@@ -1,16 +1,19 @@
-import std / [tables, math]
+import std/[tables, math]
 import pkg/godot except print
-import pkg / [chroma]
-import godotapi / [scene_tree, kinematic_body, material, mesh_instance, spatial,
-                   input_event, animation_player, resource_loader, packed_scene,
-                   spatial_material, text_edit]
-import globals, core, models / [colors], ui / markdown_label
-import ./ queries
+import pkg/[chroma]
+import
+  godotapi/[
+    scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
+    animation_player, resource_loader, packed_scene, spatial_material, text_edit
+  ]
+import globals, core, models/[colors], ui/markdown_label
+import ./queries
 
 gdobj BotNode of KinematicBody:
   var
     model*: Unit
-    material* {.gdExport.}, highlight_material* {.gdExport.},
+    material* {.gdExport.},
+      highlight_material* {.gdExport.},
       selected_material* {.gdExport.}: Material
     skin: Spatial
     mesh: MeshInstance
@@ -31,7 +34,7 @@ gdobj BotNode of KinematicBody:
     self.mesh = self.skin.get_node("root/Skeleton/body001").as(MeshInstance)
     self.set_default_material()
     self.animation_player =
-        self.skin.get_node("AnimationPlayer").as(AnimationPlayer)
+      self.skin.get_node("AnimationPlayer").as(AnimationPlayer)
     if self.model of Player:
       # hack so player model doesn't hover
       self.skin.translate DOWN * 0.8
@@ -52,7 +55,7 @@ gdobj BotNode of KinematicBody:
     debug "setting bot color", color, adjusted
     SpatialMaterial(self.material).albedo_color = adjusted
 
-  proc set_visibility =
+  proc set_visibility() =
     var color = self.model.color
     if Visible in self.model.global_flags:
       self.visible = true
@@ -90,9 +93,10 @@ gdobj BotNode of KinematicBody:
           self.set_default_material()
 
     self.model.global_flags.watch:
-      if (change.item == Visible and ScriptInitializing notin
-          self.model.global_flags) or ScriptInitializing.removed:
-
+      if (
+        change.item == Visible and
+        ScriptInitializing notin self.model.global_flags
+      ) or ScriptInitializing.removed:
         self.set_visibility
 
     self.model.local_flags.watch:
@@ -108,16 +112,16 @@ gdobj BotNode of KinematicBody:
     var velocity_zid: ZID
     if self.model of Bot:
       let bot = Bot(self.model)
-      velocity_zid = bot.velocity_value.watch:
-        if touched:
-          if bot.animation == "auto":
-            self.set_walk_animation(change.item.length, false)
+      velocity_zid =
+        bot.velocity_value.watch:
+          if touched:
+            if bot.animation == "auto":
+              self.set_walk_animation(change.item.length, false)
       bot.animation_value.watch:
         if added or touched and change.item in ["", "auto"]:
           self.animation_player.play("idle")
         elif added:
           self.animation_player.play(change.item)
-
     elif self.model of Player:
       let player = Player(self.model)
       player.rotation_value.watch:
@@ -127,8 +131,9 @@ gdobj BotNode of KinematicBody:
       player.velocity_value.watch:
         if added:
           var velocity = change.item.length
-          self.set_walk_animation(change.item.length,
-              player.input_direction.z > 0.0)
+          self.set_walk_animation(
+            change.item.length, player.input_direction.z > 0.0
+          )
 
       player.cursor_position_value.watch:
         if added:
@@ -147,9 +152,10 @@ gdobj BotNode of KinematicBody:
       if added:
         self.set_color(change.item)
 
-    self.transform_zid = self.model.transform_value.watch:
-      if added:
-        self.transform = change.item
+    self.transform_zid =
+      self.model.transform_value.watch:
+        if added:
+          self.transform = change.item
 
     self.model.sight_query_value.watch:
       if added:
@@ -157,7 +163,7 @@ gdobj BotNode of KinematicBody:
         query.run(self.model)
         self.model.sight_query = query
 
-  proc setup* =
+  proc setup*() =
     self.set_color(self.model.color)
     self.track_changes
     self.model.sight_ray = self.get_node("SightRay") as RayCast

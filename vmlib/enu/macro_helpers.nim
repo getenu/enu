@@ -1,6 +1,8 @@
-import std / [macros, strformat, strutils]
+import std/[macros, strformat, strutils]
 
-proc parse_sig*(sig: NimNode, return_type = new_empty_node()): (string, seq[NimNode], NimNode) =
+proc parse_sig*(
+    sig: NimNode, return_type = new_empty_node()
+): (string, seq[NimNode], NimNode) =
   var
     name = ""
     args = @[return_type]
@@ -9,7 +11,7 @@ proc parse_sig*(sig: NimNode, return_type = new_empty_node()): (string, seq[NimN
     name = $sig
   else:
     name = $sig[0]
-    for i, arg in sig[1..^1]:
+    for i, arg in sig[1 ..^ 1]:
       case arg.kind
       of nnkExprColonExpr:
         args.add new_ident_defs(arg[0], arg[1])

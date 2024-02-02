@@ -2,7 +2,7 @@ name Win
 if not is_instance:
   show = false
   quit()
-  
+
 seed = 7
 lock = true
 move me

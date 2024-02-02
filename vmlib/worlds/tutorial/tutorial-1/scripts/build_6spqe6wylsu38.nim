@@ -1,7 +1,7 @@
 name Maze(finished = false, won = false)
 lock = true
 
-proc make_sign: Sign =
+proc make_sign(): Sign =
   say("` `", width = 10.0, height = 3.0, size = 2600)
 
 drawing = true
@@ -94,13 +94,15 @@ proc scroller(sign: Sign, msg: string, pause = 0, len = msg.len): proc() =
   var current = msg
   var counter = 0
 
-  result = proc() =
-    if current == msg and counter < pause:
-      inc counter
-    else:
-      counter = 0
-      current = current[1..^1] & current[0]
-      sign.message = "`" & current[0..(len - 1)].strip(leading = false) & "`"
+  result =
+    proc() =
+      if current == msg and counter < pause:
+        inc counter
+      else:
+        counter = 0
+        current = current[1 ..^ 1] & current[0]
+        sign.message =
+          "`" & current[0 .. (len - 1)].strip(leading = false) & "`"
 
 var start_scroller1 = start_sign1.scroller(" START HERE! ", 0, 7)
 

@@ -1,4 +1,4 @@
-import std / [strutils]
+import std/[strutils]
 import types, base_api, vm_bridge_utils
 
 bridged_to_host:
@@ -14,7 +14,8 @@ bridged_to_host:
 proc `draw_position=`*(self: Build, unit: Unit) =
   self.draw_position = unit.position
 
-proc all*(_: type Build): seq[Build] = all_builds()
+proc all*(_: type Build): seq[Build] =
+  all_builds()
 
 proc go_home*(self: Build) =
   self.rotation = 0
@@ -25,8 +26,7 @@ proc go_home*(self: Build) =
   self.down self.position.y - self.start_position.y, 2
 
 proc fill_square*(self: Build, length = 1) =
-  for l in 0..length:
-    for i in 0..3:
+  for l in 0 .. length:
+    for i in 0 .. 3:
       self.forward(length - l, 2)
       self.right(1, 2)
-

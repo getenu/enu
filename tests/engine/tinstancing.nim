@@ -1,14 +1,16 @@
-import std / [sugar, os, monotimes]
+import std/[sugar, os, monotimes]
 import controllers/script_controllers, core, models
 
-import libs / [interpreters, eval]
+import libs/[interpreters, eval]
 
 var state = GameState.active
 
-state.logger = proc(level, msg: string) =
-  echo level, ": ", msg
+state.logger =
+  proc(level, msg: string) =
+    echo level, ": ", msg
 
-state.config.script_dir = current_source_path().parent_dir / "scripts" / "instancing"
+state.config.script_dir =
+  current_source_path().parent_dir / "scripts" / "instancing"
 state.config.lib_dir = current_source_path().parent_dir / ".." / ".." / "vmlib"
 
 let controller = ScriptController.init
@@ -23,4 +25,3 @@ let bot2 = create("bot_script_2")
 state.units.add bot2
 let bot3 = create("bot_script_3")
 state.units.add bot3
-

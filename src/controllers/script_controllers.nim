@@ -1,5 +1,5 @@
 import core
-import ./ script_controllers / worker
+import ./script_controllers/worker
 
 proc init*(T: type ScriptController): ScriptController =
   result = ScriptController()

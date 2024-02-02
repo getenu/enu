@@ -1,11 +1,11 @@
 name potato(length = 5, width = 2, color = red, label = "hi", friendly = true)
 
-- wander:
+-wander:
   forward 5
   turn right
 
-- run_away(fast=true, msg="Help!") string:
-  - say_hello() string:
+-run_away(fast = true, msg = "Help!") string:
+  -say_hello() string:
     echo "hello"
     "goodbye"
   echo say_hello()
@@ -15,7 +15,7 @@ name potato(length = 5, width = 2, color = red, label = "hi", friendly = true)
   forward 100
 
 block:
-  - test_me:
+  -test_me:
     echo "hi"
 
   test_me()

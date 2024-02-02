@@ -4,7 +4,8 @@ speed = 0
 show = false
 lock = true
 
-let overview = """
+let overview =
+  """
 # `    ` Menu
 
 - `Reset Tutorial`
@@ -13,7 +14,8 @@ let overview = """
 
 """
 
-let details = """
+let details =
+  """
 
 # Menu
 

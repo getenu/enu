@@ -1,6 +1,6 @@
-import std / [os, strformat, importutils]
-import pkg / compiler / ast except new_node
-import pkg / compiler / [vm, vmdef]
+import std/[os, strformat, importutils]
+import pkg/compiler/ast except new_node
+import pkg/compiler/[vm, vmdef]
 import core, eval
 
 export Interpreter, VmArgs, set_result
@@ -8,9 +8,9 @@ export Interpreter, VmArgs, set_result
 log_scope:
   topics = "scripting"
 
-const
-    STDLIB_PATHS = [".", "core", "pure", "pure/collections", "pure/concurrency",
-        "std", "fusion"]
+const STDLIB_PATHS = [
+  ".", "core", "pure", "pure/collections", "pure/concurrency", "std", "fusion"
+]
 
 private_access ScriptCtx
 
@@ -18,8 +18,12 @@ proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
   let std_paths = STDLIB_PATHS.map_it join_path(vmlib, "stdlib", it)
   let source_paths = std_paths & join_path(vmlib, "enu") & @[script_dir]
   {.gcsafe.}:
-    result = create_interpreter("base_api.nim", source_paths, defines =
-      @{"nimscript": "true", "nimconfig": "true"})
+    result =
+      create_interpreter(
+        "base_api.nim",
+        source_paths,
+        defines = @{"nimscript": "true", "nimconfig": "true"},
+      )
     result.config.max_loop_iterations_vm = int.high
 
 proc pause*(ctx: ScriptCtx) =
@@ -69,22 +73,29 @@ proc eval*(self: ScriptCtx, code: string): bool =
     self.exit_code = some(99)
     raise
 
-proc call_proc*(self: ScriptCtx, proc_name: string, args: varargs[PNode, `to_node`]): tuple[paused: bool, result: PNode] =
-  let foreign_proc = self.interpreter.select_routine(proc_name, module_name = self.module_name)
+proc call_proc*(
+    self: ScriptCtx, proc_name: string, args: varargs[PNode, `to_node`]
+): tuple[paused: bool, result: PNode] =
+  let foreign_proc =
+    self.interpreter.select_routine(proc_name, module_name = self.module_name)
   if foreign_proc == nil:
-    raise new_exception(VMError, \"script does not export a proc of the name: '{proc_name}'")
-  result = try:
-    {.gcsafe.}:
-      (false, self.interpreter.call_routine(foreign_proc, args))
-  except VMPause:
-    (self.exit_code.is_none, nil)
-  except CatchableError:
-    self.running = false
-    self.exit_code = some(99)
-    raise
+    raise new_exception(
+        VMError, \"script does not export a proc of the name: '{proc_name}'"
+      )
+  result =
+    try:
+      {.gcsafe.}:
+        (false, self.interpreter.call_routine(foreign_proc, args))
+    except VMPause:
+      (self.exit_code.is_none, nil)
+    except CatchableError:
+      self.running = false
+      self.exit_code = some(99)
+      raise
 
 proc get_var*(self: ScriptCtx, var_name: string, module_name: string): PNode =
-  let sym = self.interpreter.select_unique_symbol(var_name, module_name = module_name)
+  let sym =
+    self.interpreter.select_unique_symbol(var_name, module_name = module_name)
   self.interpreter.get_global_value(sym)
 
 proc resume*(self: ScriptCtx): bool =
@@ -93,13 +104,14 @@ proc resume*(self: ScriptCtx): bool =
   assert not self.tos.is_nil
 
   trace "resuming", script = self.file_name, module = self.module_name
-  result = try:
-    {.gcsafe.}:
-      discard exec_from_ctx(self.ctx, self.pc, self.tos)
-    false
-  except VMPause:
-    self.exit_code.is_none
-  except CatchableError:
-    self.running = false
-    self.exit_code = some(99)
-    raise
+  result =
+    try:
+      {.gcsafe.}:
+        discard exec_from_ctx(self.ctx, self.pc, self.tos)
+      false
+    except VMPause:
+      self.exit_code.is_none
+    except CatchableError:
+      self.running = false
+      self.exit_code = some(99)
+      raise

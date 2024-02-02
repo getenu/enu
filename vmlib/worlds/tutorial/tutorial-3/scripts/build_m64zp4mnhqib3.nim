@@ -1,4 +1,4 @@
-name Button(door=Door, pause=11.0, ghost=inky)
+name Button(door = Door, pause = 11.0, ghost = inky)
 move me
 
 loop:

@@ -9,12 +9,13 @@ var
   roof_odds = 6
   roof_sides = {2, 3}
 
-- ring:
+-ring:
   5.times(side):
-    color = if 1 in 20:
-      cycle(blue, red, green, black, white, brown)
-    else:
-      primary_color
+    color =
+      if 1 in 20:
+        cycle(blue, red, green, black, white, brown)
+      else:
+        primary_color
     drawing = 1 in roof_odds or side notin roof_sides
     forward 10
     lean back, 360 / 5
@@ -25,12 +26,12 @@ turn left
 2000.times:
   ring()
   if 1 in 50:
-    angle = -2.0..1.0
+    angle = -2.0 .. 1.0
     if 1 in 3:
       primary_color = cycle(black, white, black)
     else:
       if 1 in 2:
-        roof_odds = 2..5
+        roof_odds = 2 .. 5
       elif 1 in 2:
         roof_odds = 1
       if 1 in 4:

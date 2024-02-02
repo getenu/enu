@@ -1,4 +1,4 @@
-import godotapi / spatial
+import godotapi/spatial
 import core, states, bots, builds
 
 var add_to {.threadvar.}: Build
@@ -12,12 +12,15 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
       let local = point.local_to(add_to)
       add_to.draw(local, (Manual, state.selected_color))
     else:
-      add_to = Build.init(transform = Transform.init(origin = point),
-          global = true, color = state.selected_color)
+      add_to =
+        Build.init(
+          transform = Transform.init(origin = point),
+          global = true,
+          color = state.selected_color,
+        )
 
       state.units += add_to
       add_to.global_flags += Dirty
-
   elif state.tool == PlaceBot and state.bot_at(self.target_point).is_nil:
     var t = Transform.init(origin = self.target_point)
     var bot = Bot.init(transform = t)
@@ -25,10 +28,11 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
     bot.global_flags += Dirty
 
 proc init*(_: type Ground, node: Spatial): Ground =
-  let self = Ground(
-    global_flags: ~set[GlobalModelFlags],
-    local_flags: ~(set[LocalModelFlags], {SyncLocal})
-  )
+  let self =
+    Ground(
+      global_flags: ~set[GlobalModelFlags],
+      local_flags: ~(set[LocalModelFlags], {SyncLocal}),
+    )
 
   state.local_flags.changes:
     if PrimaryDown.added and Hover in self.local_flags:

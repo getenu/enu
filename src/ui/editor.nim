@@ -1,8 +1,11 @@
-import std / [strutils, tables]
-import pkg / [godot]
-import pkg / compiler / [lineinfos]
-import godotapi / [text_edit, scene_tree, node, input_event, global_constants,
-                   input_event_key, style_box_flat, gd_os]
+import std/[strutils, tables]
+import pkg/[godot]
+import pkg/compiler/[lineinfos]
+import
+  godotapi/[
+    text_edit, scene_tree, node, input_event, global_constants, input_event_key,
+    style_box_flat, gd_os
+  ]
 import core, globals
 import models except Color
 
@@ -24,7 +27,7 @@ gdobj Editor of TextEdit:
     let column = int self.cursor_get_column - 1
     if column > 0:
       let
-        line = self.get_line(self.cursor_get_line)[0..column]
+        line = self.get_line(self.cursor_get_line)[0 .. column]
         stripped = line.strip()
 
       if stripped.high > 0:
@@ -40,9 +43,7 @@ gdobj Editor of TextEdit:
     if not event.is_nil and event.pressed:
       if event.scancode == KEY_ENTER:
         self.indent_new_line()
-      if event.scancode == KEY_SEMICOLON and
-          state.config.semicolon_as_colon:
-
+      if event.scancode == KEY_SEMICOLON and state.config.semicolon_as_colon:
         self.insert_text_at_cursor(":")
         self.get_tree.set_input_as_handled()
       elif event.scancode == KEY_HOME:
@@ -53,17 +54,19 @@ gdobj Editor of TextEdit:
         self.get_tree.set_input_as_handled()
 
   method unhandled_input*(event: InputEvent) =
-    if EditorFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
-      if not (event of InputEventJoypadButton) or CommandMode notin state.local_flags:
+    if EditorFocused in state.local_flags and
+        event.is_action_pressed("ui_cancel"):
+      if not (event of InputEventJoypadButton) or
+          CommandMode notin state.local_flags:
         state.open_unit.code = Code.init(self.text)
         state.open_unit = nil
         self.get_tree().set_input_as_handled()
 
-  proc clear_errors =
-    for i in 0..<self.get_line_count():
+  proc clear_errors() =
+    for i in 0 ..< self.get_line_count():
       self.set_line_as_marked(i, false)
 
-  proc highlight_errors =
+  proc highlight_errors() =
     self.clear_executing_line()
     if ?state.open_unit:
       for err in state.open_unit.errors:
@@ -82,7 +85,7 @@ gdobj Editor of TextEdit:
     state.player.cursor_position =
       (int self.cursor_get_line, int self.cursor_get_column)
 
-  method ready* =
+  method ready*() =
     self.bind_signals(self, "text_changed", "cursor_changed")
     var stylebox = self.get_stylebox("normal").as(StyleBoxFlat)
     self.og_bg_color = stylebox.bg_color
@@ -104,13 +107,14 @@ gdobj Editor of TextEdit:
           self.visible = false
           state.player.open_code = ""
         else:
-          line_zid = unit.current_line_value.changes:
-            if added:
-              # only update the executing line if the code hasn't been changed.
-              if self.text == state.open_unit.code.nim:
-                self.executing_line = change.item - 1
-              else:
-                self.clear_executing_line()
+          line_zid =
+            unit.current_line_value.changes:
+              if added:
+                # only update the executing line if the code hasn't been changed.
+                if self.text == state.open_unit.code.nim:
+                  self.executing_line = change.item - 1
+                else:
+                  self.clear_executing_line()
           self.visible = true
           self.text = state.open_unit.code.nim
           state.player.open_code = self.text
@@ -137,7 +141,6 @@ gdobj Editor of TextEdit:
 
           self.modulate = dimmed_alpha
           self.release_focus
-
       elif CommandMode.removed:
         if EditorVisible in state.local_flags:
           self.modulate = solid_alpha

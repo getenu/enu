@@ -36,17 +36,22 @@ when defined(windows):
     EXCEPTION_CONTINUE_SEARCH = LONG(0)
 
   type
-    PEXCEPTION_RECORD = ptr object
-      exceptionCode: DWORD # other fields left out
+    PEXCEPTION_RECORD =
+      ptr object
+        exceptionCode: DWORD # other fields left out
 
-    PEXCEPTION_POINTERS = ptr object
-      exceptionRecord: PEXCEPTION_RECORD
-      contextRecord: pointer
+    PEXCEPTION_POINTERS =
+      ptr object
+        exceptionRecord: PEXCEPTION_RECORD
+        contextRecord: pointer
 
-    VectoredHandler = proc (p: PEXCEPTION_POINTERS): LONG {.stdcall.}
-  proc addVectoredExceptionHandler(firstHandler: ULONG,
-                                   handler: VectoredHandler): pointer {.
-    importc: "AddVectoredExceptionHandler", stdcall, dynlib: "kernel32.dll".}
+    VectoredHandler = proc(p: PEXCEPTION_POINTERS): LONG {.stdcall.}
+
+  proc addVectoredExceptionHandler(
+    firstHandler: ULONG, handler: VectoredHandler
+  ): pointer {.
+    importc: "AddVectoredExceptionHandler", stdcall, dynlib: "kernel32.dll"
+  .}
 
   {.push stackTrace: off.}
   proc segfaultHandler(p: PEXCEPTION_POINTERS): LONG {.stdcall.} =
@@ -55,6 +60,7 @@ when defined(windows):
         raise se
     else:
       result = EXCEPTION_CONTINUE_SEARCH
+
   {.pop.}
 
   discard addVectoredExceptionHandler(0, segfaultHandler)
@@ -64,9 +70,9 @@ when defined(windows):
     proc segfaultHandler(sig: cint) {.noconv.} =
       {.gcsafe.}:
         rawRaise se
+
     {.pop.}
     c_signal(SIGSEGV, segfaultHandler)
-
 else:
   import posix
 
@@ -82,6 +88,7 @@ else:
         raise se
     else:
       quit(1)
+
   {.pop.}
 
   discard sigemptyset(sa.sa_mask)

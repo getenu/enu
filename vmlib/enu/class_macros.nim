@@ -1,10 +1,12 @@
-import std / [macros, strutils, sequtils, base64]
+import std/[macros, strutils, sequtils, base64]
 import types
 import base_api, macro_helpers
 
 const private_props = ["lock"]
-const public_props = ["position", "start_position", "speed", "scale", "glow",
-  "global", "seed", "color", "height", "show", "sign"]
+const public_props = [
+  "position", "start_position", "speed", "scale", "glow", "global", "seed",
+  "color", "height", "show", "sign"
+]
 
 proc params_to_assignments(nodes: seq[NimNode]): NimNode =
   result = new_stmt_list()
@@ -28,8 +30,9 @@ proc params_to_ident_defs(nodes: seq[NimNode]): seq[NimNode] =
       elif node.kind == nnkExprColonExpr:
         result.add nnkIdentDefs.new_tree(node[0], node[1], new_empty_node())
       else:
-        error("expected `my_param = 1`, `my_param: int` kind: " & $node.kind,
-          node)
+        error(
+          "expected `my_param = 1`, `my_param: int` kind: " & $node.kind, node
+        )
 
 proc params_to_properties(nodes: seq[NimNode]): NimNode =
   result = new_nim_node(kind = nnkRecList)
@@ -39,14 +42,15 @@ proc params_to_properties(nodes: seq[NimNode]): NimNode =
     let prop = node[0]
     if prop.str_val notin ["global", "speed", "color"]:
       if node.kind == nnkExprEqExpr:
-        result.add nnkIdentDefs.new_tree(node[0], new_call(ident"type",
-          node[1]), empty)
-
+        result.add nnkIdentDefs.new_tree(
+          node[0], new_call(ident"type", node[1]), empty
+        )
       elif node.kind == nnkExprColonExpr:
         result.add nnkIdentDefs.new_tree(node[0], node[1], empty)
       else:
-        error("expected `my_param = 1`, `my_param: int` kind: " & $node.kind,
-          node)
+        error(
+          "expected `my_param = 1`, `my_param: int` kind: " & $node.kind, node
+        )
 
 proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
   result = new_stmt_list()
@@ -56,10 +60,11 @@ proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
     let getter = node[0]
     if getter.str_val notin ["global", "speed", "color"]:
       let setter = ident(getter.str_val & "=")
-      let typ = if node.kind == nnkExprEqExpr:
-        new_call(ident"type", node[1])
-      else:
-        node[1]
+      let typ =
+        if node.kind == nnkExprEqExpr:
+          new_call(ident"type", node[1])
+        else:
+          node[1]
 
       result.add quote do:
         proc `getter`*(self: `type_name`): `typ` =
@@ -73,15 +78,16 @@ proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
             self.`getter` = value
             self.wake
 
-proc build_ctors(name_str: string, type_name: NimNode, params: seq[NimNode]):
-  NimNode =
-
-  var ctor_body = quote do:
-    assert not instance.is_nil
-    link_dependency(instance)
-    result = `type_name`()
-    result.seed = active_unit().seed
-    new_instance(instance, result)
+proc build_ctors(
+    name_str: string, type_name: NimNode, params: seq[NimNode]
+): NimNode =
+  var ctor_body =
+    quote:
+      assert not instance.is_nil
+      link_dependency(instance)
+      result = `type_name`()
+      result.seed = active_unit().seed
+      new_instance(instance, result)
 
   for param in params:
     let prop = param[0]
@@ -96,8 +102,10 @@ proc build_ctors(name_str: string, type_name: NimNode, params: seq[NimNode]):
 
   var global = "global".ident
   if "global" notin var_names:
-    params &= new_ident_defs(global, new_empty_node(),
-      ident"instance_global_by_default")
+    params &=
+      new_ident_defs(
+        global, new_empty_node(), ident"instance_global_by_default"
+      )
 
   ctor_body.add quote do:
     result.global = `global`
@@ -121,24 +129,29 @@ proc build_ctors(name_str: string, type_name: NimNode, params: seq[NimNode]):
 
   # add baked in constructor params for speed, color, etc.
   # probably shouldn't be here.
-  result = new_proc(
-    name = "new".ident.postfix("*"),
-    params = params,
-    pragmas = nnkPragma.new_tree("discardable".ident),
-    body = ctor_body
-  )
+  result =
+    new_proc(
+      name = "new".ident.postfix("*"),
+      params = params,
+      pragmas = nnkPragma.new_tree("discardable".ident),
+      body = ctor_body,
+    )
 
-proc extract_class_info(name_node: NimNode): tuple[name: string,
-  params: seq[NimNode]] =
-
-  result = if name_node.kind == nnkIdent:
+proc extract_class_info(
+    name_node: NimNode
+): tuple[name: string, params: seq[NimNode]] =
+  result =
+    if name_node.kind == nnkIdent:
       (name_node.str_val, @[])
     elif name_node.kind in [nnkCall, nnkCommand, nnkObjConstr]:
       name_node[0].expect_kind nnkIdent
-      (name_node[0].str_val, name_node[1..^1])
+      (name_node[0].str_val, name_node[1 ..^ 1])
     else:
-      error("expected `name my_name` or `name my_name(my_param1 = 1, " &
-        "my_param2 = 2, ...)`", name_node)
+      error(
+        "expected `name my_name` or `name my_name(my_param1 = 1, " &
+          "my_param2 = 2, ...)`",
+        name_node,
+      )
 
       return
 
@@ -153,8 +166,9 @@ proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
   result = new_stmt_list()
 
   let name_str = name
-  var type_def = quote do:
-    type `type_name`* = ref object of `base_type`
+  var type_def =
+    quote:
+      type `type_name`* = ref object of `base_type`
 
   type_def[0][2][0][2] = params_to_properties(params)
   let accessors = params_to_accessors(type_name, params)
@@ -176,18 +190,20 @@ proc pop_name_node(ast: NimNode): tuple[start: NimNode, name_node: NimNode] =
   for i, node in ast:
     if node.kind in [nnkCommand, nnkCall]:
       if node.len == 2 and node[1].kind in [nnkIdent, nnkCall, nnkObjConstr] and
-        node[0].eq_ident(ident_name):
-
+          node[0].eq_ident(ident_name):
         result.name_node = node[1]
         ast.del(i)
         break
     result.start.add node
   for i, node in result.start:
-   ast.del(i)
+    ast.del(i)
 
-proc visit_tree(parent: NimNode, convert: open_array[string], receiver: string,
-  alias: ptr seq[NimNode]) =
-
+proc visit_tree(
+    parent: NimNode,
+    convert: open_array[string],
+    receiver: string,
+    alias: ptr seq[NimNode],
+) =
   for i, node in parent:
     if node.kind in [nnkProcDef, nnkBlockStmt, nnkIfExpr, nnkIfStmt]:
       # The alias list should only live as long as a scope. We need to make a
@@ -203,9 +219,8 @@ proc visit_tree(parent: NimNode, convert: open_array[string], receiver: string,
           elif i == 2 and node notin alias[]:
             parent[i] = new_dot_expr(ident receiver, node)
         elif $node in convert and node notin alias[] and
-          parent.kind != nnk_expr_eq_expr and not
-          (parent.kind == nnk_dot_expr and i == 1):
-
+            parent.kind != nnk_expr_eq_expr and
+            not (parent.kind == nnk_dot_expr and i == 1):
           parent[i] = new_dot_expr(ident receiver, node)
       visit_tree(node, convert, receiver, alias)
 
@@ -213,9 +228,9 @@ proc visit_tree(parent: NimNode, convert: open_array[string], receiver: string,
 # Anything for `enu_target` must work for all units. `me` can be class specific.
 # This tries to take aliasing into account. If a variable called `speed` is
 # created, anywhere it's in scope won't get `me` prefixed.
-proc auto_insert_receiver(ast: NimNode, class_specific_props:
-  open_array[string]): NimNode =
-
+proc auto_insert_receiver(
+    ast: NimNode, class_specific_props: open_array[string]
+): NimNode =
   var alias: seq[NimNode] = @[]
   visit_tree(ast, class_specific_props, "me", addr alias)
   visit_tree(ast, private_props, "me", addr alias)
@@ -225,24 +240,24 @@ proc auto_insert_receiver(ast: NimNode, class_specific_props:
 proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
   let (name, params, vars) = sig.parse_sig(return_type)
   let new_body = new_stmt_list(vars, body)
-  result = new_proc(
-    name = ident(name),
-    params = params,
-    body = new_body,
-    pragmas = new_nim_node(nnkPragma).add(ident"discardable")
-  )
+  result =
+    new_proc(
+      name = ident(name),
+      params = params,
+      body = new_body,
+      pragmas = new_nim_node(nnkPragma).add(ident"discardable"),
+    )
 
 proc transform_commands(parent: NimNode): NimNode =
   for i, node in parent:
     if parent.kind == nnkStmtList and node.kind == nnkPrefix and
-      node[0] == ident"-":
-
+        node[0] == ident"-":
       if node[1].kind in [nnkIdent, nnkCall]:
         let new_proc = build_proc(node[1], transform_commands node[2])
         parent[i] = new_proc
       elif node[1].kind == nnkCommand:
-        let new_proc = build_proc(node[1][0], transform_commands node[2],
-          node[1][1])
+        let new_proc =
+          build_proc(node[1][0], transform_commands node[2], node[1][1])
 
         parent[i] = new_proc
       else:
@@ -251,9 +266,12 @@ proc transform_commands(parent: NimNode): NimNode =
       parent[i] = transform_commands(node)
   parent
 
-macro load_enu_script*(base64_code: string, file_name: string, base_type: untyped,
-  class_specific_props: varargs[untyped]): untyped =
-
+macro load_enu_script*(
+    base64_code: string,
+    file_name: string,
+    base_type: untyped,
+    class_specific_props: varargs[untyped],
+): untyped =
   var class_specific_props = class_specific_props.map_it($it)
   let file_name = file_name.str_val
   # `static_read` has been disabled for security, so we can't read the code
@@ -280,7 +298,6 @@ macro load_enu_script*(base64_code: string, file_name: string, base_type: untype
     let assignments = params_to_assignments(params)
     inner.add quote do:
       `assignments`
-
   else:
     ast = ast.auto_insert_receiver(class_specific_props)
     result.add quote do:
@@ -302,4 +319,5 @@ macro load_enu_script*(base64_code: string, file_name: string, base_type: untype
       # If a new instance doesn't ever yield the interpreter can crash. Unsure
       # why, but probably fixable. Sleep before exit as a workaround.
       sleep 0
+
     run_script(me, false)

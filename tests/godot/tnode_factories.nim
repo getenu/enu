@@ -1,11 +1,11 @@
 import std/unittest
-import pkg / [print, model_citizen]
+import pkg/[print, model_citizen]
 import godot except print
 import godotapi/node
-import world/node_factories, models / [states, bots, types, builds]
+import world/node_factories, models/[states, bots, types, builds]
 
 when is_main_module:
-  proc tests =
+  proc tests() =
     var state = GameState.init(Node)
     state.nodes.game = gdnew[Node]()
     state.nodes.data = gdnew[Node]()
@@ -20,4 +20,5 @@ when is_main_module:
     u2.units += u4
     u2.units -= u4
     u3.flags += Targeted
+
   tests()

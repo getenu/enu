@@ -1,12 +1,12 @@
-import std / [tables, monotimes, sets, options, macros]
-import godotapi / [spatial, ray_cast]
+import std/[tables, monotimes, sets, options, macros]
+import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
-import pkg / core / [vector3, basis, aabb, godotbase]
-import pkg / compiler / [ast, lineinfos, semdata]
-import pkg / [model_citizen]
-import models / colors, libs / [eval]
+import pkg/core/[vector3, basis, aabb, godotbase]
+import pkg/compiler/[ast, lineinfos, semdata]
+import pkg/[model_citizen]
+import models/colors, libs/[eval]
 
-from pkg / godot import NimGodotObject
+from pkg/godot import NimGodotObject
 
 export Vector3, Transform, vector3, basis, AABB, aabb
 export godotbase except print
@@ -15,27 +15,64 @@ export Interpreter
 type
   EnuError* = object of CatchableError
   LocalStateFlags* = enum
-    CommandMode, EditorVisible, ConsoleVisible,
-    BlockTargetVisible, ReticleVisible, DocsVisible, MouseCaptured,
-    PrimaryDown, SecondaryDown, EditorFocused, ConsoleFocused, DocsFocused,
-    Playing, Flying, God, AltWalkSpeed, AltFlySpeed,
-    LoadingScript, Server, Quitting, ResettingVM, NeedsRestart, Connecting
+    CommandMode
+    EditorVisible
+    ConsoleVisible
+    BlockTargetVisible
+    ReticleVisible
+    DocsVisible
+    MouseCaptured
+    PrimaryDown
+    SecondaryDown
+    EditorFocused
+    ConsoleFocused
+    DocsFocused
+    Playing
+    Flying
+    God
+    AltWalkSpeed
+    AltFlySpeed
+    LoadingScript
+    Server
+    Quitting
+    ResettingVM
+    NeedsRestart
+    Connecting
 
   GlobalStateFlags* = enum
     LoadingLevel
 
   LocalModelFlags* = enum
-    Hover, TargetMoved, Highlight, HighlightError, Hide
+    Hover
+    TargetMoved
+    Highlight
+    HighlightError
+    Hide
 
   GlobalModelFlags* = enum
-    Global, Visible, Lock, Ready, ScriptInitializing, Dirty, Resetting
+    Global
+    Visible
+    Lock
+    Ready
+    ScriptInitializing
+    Dirty
+    Resetting
 
   Tools* = enum
-    CodeMode, BlueBlock, RedBlock, GreenBlock, BlackBlock, WhiteBlock,
-    BrownBlock, PlaceBot, Disabled
+    CodeMode
+    BlueBlock
+    RedBlock
+    GreenBlock
+    BlackBlock
+    WhiteBlock
+    BrownBlock
+    PlaceBot
+    Disabled
 
   TaskStates* = enum
-    Running, Done, NextTask
+    Running
+    Done
+    NextTask
 
   ConsoleModel* = ref object
     log*: ZenSeq[string]
@@ -48,11 +85,7 @@ type
     open_unit_value*: ZenValue[Unit]
     tool_value*: ZenValue[Tools]
     gravity*: float
-    nodes*: tuple[
-      game: Node,
-      data: Node,
-      player: Node
-    ]
+    nodes*: tuple[game: Node, data: Node, player: Node]
     player_value*: ZenValue[Player]
     units*: ZenSeq[Unit]
     ground*: Ground
@@ -135,11 +168,11 @@ type
     text_only*: bool
 
   VoxelKind* = enum
-    Hole, Manual, Computed
+    Hole
+    Manual
+    Computed
 
-  VoxelInfo* = tuple
-    kind: VoxelKind
-    color: Color
+  VoxelInfo* = tuple[kind: VoxelKind, color: Color]
 
   Chunk* = ZenTable[Vector3, VoxelInfo]
 
@@ -234,7 +267,8 @@ type
 
   VMError* = object of CatchableError
   QuitKind* = enum
-    Unknown, Timeout
+    Unknown
+    Timeout
 
   VMQuit* = object of VMError
     info*: TLineInfo

@@ -1,1 +1,1 @@
-Button.new(door=door3, pause=6)
+Button.new(door = door3, pause = 6)

@@ -1,7 +1,7 @@
-import pkg / [godot]
-import godotapi / [margin_container, input_event, scene_tree]
-import ui / markdown_label
-import core, models / [states, colors]
+import pkg/[godot]
+import godotapi/[margin_container, input_event, scene_tree]
+import ui/markdown_label
+import core, models/[states, colors]
 
 proc set_filter(self: Control, filter: int64) =
   self.mouse_filter = filter
@@ -20,7 +20,7 @@ gdobj RightPanel of MarginContainer:
   var label: MarkdownLabel
   var zid: ZID
 
-  method ready* =
+  method ready*() =
     self.label = self.find_node("MarkdownLabel") as MarkdownLabel
 
     state.status_message_value.changes:
@@ -40,10 +40,11 @@ gdobj RightPanel of MarginContainer:
         var sign = change.item
         self.label.markdown = md(sign, sign.more)
         self.label.update
-        self.zid = sign.more_value.changes:
-          if added:
-            self.label.markdown = md(sign, change.item)
-            self.label.update
+        self.zid =
+          sign.more_value.changes:
+            if added:
+              self.label.markdown = md(sign, change.item)
+              self.label.update
       if removed and change.item != nil:
         if change.item.more_value.valid:
           change.item.more_value.untrack(self.zid)
@@ -63,9 +64,7 @@ gdobj RightPanel of MarginContainer:
 
   method unhandled_input*(event: InputEvent) =
     if DocsFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
-      if not (event of InputEventJoypadButton) or CommandMode notin state.local_flags:
+      if not (event of InputEventJoypadButton) or
+          CommandMode notin state.local_flags:
         state.open_sign = nil
         self.get_tree().set_input_as_handled()
-
-
-

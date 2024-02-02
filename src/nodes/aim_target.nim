@@ -1,6 +1,6 @@
-import std / [strutils, wrapnils]
-import pkg / [godot]
-import godotapi / [sprite_3d, ray_cast, spatial]
+import std/[strutils, wrapnils]
+import pkg/[godot]
+import godotapi/[sprite_3d, ray_cast, spatial]
 import globals, core, nodes/helpers, models
 
 gdobj AimTarget of Sprite3D:
@@ -27,21 +27,20 @@ gdobj AimTarget of Sprite3D:
 
   proc update*(ray: RayCast) =
     ray.force_raycast_update()
-    let collider = if ray.is_colliding():
-      ray.get_collider() as Spatial
-    else:
-      nil
+    let collider =
+      if ray.is_colliding():
+        ray.get_collider() as Spatial
+      else:
+        nil
 
     let unit = ?.collider.model
     if ?self.target_model:
       # :(
       if ?self.target_model.global_flags and
           self.target_model.global_flags.destroyed:
-
         self.target_model = nil
       elif ?self.target_model.local_flags and
           self.target_model.local_flags.destroyed:
-
         self.target_model = nil
 
     if unit != self.target_model:
@@ -50,10 +49,12 @@ gdobj AimTarget of Sprite3D:
         state.pop_flag BlockTargetVisible
       self.target_model = unit
       # :(
-      if not (unit == nil or (unit of Sign and Sign(unit).more == "") or
-          (God notin state.local_flags and (unit of Bot or unit of Build) and
-          Lock in Unit(unit).find_root.global_flags)):
-
+      if not (
+        unit == nil or (unit of Sign and Sign(unit).more == "") or (
+          God notin state.local_flags and (unit of Bot or unit of Build) and
+          Lock in Unit(unit).find_root.global_flags
+        )
+      ):
         unit.local_flags += Hover
         if unit of Build or unit of Ground:
           state.push_flag BlockTargetVisible
@@ -66,8 +67,8 @@ gdobj AimTarget of Sprite3D:
         local_collision_point = collider.to_local(ray.get_collision_point())
         basis = collider.global_transform.basis
         half = vec3(0.5, 0.5, 0.5)
-        local_normal = (basis.xform_inv(global_normal) / collider.scale)
-                             .snapped(half)
+        local_normal =
+          (basis.xform_inv(global_normal) / collider.scale).snapped(half)
         factor = local_normal.inverse_normalized() * 0.5
 
       if not local_normal.is_axis_aligned:
@@ -75,17 +76,21 @@ gdobj AimTarget of Sprite3D:
         # If it isn't, we probably got a corner or something.
         return
 
-      local_point = (local_collision_point - factor).snapped(vec3(1, 1, 1)) + factor
+      local_point =
+        (local_collision_point - factor).snapped(vec3(1, 1, 1)) + factor
       global_normal = basis.xform(local_normal) / collider.scale
 
-      self.translation = collider.to_global local_point + (local_normal * 0.01) / collider.scale
+      self.translation =
+        collider.to_global local_point + (local_normal * 0.01) / collider.scale
       self.scale = collider.scale
 
       let align_normal = self.transform.origin + global_normal
       self.look_at(align_normal, self.transform.basis.x)
 
       if ?unit:
-        if (unit.target_point, unit.target_normal) != (local_point, local_normal):
+        if (unit.target_point, unit.target_normal) != (
+          local_point, local_normal
+        ):
           unit.target_point = local_point
           unit.target_normal = local_normal
           unit.local_flags.touch TargetMoved

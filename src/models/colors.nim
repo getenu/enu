@@ -4,20 +4,37 @@ import pkg/chroma
 export chroma
 
 converter to_chroma_color*(self: godot.Color): chroma.Color =
-    cast[chroma.Color](self)
+  cast[chroma.Color](self)
 
 converter to_godot_color*(self: chroma.Color): godot.Color =
-    cast[godot.Color](self)
+  cast[godot.Color](self)
 
-proc col*(hex: string): chroma.Color = hex.parse_hex
+proc col*(hex: string): chroma.Color =
+  hex.parse_hex
 
 type
   Colors* = enum
-    eraser, blue, red, green, black, white, brown
+    eraser
+    blue
+    red
+    green
+    black
+    white
+    brown
 
   Theme* = enum
-    normal, comment, entity, keyword, operator, class, storage, constant,
-    text, number, variable, invalid
+    normal
+    comment
+    entity
+    keyword
+    operator
+    class
+    storage
+    constant
+    text
+    number
+    variable
+    invalid
 
 const ir_black* = [
   normal: col"F6F3E8",

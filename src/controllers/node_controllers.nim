@@ -1,13 +1,15 @@
-import std / [tables, typetraits]
+import std/[tables, typetraits]
 import pkg/godot except print
-import godotapi / [node, spatial]
-import core, models, nodes / [bot_node, build_node, sign_node, player_node]
+import godotapi/[node, spatial]
+import core, models, nodes/[bot_node, build_node, sign_node, player_node]
 
 proc remove_from_scene(unit: Unit) =
   debug "removing unit", unit = unit.id
   assert ?unit.node
-  if unit == previous_build: previous_build = nil
-  if unit == current_build: current_build = nil
+  if unit == previous_build:
+    previous_build = nil
+  if unit == current_build:
+    current_build = nil
 
   for zid in unit.zids:
     Zen.thread_ctx.untrack zid
@@ -45,8 +47,8 @@ proc add_to_scene(unit: Unit) =
     node.transform = unit.transform
     if node.owner != nil:
       fail \"{T.name} node shouldn't be owned. unit = {unit.id}"
-    unit.node.visible = Visible in unit.global_flags and
-        ScriptInitializing notin unit.global_flags
+    unit.node.visible =
+      Visible in unit.global_flags and ScriptInitializing notin unit.global_flags
 
     parent_node.add_child(unit.node)
     unit.node.owner = parent_node
@@ -55,14 +57,15 @@ proc add_to_scene(unit: Unit) =
     unit.main_thread_joined
     unit.global_flags += Ready
 
-  let parent_node = if Global in unit.global_flags:
-    state.nodes.data
-  else:
-    unit.parent.node
+  let parent_node =
+    if Global in unit.global_flags: state.nodes.data else: unit.parent.node
 
-  if unit of Bot: Bot(unit).add(BotNode, parent_node)
-  elif unit of Build: Build(unit).add(BuildNode, parent_node)
-  elif unit of Sign: Sign(unit).add(SignNode, parent_node)
+  if unit of Bot:
+    Bot(unit).add(BotNode, parent_node)
+  elif unit of Build:
+    Build(unit).add(BuildNode, parent_node)
+  elif unit of Sign:
+    Sign(unit).add(SignNode, parent_node)
   elif unit of Player:
     let player = Player(unit)
     # TODO: PlayerNode should work for connected players as well
@@ -84,11 +87,13 @@ proc set_global(unit: Unit, global: bool) =
   if global:
     state.nodes.data.add_child(unit.node)
     unit.node.owner = state.nodes.data
-    unit.transform_value.origin = unit.transform.origin + unit.start_transform.origin
+    unit.transform_value.origin =
+      unit.transform.origin + unit.start_transform.origin
   else:
     unit.parent.node.add_child(unit.node)
     unit.node.owner = unit.parent.node
-    unit.transform_value.origin = unit.transform.origin - unit.start_transform.origin
+    unit.transform_value.origin =
+      unit.transform.origin - unit.start_transform.origin
 
 proc reset_nodes() =
   current_build = nil

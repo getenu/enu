@@ -1,7 +1,8 @@
 lock = true
 
 turn right
-let text = """
+let text =
+  """
 
 # ???
 

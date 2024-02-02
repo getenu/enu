@@ -1,12 +1,14 @@
-import godotapi / [text_edit, scene_tree, node, input_event, input_event_key,
-                         rich_text_label, global_constants]
+import
+  godotapi/[
+    text_edit, scene_tree, node, input_event, input_event_key, rich_text_label,
+    global_constants
+  ]
 import godot
-import std / strutils
+import std/strutils
 import core, globals
 
 gdobj Console of RichTextLabel:
-  var
-    default_mouse_filter: int64
+  var default_mouse_filter: int64
 
   proc init*() =
     state.local_flags.changes:

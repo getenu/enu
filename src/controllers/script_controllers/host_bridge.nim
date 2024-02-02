@@ -1,18 +1,18 @@
-import std / [os, macros, math, asyncfutures, hashes]
+import std/[os, macros, math, asyncfutures, hashes]
 import locks except Lock
-import pkg / godot except print
-import pkg / compiler / vm except get_int
-from pkg / compiler / vm {.all.} import stack_trace_aux
-import pkg / compiler / ast except new_node
-import pkg / compiler / [vmdef, renderer, msgs]
+import pkg/godot except print
+import pkg/compiler/vm except get_int
+from pkg/compiler/vm {.all.} import stack_trace_aux
+import pkg/compiler/ast except new_node
+import pkg/compiler/[vmdef, renderer, msgs]
 
-import godotapi / [spatial, ray_cast]
-import core, models / [states, bots, builds, units, colors, signs, serializers]
-import libs / [interpreters, eval]
-import shared / errors
+import godotapi/[spatial, ray_cast]
+import core, models/[states, bots, builds, units, colors, signs, serializers]
+import libs/[interpreters, eval]
+import shared/errors
 
-import ./ [vars, scripting]
-include ./ host_bridge_utils
+import ./[vars, scripting]
+include ./host_bridge_utils
 
 proc get_last_error(self: Worker): ErrorData =
   result = self.last_exception.from_exception
@@ -32,7 +32,8 @@ proc unmap_unit*(self: Worker, unit: Unit) =
 proc link_dependency(self: Worker, dep: Unit) =
   let dep = dep.find_root
   let active = self.active_unit.find_root
-  debug "linking dependency", dependency = dep.script_ctx.module_name,
+  debug "linking dependency",
+    dependency = dep.script_ctx.module_name,
     will_reload = active.script_ctx.module_name
   dep.script_ctx.dependents.incl active.script_ctx.module_name
 
@@ -41,8 +42,9 @@ proc write_stack_trace(self: Worker) =
 
   let ctx = self.active_unit.script_ctx
   {.gcsafe.}:
-    msg_writeln(ctx.ctx.config, "stack trace: (most recent call last)",
-      {msg_no_unit_sep})
+    msg_writeln(
+      ctx.ctx.config, "stack trace: (most recent call last)", {msg_no_unit_sep}
+    )
 
     stack_trace_aux(ctx.ctx, ctx.tos, ctx.pc)
 
@@ -87,18 +89,21 @@ proc register_active(self: Worker, pnode: PNode) =
   self.map_unit(self.active_unit, pnode)
 
 proc new_instance(self: Worker, src: Unit, dest: PNode) =
-  let id = src.id & "_" & self.active_unit.id & "_instance_" &
-      $(self.active_unit.units.len + 1)
+  let id =
+    src.id & "_" & self.active_unit.id & "_instance_" &
+    $(self.active_unit.units.len + 1)
 
   var clone = src.clone(self.active_unit, id)
   assert not clone.is_nil
-  clone.script_ctx = ScriptCtx.init(owner = clone, clone_of = src,
-      interpreter = self.interpreter)
+  clone.script_ctx =
+    ScriptCtx.init(
+      owner = clone, clone_of = src, interpreter = self.interpreter
+    )
 
   self.map_unit(clone, dest)
 
-  debug "adding to active unit", unit = clone.id,
-      active_unit = self.active_unit.id
+  debug "adding to active unit",
+    unit = clone.id, active_unit = self.active_unit.id
 
   self.active_unit.units.add(clone)
 
@@ -111,7 +116,8 @@ proc exec_instance(self: Worker, unit: Unit) =
   ctx.timeout_at = get_mono_time() + script_timeout
   ctx.running = ctx.call_proc("run_script", self.node_map[unit], true).paused
 
-proc active_unit(self: Worker): Unit = self.active_unit
+proc active_unit(self: Worker): Unit =
+  self.active_unit
 
 proc wake(self: Unit) =
   self.script_ctx.timer = get_mono_time()
@@ -143,18 +149,26 @@ proc reset_level(self: Worker) =
   self.exit(self.active_unit.script_ctx, 0)
   after_boop:
     let current_level = state.config.level_dir
-    state.config_value.value: level_dir = ""
+    state.config_value.value:
+      level_dir = ""
     remove_dir current_level
     state.config_value.value:
       level_dir = current_level
 
-proc world_name: string = state.config.world
+proc world_name(): string =
+  state.config.world
 
-proc level_name: string = state.config.level
+proc level_name(): string =
+  state.config.level
 
-proc begin_turn(self: Worker, unit: Unit, direction: Vector3, degrees: float,
-    lean: bool, move_mode: int): string =
-
+proc begin_turn(
+    self: Worker,
+    unit: Unit,
+    direction: Vector3,
+    degrees: float,
+    lean: bool,
+    move_mode: int,
+): string =
   assert not degrees.is_nan
   var degrees = floor_mod(degrees, 360)
   let ctx = self.active_unit.script_ctx
@@ -163,9 +177,9 @@ proc begin_turn(self: Worker, unit: Unit, direction: Vector3, degrees: float,
   if not ctx.callback.is_nil:
     self.pause_script()
 
-proc begin_move(self: Worker, unit: Unit, direction: Vector3, steps: float,
-    move_mode: int) =
-
+proc begin_move(
+    self: Worker, unit: Unit, direction: Vector3, steps: float, move_mode: int
+) =
   var steps = steps
   var direction = direction
   let ctx = self.active_unit.script_ctx
@@ -179,14 +193,15 @@ proc begin_move(self: Worker, unit: Unit, direction: Vector3, steps: float,
 
 proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   var duration = 0.0
-  ctx.callback = proc(delta: float, _: MonoTime): TaskStates =
-    duration += delta
-    if seconds > 0 and duration < seconds:
-      Running
-    elif seconds <= 0 and duration <= 0.5 and ctx.timer > get_mono_time():
-      Running
-    else:
-      Done
+  ctx.callback =
+    proc(delta: float, _: MonoTime): TaskStates =
+      duration += delta
+      if seconds > 0 and duration < seconds:
+        Running
+      elif seconds <= 0 and duration <= 0.5 and ctx.timer > get_mono_time():
+        Running
+      else:
+        Done
   ctx.last_ran = MonoTime.default
   self.pause_script()
 
@@ -209,7 +224,8 @@ proc `action_running=`(self: Unit, value: bool) =
     self.script_ctx.timer = MonoTime.high
   self.script_ctx.action_running = value
 
-proc id(self: Unit): string = self.id
+proc id(self: Unit): string =
+  self.id
 
 proc global(self: Unit): bool =
   Global in self.global_flags
@@ -324,18 +340,20 @@ proc sees(self: Worker, unit: Unit, target: Unit, distance: float): Future[bool]
     return
 
   let future = result
-  unit.script_ctx.callback = proc(delta: float, timeout: MonoTime): TaskStates =
-    let query = unit.sight_query
-    if ?query.answer:
-      future.complete(query.answer.get)
-      result = Done
-    else:
-      result = Running
+  unit.script_ctx.callback =
+    proc(delta: float, timeout: MonoTime): TaskStates =
+      let query = unit.sight_query
+      if ?query.answer:
+        future.complete(query.answer.get)
+        result = Done
+      else:
+        result = Running
 
   unit.script_ctx.last_ran = MonoTime.default
   self.pause_script()
 
-proc frame_count(): int = state.frame_count
+proc frame_count(): int =
+  state.frame_count
 
 proc frame_created(unit: Unit): int =
   unit.frame_created
@@ -353,11 +371,15 @@ proc drop_transform(unit: Unit): Transform =
 
 proc reset(self: Unit, clear: bool) =
   if clear:
-    if self of Build: Build(self).reset()
-    elif self of Bot: Bot(self).reset()
+    if self of Build:
+      Build(self).reset()
+    elif self of Bot:
+      Bot(self).reset()
   else:
-    if self of Build: Build(self).reset_state()
-    elif self of Bot: Bot(self).reset_state()
+    if self of Build:
+      Build(self).reset_state()
+    elif self of Bot:
+      Bot(self).reset_state()
 
 # Bot bindings
 
@@ -405,11 +427,11 @@ proc draw_position_set(self: Build, position: Vector3) =
 
 proc save(self: Build, name: string) =
   self.save_points[name] =
-      (self.draw_transform, self.color_value.value, self.drawing)
+    (self.draw_transform, self.color_value.value, self.drawing)
 
 proc restore(self: Build, name: string) =
   (self.draw_transform, self.color_value.value, self.drawing) =
-      self.save_points[name]
+    self.save_points[name]
 
 # Player binding
 
@@ -451,22 +473,43 @@ proc `open_sign=`(self: Unit, value: Sign) =
 
 # Sign bindings
 
-proc new_markdown_sign(self: Worker,
-    unit: Unit, pnode: PNode, message: string, more: string, width: float,
-    height: float, size: int, billboard: bool): Unit =
-
-  result = Sign.init(
-    message, more = more, owner = self.active_unit,
-    transform = drop_transform(unit), width = width, height = height,
-    size = size, billboard = billboard)
+proc new_markdown_sign(
+    self: Worker,
+    unit: Unit,
+    pnode: PNode,
+    message: string,
+    more: string,
+    width: float,
+    height: float,
+    size: int,
+    billboard: bool,
+): Unit =
+  result =
+    Sign.init(
+      message,
+      more = more,
+      owner = self.active_unit,
+      transform = drop_transform(unit),
+      width = width,
+      height = height,
+      size = size,
+      billboard = billboard,
+    )
 
   info "creating sign", id = result.id
   self.map_unit(result, pnode)
   unit.units.add(result)
 
-proc update_markdown_sign(self: Worker, unit: Sign, message: string,
-    more: string, width: float, height: float, size: int, billboard: bool) =
-
+proc update_markdown_sign(
+    self: Worker,
+    unit: Sign,
+    message: string,
+    more: string,
+    width: float,
+    height: float,
+    size: int,
+    billboard: bool,
+) =
   unit.width = width
   unit.height = height
   unit.size = size
@@ -511,7 +554,6 @@ proc `coding=`(self: Unit, value: Unit) =
 # End of bindings
 
 proc bridge_to_vm*(worker: Worker) =
-
   # host_bridge_utils.nim is expecting a var called `result`. Fix this.
   var result = worker
 
@@ -530,8 +572,7 @@ proc bridge_to_vm*(worker: Worker) =
     begin_turn, begin_move, sleep_impl, position_set, new_markdown_sign,
     update_markdown_sign
 
-  result.bridged_from_vm "bots",
-    play, all_bots
+  result.bridged_from_vm "bots", play, all_bots
 
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, all_builds,
@@ -542,5 +583,5 @@ proc bridge_to_vm*(worker: Worker) =
     size, `size=`, open, `open=`, billboard, `billboard=`
 
   result.bridged_from_vm "players",
-    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`,
-    coding, `coding=`, running, `running=`, open_sign, `open_sign=`
+    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`, coding,
+    `coding=`, running, `running=`, open_sign, `open_sign=`

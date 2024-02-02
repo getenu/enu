@@ -1,5 +1,5 @@
 import engine/engine, core
-import std / [strformat, sugar, os]
+import std/[strformat, sugar, os]
 
 let
   vmlib = "vmlib"
@@ -12,10 +12,11 @@ var
 e1.load("scripts", "bot", read_file script_dir & "/bots.nim", vmlib)
 e1.expose("yield_script", a => true)
 
-e1.expose "script_echo", proc(a: VmArgs): bool =
-  let str = a.get_string(0)
-  output &= str
-  echo str
+e1.expose "script_echo",
+  proc(a: VmArgs): bool =
+    let str = a.get_string(0)
+    output &= str
+    echo str
 
 assert e1.run()
 while e1.resume():

@@ -1,8 +1,8 @@
-import std / [json, jsonutils, sugar, tables, strutils, os, times, algorithm]
-import pkg / zippy / ziparchives_v1
+import std/[json, jsonutils, sugar, tables, strutils, os, times, algorithm]
+import pkg/zippy/ziparchives_v1
 import core except to_json
 import models
-import controllers / script_controllers / scripting
+import controllers/script_controllers/scripting
 
 var load_chunks {.threadvar.}: bool
 
@@ -10,13 +10,14 @@ type LevelInfo = object
   enu_version, format_version: string
 
 proc to_json_hook(self: Color): JsonNode =
-  result = if self == action_colors[eraser]:
-    %""
-  else:
-    for i, color in Colors.enum_fields:
-      if self == action_colors[Colors(i)]:
-        return %color
-    %self.to_html_hex
+  result =
+    if self == action_colors[eraser]:
+      %""
+    else:
+      for i, color in Colors.enum_fields:
+        if self == action_colors[Colors(i)]:
+          return %color
+      %self.to_html_hex
 
 proc from_json_hook(self: var Color, json: JsonNode) =
   let hex = json.get_str
@@ -41,9 +42,9 @@ proc from_json_hook(self: var Vector3, json: JsonNode) =
   self.y = json[1].get_float
   self.z = json[2].get_float
 
-proc from_json_hook(self: var ZenTable[Vector3, VoxelInfo],
-    json: JsonNode) {.gcsafe.} =
-
+proc from_json_hook(
+    self: var ZenTable[Vector3, VoxelInfo], json: JsonNode
+) {.gcsafe.} =
   assert load_chunks
   self = ~Table[Vector3, VoxelInfo]
   for chunks in json:
@@ -52,9 +53,9 @@ proc from_json_hook(self: var ZenTable[Vector3, VoxelInfo],
       let info = chunk[1].json_to(VoxelInfo)
       self[location] = info
 
-proc from_json_hook(self: var ZenTable[string, ZenTable[Vector3, VoxelInfo]],
-    json: JsonNode) =
-
+proc from_json_hook(
+    self: var ZenTable[string, ZenTable[Vector3, VoxelInfo]], json: JsonNode
+) =
   assert not load_chunks
   for id, edits in json:
     for edit in edits:
@@ -68,18 +69,23 @@ proc from_json_hook(self: var ZenTable[string, ZenTable[Vector3, VoxelInfo]],
 
 proc from_json_hook(self: var Transform, json: JsonNode) =
   self = Transform.init(origin = json["origin"].json_to(Vector3))
-  let elements = if json["basis"].kind == JObject:
-    # old way
-    json["basis"]["elements"]
-  else:
-    # new way
-    json["basis"]
+  let elements =
+    if json["basis"].kind == JObject:
+      # old way
+      json["basis"]["elements"]
+    else:
+      # new way
+      json["basis"]
   self.basis.elements.from_json(elements)
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
-  self = Build.init(id = json["id"].json_to(string), transform =
-      json["start_transform"].json_to(Transform), color = color)
+  self =
+    Build.init(
+      id = json["id"].json_to(string),
+      transform = json["start_transform"].json_to(Transform),
+      color = color,
+    )
 
   if load_chunks:
     var edit = ~Table[Vector3, VoxelInfo]()
@@ -89,8 +95,11 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     self.shared.edits.from_json(json["edits"])
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
-  self = Bot.init(id = json["id"].json_to(string), transform =
-      json["start_transform"].json_to(Transform))
+  self =
+    Bot.init(
+      id = json["id"].json_to(string),
+      transform = json["start_transform"].json_to(Transform),
+    )
 
   if not load_chunks:
     self.shared.edits.from_json(json["edits"])
@@ -98,7 +107,7 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
 proc `$`(self: Color): string =
   $json_utils.to_json(self)
 
-proc `$`(self: VoxelInfo): string  =
+proc `$`(self: VoxelInfo): string =
   \"[{self.kind.ord}, \"{self.color}\"]"
 
 proc `$`(self: Vector3): string =
@@ -108,20 +117,23 @@ proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
   \"[{self.voxel}, [{int self.info.kind}, {self.info.color}]]"
 
 proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
-  let edits = collect:
-    for id, edit in self.value:
-      let json = collect:
-        for voxel, info in edit.value:
-          $(voxel, info)
-      if json.len > 0:
-        let elements = json.join(",\n").indent(2)
-        \"\"{id}\": [\n{elements}\n]"
+  let edits =
+    collect:
+      for id, edit in self.value:
+        let json =
+          collect:
+            for voxel, info in edit.value:
+              $(voxel, info)
+        if json.len > 0:
+          let elements = json.join(",\n").indent(2)
+          \"\"{id}\": [\n{elements}\n]"
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
   let elements = self.start_transform.basis.elements.map_it($it).join(",\n")
   let edits = $self.shared.edits
-  result = \"""
+  result =
+    \"""
 
 {{
   "id": "{self.id}",
@@ -157,14 +169,12 @@ proc save_level*(level_dir: string, save_all = false) =
   if Server in state.local_flags:
     debug "saving level"
     let level = LevelInfo(enu_version: enu_version, format_version: "v0.9.2")
-    write_file level_dir / "level.json",
-      jsonutils.to_json(level).pretty
+    write_file level_dir / "level.json", jsonutils.to_json(level).pretty
 
     for unit in state.units:
       if save_all or Dirty in unit.global_flags:
         unit.save
         unit.global_flags -= Dirty
-
   else:
     debug "not server. Skipping save."
 
@@ -173,25 +183,22 @@ proc backup_level*(level_dir: string) =
     let backup_dir = state.config.world_dir / "backups"
     create_dir backup_dir
 
-    let backup_file = backup_dir / state.config.level & "_" &
+    let backup_file =
+      backup_dir / state.config.level & "_" &
       times.now().format("yyyy-MM-dd-HH-mm-ss") & ".zip"
-      
-    let backups = walk_files(backup_dir / 
-      state.config.level & "_????-??-??-??-??-??.zip").to_seq.sorted
+
+    let backups =
+      walk_files(backup_dir / state.config.level & "_????-??-??-??-??-??.zip").to_seq.sorted
 
     if backups.len > 19:
-      for file in backups[0..^20]:
+      for file in backups[0 ..^ 20]:
         remove_file file
 
     create_zip_archive(level_dir, backup_file)
 
 proc load_units(parent: Unit) =
   let opts = JOptions(allow_missing_keys: true)
-  let path =
-    if ?parent:
-      parent.data_dir
-    else:
-      state.config.data_dir
+  let path = if ?parent: parent.data_dir else: state.config.data_dir
   for dir in walk_dirs(path / "*"):
     let unit_id = dir.split_path.tail
     let file_name = dir / unit_id & ".json"

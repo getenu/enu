@@ -1,7 +1,10 @@
-import godotapi / [viewport, camera, mesh_instance, material, camera,
-                         viewport_texture, image, resource_loader]
+import
+  godotapi/[
+    viewport, camera, mesh_instance, material, camera, viewport_texture, image,
+    resource_loader
+  ]
 import godot
-import ".." / [core, globals]
+import ".."/[core, globals]
 
 gdobj PreviewMaker of Viewport:
   var
@@ -26,7 +29,9 @@ gdobj PreviewMaker of Viewport:
       self.callback = nil
     self.skip_next = false
 
-  proc generate_block_preview*(material_name: string, callback: proc(preview: Image) {.gcsafe.}) =
+  proc generate_block_preview*(
+      material_name: string, callback: proc(preview: Image) {.gcsafe.}
+  ) =
     let material = load(\"res://materials/{material_name}.tres") as Material
     self.cube.visible = true
     self.bot.visible = false
@@ -37,7 +42,9 @@ gdobj PreviewMaker of Viewport:
     self.callback = callback
     self.skip_next = true
 
-  proc generate_object_preview*(object_name: string, callback: proc(preview: Image) {.gcsafe.}) =
+  proc generate_object_preview*(
+      object_name: string, callback: proc(preview: Image) {.gcsafe.}
+  ) =
     self.cube.visible = false
     self.bot.visible = true
     self.render_target_update_mode = UPDATE_ONCE

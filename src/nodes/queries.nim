@@ -1,6 +1,6 @@
-import pkg / godot
-import godotapi / [ray_cast]
-import core, models / [units]
+import pkg/godot
+import godotapi/[ray_cast]
+import core, models/[units]
 
 proc run*(query: var SightQuery, source: Unit) =
   assert not ?query.answer

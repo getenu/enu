@@ -1,8 +1,9 @@
-proc vec_proc*(vec: Vector3): Vector3 = discard
+proc vec_proc*(vec: Vector3): Vector3 =
+  discard
 
 name = "box"
 echo "in script"
-def box(length=10, height=20):
+def box(length = 10, height = 20):
   echo "box", " ", "box 2"
   height.times:
     4.times:

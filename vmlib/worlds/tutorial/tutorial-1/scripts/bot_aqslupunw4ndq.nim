@@ -6,7 +6,7 @@ var test_mode = false
 var bot_id = ""
 var maze: MazeType
 
-proc get_bot: Bot =
+proc get_bot(): Bot =
   # each time the code for the bot is reloaded we need to
   # grab a new reference to it. Eventually an easy way to
   # do this will be built in.
@@ -16,13 +16,13 @@ proc get_bot: Bot =
     elif not test_mode and bot.id == bot_id:
       return bot
 
-- setup:
+-setup:
   reset()
   position = position + LEFT
   speed = 10
   turn player
 
-- approach:
+-approach:
   sleep 2
   say "# - Hi!", width = 1.0
   sleep 2
@@ -33,10 +33,12 @@ proc get_bot: Bot =
   say "- Welcome to **Enu**!", width = 2.0
   sleep 1.5
   say "- Click this text for a short tutorial.", "# Welcome to Enu!"
-  while not sign.open: turn(player)
+  while not sign.open:
+    turn(player)
 
-- movement_info:
-  say "# . . .", """
+-movement_info:
+  say "# . . .",
+    """
 
 # Welcome to Enu!
 
@@ -62,14 +64,16 @@ controller, or by holding down left `alt/option (⌥)` on your keyboard.
 
 Sneak behind the `Bot` to continue the tutorial.
 
-  """, width = 0.6
+  """,
+    width = 0.6
 
   menu.show = true
-  while me.angle_to(player).abs notin 150..210:
+  while me.angle_to(player).abs notin 150 .. 210:
     sleep 0.5
 
-- flying_info:
-  say "- Good!", """
+-flying_info:
+  say "- Good!",
+    """
 
 # Jumping and Flying
 
@@ -85,24 +89,28 @@ ever get yourself stuck you can probably fly your way out.
 
 Jump, fly, then returning to the ground to continue the tutorial.
 
-  """, width = 1.4
+  """,
+    width = 1.4
 
   speed = 1
   turn player
   sign.open = true
-  while not player.flying: sleep()
+  while not player.flying:
+    sleep()
 
-- flying_done:
+-flying_done:
   say "- Now drop!"
-  while player.flying: sleep()
+  while player.flying:
+    sleep()
 
-- good_job:
+-good_job:
   sign.open = false
   say "- Good Job!", "# Good Job!"
   sleep 2
 
-- tool_info:
-  say "- Switch to `Place Bot`", """
+-tool_info:
+  say "- Switch to `Place Bot`",
+    """
 
 # Changing tools
 
@@ -120,14 +128,17 @@ friendly robots. Tools `2` - `7` are the `blue`, `red`, `green`, `black`,
 
 Select the `Place Bot` tool to continue the tutorial.
 
-  """, width = 2.5
+  """,
+    width = 2.5
 
   sign.open = true
-  while player.tool != PlaceBot: sleep()
+  while player.tool != PlaceBot:
+    sleep()
   sleep 0.5
 
-- bot_info:
-  say "- Place a `Bot`", """
+-bot_info:
+  say "- Place a `Bot`",
+    """
 
 # Bots
 
@@ -138,7 +149,8 @@ They can be placed with the `left` mouse button or the `R1` gamepad trigger.
 
 Place a `Bot` on the ground to continue the tutorial.
 
-  """, width = 2.0
+  """,
+    width = 2.0
 
   sign.open = true
   var last_bot_frame = frame_count()
@@ -151,20 +163,21 @@ Place a `Bot` on the ground to continue the tutorial.
       last_bot_frame = bot.frame_created
       bot_id = bot.id
 
-- draw_maze:
+-draw_maze:
   var bot = get_bot()
   turn bot
   maze = Maze.new(global = true)
   maze.show = true
   maze.rotation = 0
-  maze.position = bot.position + (LEFT * 4.0)  + (FORWARD * 1.0)
+  maze.position = bot.position + (LEFT * 4.0) + (FORWARD * 1.0)
 
   while not maze.finished:
     sleep 0.5
   sleep 1
 
-- code_info:
-  say "- Coding", """
+-code_info:
+  say "- Coding",
+    """
 
 # Coding Enu
 
@@ -182,8 +195,9 @@ Switch to the `Code` tool to continue the tutorial.
     turn player
   sleep 0.5
 
-- open_code:
-  sign.more = """
+-open_code:
+  sign.more =
+    """
 
 # Coding Enu
 
@@ -201,8 +215,9 @@ Open the code for your `Bot` to continue the tutorial.
     turn player
   sleep 0.5
 
-- bot_navigation:
-  sign.more = """
+-bot_navigation:
+  sign.more =
+    """
 
 # Coding Bots
 
@@ -246,11 +261,12 @@ Good luck! We'll conclude this tutorial when your `Bot` goes past the
     bot = get_bot()
     turn bot
 
-- win:
+-win:
   maze.won = true
   say "- Great Job!", "# Great Job!"
   sleep 15
-  say "- All Done!", """
+  say "- All Done!",
+    """
 
 # Great Job!
 

@@ -1,17 +1,19 @@
-proc restart* =
+proc restart*() =
   player.flying = false
   player.open_sign = nil
   player.position = start_spot
   player.rotation = 180
 
-proc stop_playing* =
+proc stop_playing*() =
   player.playing = false
   player.running = false
 
 proc level_menu*(me: Build, show_restart = true) =
-  let blurb = "`Inky: Isolation` is a simple survivial game created in Enu. Find buttons to open new areas of the space station. Hit the top of Inky's head to defeat them."
+  let blurb =
+    "`Inky: Isolation` is a simple survivial game created in Enu. Find buttons to open new areas of the space station. Hit the top of Inky's head to defeat them."
 
-  let copy = \"""
+  let copy =
+    \"""
 
 # Inky: Isolation
 
@@ -33,17 +35,17 @@ proc level_menu*(me: Build, show_restart = true) =
   me.left 3
 
   forever:
-    let return_action = if show_restart:
-      "- [RETURN TO START](<nim://restart()>)"
-    else:
-      ""
+    let return_action =
+      if show_restart: "- [RETURN TO START](<nim://restart()>)" else: ""
 
-    let toolbar_action = if player.playing:
-      "- [SHOW TOOLBAR AND STOP PLAYING](<nim://player.playing = false;player.running = false;player.open_sign = nil>)"
-    else:
-      ""
+    let toolbar_action =
+      if player.playing:
+        "- [SHOW TOOLBAR AND STOP PLAYING](<nim://player.playing = false;player.running = false;player.open_sign = nil>)"
+      else:
+        ""
 
-    let more = \"""
+    let more =
+      \"""
 
 # Menu
 
@@ -67,4 +69,3 @@ See how `Inky: Isolation` was built in the video [Inky: Isolation. A 90 minute g
     sleep 1
 
 level_menu(me)
-

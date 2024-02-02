@@ -1,9 +1,11 @@
 lock = true
 
 turn 180
-let blurb = "Here are some things you can build with Enu. Play with their code, or build something new from scratch."
+let blurb =
+  "Here are some things you can build with Enu. Play with their code, or build something new from scratch."
 
-let text = \"""
+let text =
+  \"""
 
 # Examples
 
@@ -15,7 +17,8 @@ let text = \"""
 
 """
 
-let more = \"""
+let more =
+  \"""
 
 # Menu
 

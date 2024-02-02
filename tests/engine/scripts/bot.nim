@@ -1,7 +1,9 @@
 #proc quit*(exit_code = 0) = discard
 include robot
 
-proc script_echo*(msg: string) = discard
+proc script_echo*(msg: string) =
+  discard
+
 proc echo(x: varargs[string, `$`]) =
   script_echo x.join
 

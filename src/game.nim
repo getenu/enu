@@ -1,13 +1,15 @@
-import std / [monotimes, os, json, math, random, net]
-import pkg / [godot, metrics, metrics / stdlib_httpserver]
+import std/[monotimes, os, json, math, random, net]
+import pkg/[godot, metrics, metrics/stdlib_httpserver]
 from dotenv import nil
-import godotapi / [input, input_event, gd_os, node, scene_tree, packed_scene,
-    sprite, control, viewport, viewport_texture, performance, label, theme,
-    dynamic_font, resource_loader, main_loop, project_settings, input_map,
-    input_event_action, input_event_key, global_constants, scroll_container,
-    voxel_server]
+import
+  godotapi/[
+    input, input_event, gd_os, node, scene_tree, packed_scene, sprite, control,
+    viewport, viewport_texture, performance, label, theme, dynamic_font,
+    resource_loader, main_loop, project_settings, input_map, input_event_action,
+    input_event_key, global_constants, scroll_container, voxel_server
+  ]
 
-import core, types, globals, controllers, models / [serializers, units, colors]
+import core, types, globals, controllers, models/[serializers, units, colors]
 
 if file_exists(".env"):
   dotenv.overload()
@@ -18,8 +20,9 @@ when defined(metrics):
 ZenContext.init_metrics "main", "worker"
 
 # saved state when restarting worker thread
-const savable_flags = {ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed,
-  AltFlySpeed}
+const savable_flags = {
+  ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed
+}
 
 var saved_transform {.threadvar.}: Transform
 var saved_rotation {.threadvar.}: float
@@ -57,7 +60,8 @@ gdobj Game of Node:
       state.units.value.walk_tree proc(unit: Unit) =
         inc unit_count
 
-      self.stats.text = \"""
+      self.stats.text =
+        \"""
 
 FPS: {fps}
 scale_factor: {state.scale_factor}
@@ -68,7 +72,8 @@ level: {state.level_name}
 {get_stats()}
 
       """
-    state.voxel_tasks = parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
+    state.voxel_tasks =
+      parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
 
     if time > self.rescale_at:
       self.rescale_at = MonoTime.high
@@ -79,8 +84,8 @@ level: {state.level_name}
 
   proc rescale*() =
     let vp = self.get_viewport().size
-    state.scale_factor = sqrt(state.config.mega_pixels *
-        1_000_000.0 / (vp.x * vp.y))
+    state.scale_factor =
+      sqrt(state.config.mega_pixels * 1_000_000.0 / (vp.x * vp.y))
 
     self.scaled_viewport.size = vp * state.scale_factor
 
@@ -91,7 +96,7 @@ level: {state.level_name}
     if what == main_loop.NOTIFICATION_WM_ABOUT:
       alert \"Enu {enu_version}\n\n© 2023 Scott Wadden", "Enu"
 
-  proc add_platform_input_actions =
+  proc add_platform_input_actions() =
     let suffix = "." & host_os
     for action in get_actions():
       let action = action.as_string()
@@ -105,19 +110,24 @@ level: {state.level_name}
           action_add_event(name, event)
         erase_action(action)
 
-  proc init* =
+  proc init*() =
     self.process_priority = -100
 
-    let
-      screen_scale = if host_os == "macos":
+    let screen_scale =
+      if host_os == "macos":
         get_screen_scale(-1)
       else:
         get_screen_dpi(-1).float / 96.0
 
     var initial_user_config = load_user_config(get_user_data_dir())
 
-    Zen.thread_ctx = ZenContext.init(id = \"main-{generate_id()}",
-      chan_size = 2000, buffer = true, label = "main")
+    Zen.thread_ctx =
+      ZenContext.init(
+        id = \"main-{generate_id()}",
+        chan_size = 2000,
+        buffer = true,
+        label = "main",
+      )
 
     state = GameState.init
     state.nodes.game = self
@@ -140,11 +150,15 @@ level: {state.level_name}
       listen_address = ""
 
     if host_os == "macosx" and not restarting:
-      global_menu_add_item("Help", "Documentation", "help".to_variant, "".to_variant)
+      global_menu_add_item(
+        "Help", "Documentation", "help".to_variant, "".to_variant
+      )
       global_menu_add_item("Help", "Web Site", "site".to_variant, "".to_variant)
       if connect_address == "":
         global_menu_add_separator("Help")
-        global_menu_add_item("Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant)
+        global_menu_add_item(
+          "Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant
+        )
 
     state.config_value.value:
       work_dir = get_user_data_dir()
@@ -156,8 +170,8 @@ level: {state.level_name}
       mega_pixels = uc.mega_pixels ||= 2.0
       start_full_screen = uc.start_full_screen ||= true
       semicolon_as_colon = uc.semicolon_as_colon ||= false
-      lib_dir = join_path(get_executable_path().parent_dir(), "..", "..", "..",
-          "vmlib")
+      lib_dir =
+        join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
 
       connect_address = connect_address
       listen_address = listen_address
@@ -176,10 +190,11 @@ level: {state.level_name}
 
     set_window_fullscreen state.config.start_full_screen
     when defined(metrics):
-      let metrics_port = if ?get_env("ENU_METRICS_PORT"):
-        get_env("ENU_METRICS_PORT").parse_int
-      else:
-        8000
+      let metrics_port =
+        if ?get_env("ENU_METRICS_PORT"):
+          get_env("ENU_METRICS_PORT").parse_int
+        else:
+          8000
 
       {.cast(gcsafe).}:
         start_metrics_http_server("0.0.0.0", Port(metrics_port))
@@ -191,11 +206,9 @@ level: {state.level_name}
       if host_os == "macosx":
         state.config_value.value:
           lib_dir = join_path(exe_dir.parent_dir, "Resources", "vmlib")
-
       elif host_os == "windows":
         state.config_value.value:
           lib_dir = join_path(exe_dir, "vmlib")
-
       elif host_os == "linux":
         state.config_value.value:
           lib_dir = join_path(exe_dir.parent_dir, "lib", "vmlib")
@@ -218,18 +231,17 @@ level: {state.level_name}
       theme_holder = self.find_node("LeftPanel").as(Container)
       theme = theme_holder.theme
       font = theme.default_font.as(DynamicFont)
-      bold_font = theme.get_font("bold_font", "RichTextLabel")
-                        .as(DynamicFont)
+      bold_font = theme.get_font("bold_font", "RichTextLabel").as(DynamicFont)
 
     font.size = size
     bold_font.size = size
     theme_holder.theme = theme
 
-  method ready* =
+  method ready*() =
     state.nodes.data = state.nodes.game.find_node("Level").get_node("data")
     assert not state.nodes.data.is_nil
     self.scaled_viewport =
-        self.get_node("ViewportContainer/Viewport") as Viewport
+      self.get_node("ViewportContainer/Viewport") as Viewport
 
     self.bind_signals(self.get_viewport(), "size_changed")
     self.bind_signals(self.get_tree(), "global_menu_action")
@@ -277,7 +289,8 @@ level: {state.level_name}
         discard self.get_tree.reload_current_scene()
 
       if Connecting.added:
-        state.status_message = \"""
+        state.status_message =
+          \"""
 
 # Connecting...
 
@@ -320,7 +333,8 @@ Trying to connect to {state.config.connect_address}.
     elif action == "site":
       discard shell_open("http://getenu.com")
     elif action == "tutorial":
-      state.config_value.value: level_dir = ""
+      state.config_value.value:
+        level_dir = ""
       state.player.transform = Transform.init(origin = vec3(0, 2, 0))
       state.player.rotation = 0
       change_loaded_level("tutorial-1", "tutorial")
@@ -331,34 +345,35 @@ Trying to connect to {state.config.connect_address}.
       var level = config.level
       let prefix = config.world & "-"
       level.remove_prefix(prefix)
-      var num = try:
-        level.parse_int
-      except ValueError:
-        1
+      var num =
+        try:
+          level.parse_int
+        except ValueError:
+          1
       num += diff
       change_loaded_level(prefix & $num, state.config.world)
     else:
       # force a reload of the current world
       let current_level = state.config.level_dir
-      state.config_value.value: level_dir = ""
-      state.config_value.value: level_dir = current_level
+      state.config_value.value:
+        level_dir = ""
+      state.config_value.value:
+        level_dir = current_level
 
   method unhandled_input*(event: InputEvent) =
     if event of InputEventKey:
       let event = InputEventKey(event)
       # Left alt support. raw_code is an enu specific addition
-      if (host_os == "macosx" and event.raw_code == 58) or
-        (host_os == "windows" and event.raw_code == 56) or
-        (host_os == "linux" and event.raw_code == 65513):
-
+      if (host_os == "macosx" and event.raw_code == 58) or (
+        host_os == "windows" and event.raw_code == 56
+      ) or (host_os == "linux" and event.raw_code == 65513):
         if event.pressed:
           state.push_flag CommandMode
         else:
           state.pop_flag CommandMode
 
     if EditorVisible in state.local_flags or DocsVisible in state.local_flags or
-      ConsoleVisible in state.local_flags:
-
+        ConsoleVisible in state.local_flags:
       if event.is_action_pressed("zoom_in"):
         self.set_font_size state.config.font_size + 1
       elif event.is_action_pressed("zoom_out"):
@@ -371,11 +386,11 @@ Trying to connect to {state.config.connect_address}.
         state.update_action_index(-1)
         # NOTE: alt+enter isn't being picked up on windows if the editor is
         # open. Needs investigation.
-    if event.is_action_pressed("toggle_fullscreen") or (host_os == "windows" and
-        CommandMode in state.local_flags and EditorVisible in state.local_flags and
-        event of InputEventKey and
-        event.as(InputEventKey).scancode == KEY_ENTER):
-
+    if event.is_action_pressed("toggle_fullscreen") or (
+      host_os == "windows" and CommandMode in state.local_flags and
+      EditorVisible in state.local_flags and event of InputEventKey and
+      event.as(InputEventKey).scancode == KEY_ENTER
+    ):
       set_window_fullscreen not is_window_fullscreen()
       var user_config = load_user_config()
       state.config_value.value:
@@ -393,7 +408,6 @@ Trying to connect to {state.config.connect_address}.
       self.switch_world(0)
       state.pop_flag ResettingVM
       self.get_tree().set_input_as_handled()
-
     elif event.is_action_pressed("pause"):
       state.paused = not state.paused
     elif event.is_action_pressed("clear_console"):
@@ -435,15 +449,13 @@ Trying to connect to {state.config.connect_address}.
   method on_meta_clicked(url: string) =
     if url.starts_with("nim://"):
       assert ?state.open_sign
-      state.open_sign.owner.eval = url[6..^1]
-
+      state.open_sign.owner.eval = url[6 ..^ 1]
     elif url.starts_with("unit://"):
-      let id = url[7..^1]
+      let id = url[7 ..^ 1]
       for unit in state.units:
         if unit.id == id:
           state.open_unit = unit
           return
       logger("err", \"Unable to open unit {id}")
-
     elif shell_open(url) != godotcoretypes.Error.OK:
       logger("err", \"Unable to open url {url}")

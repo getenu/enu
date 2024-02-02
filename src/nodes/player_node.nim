@@ -1,16 +1,19 @@
-import std / [math, sugar]
-from std / times import `+`
-import pkg / godot except print
-import godotapi / [kinematic_body, spatial, input, input_event,
-    input_event_mouse_motion, input_event_joypad_motion, ray_cast, scene_tree,
-    input_event_pan_gesture, viewport, camera, global_constants,
-    collision_shape, kinematic_collision, packed_scene, resource_loader]
-import core, globals, nodes / helpers
+import std/[math, sugar]
+from std/times import `+`
+import pkg/godot except print
+import
+  godotapi/[
+    kinematic_body, spatial, input, input_event, input_event_mouse_motion,
+    input_event_joypad_motion, ray_cast, scene_tree, input_event_pan_gesture,
+    viewport, camera, global_constants, collision_shape, kinematic_collision,
+    packed_scene, resource_loader
+  ]
+import core, globals, nodes/helpers
 import aim_target, models
 
-proc handle_collisions(self: Player, collisions:
-    seq[KinematicCollision]) {.inline, gcsafe.} =
-
+proc handle_collisions(
+    self: Player, collisions: seq[KinematicCollision]
+) {.inline, gcsafe.} =
   var colliders: HashSet[Model]
   for collision in collisions:
     let collider = collision.collider
@@ -67,8 +70,10 @@ gdobj PlayerNode of KinematicBody:
     state.set_flag Flying, value
 
   proc get_look_direction(): Vector2 =
-    vec2(get_action_strength("look_right") - get_action_strength("look_left"),
-         get_action_strength("look_up") - get_action_strength("look_down"))
+    vec2(
+      get_action_strength("look_right") - get_action_strength("look_left"),
+      get_action_strength("look_up") - get_action_strength("look_down"),
+    )
 
   proc update_rotation(offset: Vector2) =
     var r = self.camera_rig.rotation
@@ -79,12 +84,18 @@ gdobj PlayerNode of KinematicBody:
     self.camera_rig.rotation = r
 
   proc get_input_direction(): Vector3 =
-    vec3(get_action_strength("move_right") - get_action_strength("move_left"),
-         get_action_strength("jump") - get_action_strength("crouch"),
-         get_action_strength("move_back") - get_action_strength("move_front"))
+    vec3(
+      get_action_strength("move_right") - get_action_strength("move_left"),
+      get_action_strength("jump") - get_action_strength("crouch"),
+      get_action_strength("move_back") - get_action_strength("move_front"),
+    )
 
-  proc calculate_velocity(velocity_current: Vector3, move_direction: Vector3,
-                          delta: float, flying, alt_speed: bool): Vector3 =
+  proc calculate_velocity(
+      velocity_current: Vector3,
+      move_direction: Vector3,
+      delta: float,
+      flying, alt_speed: bool,
+  ): Vector3 =
     let speed =
       if not flying and not (alt_speed xor AltWalkSpeed in state.local_flags):
         vec3(state.config.walk_speed)
@@ -98,17 +109,20 @@ gdobj PlayerNode of KinematicBody:
     result = move_direction * delta * speed
 
     if not flying:
-      let float_time = if alt_speed:
-        float_time + float_time
-      else:
-        float_time
-      let floating = self.jump_down and ?self.jump_time and
-          self.jump_time.get + float_time > get_mono_time()
+      let float_time =
+        if alt_speed:
+          float_time + float_time
+        else:
+          float_time
+      let floating =
+        self.jump_down and ?self.jump_time and
+        self.jump_time.get + float_time > get_mono_time()
 
-      let gravity = if floating:
-        state.gravity / 4
-      else:
-        state.gravity
+      let gravity =
+        if floating:
+          state.gravity / 4
+        else:
+          state.gravity
       result.y = velocity_current.y + gravity * delta
 
   method ready*() =
@@ -146,19 +160,18 @@ gdobj PlayerNode of KinematicBody:
         self.transform = change.item
 
     self.camera_rig.rotation = vec3(0, deg_to_rad self.model.rotation, 0)
-    self.rotation_zid = self.model.rotation_value.watch:
-      if added or touched:
-        self.camera_rig.rotation = vec3(0, deg_to_rad change.item, 0)
+    self.rotation_zid =
+      self.model.rotation_value.watch:
+        if added or touched:
+          self.camera_rig.rotation = vec3(0, deg_to_rad change.item, 0)
 
-    self.velocity_zid = self.model.velocity_value.watch:
-      if added:
-        self.velocity = change.item
+    self.velocity_zid =
+      self.model.velocity_value.watch:
+        if added:
+          self.velocity = change.item
 
-  proc current_raycast*: RayCast =
-    if MouseCaptured in state.local_flags:
-      self.aim_ray
-    else:
-      self.world_ray
+  proc current_raycast*(): RayCast =
+    if MouseCaptured in state.local_flags: self.aim_ray else: self.world_ray
 
   method process*(delta: float) =
     self.model.velocity_value.pause self.velocity_zid:
@@ -186,11 +199,12 @@ gdobj PlayerNode of KinematicBody:
       let ray_length = if state.tool == CodeMode: 200.0 else: 100.0
       if MouseCaptured notin state.local_flags:
         let
-          mouse_pos = self.get_viewport().get_mouse_position() *
-            float state.scale_factor
+          mouse_pos =
+            self.get_viewport().get_mouse_position() * float state.scale_factor
           cast_from = self.camera.project_ray_origin(mouse_pos)
-          cast_to = self.aim_ray.translation +
-              self.camera.project_ray_normal(mouse_pos) * ray_length
+          cast_to =
+            self.aim_ray.translation +
+            self.camera.project_ray_normal(mouse_pos) * ray_length
 
         self.world_ray.cast_to = cast_to
         self.world_ray.translation = cast_from
@@ -210,7 +224,10 @@ gdobj PlayerNode of KinematicBody:
       process_input =
         EditorVisible notin state.local_flags or CommandMode in state.local_flags
       input_direction =
-          if process_input: self.get_input_direction() else: vec3()
+        if process_input:
+          self.get_input_direction()
+        else:
+          vec3()
 
       basis = self.camera_rig.global_transform.basis
       right = basis.x * input_direction.x
@@ -225,17 +242,20 @@ gdobj PlayerNode of KinematicBody:
     move_direction.y = 0
     move_direction += up
 
-    var velocity = self.calculate_velocity(self.velocity, move_direction,
-                                           delta, self.flying, self.alt_speed)
+    var velocity =
+      self.calculate_velocity(
+        self.velocity, move_direction, delta, self.flying, self.alt_speed
+      )
 
     self.model.input_direction = input_direction
     self.velocity = self.move_and_slide(velocity, UP)
 
     self.model.transform = self.transform
 
-    let collisions = collect:
-      for i in 0..(self.get_slide_count - 1):
-        self.get_slide_collision(i)
+    let collisions =
+      collect:
+        for i in 0 .. (self.get_slide_count - 1):
+          self.get_slide_collision(i)
 
     handle_collisions(self.model, collisions)
 
@@ -247,8 +267,12 @@ gdobj PlayerNode of KinematicBody:
         self.down_ray.translation = move_direction * 0.3 + vec3(0, 1, 0)
         if self.down_ray.is_colliding():
           let length = 1.85
-          let diff = length - (self.down_ray.global_transform.origin -
-              self.down_ray.get_collision_point).y
+          let diff =
+            length -
+            (
+              self.down_ray.global_transform.origin -
+              self.down_ray.get_collision_point
+            ).y
           if diff > 0 and (self.is_on_floor() or not self.boosted):
             let boost = 16.1 * cbrt(diff)
             if boost > self.velocity.y:
@@ -260,12 +284,11 @@ gdobj PlayerNode of KinematicBody:
         self.translation = vec3(0, 100, 0)
 
   proc has_active_input(device: int): bool =
-    for axis in 0..JOY_AXIS_MAX:
+    for axis in 0 .. JOY_AXIS_MAX:
       if axis != JOY_ANALOG_L2 and axis != JOY_ANALOG_R2 and
           get_joy_axis(device, axis).abs >= 0.2:
-
         return true
-    for button in 0..JOY_BUTTON_MAX:
+    for button in 0 .. JOY_BUTTON_MAX:
       if is_joy_button_pressed(device, button):
         return true
 
@@ -280,9 +303,9 @@ gdobj PlayerNode of KinematicBody:
         self.input_relative += event.as(InputEventMouseMotion).relative()
       else:
         self.skip_next_mouse_move = false
-    if EditorVisible in state.local_flags and not self.skip_release and
-      (event of InputEventJoypadButton or event of InputEventJoypadMotion):
-
+    if EditorVisible in state.local_flags and not self.skip_release and (
+      event of InputEventJoypadButton or event of InputEventJoypadMotion
+    ):
       let active_input = self.has_active_input(event.device.int)
       if CommandMode in state.local_flags and not active_input:
         self.command_timer = input_command_timeout
@@ -326,9 +349,7 @@ gdobj PlayerNode of KinematicBody:
     elif event.is_action_released("run"):
       self.alt_speed = false
 
-    if event of InputEventPanGesture and
-      state.tool notin {CodeMode, PlaceBot}:
-
+    if event of InputEventPanGesture and state.tool notin {CodeMode, PlaceBot}:
       let pan = event as InputEventPanGesture
       self.pan_delta += pan.delta.y
       if self.pan_delta > 2:
@@ -351,7 +372,8 @@ gdobj PlayerNode of KinematicBody:
     elif event.is_action_released("remove"):
       state.pop_flag SecondaryDown
 
-proc get_player*(): PlayerNode = PlayerNode(state.nodes.player)
+proc get_player*(): PlayerNode =
+  PlayerNode(state.nodes.player)
 
 var scene {.threadvar.}: PackedScene
 proc init*(_: type PlayerNode): PlayerNode =

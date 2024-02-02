@@ -1,4 +1,4 @@
-import std / [macros, strformat, strutils, sequtils, tables]
+import std/[macros, strformat, strutils, sequtils, tables]
 import types, macro_helpers, base_api
 
 proc current_loop(value: Loop = nil): Loop =
@@ -11,15 +11,14 @@ proc advance*(ctx: Context, frame: Frame = nil): bool =
   ## advance state machine. Returns true if statemachine is still running.
   ## It's ok to run this from within the statemachine, but Halt exceptions
   ## must be allowed to propagate.
-  let
-    stack = ctx.stack
+  let stack = ctx.stack
   for i, stack_frame in stack:
     let active = i + 1 == stack.len
     try:
       discard stack_frame.manager(active)
     except Halt:
       # shrink the stack to the current position
-      ctx.stack = ctx.stack[0..i]
+      ctx.stack = ctx.stack[0 .. i]
       if stack_frame.action == nil and stack_frame == ctx.stack[^1]:
         discard ctx.stack.pop()
       if frame != stack_frame:
@@ -58,6 +57,7 @@ template loop_body(body: untyped) =
     while true:
       body
       return true
+
   validate_loop()
   frame.manager = manager
   ctx.stack.add frame
@@ -103,36 +103,35 @@ template loop_body(body: untyped) =
 macro loop*(body: untyped) =
   discard current_loop(Loop())
   result = new_stmt_list()
-  let body = if body.kind == nnkNilLit: new_stmt_list() else: body
+  let body =
+    if body.kind == nnkNilLit:
+      new_stmt_list()
+    else:
+      body
   result.add(get_ast loop_body(body))
   result = new_block_stmt(result)
 
-macro loop*(sig: untyped,  body: untyped): untyped =
+macro loop*(sig: untyped, body: untyped): untyped =
   var (name, params, vars) = sig.parse_sig
 
-  let proc_body = quote do:
-    const this_state {.inject.} = `name.ast_to_str`
-    `vars`
-    loop:
-      `body`
+  let proc_body =
+    quote:
+      const this_state {.inject.} = `name . ast_to_str`
+      `vars`
+      loop:
+        `body`
 
   result = new_stmt_list()
   params.add new_ident_defs(ident"ctx", ident"Context", new_nil_lit())
 
-  result.add new_proc(
-    name = ident(name),
-    params = params,
-    body = proc_body
-  )
+  result.add new_proc(name = ident(name), params = params, body = proc_body)
 
 macro smart_call*(call: untyped) =
   var call_without_ctx = call.copy_nim_tree
   call_without_ctx.del call_without_ctx.len - 1
-  result = quote do:
-    when compiles(`call`):
-      `call`
-    else:
-      `call_without_ctx`
+  result =
+    quote:
+      when compiles(`call`): `call` else: `call_without_ctx`
 
 proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
   var
@@ -171,11 +170,13 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
     let ctx_arg = new_nim_node(nnkExprEqExpr)
     ctx_arg.add(ident"ctx")
     ctx_arg.add(ident"ctx")
-    if to_state.kind == nnkInfix and to_state[0] == ident"as" and to_state[2].kind == nnkIdent:
+    if to_state.kind == nnkInfix and to_state[0] == ident"as" and
+        to_state[2].kind == nnkIdent:
       to_state_name = $to_state[2]
       if to_state[1].kind == nnkIdent:
         let search_name = $to_state[1]
-        if search_name in current_loop().states and not current_loop().states[search_name].is_nil:
+        if search_name in current_loop().states and
+            not current_loop().states[search_name].is_nil:
           to_state = current_loop().states[search_name]
         else:
           to_state = new_call(to_state[1], ctx_arg)
@@ -185,7 +186,8 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
       current_loop().states[to_state_name] = copy_nim_tree to_state
     elif to_state.kind == nnkIdent:
       to_state_name = $to_state
-      if to_state_name in current_loop().states and not current_loop().states[to_state_name].is_nil:
+      if to_state_name in current_loop().states and
+          not current_loop().states[to_state_name].is_nil:
         to_state = current_loop().states[to_state_name]
       else:
         to_state = new_call(to_state, ctx_arg) #
@@ -194,7 +196,6 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
       to_state.add(ctx_arg)
     else:
       error "to_state must be identifier or call", to_state
-
   else:
     to_state_name = "nil"
     to_state = new_stmt_list()
@@ -207,29 +208,35 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
     includes_str = includes.join(",")
     excludes_str = excludes.join(",")
 
-  result = quote do:
-    when not declared(current_state) or not declared(ctx):
-      {.error: "`->` or `==>` must be inside a `loop` ".}
-    if `immediate` or (active and done):
-      let
-        from_includes: seq[string] = `includes_str`.split(",")
-        from_excludes: seq[string] = `excludes_str`.split(",")
-      if (current_state in from_includes or
-          (current_state != "nil" and
-          (("others" in from_includes and `to_state_name` != current_state) or
-          "any" in from_includes))) and current_state notin from_excludes:
-        current_state = `to_state_name`
-        first_iteration = true
-        proc action() =
-          if first_iteration:
-            `body`
-          smart_call(`to_state`)
-          first_iteration = false
-        if `to_state_name` != "nil":
-          frame.action = action
-        else:
-          frame.action = nil
-        raise (ref Halt)()
+  result =
+    quote:
+      when not declared(current_state) or not declared(ctx):
+        {.error: "`->` or `==>` must be inside a `loop` ".}
+      if `immediate` or (active and done):
+        let
+          from_includes: seq[string] = `includes_str`.split(",")
+          from_excludes: seq[string] = `excludes_str`.split(",")
+        if (
+          current_state in from_includes or (
+            current_state != "nil" and (
+              ("others" in from_includes and `to_state_name` != current_state) or
+              "any" in from_includes
+            )
+          )
+        ) and current_state notin from_excludes:
+          current_state = `to_state_name`
+          first_iteration = true
+          proc action() =
+            if first_iteration:
+              `body`
+            smart_call(`to_state`)
+            first_iteration = false
+
+          if `to_state_name` != "nil":
+            frame.action = action
+          else:
+            frame.action = nil
+          raise (ref Halt)()
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   result = transition(from_state, to_state, body, ident"true")
@@ -238,14 +245,13 @@ macro `->`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   result = transition(from_state, to_state, body, ident"false")
 
 when is_main_module:
-  proc task1 =
+  proc task1() =
     echo "task1"
 
-  proc task2 =
+  proc task2() =
     echo "task2"
 
-  var
-    count = 0
+  var count = 0
   loop:
     inc count
     echo "count: " & $count
@@ -261,6 +267,7 @@ when is_main_module:
 
   proc forward(length = 1) =
     echo "forward ", length
+
   proc turn_right() =
     discard
 

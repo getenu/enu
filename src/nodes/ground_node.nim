@@ -1,4 +1,4 @@
-import godotapi / [mesh_instance]
+import godotapi/[mesh_instance]
 import pkg/godot except print
 import core, globals, models
 

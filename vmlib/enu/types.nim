@@ -1,4 +1,4 @@
-import std / [strutils, strformat, macros, math, hashes, tables, random]
+import std/[strutils, strformat, macros, math, hashes, tables, random]
 
 var global_default* = false
 
@@ -6,11 +6,21 @@ const yes* = true
 const no* = false
 
 type
-  Vector3* = tuple
-    x, y, z: float
+  Vector3* = tuple[x, y, z: float]
 
   Directions* = enum
-    up, u, down, d, left, l, right, r, forward, f, back, b
+    up
+    u
+    down
+    d
+    left
+    l
+    right
+    r
+    forward
+    f
+    back
+    b
 
   Unit* = ref object of RootObj
     id: int
@@ -32,7 +42,13 @@ type
   Sign* = ref object of Unit
 
   Colors* = enum
-    eraser, blue, red, green, black, white, brown
+    eraser
+    blue
+    red
+    green
+    black
+    white
+    brown
 
   PlayerType* = ref object of Unit
 
@@ -40,7 +56,7 @@ type
     stack*: seq[Frame]
 
   Frame* = ref object
-    manager*: proc(active: bool):bool
+    manager*: proc(active: bool): bool
     action*: proc()
 
   Halt* = object of CatchableError
@@ -50,10 +66,17 @@ type
     from_states*: seq[(string, NimNode)]
 
   Tools* = enum
-    CodeMode, BlueBlock, RedBlock, GreenBlock, BlackBlock, WhiteBlock,
-    BrownBlock, PlaceBot
+    CodeMode
+    BlueBlock
+    RedBlock
+    GreenBlock
+    BlackBlock
+    WhiteBlock
+    BrownBlock
+    PlaceBot
 
-proc vec3*(x, y, z: float): Vector3 {.inline.} = (x:x, y:y, z:z)
+proc vec3*(x, y, z: float): Vector3 {.inline.} =
+  (x: x, y: y, z: z)
 
 const
   UP* = vec3(0, 1, 0)
@@ -67,7 +90,7 @@ const
 
 const EPSILON = 0.00001'f32
 
-proc isEqualApprox*(a, b: float32): bool {.inline, noinit.}  =
+proc isEqualApprox*(a, b: float32): bool {.inline, noinit.} =
   abs(a - b) < EPSILON
 
 proc isEqualApprox*(a, b: float64): bool {.inline, noinit.} =
@@ -92,8 +115,6 @@ proc stepify*(value, step: float32): float32 {.inline, noinit.} =
     value
 
 # Vector3 math. https://github.com/pragmagic/godot-nim/blob/7fb22f69af92aa916e56dba14ba3938fc7fa1dd1/godot/core/vector3.nim
-
-
 
 proc `+`*(a, b: Vector3): Vector3 {.inline.} =
   result.x = a.x + b.x
@@ -120,20 +141,20 @@ proc `*`*(a, b: Vector3): Vector3 {.inline.} =
   result.y = a.y * b.y
   result.z = a.z * b.z
 
-proc `*=`*(a: var Vector3, b: Vector3) {.inline.}=
+proc `*=`*(a: var Vector3, b: Vector3) {.inline.} =
   a.x *= b.x
   a.y *= b.y
   a.z *= b.z
 
-proc `*`*(a: Vector3; b: float32): Vector3 {.inline.} =
+proc `*`*(a: Vector3, b: float32): Vector3 {.inline.} =
   result.x = a.x * b
   result.y = a.y * b
   result.z = a.z * b
 
-proc `*`*(b: float32; a: Vector3): Vector3 {.inline.} =
+proc `*`*(b: float32, a: Vector3): Vector3 {.inline.} =
   a * b
 
-proc `*=`*(a: var Vector3; b: float32) {.inline.} =
+proc `*=`*(a: var Vector3, b: float32) {.inline.} =
   a.x *= b
   a.y *= b
   a.z *= b
@@ -143,17 +164,17 @@ proc `/`*(a, b: Vector3): Vector3 =
   result.y = a.y / b.y
   result.z = a.z / b.z
 
-proc `/=`*(a: var Vector3; b: Vector3) {.inline.} =
+proc `/=`*(a: var Vector3, b: Vector3) {.inline.} =
   a.x /= b.x
   a.y /= b.y
   a.z /= b.z
 
-proc `/`*(a: Vector3; b: float32): Vector3 =
+proc `/`*(a: Vector3, b: float32): Vector3 =
   result.x = a.x / b
   result.y = a.y / b
   result.z = a.z / b
 
-proc `/=`*(a: var Vector3; b: float32) {.inline.} =
+proc `/=`*(a: var Vector3, b: float32) {.inline.} =
   a.x /= b
   a.y /= b
   a.z /= b
@@ -229,7 +250,8 @@ proc cross*(self, other: Vector3): Vector3 {.inline.} =
   vec3(
     self.y * other.z - self.z * other.y,
     self.z * other.x - self.x * other.z,
-    self.x * other.y - self.y * other.x)
+    self.x * other.y - self.y * other.x,
+  )
 
 proc dot*(self, other: Vector3): float32 {.inline.} =
   self.x * other.x + self.y * other.y + self.z * other.z
@@ -238,7 +260,7 @@ proc abs*(self: Vector3): Vector3 {.inline.} =
   vec3(abs(self.x), abs(self.y), abs(self.z))
 
 proc sign*(self: Vector3): Vector3 {.inline.} =
-  vec3(sign(self.x),  sign(self.y), sign(self.z))
+  vec3(sign(self.x), sign(self.y), sign(self.z))
 
 proc floor*(self: Vector3): Vector3 {.inline.} =
   vec3(floor(self.x), floor(self.y), floor(self.z))
@@ -250,7 +272,7 @@ proc lerp*(self: Vector3, other: Vector3, t: float32): Vector3 {.inline.} =
   vec3(
     self.x + t * (other.x - self.x),
     self.y + t * (other.y - self.y),
-    self.z + t * (other.z - self.z)
+    self.z + t * (other.z - self.z),
   )
 
 proc distanceTo*(self, other: Vector3): float32 {.inline.} =
@@ -282,8 +304,7 @@ proc snapped*(self: Vector3, other: Vector3): Vector3 =
   result = self
   result.snap(other)
 
-proc cubicInterpolate*(self, b, preA, postB: Vector3;
-                       t: float32): Vector3 =
+proc cubicInterpolate*(self, b, preA, postB: Vector3, t: float32): Vector3 =
   let p0 = preA
   let p1 = self
   let p2 = b
@@ -292,10 +313,11 @@ proc cubicInterpolate*(self, b, preA, postB: Vector3;
   let t2 = t * t
   let t3 = t2 * t
 
-  result = 0.5 * ((p1 * 2.0) +
-            (-p0 + p2) * t +
-            (2.0 * p0 - 5.0 * p1 + 4 * p2 - p3) * t2 +
-            (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+  result =
+    0.5 * (
+      (p1 * 2.0) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4 * p2 - p3) * t2 +
+      (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+    )
 
 proc moveToward*(vFrom, to: Vector3, delta: float32): Vector3 =
   let
@@ -312,5 +334,7 @@ proc moveToward*(vFrom, to: Vector3, delta: float32): Vector3 =
 converter vec3_to_bool*(v: Vector3): bool =
   v != vec3(0, 0, 0)
 
-proc init*[T: Exception](kind: type[T], message: string, parent: ref Exception = nil): ref Exception =
+proc init*[T: Exception](
+    kind: type[T], message: string, parent: ref Exception = nil
+): ref Exception =
   (ref kind)(msg: message, parent: parent)

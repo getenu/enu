@@ -1,7 +1,7 @@
-import std / [os, with, tables]
-import godotapi / spatial
-from pkg / core / godotcoretypes import Basis
-import core, models / [states, colors], libs / interpreters
+import std/[os, with, tables]
+import godotapi/spatial
+from pkg/core/godotcoretypes import Basis
+import core, models/[states, colors], libs/interpreters
 
 proc fix_parents*(self: Unit, parent: Unit) =
   self.parent = parent
@@ -56,9 +56,9 @@ proc find_root*(self: Unit, all_clones = false): Unit =
   while parent != nil:
     result = parent
 
-    if (all_clones and not ?parent.clone_of) or
-        (not all_clones and Global in parent.global_flags):
-
+    if (all_clones and not ?parent.clone_of) or (
+      not all_clones and Global in parent.global_flags
+    ):
       parent = nil
     else:
       parent = parent.parent
@@ -80,22 +80,26 @@ proc data_dir*(self: Unit): string =
 proc data_file*(self: Unit): string =
   self.data_dir / self.id & ".json"
 
-method main_thread_joined*(self: Unit) {.base, gcsafe.} = discard
+method main_thread_joined*(self: Unit) {.base, gcsafe.} =
+  discard
 
-method worker_thread_joined*(self: Unit) {.base, gcsafe.} = discard
+method worker_thread_joined*(self: Unit) {.base, gcsafe.} =
+  discard
 
-method batch_changes*(self: Unit): bool {.base, gcsafe.} = discard
+method batch_changes*(self: Unit): bool {.base, gcsafe.} =
+  discard
 
-method apply_changes*(self: Unit) {.base, gcsafe.} = discard
+method apply_changes*(self: Unit) {.base, gcsafe.} =
+  discard
 
-method on_begin_move*(self: Unit, direction: Vector3, steps: float,
-    move_mode: int): Callback {.base, gcsafe.} =
-
+method on_begin_move*(
+    self: Unit, direction: Vector3, steps: float, move_mode: int
+): Callback {.base, gcsafe.} =
   fail "override me"
 
-method on_begin_turn*(self: Unit, direction: Vector3, degrees: float,
-    lean: bool, move_mode: int): Callback {.base, gcsafe.} =
-
+method on_begin_turn*(
+    self: Unit, direction: Vector3, degrees: float, lean: bool, move_mode: int
+): Callback {.base, gcsafe.} =
   fail "override me"
 
 method clone*(self: Unit, clone_to: Unit, id: string): Unit {.base, gcsafe.} =
@@ -122,7 +126,9 @@ method collect_garbage*(self: Unit) {.base, gcsafe.} =
 method ensure_visible*(self: Unit) {.base, gcsafe.} =
   discard
 
-method on_collision*(self: Model, partner: Model, normal: Vector3) {.base, gcsafe.} =
+method on_collision*(
+    self: Model, partner: Model, normal: Vector3
+) {.base, gcsafe.} =
   discard
 
 method off_collision*(self: Model, partner: Model) {.base, gcsafe.} =

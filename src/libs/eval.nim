@@ -1,9 +1,9 @@
-import std / options
-import compiler / [syntaxes, reorder, vmdef, msgs]
-import compiler / passes {.all.}
+import std/options
+import compiler/[syntaxes, reorder, vmdef, msgs]
+import compiler/passes {.all.}
 
 {.warning[UnusedImport]: off.}
-include compiler / [nimeval, pipelines]
+include compiler/[nimeval, pipelines]
 
 export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 
@@ -16,10 +16,15 @@ export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 # https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
 # Normal module loading procedure, but makes PContext a param so it can be
 # passed to extend_module
-proc processModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
-  stream: PLLStream, ctx: var PContext): bool {.discardable.} =
-
-  if graph.stopCompile(): return true
+proc processModule*(
+    graph: ModuleGraph,
+    module: PSym,
+    idgen: IdGenerator,
+    stream: PLLStream,
+    ctx: var PContext,
+): bool {.discardable.} =
+  if graph.stopCompile():
+    return true
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
@@ -40,26 +45,35 @@ proc processModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
   while true:
     syntaxes.openParser(p, fileIdx, s, graph.cache, graph.config)
 
-    if not belongsToStdlib(graph, module) or (belongsToStdlib(graph, module) and module.name.s == "distros"):
+    if not belongsToStdlib(graph, module) or (
+      belongsToStdlib(graph, module) and module.name.s == "distros"
+    ):
       # XXX what about caching? no processing then? what if I change the
       # modules to include between compilation runs? we'd need to track that
       # in ROD files. I think we should enable this feature only
       # for the interactive mode.
       if module.name.s != "nimscriptapi":
-        processImplicitImports graph, graph.config.implicitImports, nkImportStmt, module, ctx, bModule, idgen
-        processImplicitImports graph, graph.config.implicitIncludes, nkIncludeStmt, module, ctx, bModule, idgen
+        processImplicitImports graph,
+          graph.config.implicitImports, nkImportStmt, module, ctx, bModule,
+          idgen
+        processImplicitImports graph,
+          graph.config.implicitIncludes, nkIncludeStmt, module, ctx, bModule,
+          idgen
 
     checkFirstLineIndentation(p)
     block processCode:
-      if graph.stopCompile(): break processCode
+      if graph.stopCompile():
+        break processCode
       var n = parseTopLevelStmt(p)
-      if n.kind == nkEmpty: break processCode
+      if n.kind == nkEmpty:
+        break processCode
       # read everything, no streaming possible
       var sl = newNodeI(nkStmtList, n.info)
       sl.add n
       while true:
         var n = parseTopLevelStmt(p)
-        if n.kind == nkEmpty: break
+        if n.kind == nkEmpty:
+          break
         sl.add n
 
       prePass(ctx, sl)
@@ -67,7 +81,8 @@ proc processModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
       discard processPipeline(graph, semNode, bModule)
 
     closeParser(p)
-    if s.kind != llsStdIn: break
+    if s.kind != llsStdIn:
+      break
 
   assert graph.pipelinePass == EvalPass
   let finalNode = closePContext(graph, ctx, nil)
@@ -81,8 +96,12 @@ proc processModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
   result = true
 
 # from nimeval. Added moduleName
-proc selectUniqueSymbol*(i: Interpreter; name: string;
-  symKinds: set[TSymKind] = {skLet, skVar}; moduleName: string): PSym =
+proc selectUniqueSymbol*(
+    i: Interpreter,
+    name: string,
+    symKinds: set[TSymKind] = {skLet, skVar},
+    moduleName: string,
+): PSym =
   ## Can be used to access a unique symbol of ``name`` and
   ## the given ``symKinds`` filter.
   assert i != nil
@@ -98,18 +117,25 @@ proc selectUniqueSymbol*(i: Interpreter; name: string;
   result = nil
   while s != nil:
     if s.kind in symKinds:
-      if result == nil: result = s
-      else: return nil # ambiguous
+      if result == nil:
+        result = s
+      else:
+        return nil # ambiguous
     s = nextModuleIter(it, i.graph)
 
 # from nimeval. Added moduleName
-proc selectRoutine*(i: Interpreter; name: string, module_name: string): PSym =
+proc selectRoutine*(i: Interpreter, name: string, module_name: string): PSym =
   ## Selects a declared routine (proc/func/etc) from the main module.
   ## The routine needs to have the export marker ``*``. The only matching
   ## routine is returned and ``nil`` if it is overloaded.
   {.gcsafe.}:
-    result = selectUniqueSymbol(i, name, {skTemplate, skMacro, skFunc,
-      skMethod, skProc, skConverter}, moduleName)
+    result =
+      selectUniqueSymbol(
+        i,
+        name,
+        {skTemplate, skMacro, skFunc, skMethod, skProc, skConverter},
+        moduleName,
+      )
 
 proc resetModule*(i: Interpreter, moduleName: string) =
   for iface in i.graph.ifaces:
@@ -118,17 +144,16 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       iface.module.ast = nil
       break
 
-proc loadModule*(i: Interpreter, fileName, code: string, ctx: var PContext
-  ) {.gcsafe.} =
-
+proc loadModule*(
+    i: Interpreter, fileName, code: string, ctx: var PContext
+) {.gcsafe.} =
   assert i != nil
 
   var module: PSym
   let moduleName = fileName.splitFile.name
   for iface in i.graph.ifaces:
     if iface.module != nil and iface.module.name.s == moduleName and
-      fileName == toFullPath(i.graph.config, iface.module.info):
-
+        fileName == toFullPath(i.graph.config, iface.module.info):
       module = iface.module
       break
 
@@ -152,10 +177,15 @@ proc loadModule*(i: Interpreter, fileName, code: string, ctx: var PContext
 
 # adapted from
 # https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
-proc extendModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
-  stream: PLLStream, ctx: var PContext): bool {.discardable.} =
-
-  if graph.stopCompile(): return true
+proc extendModule*(
+    graph: ModuleGraph,
+    module: PSym,
+    idgen: IdGenerator,
+    stream: PLLStream,
+    ctx: var PContext,
+): bool {.discardable.} =
+  if graph.stopCompile():
+    return true
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
@@ -169,15 +199,18 @@ proc extendModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
     checkFirstLineIndentation(p)
     assert graph.pipelinePass == EvalPass
     block processCode:
-      if graph.stopCompile(): break processCode
+      if graph.stopCompile():
+        break processCode
       var n = parseTopLevelStmt(p)
-      if n.kind == nkEmpty: break processCode
+      if n.kind == nkEmpty:
+        break processCode
       # read everything, no streaming possible
       var sl = newNodeI(nkStmtList, n.info)
       sl.add n
       while true:
         var n = parseTopLevelStmt(p)
-        if n.kind == nkEmpty: break
+        if n.kind == nkEmpty:
+          break
         sl.add n
 
       prePass(ctx, sl)
@@ -186,7 +219,8 @@ proc extendModule*(graph: ModuleGraph; module: PSym; idgen: IdGenerator;
       discard processPipeline(graph, semNode, bModule)
 
     closeParser(p)
-    if s.kind != llsStdIn: break
+    if s.kind != llsStdIn:
+      break
 
   result = true
 
@@ -204,15 +238,25 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string) =
   let s = llStreamOpen(code)
   extendModule(i.graph, module, i.idgen, s, ctx)
 
-proc config*(i: Interpreter): ConfigRef = i.graph.config
+proc config*(i: Interpreter): ConfigRef =
+  i.graph.config
 
-proc `exit_hook=`*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame)) =
+proc `exit_hook=`*(
+    i: Interpreter, hook: proc(c: PCtx, pc: int, tos: PStackFrame)
+) =
   (PCtx i.graph.vm).exitHook = hook
 
-proc `enter_hook=`*(i: Interpreter, hook: proc (c: PCtx, pc: int, tos: PStackFrame, instr: TInstr)) =
+proc `enter_hook=`*(
+    i: Interpreter,
+    hook: proc(c: PCtx, pc: int, tos: PStackFrame, instr: TInstr),
+) =
   (PCtx i.graph.vm).enterHook = hook
 
-proc `error_hook=`*(i: Interpreter, hook: proc(config: ConfigRef,
-    info: TLineInfo; msg: string, severity: Severity) {.gcsafe.}) =
-
+proc `error_hook=`*(
+    i: Interpreter,
+    hook:
+      proc(config: ConfigRef, info: TLineInfo, msg: string, severity: Severity) {.
+        gcsafe
+      .},
+) =
   i.registerErrorHook(hook)

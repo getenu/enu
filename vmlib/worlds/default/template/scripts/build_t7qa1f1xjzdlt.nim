@@ -3,7 +3,8 @@ let menu* = me
 speed = 0
 lock = true
 
-let overview = \"""
+let overview =
+  \"""
 
 World `{world_name()}`
 
@@ -11,7 +12,8 @@ Level `{level_name()}`
 
 """
 
-let details = \"""
+let details =
+  \"""
 
 # Menu
 

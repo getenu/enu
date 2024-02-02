@@ -1,7 +1,8 @@
 lock = true
 turn left
 
-let text = """
+let text =
+  """
 
 # Annoying Robot
 

@@ -1,5 +1,5 @@
 import system except echo
-import std / [strformat, math, importutils, strutils, options, sets]
+import std/[strformat, math, importutils, strutils, options, sets]
 import random as rnd except rand
 import types, state_machine, base_bridge, base_bridge_private
 
@@ -11,14 +11,18 @@ proc echo*(args: varargs[string, `$`]) =
 proc quit*(code = 0, msg = "") =
   exit(code, msg)
 
-proc `position=`*(self: Unit, position: Vector3) = self.position_set(position)
-proc `position=`*(self: Unit, unit: Unit) = self.position_set(unit.position)
+proc `position=`*(self: Unit, position: Vector3) =
+  self.position_set(position)
+
+proc `position=`*(self: Unit, unit: Unit) =
+  self.position_set(unit.position)
 
 proc link_dependency*(dep: Unit) =
   if not dep.is_nil:
     link_dependency_impl(dep)
 
-proc link_dependency*(dep: not Unit) = discard
+proc link_dependency*(dep: not Unit) =
+  discard
 
 proc `seed=`*(self: Unit, seed: int) =
   private_access Unit
@@ -85,26 +89,59 @@ template down*(self: Unit, steps = 1.0) =
   mixin wait, begin_move
   wait self.begin_move(DOWN, steps, move_mode)
 
-template l*(self: Unit, steps = 1.0) = self.left(steps)
-template r*(self: Unit, steps = 1.0) = self.right(steps)
-template u*(self: Unit, steps = 1.0) = self.up(steps)
-template d*(self: Unit, steps = 1.0) = self.down(steps)
-template f*(self: Unit, steps = 1.0) = self.forward(steps)
-template b*(self: Unit, steps = 1.0) = self.back(steps)
+template l*(self: Unit, steps = 1.0) =
+  self.left(steps)
 
-template forward*(steps = 1.0) = enu_target.forward(steps)
-template back*(steps = 1.0) = enu_target.back(steps)
-template left*(steps = 1.0) = enu_target.left(steps)
-template right*(steps = 1.0) = enu_target.right(steps)
-template up*(steps = 1.0) = enu_target.up(steps)
-template down*(steps = 1.0) = enu_target.down(steps)
+template r*(self: Unit, steps = 1.0) =
+  self.right(steps)
 
-template l*(steps = 1.0) = enu_target.left(steps)
-template r*(steps = 1.0) = enu_target.right(steps)
-template u*(steps = 1.0) = enu_target.up(steps)
-template d*(steps = 1.0) = enu_target.down(steps)
-template f*(steps = 1.0) = enu_target.forward(steps)
-template b*(steps = 1.0) = enu_target.back(steps)
+template u*(self: Unit, steps = 1.0) =
+  self.up(steps)
+
+template d*(self: Unit, steps = 1.0) =
+  self.down(steps)
+
+template f*(self: Unit, steps = 1.0) =
+  self.forward(steps)
+
+template b*(self: Unit, steps = 1.0) =
+  self.back(steps)
+
+template forward*(steps = 1.0) =
+  enu_target.forward(steps)
+
+template back*(steps = 1.0) =
+  enu_target.back(steps)
+
+template left*(steps = 1.0) =
+  enu_target.left(steps)
+
+template right*(steps = 1.0) =
+  enu_target.right(steps)
+
+template up*(steps = 1.0) =
+  enu_target.up(steps)
+
+template down*(steps = 1.0) =
+  enu_target.down(steps)
+
+template l*(steps = 1.0) =
+  enu_target.left(steps)
+
+template r*(steps = 1.0) =
+  enu_target.right(steps)
+
+template u*(steps = 1.0) =
+  enu_target.up(steps)
+
+template d*(steps = 1.0) =
+  enu_target.down(steps)
+
+template f*(steps = 1.0) =
+  enu_target.forward(steps)
+
+template b*(steps = 1.0) =
+  enu_target.back(steps)
 
 template see*(target: Unit, less_than = 100.0): bool =
   enu_target.see(target, less_than)
@@ -128,7 +165,8 @@ template forward*(self: Unit, value: PositionOffset) =
   let steps = self.local_position.z - value.position.z + value.offset
   wait self.begin_move(FORWARD, steps, move_mode)
 
-template forward*(offset: PositionOffset) = enu_target.forward(offset)
+template forward*(offset: PositionOffset) =
+  enu_target.forward(offset)
 
 proc back*(self: Unit, value: PositionOffset, move_mode: int) =
   let steps = self.position.z - value.position.z - value.offset
@@ -139,7 +177,8 @@ template back*(self: Unit, value: PositionOffset) =
   let steps = self.local_position.z - value.position.z - value.offset
   wait self.begin_move(FORWARD, steps, move_mode)
 
-template back*(offset: PositionOffset) = enu_target.back(offset)
+template back*(offset: PositionOffset) =
+  enu_target.back(offset)
 
 proc left*(self: Unit, value: PositionOffset, move_mode: int) =
   let steps = self.local_position.x - value.position.x + value.offset
@@ -150,7 +189,8 @@ template left*(self: Unit, value: PositionOffset) =
   let steps = self.local_position.x - value.position.x + value.offset
   wait self.begin_move(LEFT, steps, move_mode)
 
-template left*(offset: PositionOffset) = enu_target.left(offset)
+template left*(offset: PositionOffset) =
+  enu_target.left(offset)
 
 proc right*(self: Unit, value: PositionOffset, move_mode: int) =
   let steps = self.local_position.x - value.position.x - value.offset
@@ -161,7 +201,8 @@ template right*(self: Unit, value: PositionOffset) =
   let steps = self.local_position.x - value.position.x - value.offset
   wait self.begin_move(LEFT, steps, move_mode)
 
-template right*(offset: PositionOffset) = enu_target.right(offset)
+template right*(offset: PositionOffset) =
+  enu_target.right(offset)
 
 proc down*(self: Unit, value: PositionOffset, move_mode: int) =
   let steps = self.local_position.y - value.position.y + value.offset
@@ -172,7 +213,8 @@ template down*(self: Unit, value: PositionOffset) =
   let steps = self.local_position.y - value.position.y + value.offset
   wait self.begin_move(DOWN, steps, move_mode)
 
-template down*(offset: PositionOffset) = enu_target.down(offset)
+template down*(offset: PositionOffset) =
+  enu_target.down(offset)
 
 proc up*(self: Unit, value: PositionOffset, move_mode: int) =
   let steps = self.local_position.y - value.position.y - value.offset
@@ -183,7 +225,8 @@ template up*(self: Unit, value: PositionOffset) =
   let steps = self.local_position.y - value.position.y - value.offset
   wait self.begin_move(DOWN, steps, move_mode)
 
-template up*(offset: PositionOffset) = enu_target.up(offset)
+template up*(offset: PositionOffset) =
+  enu_target.up(offset)
 
 type NegativeNode = ref object
   node: Unit
@@ -203,7 +246,8 @@ proc angle_to*(self: Unit, enu_target: Unit): float =
   self.angle_to(enu_target.position)
 
 proc vec3(direction: Directions): Vector3 =
-  result = case direction:
+  result =
+    case direction
     of Directions.forward, Directions.f: FORWARD
     of Directions.back, Directions.b: BACK
     of Directions.left, Directions.l: LEFT
@@ -340,8 +384,11 @@ proc near*(node: Unit | Vector3, less_than = 5.0): bool =
 proc far*(node: Unit | Vector3, greater_than = 100.0): bool =
   result = node.distance > greater_than
 
-proc height*(self: Vector3): float = self.y
-proc height*(self: Unit): float = self.position.y
+proc height*(self: Vector3): float =
+  self.y
+
+proc height*(self: Unit): float =
+  self.position.y
 
 template go_home*() =
   enu_target.go_home
@@ -354,14 +401,14 @@ proc rng(): var Rand =
   var unit = active_unit()
   if unit.seed == 0:
     randomize()
-    unit.seed = rnd. rand(int.high)
+    unit.seed = rnd.rand(int.high)
     unit.rng = init_rand(unit.seed)
   unit.rng
 
 proc rand*[T: int | float](range: Slice[T]): T =
   rnd.rand rng(),
     if range.a > range.b:
-      range.b..range.a
+      range.b .. range.a
     else:
       range
 
@@ -378,10 +425,11 @@ converter float_slice_to_float*(range: Slice[float]): float =
   rand(range)
 
 proc fuzzed*(self, range: float): float =
-  result = if range > 0:
-    self + (rand(0.0..range) - (range / 2.0))
-  else:
-    self
+  result =
+    if range > 0:
+      self + (rand(0.0 .. range) - (range / 2.0))
+    else:
+      self
 
 proc fuzzed*(self, range: Vector3): Vector3 =
   vec3(self.x.fuzzed(range.x), self.y.fuzzed(range.y), self.z.fuzzed(range.z))
@@ -393,23 +441,25 @@ proc fuzzed*(self: Vector3, x, y, z: float): Vector3 =
   self.fuzzed(vec3(x, y, z))
 
 template times*(count: int, body: untyped): untyped =
-  for x in 0..<count:
+  for x in 0 ..< count:
     let first {.inject.} = (x == 0)
     let last {.inject.} = (x == count - 1)
     body
 
 template times*(count: int, name: untyped, body: untyped): untyped =
-  for name {.inject.} in 0..<count:
+  for name {.inject.} in 0 ..< count:
     let first {.inject.} = (name == 0)
     let last {.inject.} = (name == count - 1)
     body
 
-template x*(count: int, body: untyped): untyped = times(count, body)
+template x*(count: int, body: untyped): untyped =
+  times(count, body)
 
 macro dump*(x: typed): untyped =
   let s = x.toStrLit
-  let r = quote do:
-    echo(`s` & " = " & $`x`)
+  let r =
+    quote:
+      echo(`s` & " = " & $`x`)
   return r
 
 template cycle*[T](args: varargs[T]): T =
@@ -425,11 +475,11 @@ template cycle*[T](args: varargs[T]): T =
   args[positions[key]]
 
 proc random*[T](args: varargs[T]): T =
-  let i = rnd.rand(rng(), 0..(args.len - 1))
+  let i = rnd.rand(rng(), 0 .. (args.len - 1))
   args[i]
 
 proc contains*(max, chance: int): bool =
-  var r = rnd.rand(rng(), 1..max)
+  var r = rnd.rand(rng(), 1 .. max)
   result = r <= chance
 
 template forever*(body) =
@@ -456,8 +506,11 @@ proc go*(unit: Unit) =
   active_unit().forward((position - active_unit().position).length, 2)
   active_unit().down(active_unit().height - height, 2)
 
-proc even*(self: int): bool = self mod 2 == 0
-proc odd*(self: int): bool = not self.even
+proc even*(self: int): bool =
+  self mod 2 == 0
+
+proc odd*(self: int): bool =
+  not self.even
 
 template `\`*(s: string): string =
   var f = fmt(s)
@@ -466,18 +519,35 @@ template `\`*(s: string): string =
   f.remove_suffix("\n\n")
   f
 
-template `?`*(self: ref): bool = not self.is_nil
-template `?`*(self: object): bool = self != self.type.default
-template `?`*[T](option: Option[T]): bool = option.is_some
-template `?`*(self: SomeNumber): bool = self != 0
-template `?`*(self: string): bool = self != ""
-template `?`*[T](self: open_array[T]): bool = self.len > 0
-template `?`*[T](self: set[T]): bool = self.card > 0
-template `?`*[T](self: HashSet[T]): bool = self.card > 0
+template `?`*(self: ref): bool =
+  not self.is_nil
+
+template `?`*(self: object): bool =
+  self != self.type.default
+
+template `?`*[T](option: Option[T]): bool =
+  option.is_some
+
+template `?`*(self: SomeNumber): bool =
+  self != 0
+
+template `?`*(self: string): bool =
+  self != ""
+
+template `?`*[T](self: open_array[T]): bool =
+  self.len > 0
+
+template `?`*[T](self: set[T]): bool =
+  self.card > 0
+
+template `?`*[T](self: HashSet[T]): bool =
+  self.card > 0
 
 proc `or`*[T: not bool](a, b: T): T =
-  if ?a: result = a
-  else: result = b
+  if ?a:
+    result = a
+  else:
+    result = b
 
 template reset*(clear = false) =
   enu_target.reset(clear)

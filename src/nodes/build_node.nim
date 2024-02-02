@@ -1,9 +1,12 @@
-import std / [tables, bitops]
-import pkg / godot except print, Color
-import godotapi / [node, voxel_terrain, voxel_mesher_blocky, voxel_tool,
-       voxel_library, shader_material,resource_loader, packed_scene, ray_cast]
-import core, models / [units, builds, colors], globals
-import ./ queries
+import std/[tables, bitops]
+import pkg/godot except print, Color
+import
+  godotapi/[
+    node, voxel_terrain, voxel_mesher_blocky, voxel_tool, voxel_library,
+    shader_material, resource_loader, packed_scene, ray_cast
+  ]
+import core, models/[units, builds, colors], globals
+import ./queries
 
 const
   highlight_glow = 1.0
@@ -29,19 +32,20 @@ gdobj BuildNode of VoxelTerrain:
     self.bind_signals self, "block_loaded", "block_unloaded"
     self.default_view_distance = self.max_view_distance.int
 
-  proc prepare_materials =
+  proc prepare_materials() =
     if self.model.shared.materials.len == 0:
       # generate our own copy of the library materials, so we can manipulate
       # them without impacting other builds.
-      for i in 0..int.high:
+      for i in 0 .. int.high:
         let m = self.get_material(i)
         if m.is_nil:
           break
         else:
           let m = m.duplicate.as(ShaderMaterial)
           m.set_shader_param("emission_energy", default_glow.to_variant)
-          self.model.shared.emission_colors.add(m.get_shader_param("emission").
-            as_color)
+          self.model.shared.emission_colors.add(
+            m.get_shader_param("emission").as_color
+          )
 
           self.model.shared.materials.add(m)
 
@@ -57,25 +61,26 @@ gdobj BuildNode of VoxelTerrain:
 
   proc set_glow(glow: float) =
     let library = self.mesher.as(VoxelMesherBlocky).library
-    for i in 0..<library.voxel_count.int:
+    for i in 0 ..< library.voxel_count.int:
       let m = self.get_material(i).as(ShaderMaterial)
       if not m.is_nil:
         m.set_shader_param("emission_energy", glow.to_variant)
 
   proc set_highlight() =
     let library = self.mesher.as(VoxelMesherBlocky).library
-    for i in 0..<library.voxel_count.int:
+    for i in 0 ..< library.voxel_count.int:
       let m = self.get_material(i).as(ShaderMaterial)
       if not m.is_nil:
         if self.error_highlight_on:
           m.set_shader_param("emission", action_colors[red].to_variant)
         else:
-          m.set_shader_param("emission", self.model.shared.emission_colors[i].
-            to_variant)
+          m.set_shader_param(
+            "emission", self.model.shared.emission_colors[i].to_variant
+          )
 
-        if Highlight in self.model.local_flags or (HighlightError in
-          self.model.local_flags and self.error_highlight_on):
-
+        if Highlight in self.model.local_flags or (
+          HighlightError in self.model.local_flags and self.error_highlight_on
+        ):
           m.set_shader_param("emission_energy", highlight_glow.to_variant)
         else:
           m.set_shader_param("emission_energy", self.model.glow.to_variant)
@@ -83,13 +88,14 @@ gdobj BuildNode of VoxelTerrain:
   proc track_chunk(chunk_id: Vector3) =
     if chunk_id in self.model.chunks:
       self.draw_block(self.model.chunks[chunk_id])
-      self.active_chunks[chunk_id] = self.model.chunks[chunk_id].watch:
-        # `and not modified` isn't required, but the block will be
-        # replaced on the next iteration anyway.
-        if removed and not modified:
-          self.draw(change.item.key, action_colors[eraser])
-        elif added:
-          self.draw(change.item.key, change.item.value.color)
+      self.active_chunks[chunk_id] =
+        self.model.chunks[chunk_id].watch:
+          # `and not modified` isn't required, but the block will be
+          # replaced on the next iteration anyway.
+          if removed and not modified:
+            self.draw(change.item.key, action_colors[eraser])
+          elif added:
+            self.draw(change.item.key, change.item.value.color)
       self.draw_block(self.model.chunks[chunk_id])
     else:
       self.active_chunks[chunk_id] = empty_zid
@@ -105,7 +111,7 @@ gdobj BuildNode of VoxelTerrain:
         self.model.chunks[chunk_id].untrack(zid)
       self.active_chunks.del(chunk_id)
 
-  proc set_visibility =
+  proc set_visibility() =
     if Visible in self.model.global_flags:
       self.visible = true
 
@@ -120,13 +126,14 @@ gdobj BuildNode of VoxelTerrain:
       self.visible = false
 
   proc track_chunks() =
-    self.chunks_zid = self.model.chunks.watch:
-      let id = change.item.key
-      if id in self.active_chunks:
-        if added:
-          self.track_chunk(change.item.key)
-        elif removed:
-          self.active_chunks[id] = empty_zid
+    self.chunks_zid =
+      self.model.chunks.watch:
+        let id = change.item.key
+        if id in self.active_chunks:
+          if added:
+            self.track_chunk(change.item.key)
+          elif removed:
+            self.active_chunks[id] = empty_zid
 
   proc untrack_chunks() =
     Zen.thread_ctx.untrack(self.chunks_zid)
@@ -148,17 +155,16 @@ gdobj BuildNode of VoxelTerrain:
     self.track_chunks()
 
     self.model.global_flags.watch:
-      if (change.item == Visible and ScriptInitializing notin
-          self.model.global_flags) or ScriptInitializing.removed:
-
+      if (
+        change.item == Visible and
+        ScriptInitializing notin self.model.global_flags
+      ) or ScriptInitializing.removed:
         self.set_visibility
-
       elif Resetting.added:
         self.untrack_chunks()
         let model = self.model
         self.generator = nil
         self.stream = nil
-
       elif Resetting.removed:
         self.generator = gdnew[VoxelGeneratorFlat]()
         self.track_chunks()
@@ -185,9 +191,10 @@ gdobj BuildNode of VoxelTerrain:
           self.model.transform = self.transform
         self.max_view_distance = int(self.default_view_distance.float / scale)
 
-    self.transform_zid = self.model.transform_value.watch:
-      if added:
-        self.transform = change.item
+    self.transform_zid =
+      self.model.transform_value.watch:
+        if added:
+          self.transform = change.item
 
     self.model.sight_query_value.watch:
       if added:
@@ -210,7 +217,7 @@ gdobj BuildNode of VoxelTerrain:
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
 
-  proc setup* =
+  proc setup*() =
     let was_skipping_join = dont_join
     dont_join = true
 

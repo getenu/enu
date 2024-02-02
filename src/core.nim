@@ -1,8 +1,8 @@
 import types
 export types
 
-import pkg / model_citizen / utils
-import std / [sequtils, strutils, sugar, macros, asyncfutures, importutils]
+import pkg/model_citizen/utils
+import std/[sequtils, strutils, sugar, macros, asyncfutures, importutils]
 export utils, sequtils, strutils, sugar, importutils
 
 ### Globals ###
@@ -13,9 +13,9 @@ var state* {.threadvar.}: GameState
 ### Sugar ###
 
 from sugar import dup, dump, collect
-import std / [with, sets, monotimes, tables]
-import std / times except seconds
-import pkg / [pretty, flatty]
+import std/[with, sets, monotimes, tables]
+import std/times except seconds
+import pkg/[pretty, flatty]
 
 export with, sets, tables, pretty, flatty
 
@@ -26,10 +26,11 @@ proc minutes*(m: float | int): Duration {.inline.} =
 
 export dump
 
-import pkg / chronicles
+import pkg/chronicles
 export chronicles
 
-template nim_filename*: string = instantiation_info(full_paths = true).filename
+template nim_filename*(): string =
+  instantiation_info(full_paths = true).filename
 
 ### options ###
 
@@ -44,16 +45,10 @@ proc `||=`*[T](opt: var Option[T], val: T): T {.discardable.} =
     result = opt.get()
 
 proc `||`*[T](a: Option[T], b: T): T =
-  if ?a:
-    a.get
-  else:
-    b
+  if ?a: a.get else: b
 
 proc `||`*[T](a, b: T): T =
-  if ?a:
-    a
-  else:
-    b
+  if ?a: a else: b
 
 converter from_option*[T](val: Option[T]): T =
   val.get()
@@ -121,9 +116,9 @@ proc `z=`*(self: var Basis, value: Vector3) {.inline.} =
 
 proc surrounding*(point: Vector3): seq[Vector3] =
   collect(new_seq):
-    for x in 0..2:
-      for y in 0..2:
-        for z in 0..2:
+    for x in 0 .. 2:
+      for y in 0 .. 2:
+        for z in 0 .. 2:
           point + vec3(x - 1, y - 1, z - 1)
 
 # math
@@ -145,10 +140,10 @@ proc wrap*[T](value, min, max: T): float =
 # output
 
 when not defined(no_godot):
-  import pkg / godot
+  import pkg/godot
 
   default_chronicles_stream.output.writer =
-    proc (logLevel: LogLevel, msg: LogOutputStr) {.gcsafe.} =
+    proc(logLevel: LogLevel, msg: LogOutputStr) {.gcsafe.} =
       when defined(release):
         godot.print msg
       else:
@@ -159,12 +154,12 @@ when not defined(no_godot):
 proc init*(_: type Future, T: type, proc_name = ""): Future[T] =
   return new_future[T](proc_name)
 
-import pkg / core / transforms
+import pkg/core/transforms
 export transforms
 
-import pkg / godot
+import pkg/godot
 
-import pkg / model_citizen
+import pkg/model_citizen
 export model_citizen
 
 proc global_from*(self: Vector3, unit: Unit): Vector3 =
@@ -200,7 +195,8 @@ proc `basis=`*(self: ZenValue[Transform], value: Basis) =
   transform.basis = value
   self.value = transform
 
-proc init*(_: type Basis): Basis = init_basis()
+proc init*(_: type Basis): Basis =
+  init_basis()
 
 proc init*(_: type Transform, origin = vec3()): Transform =
   result = init_transform()
@@ -221,15 +217,18 @@ proc update_action_index*(state: GameState, change: int) =
 template watch*[T, O](zen: Zen[T, O], unit: untyped, body: untyped) =
   when unit is Unit:
     mixin thread_ctx
-    let zid = zen.changes:
-      body
+    let zid =
+      zen.changes:
+        body
     unit.zids.add(zid)
     make_discardable(zid)
   else:
-    {. error:
-      "Watch needs a Unit object to bind its lifetime to. The Unit " &
-      "can be passed explicitly, or found implicitly by evaluating " &
-      "`self.model`, then `self`." .}
+    {.
+      error:
+        "Watch needs a Unit object to bind its lifetime to. The Unit " &
+        "can be passed explicitly, or found implicitly by evaluating " &
+        "`self.model`, then `self`."
+    .}
 
 template watch*[T, O](zen: Zen[T, O], body: untyped) =
   when compiles(self.model):
@@ -246,7 +245,8 @@ macro enum_fields*(n: typed): untyped =
     case f.kind
     of nnk_sym, nnk_ident:
       result.add new_lit(f.str_val)
-    else: discard
+    else:
+      discard
 
 template value*(self: ZenValue, body: untyped) {.dirty.} =
   block:
@@ -260,7 +260,7 @@ template after_boop*(body: untyped) =
   deferred.add proc() =
     body
 
-proc run_deferred* =
+proc run_deferred*() =
   for fn in deferred:
     fn()
   deferred.set_len(0)

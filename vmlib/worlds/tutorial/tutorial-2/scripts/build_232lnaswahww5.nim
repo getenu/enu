@@ -1,6 +1,7 @@
 lock = true
 
-let text = """
+let text =
+  """
 
 # Towers. Too Many Towers.
 

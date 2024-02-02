@@ -1,8 +1,10 @@
-import pkg / [godot]
-import godotapi / [spatial, resource_loader, packed_scene, collision_shape,
-    mesh_instance, quad_mesh, spatial_material, viewport, style_box_flat,
-    text_edit]
-import ui / [markdown_label, editor]
+import pkg/[godot]
+import
+  godotapi/[
+    spatial, resource_loader, packed_scene, collision_shape, mesh_instance,
+    quad_mesh, spatial_material, viewport, style_box_flat, text_edit
+  ]
+import ui/[markdown_label, editor]
 import core
 
 const
@@ -20,7 +22,7 @@ gdobj SignNode of Spatial:
   var counter: int
   var expanded: bool
 
-  proc set_visibility =
+  proc set_visibility() =
     if Hide in self.model.local_flags:
       self.visible = false
     elif Visible in self.model.global_flags:
@@ -47,7 +49,7 @@ gdobj SignNode of Spatial:
     self.quad.size = vec2(self.model.width, self.model.width * ratio)
     self.shape.scale = vec3(self.model.width, self.model.width * ratio, 1)
 
-  proc setup* =
+  proc setup*() =
     debug "sign setup", sign = self.model.id
 
     var mesh = self.get_node("MeshInstance") as MeshInstance
@@ -67,7 +69,7 @@ gdobj SignNode of Spatial:
         # hide scrollbars
         ScrollBar(child).rect_scale = vec2()
 
-    proc resize =
+    proc resize() =
       debug "sign resize", sign = self.model.id
 
       var
@@ -100,10 +102,7 @@ gdobj SignNode of Spatial:
 
     resize()
     self.material.params_billboard_mode =
-      if self.model.billboard:
-        BILLBOARD_ENABLED
-      else:
-        BILLBOARD_DISABLED
+      if self.model.billboard: BILLBOARD_ENABLED else: BILLBOARD_DISABLED
 
     if self.model.text_only:
       text_edit.text = self.model.message
@@ -130,9 +129,10 @@ gdobj SignNode of Spatial:
         self.transform = change.item
 
     self.model.global_flags.watch:
-      if (change.item == Visible and ScriptInitializing notin
-          self.model.global_flags) or ScriptInitializing.removed:
-
+      if (
+        change.item == Visible and
+        ScriptInitializing notin self.model.global_flags
+      ) or ScriptInitializing.removed:
         self.set_visibility
 
     state.local_flags.watch:

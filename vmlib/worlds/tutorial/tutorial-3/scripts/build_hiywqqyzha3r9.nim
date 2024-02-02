@@ -1,4 +1,4 @@
-name Door(color=green, open=false, width=20, height=11)
+name Door(color = green, open = false, width = 20, height = 11)
 
 speed = 0
 height.times:

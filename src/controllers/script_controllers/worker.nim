@@ -1,8 +1,8 @@
-import std / [locks, os, random, net]
-import std / times except seconds, minutes
-from pkg / netty import Reactor
-import core, models, models / [serializers], libs / [interpreters, eval]
-import ./ [vars, host_bridge, scripting]
+import std/[locks, os, random, net]
+import std/times except seconds, minutes
+from pkg/netty import Reactor
+import core, models, models/[serializers], libs/[interpreters, eval]
+import ./[vars, host_bridge, scripting]
 
 var
   worker_lock: locks.Lock
@@ -24,16 +24,17 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
 
       let now = get_mono_time()
 
-      let delta = if ?ctx.last_ran:
-        (now - ctx.last_ran).in_microseconds.float / 1000000.0
-      else:
-        0.0
+      let delta =
+        if ?ctx.last_ran:
+          (now - ctx.last_ran).in_microseconds.float / 1000000.0
+        else:
+          0.0
 
       ctx.last_ran = now
-      if ctx.callback == nil or
-          (task_state = ctx.callback(delta, timeout);
-          task_state in {Done, NextTask}):
-
+      if ctx.callback == nil or (;
+        task_state = ctx.callback(delta, timeout)
+        task_state in {Done, NextTask}
+      ):
         ctx.timer = MonoTime.high
         ctx.action_running = false
         self.active_unit = unit
@@ -45,7 +46,6 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
           unit.current_line = 0
 
         result = ctx.running and task_state == NextTask
-
       elif now >= ctx.timer:
         ctx.timer = now + advance_step
         ctx.saved_callback = ctx.callback
@@ -53,7 +53,6 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         self.active_unit = unit
         ctx.timeout_at = now + script_timeout
         discard ctx.resume()
-
     except VMQuit as e:
       self.interpreter.reset_module(unit.script_ctx.module_name)
       self.script_error(unit, e)
@@ -116,18 +115,20 @@ proc watch_code(self: Worker, unit: Unit) =
         self.script_error(unit, e)
 
   if unit.script_ctx.is_nil:
-    unit.script_ctx = ScriptCtx.init(owner = unit,
-        interpreter = self.interpreter)
+    unit.script_ctx =
+      ScriptCtx.init(owner = unit, interpreter = self.interpreter)
 
     unit.script_ctx.script = script_file_for unit
 
-proc watch_units(self: Worker,
-  units: ZenSeq[Unit],
-  parent: Unit,
-  body: proc(unit: Unit, change: Change[Unit], added: bool,
-      removed: bool) {.gcsafe.}
+proc watch_units(
+    self: Worker,
+    units: ZenSeq[Unit],
+    parent: Unit,
+    body:
+      proc(unit: Unit, change: Change[Unit], added: bool, removed: bool) {.
+        gcsafe
+      .},
 ) {.gcsafe.} =
-
   units.track proc(changes: seq[Change[Unit]]) {.gcsafe.} =
     for change in changes:
       let unit = change.item
@@ -143,10 +144,11 @@ proc watch_units(self: Worker,
         self.watch_units(unit.units, unit, body)
 
 template for_all_units(self: Worker, body: untyped) {.dirty.} =
-  self.watch_units state.units, parent = nil,
-    proc(unit: Unit, change: Change[Unit], added: bool,
-        removed: bool) {.gcsafe.} =
-
+  self.watch_units state.units,
+    parent = nil,
+    proc(
+        unit: Unit, change: Change[Unit], added: bool, removed: bool
+    ) {.gcsafe.} =
       body
 
 proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
@@ -154,9 +156,14 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   worker_lock.acquire
 
   var listen_address = main_thread_state.config.listen_address
-  let worker_ctx = ZenContext.init(id = \"work-{generate_id()}",
-    chan_size = 500, buffer = false, listen_address = listen_address,
-    label = "worker")
+  let worker_ctx =
+    ZenContext.init(
+      id = \"work-{generate_id()}",
+      chan_size = 500,
+      buffer = false,
+      listen_address = listen_address,
+      label = "worker",
+    )
 
   Zen.thread_ctx = worker_ctx
   ctx.subscribe(Zen.thread_ctx)
@@ -192,8 +199,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         unit.script_ctx.running = false
         unit.script_ctx.callback = nil
         if not (unit of Player) and LoadingScript notin state.local_flags and
-          not ?unit.clone_of:
-
+            not ?unit.clone_of:
           remove_file unit.script_ctx.script
           remove_dir unit.data_dir
 
@@ -240,7 +246,6 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           level_dir = change.item.level_dir
           if level_dir != "":
             worker.load_level(level_dir)
-
   else:
     var timeout_at = get_mono_time() + 30.seconds
     var connected = false
@@ -257,9 +262,18 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     player.script_ctx.interpreter = worker.interpreter
     worker.load_script_and_dependents(player)
 
-  var sign = Sign.init("", "", width = 4, height = 3.05, owner = state.player,
-      size = 244, billboard = true, text_only = true,
-      transform = Transform.init(origin = vec3(0, 4, 0)))
+  var sign =
+    Sign.init(
+      "",
+      "",
+      width = 4,
+      height = 3.05,
+      owner = state.player,
+      size = 244,
+      billboard = true,
+      text_only = true,
+      transform = Transform.init(origin = vec3(0, 4, 0)),
+    )
 
   state.player.units += sign
   sign.global_flags -= Visible
@@ -306,14 +320,14 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           break
 
       var to_process: seq[Unit]
-      state.units.value.walk_tree proc(unit: Unit) = to_process.add unit
+      state.units.value.walk_tree proc(unit: Unit) =
+        to_process.add unit
       to_process.shuffle
 
       var batched: HashSet[Unit]
 
-      while Zen.thread_ctx.pressure < 0.9 and to_process.len > 0 and state.voxel_tasks <= 10 and
-        get_mono_time() < timeout:
-
+      while Zen.thread_ctx.pressure < 0.9 and to_process.len > 0 and
+          state.voxel_tasks <= 10 and get_mono_time() < timeout:
         let units = to_process
         to_process = @[]
         for unit in units:
@@ -338,10 +352,9 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
       if now < wait_until:
         sleep int((wait_until - get_mono_time()).in_milliseconds)
-
   except Exception as e:
-    error "Unhandled worker thread exception", kind = $e.type, msg = e.msg,
-      stacktrace = e.get_stack_trace
+    error "Unhandled worker thread exception",
+      kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace
 
     state.push_flag(NeedsRestart)
 
@@ -356,8 +369,9 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   except Exception:
     discard
 
-proc launch_worker*(ctx: ZenContext, state: GameState): system.Thread[tuple[
-    ctx: ZenContext, state: GameState]] =
+proc launch_worker*(
+    ctx: ZenContext, state: GameState
+): system.Thread[tuple[ctx: ZenContext, state: GameState]] =
   worker_lock.acquire
   result.create_thread(worker_thread, (ctx, state))
   work_done.wait(worker_lock)

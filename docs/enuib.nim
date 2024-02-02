@@ -1,6 +1,6 @@
-import std / [sugar, strutils, os, enumerate, pathnorm, macros]
-import pkg / [pretty, nimibook, nimib, nimib / themes]
-import pkg / nimibook / [types, commands, entries, toc_render]
+import std/[sugar, strutils, os, enumerate, pathnorm, macros]
+import pkg/[pretty, nimibook, nimib, nimib/themes]
+import pkg/nimibook/[types, commands, entries, toc_render]
 
 export pathutils, pretty
 # adapted from https://raw.githubusercontent.com/pietroppeter/nimibook/ef700f646db8ec0bbe8a3319cbb3561aaac89a34/src/nimibook/themes.nim
@@ -8,7 +8,8 @@ export pathutils, pretty
 const document* = hl_html static_read("./book/template.html.mustache")
 
 proc use_enu*(doc: var NbDoc) =
-  doc.context["path_to_root"] = doc.src_dir_rel.string & "/" # I probably should make sure to have / at the end
+  doc.context["path_to_root"] = doc.src_dir_rel.string & "/"
+    # I probably should make sure to have / at the end
 
   # templates are in memory
   doc.partials["document"] = document
@@ -36,7 +37,9 @@ proc use_enu*(doc: var NbDoc) =
   var this_entry: Entry
   # process toc
   for i, entry in enumerate(book.toc.entries.mitems):
-    if normalize_path(entry.url) == normalize_path(doc.filename.replace('\\', '/')): # replace needed for windows
+    if normalize_path(entry.url) ==
+        normalize_path(doc.filename.replace('\\', '/')):
+      # replace needed for windows
       this_entry = entry
       entry.is_active = true
       let
@@ -57,10 +60,10 @@ template load_md*(file) =
   nb_init(theme = use_enu)
   nb_text(text)
 
-template caller_path: string =
+template caller_path(): string =
   instantiation_info(0, true).filename
 
-proc root_dir: string =
+proc root_dir(): string =
   caller_path().splitfile.dir
 
 template md*(file: string) =

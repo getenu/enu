@@ -1,7 +1,4 @@
-
-
 #quit()
-
 
 var
   speed* = 1.0

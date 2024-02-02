@@ -1,19 +1,21 @@
-import std / [tables, strutils, sequtils, sets, sugar]
-import core, models / [colors]
+import std/[tables, strutils, sequtils, sets, sugar]
+import core, models/[colors]
 
 log_scope:
   topics = "state"
   ctx = Zen.thread_ctx.id
 
 # only one flag from the group is active at a time
-const groups = @[
-  {EditorFocused, ConsoleFocused, DocsFocused},
-  {ReticleVisible, BlockTargetVisible},
-  {Playing, Flying}
-]
+const groups =
+  @[
+    {EditorFocused, ConsoleFocused, DocsFocused},
+    {ReticleVisible, BlockTargetVisible},
+    {Playing, Flying}
+  ]
 
 proc resolve_flags(self: GameState) =
-  debug "resolving flags", flags = self.local_flags.value, wants = self.wants.value
+  debug "resolving flags",
+    flags = self.local_flags.value, wants = self.wants.value
   var result: set[LocalStateFlags]
   for flag in self.wants:
     for group in groups:
@@ -92,11 +94,13 @@ proc toggle_flag*(self: GameState, flag: LocalStateFlags) =
   else:
     self.pop_flag flag
 
-proc `+=`*(self: ZenSet[LocalStateFlags], flag: LocalStateFlags) {.error:
-  "Use `push_flag`, `pop_flag` and `replace_flag`".}
+proc `+=`*(
+  self: ZenSet[LocalStateFlags], flag: LocalStateFlags
+) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
-proc `-=`*(self: ZenSet[LocalStateFlags], flag: LocalStateFlags) {.error:
-  "Use `push_flag`, `pop_flag` and `replace_flag`".}
+proc `-=`*(
+  self: ZenSet[LocalStateFlags], flag: LocalStateFlags
+) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc selected_color*(self: GameState): Color =
   action_colors[Colors(ord self.tool)]
@@ -120,23 +124,24 @@ proc err*(self: GameState, args: varargs[string, `$`]) =
 
 proc init*(_: type GameState): GameState =
   let flags = {SyncLocal}
-  let self = GameState(
-    player_value: ~(Player, flags),
-    local_flags: ~(set[LocalStateFlags], flags),
-    global_flags: ~(set[GlobalStateFlags], id = "state_global_flags"),
-    units: ~(seq[Unit], id = "root_units"),
-    open_unit_value: ~(Unit, flags),
-    config_value: ~(Config, flags, id = "config"),
-    tool_value: ~(BlueBlock, flags),
-    gravity: -80.0,
-    console: ConsoleModel(log: ~(seq[string], flags)),
-    open_sign_value: ~(Sign, flags),
-    wants: ~(seq[LocalStateFlags], flags),
-    level_name_value: ~("", id = "level_name"),
-    queued_action_value: ~("", flags),
-    status_message_value: ~("", flags),
-    voxel_tasks_value: ~(0, flags)
-  )
+  let self =
+    GameState(
+      player_value: ~(Player, flags),
+      local_flags: ~(set[LocalStateFlags], flags),
+      global_flags: ~(set[GlobalStateFlags], id = "state_global_flags"),
+      units: ~(seq[Unit], id = "root_units"),
+      open_unit_value: ~(Unit, flags),
+      config_value: ~(Config, flags, id = "config"),
+      tool_value: ~(BlueBlock, flags),
+      gravity: -80.0,
+      console: ConsoleModel(log: ~(seq[string], flags)),
+      open_sign_value: ~(Sign, flags),
+      wants: ~(seq[LocalStateFlags], flags),
+      level_name_value: ~("", id = "level_name"),
+      queued_action_value: ~("", flags),
+      status_message_value: ~("", flags),
+      voxel_tasks_value: ~(0, flags),
+    )
   result = self
   self.open_unit_value.changes:
     if added and change.item != nil:
@@ -157,10 +162,10 @@ proc init*(_: type GameState): GameState =
   result = self
 
 when is_main_module:
-  import pkg / print
+  import pkg/print
   on_unhandled_exception = nil
 
-  import std / [unittest, sequtils]
+  import std/[unittest, sequtils]
   type Node = ref object
   var state = GameState.init
 
@@ -198,8 +203,10 @@ when is_main_module:
     added = {}
     removed = {}
     for change in changes:
-      if Added in change.changes: added.incl change.item
-      if Removed in change.changes: removed.incl change.item
+      if Added in change.changes:
+        added.incl change.item
+      if Removed in change.changes:
+        removed.incl change.item
 
   state.push_flag CommandMode
   check:

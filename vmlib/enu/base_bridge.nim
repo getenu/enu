@@ -2,13 +2,20 @@ import types, vm_bridge_utils
 
 # NOTE: overridden by ScriptController. Only for tests.
 var current_active_unit: Unit
-proc register_active_impl(self: Unit) = current_active_unit = self
-proc active_unit_impl(): Unit = current_active_unit
+proc register_active_impl(self: Unit) =
+  current_active_unit = self
 
-proc register_active*(self: Unit) = register_active_impl(self)
-proc active_unit*(): Unit = active_unit_impl()
+proc active_unit_impl(): Unit =
+  current_active_unit
 
-proc sees_impl*(self: Unit, target: Unit, less_than = 100.0): bool = discard
+proc register_active*(self: Unit) =
+  register_active_impl(self)
+
+proc active_unit*(): Unit =
+  active_unit_impl()
+
+proc sees_impl*(self: Unit, target: Unit, less_than = 100.0): bool =
+  discard
 
 bridged_to_host:
   proc write_stack_trace*()
@@ -40,8 +47,8 @@ bridged_to_host:
   proc press_action*(name: string)
   proc load_level*(level: string, world = "")
   proc reset_level*()
-  proc level_name*: string
-  proc world_name*: string
+  proc level_name*(): string
+  proc world_name*(): string
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)
