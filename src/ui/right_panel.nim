@@ -32,6 +32,7 @@ gdobj RightPanel of MarginContainer:
     self.label = self.find_node("MarkdownLabel") as MarkdownLabel
 
     state.nodes.game.bind_signal(self.label, "gui_input", self.name)
+    self.bind_signal(find("Close", Control), ("pressed", "close"))
 
     state.status_message_value.changes:
       if added:
@@ -90,6 +91,11 @@ gdobj RightPanel of MarginContainer:
         self.ghost()
       elif CommandMode.removed:
         self.unghost()
+        find("Overlay", Control).set_mouse_filter_recursive(MOUSE_FILTER_IGNORE)
+        find("Close", Control).mouse_filter = MOUSE_FILTER_STOP
+
+  method on_close() =
+    state.open_sign = nil
 
   method unhandled_input*(event: InputEvent) =
     if DocsFocused in state.local_flags and event.is_action_pressed("ui_cancel"):

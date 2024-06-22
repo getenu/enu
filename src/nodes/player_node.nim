@@ -4,12 +4,16 @@ import pkg/godot except print
 import
   godotapi/[
     kinematic_body, spatial, input, input_event, input_event_mouse_motion,
+    input_event_screen_drag, input_event_screen_touch,
     input_event_joypad_motion, ray_cast, scene_tree, input_event_pan_gesture,
     viewport, camera, global_constants, collision_shape, kinematic_collision,
     packed_scene, resource_loader
   ]
 import core, gdutils, nodes/helpers
 import aim_target, models
+
+const first_delete = 0.5.seconds
+const next_deletes = 0.1.seconds
 
 proc handle_collisions(
     self: Player, collisions: seq[KinematicCollision]
@@ -50,7 +54,7 @@ gdobj PlayerNode of KinematicBody:
     jump_time, run_time: Option[MonoTime]
 
     position_start: Vector3
-    input_relative = vec2()
+    input_relative* = vec2()
     camera_rig: Spatial
     camera: Camera
     aim_target: AimTarget
@@ -62,6 +66,10 @@ gdobj PlayerNode of KinematicBody:
     model*: Player
     velocity_zid, rotation_zid: ZID
     boosted = false
+    # touch_time = MonoTime.low
+    touch_position: Option[Vector2]
+    delete_timer = MonoTime.high
+    deleting = false
 
   proc flying(): bool =
     Flying in state.local_flags
@@ -173,9 +181,6 @@ gdobj PlayerNode of KinematicBody:
       if added:
         self.velocity = change.item
 
-  proc current_raycast*(): RayCast =
-    if MouseCaptured in state.local_flags: self.aim_ray else: self.world_ray
-
   method process*(delta: float) =
     self.model.velocity_value.pause self.velocity_zid:
       self.model.velocity = self.velocity
@@ -199,22 +204,7 @@ gdobj PlayerNode of KinematicBody:
         self.model.rotation = rad_to_deg r.y
 
     if LoadingLevel notin state.global_flags:
-      let ray_length = if state.tool == CodeMode: 200.0 else: 100.0
-      if MouseCaptured notin state.local_flags:
-        let
-          mouse_pos =
-            self.get_viewport().get_mouse_position() * float state.scale_factor
-          cast_from = self.camera.project_ray_origin(mouse_pos)
-          cast_to =
-            self.aim_ray.translation +
-            self.camera.project_ray_normal(mouse_pos) * ray_length
-
-        self.world_ray.cast_to = cast_to
-        self.world_ray.translation = cast_from
-        self.aim_target.update(self.world_ray)
-      else:
-        self.aim_ray.cast_to = vec3(0, 0, -ray_length)
-        self.aim_target.update(self.aim_ray)
+      self.update_raycast()
 
   method physics_process*(delta: float) =
     if CommandMode in state.local_flags and self.command_timer > 0:
@@ -293,17 +283,63 @@ gdobj PlayerNode of KinematicBody:
       if is_joy_button_pressed(device, button):
         return true
 
-  method unhandled_input*(event: InputEvent) =
+  proc update_raycast() =
+    let ray_length = if state.tool == CodeMode: 200.0 else: 100.0
+    if MouseCaptured notin state.local_flags:
+      let
+        mouse_pos =
+          self.get_viewport().get_mouse_position() * float state.scale_factor
+        cast_from = self.camera.project_ray_origin(mouse_pos)
+        cast_to =
+          self.aim_ray.translation +
+          self.camera.project_ray_normal(mouse_pos) * ray_length
+
+      self.world_ray.cast_to =
+        if ViewportFocused in state.local_flags: cast_to else: cast_from
+
+      self.world_ray.translation = cast_from
+      self.aim_target.update(self.world_ray)
+    else:
+      self.aim_ray.cast_to = vec3(0, 0, -ray_length)
+      self.aim_target.update(self.aim_ray)
+
+  method viewport_input*(event: InputEvent) =
     if event of InputEventJoypadMotion:
       let event = event as InputEventJoypadMotion
       if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
         return
 
-    if event of InputEventMouseMotion and MouseCaptured in state.local_flags:
+    if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
+        TouchControls notin state.local_flags:
       if not self.skip_next_mouse_move:
         self.input_relative += event.as(InputEventMouseMotion).relative()
       else:
         self.skip_next_mouse_move = false
+
+    if event of InputEventScreenTouch and TouchControls in state.local_flags:
+      let event = event as InputEventScreenTouch
+      if event.index == 0:
+        if event.pressed:
+          self.touch_position = some event.position
+          # self.touch_time = get_mono_time()
+          self.delete_timer = get_mono_time() + first_delete
+        else:
+          if ?self.touch_position and self.touch_position.get == event.position:
+            self.update_raycast()
+            state.push_flag PrimaryDown
+            state.pop_flag PrimaryDown
+            self.deleting = false
+            self.delete_timer = MonoTime.high
+            self.touch_position = none(Vector2)
+
+    if event of InputEventScreenDrag and TouchControls in state.local_flags:
+      let event = event as InputEventScreenDrag
+      if event.index == 0:
+        self.touch_position = none(Vector2)
+      self.input_relative += event.relative()
+      if not self.deleting:
+        self.delete_timer = MonoTime.high
+
     if EditorVisible in state.local_flags and not self.skip_release and
         (event of InputEventJoypadButton or event of InputEventJoypadMotion):
       let active_input = self.has_active_input(event.device.int)

@@ -11,7 +11,10 @@ log_scope:
 # only one flag from the group is active at a time
 const groups =
   @[
-    {EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused},
+    {
+      EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused,
+      ViewportFocused
+    },
     {ReticleVisible, BlockTargetVisible},
     {Playing, Flying}
   ]
@@ -48,6 +51,9 @@ proc resolve_flags(self: GameState) =
     result.excl(BlockTargetVisible)
     result.excl(EditorVisible)
     result.incl(ReticleVisible)
+
+  if TouchControls in result:
+    result.excl(BlockTargetVisible)
 
   if MouseCaptured notin result:
     result.excl(ReticleVisible)

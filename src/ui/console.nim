@@ -86,6 +86,11 @@ gdobj Console of RichTextLabel:
       if ?o:
         o.modulate = Color(r: 1.0, g: 1.0, b: 1.0, a: 0.0)
 
+    self.bind_signal(find("Close", Control), ("pressed", "close"))
+
+  method on_close() =
+    state.pop_flags ConsoleVisible, ConsoleFocused
+
   method unhandled_input*(event: InputEvent) =
     if ConsoleFocused in state.local_flags and
         event.is_action_pressed("ui_cancel"):

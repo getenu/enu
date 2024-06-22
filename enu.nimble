@@ -6,7 +6,10 @@ const
     of "windows":
       ("windows", ".dll", ".exe")
     of "macosx":
-      ("osx", ".dylib", "")
+      if get_env("TARGET") == "ios":
+        ("iOS", ".a", "")
+      else:
+        ("osx", ".dylib", "")
     else:
       ("x11", ".so", "")
   cpu = if host_cpu == "arm64": "arm64" else: "64"
@@ -17,29 +20,28 @@ const
     "https://docs.godotengine.org/en/stable/development/compiling/index.html"
   gcc_dlls = ["libgcc_s_seh-1.dll", "libwinpthread-1.dll"]
   nim_dlls = ["pcre64.dll"]
-  godot_opts = "target=release_debug"
+  godot_opts = "target=debug"
 
 version = "0.2.2"
 author = "Scott Wadden"
 description = "Logo-like DSL for Godot"
 license = "MIT"
 install_files = @["enu.nim"]
-bin_dir = "app/_dlls"
+bin_dir = "app"
 src_dir = "src"
 bin = @["enu" & lib_ext]
 
 requires "nim >= 2.0.2",
-  "https://github.com/dsrw/Nim#ccf10a81f",
+  "https://github.com/dsrw/Nim#44959b7",
   "https://github.com/arnetheduck/nim-results#f3c666a",
   "https://github.com/dsrw/godot-nim#43addc1",
   "https://github.com/dsrw/model_citizen 0.19.2",
-  "https://github.com/dsrw/nanoid.nim 0.2.1", "cligen 1.6.0",
+  "https://github.com/dsrw/nanoid.nim 0.2.1", "cligen 1.6.17",
   "https://github.com/treeform/pretty", "chroma", "markdown", "chronicles",
   "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
 proc godot_bin(target = target): string =
-  result =
-    this_dir() & &"/vendor/godot/bin/godot.{target}.opt.tools.{cpu}{exe_ext}"
+  result = this_dir() & &"/vendor/godot/bin/godot.{target}.tools.{cpu}{exe_ext}"
   if target == "server":
     result = result.replace("godot.server", "godot_server.x11")
 
@@ -167,7 +169,11 @@ proc mingw_path(): string =
 proc gen_binding_and_copy_stdlib(target = target) =
   if host_os == "windows":
     # Assumes mingw
+<<<<<<< HEAD
     find_and_copy_dlls mingw_path(), join_path("app", "_dlls"), gcc_dlls
+=======
+    find_and_copy_dlls mingw_path(), "app", gcc_dlls
+>>>>>>> 5a4aac60 (wip)
     find_and_copy_dlls get_current_compiler_exe().parent_dir,
       join_path("vendor", "godot", "bin"), nim_dlls
   mk_dir generated_dir
@@ -244,7 +250,7 @@ task dist_package, "Build distribution binaries":
     exec &"{godot_bin()} --verbose --path app --export-pack \"win\" " & pck_path
 
     exec "nimble build -d:release -d:dist"
-    cp_file "app/_dlls/enu.dll", root & "/enu.dll"
+    cp_file "app/enu.dll", root & "/enu.dll"
     find_and_copy_dlls mingw_path(), root, gcc_dlls
     find_and_copy_dlls get_current_compiler_exe().parent_dir, root, nim_dlls
     copy_vmlib "vmlib", root & "/vmlib"
@@ -325,7 +331,7 @@ task dist_package, "Build distribution binaries":
     exec "nimble build -d:release -d:dist"
     exec "strip " & release_bin
     cp_file release_bin, root & "/bin/enu"
-    cp_file "app/_dlls/enu.so", root & "/lib/enu.so"
+    cp_file "app/enu.so", root & "/lib/enu.so"
     copy_vmlib "vmlib", root & "/lib/vmlib"
     exec "chmod +x " & root & "/bin/enu"
     exec &"{gen()} write_export_presets --enu_version {git_version}"

@@ -7,10 +7,10 @@ reloadable=true
 
 [entry]
 
-OSX.64="res://_dlls/enu-test.dylib"
-Windows.64="res://_dlls/enu-test.dll"
-X11.64="res://_dlls/enu-test.so"
-Server.64="res://_dlls/enu-test.dylib"
+OSX.64="res://enu-test.dylib"
+Windows.64="res://enu-test.dll"
+X11.64="res://enu-test.so"
+Server.64="res://enu-test.dylib"
 
 [dependencies]
 

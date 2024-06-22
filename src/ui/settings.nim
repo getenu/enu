@@ -34,6 +34,9 @@ gdobj Settings of PanelContainer:
     state: WindowState
 
   proc update_values() =
+    find("FullScreenLabel", Label).visible = host_os != "ios"
+    self.full_screen.visible = host_os != "ios"
+
     self.megapixels.text = \"{state.config.megapixels:.2f}"
     self.font_size.text = $state.config.font_size
     self.toolbar_size.text = $int(state.config.toolbar_size)
@@ -466,6 +469,9 @@ gdobj Settings of PanelContainer:
     elif self.action_steps.len == 0 and not self.tween.is_active and
         self.state == Opened and self.margin_y != self.expanded_margin:
       self.resize_y(self.expanded_margin)
+
+  method input(event: InputEvent) =
+    self.ignore_touches(event)
 
   method unhandled_input*(event: InputEvent) =
     if SettingsFocused in state.local_flags and

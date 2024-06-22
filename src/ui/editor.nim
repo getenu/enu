@@ -5,7 +5,7 @@ import
   godotapi/[
     text_edit, scene_tree, node, input_event, global_constants, input_event_key,
     style_box_flat, gd_os, tween, scene_tree_tween, property_tweener,
-    method_tweener
+    method_tweener, input
   ]
 import core, gdutils
 import models except Color
@@ -35,15 +35,17 @@ gdobj Editor of TextEdit:
       if stripped.high > 0:
         let last = $stripped[stripped.high]
 
+        var spaces = line.indentation
         if (stripped in ["var", "let", "const", "type"]) or last in [":", "="]:
-          let spaces = " ".repeat(line.indentation + 2)
-          self.insert_text_at_cursor("\n" & spaces)
-          self.get_tree.set_input_as_handled()
+          spaces += 2
+
+        self.insert_text_at_cursor("\n" & " ".repeat(spaces))
+        self.get_tree.set_input_as_handled()
 
   method input*(event: InputEvent) =
     var event = event.as(InputEventKey)
     if not event.is_nil and event.pressed:
-      if event.scancode == KEY_ENTER:
+      if event.scancode == KEY_ENTER and host_os != "ios":
         self.indent_new_line()
       if event.scancode == KEY_SEMICOLON and state.config.semicolon_as_colon:
         self.insert_text_at_cursor(":")
@@ -101,6 +103,12 @@ gdobj Editor of TextEdit:
   method ready*() =
     self.bind_signals(self, "text_changed", "cursor_changed")
     state.nodes.game.bind_signal(self, "gui_input", self.name)
+
+    for name in ["Close", "Run"]:
+      let control = find(name, Control)
+      self.bind_signal(control, ("pressed", name.to_lower))
+      self.bind_signal(control, ("gui_input", "child_focused"))
+
     var stylebox = self.get_stylebox("normal").as(StyleBoxFlat)
     self.og_bg_color = stylebox.bg_color
 
@@ -207,3 +215,16 @@ gdobj Editor of TextEdit:
       let o = child.as_object(Node) as VScrollBar
       if ?o:
         o.modulate = Color(r: 1.0, g: 1.0, b: 1.0, a: 0.0)
+
+  method on_close() =
+    if ?state.open_unit:
+      state.open_unit.code = Code.init(self.text)
+      state.open_unit = nil
+
+  method on_run() =
+    if ?state.open_unit:
+      state.open_unit.code = Code.init("")
+      state.open_unit.code = Code.init(self.text)
+
+  method on_child_focused(event: InputEvent) =
+    self.grab_focus()
