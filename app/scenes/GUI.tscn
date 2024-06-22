@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=2]
+[gd_scene load_steps=18 format=2]
 
 [ext_resource path="res://components/Editor.tscn" type="PackedScene" id=1]
 [ext_resource path="res://components/Console.tscn" type="PackedScene" id=2]
@@ -12,6 +12,8 @@
 [ext_resource path="res://components/PreviewMaker.gdns" type="Script" id=10]
 [ext_resource path="res://components/Toolbar.gdns" type="Script" id=11]
 [ext_resource path="res://components/Settings.tscn" type="PackedScene" id=12]
+[ext_resource path="res://joystick/virtual_joystick.tscn" type="PackedScene" id=13]
+[ext_resource path="res://scenes/GUI.gdns" type="Script" id=14]
 
 [sub_resource type="ButtonGroup" id=1]
 
@@ -27,7 +29,8 @@ font_data = ExtResource( 8 )
 [node name="GUI" type="Control"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-mouse_filter = 2
+mouse_filter = 1
+script = ExtResource( 14 )
 
 [node name="Toolbar" type="HBoxContainer" parent="."]
 anchor_top = 1.0
@@ -95,21 +98,22 @@ margin_bottom = 50.0
 group = SubResource( 1 )
 icon = null
 
-[node name="CenterContainer" type="GridContainer" parent="."]
+[node name="GridContainer" type="GridContainer" parent="."]
 anchor_right = 1.0
 mouse_filter = 2
 columns = 2
 
-[node name="Label" type="Label" parent="CenterContainer"]
-margin_right = 1916.0
-margin_bottom = 14.0
+[node name="Label" type="Label" parent="GridContainer"]
+margin_right = 1042.0
+margin_bottom = 516.0
 size_flags_horizontal = 3
 size_flags_vertical = 1
 
-[node name="Settings" parent="CenterContainer" instance=ExtResource( 12 )]
-margin_left = 1920.0
+[node name="Settings" parent="GridContainer" instance=ExtResource( 12 )]
+margin_left = 1046.0
+margin_top = 0.0
 margin_right = 1920.0
-margin_bottom = 0.0
+margin_bottom = 516.0
 
 [node name="LeftPanel" type="MarginContainer" parent="."]
 anchor_right = 0.5
@@ -135,7 +139,11 @@ size_flags_vertical = 3
 size_flags_stretch_ratio = 2.0
 
 [node name="Editor" parent="LeftPanel/ThemeHolder/MarginContainer" instance=ExtResource( 1 )]
+visible = false
 margin_bottom = 678.0
+middle_mouse_paste_enabled = false
+deselect_on_focus_loss_enabled = false
+drag_and_drop_selection_enabled = false
 
 [node name="Console" parent="LeftPanel/ThemeHolder" instance=ExtResource( 2 )]
 margin_top = 680.0
@@ -160,6 +168,43 @@ margin_right = 959.0
 margin_bottom = 1080.0
 focus_mode = 2
 custom_styles/bg = SubResource( 8 )
+
+[node name="Overlay" type="GridContainer" parent="RightPanel"]
+margin_left = -2.0
+margin_right = 959.0
+margin_bottom = 1080.0
+mouse_filter = 2
+theme = ExtResource( 6 )
+columns = 2
+
+[node name="Label" type="Label" parent="RightPanel/Overlay"]
+margin_right = 882.0
+margin_bottom = 53.0
+size_flags_horizontal = 3
+size_flags_vertical = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="RightPanel/Overlay"]
+margin_left = 886.0
+margin_right = 961.0
+margin_bottom = 53.0
+mouse_filter = 2
+custom_constants/margin_right = 35
+custom_constants/margin_top = 25
+
+[node name="GridContainer" type="GridContainer" parent="RightPanel/Overlay/MarginContainer"]
+margin_top = 25.0
+margin_right = 40.0
+margin_bottom = 53.0
+rect_pivot_offset = Vector2( -911, -78 )
+mouse_filter = 2
+custom_constants/vseparation = 30
+
+[node name="Close" type="Button" parent="RightPanel/Overlay/MarginContainer/GridContainer"]
+margin_right = 40.0
+margin_bottom = 28.0
+mouse_default_cursor_shape = 2
+theme_type_variation = "IconButton"
+text = "  "
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
@@ -205,4 +250,15 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[editable path="CenterContainer/Settings"]
+[node name="LeftStick" parent="." instance=ExtResource( 13 )]
+anchor_left = 0.12
+anchor_top = 0.7
+anchor_right = 0.12
+anchor_bottom = 0.7
+margin_left = 0.0
+margin_top = 0.0
+margin_right = 0.0
+margin_bottom = 0.0
+rect_min_size = Vector2( 200, 200 )
+
+[editable path="GridContainer/Settings"]

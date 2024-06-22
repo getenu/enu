@@ -7,12 +7,14 @@ reloadable=false
 
 [entry]
 
-OSX.64="res://_dlls/enu.dylib"
-Windows.64="res://_dlls/enu.dll"
-X11.64="res://_dlls/enu.so"
+OSX.64="res://enu.dylib"
+Windows.64="res://enu.dll"
+X11.64="res://enu.so"
+iOS.arm64="res://libenu.a"
 
 [dependencies]
 
 OSX.64=[  ]
 Windows.64=[  ]
 X11.64=[  ]
+iOS.arm64=[  ]

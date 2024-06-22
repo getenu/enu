@@ -132,7 +132,7 @@ gdobj MarkdownLabel of ScrollContainer:
   proc render_markdown(token: Token, list_position = 0, inline_blocks = false) =
     var list_position = list_position
     for t in token.children:
-      debug "rendering markdown token", token = t, type = t.base_type
+      # debug "rendering markdown token", token = t, type = t.base_type
       if not ?self.current_label and not (t of CodeBlock):
         self.add_label
 

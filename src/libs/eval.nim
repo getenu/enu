@@ -1,4 +1,5 @@
 import std/options
+import pkg/pretty
 import compiler/[syntaxes, reorder, vmdef, msgs]
 import compiler/passes {.all.}
 
@@ -141,6 +142,8 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       initStrTables(i.graph, iface.module)
       iface.module.ast = nil
       break
+
+import std / posix
 
 proc loadModule*(
     i: Interpreter, fileName, code: string, ctx: var PContext

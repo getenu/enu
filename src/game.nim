@@ -10,6 +10,7 @@ import
     voxel_server, world_environment
   ]
 
+import ui/virtual_joystick
 import core, types, gdutils, controllers, models/[serializers, units, colors]
 
 if file_exists(".env"):
@@ -41,6 +42,7 @@ gdobj Game of Node:
     force_quit_at = MonoTime.high
     node_controller: NodeController
     script_controller: ScriptController
+    left_stick: VirtualJoystick
 
   method process*(delta: float) =
     Zen.thread_ctx.boop
@@ -174,6 +176,13 @@ gdobj Game of Node:
           "Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant
         )
 
+    when host_os == "ios":
+      state.push_flag TouchControls
+      let vmlib = join_path(get_executable_path().parent_dir(), "vmlib")
+    else:
+      let vmlib =
+        join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
+
     state.config_value.value:
       screen_scale = screen_scale
       work_dir = get_user_data_dir()
@@ -186,9 +195,7 @@ gdobj Game of Node:
       megapixels = uc.megapixels ||= 2.0
       full_screen = uc.full_screen ||= true
       semicolon_as_colon = uc.semicolon_as_colon ||= false
-      lib_dir =
-        join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
-
+      lib_dir = vmlib
       connect_address = connect_address
       listen_address = listen_address
       player_color = uc.player_color ||= color(rand(1.0), rand(1.0), rand(1.0))
@@ -312,6 +319,7 @@ gdobj Game of Node:
     info "config", config = state.config
     self.reticle = self.find_node("Reticle").as(Control)
     self.stats = self.find_node("stats").as(Label)
+    self.left_stick = find("LeftStick", VirtualJoystick)
     self.stats.visible = state.config.show_stats
 
     state.config_value.changes:
@@ -394,7 +402,8 @@ gdobj Game of Node:
       elif ReticleVisible.removed:
         self.reticle.visible = false
 
-    state.push_flag MouseCaptured
+    if TouchControls notin state.local_flags:
+      state.push_flag MouseCaptured
 
     state.queued_action_value.changes:
       if added and change.item != "":

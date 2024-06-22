@@ -35,12 +35,13 @@ text = " "
 margin_top = 25.0
 margin_right = 46.0
 margin_bottom = 62.0
+mouse_default_cursor_shape = 2
 theme_type_variation = "IconButton"
 text = "  "
 
 [node name="Window" type="PanelContainer" parent="."]
 margin_right = 874.0
-margin_bottom = 521.0
+margin_bottom = 516.0
 rect_clip_content = true
 mouse_filter = 1
 size_flags_horizontal = 0
@@ -50,7 +51,7 @@ size_flags_vertical = 0
 margin_left = 20.0
 margin_top = 20.0
 margin_right = 854.0
-margin_bottom = 501.0
+margin_bottom = 496.0
 mouse_filter = 1
 custom_constants/margin_right = 10
 custom_constants/margin_top = 5
@@ -59,21 +60,22 @@ custom_constants/margin_bottom = 0
 [node name="RowContainer" type="VBoxContainer" parent="Window/MainContainer"]
 margin_top = 5.0
 margin_right = 824.0
-margin_bottom = 481.0
+margin_bottom = 476.0
 custom_constants/separation = 50
 
 [node name="VFlowContainer" type="HBoxContainer" parent="Window/MainContainer/RowContainer"]
 margin_right = 824.0
-margin_bottom = 33.0
+margin_bottom = 28.0
 size_flags_horizontal = 3
 alignment = 2
 
 [node name="Close" type="Button" parent="Window/MainContainer/RowContainer/VFlowContainer"]
-margin_left = 775.0
+margin_left = 784.0
 margin_right = 824.0
-margin_bottom = 33.0
-theme_type_variation = "MonoButton"
-text = " × "
+margin_bottom = 28.0
+mouse_default_cursor_shape = 2
+theme_type_variation = "IconButton"
+text = "  "
 
 [node name="NewLevelContainer" type="VBoxContainer" parent="Window/MainContainer/RowContainer"]
 visible = false
@@ -115,6 +117,7 @@ custom_constants/separation = 20
 [node name="Save" type="Button" parent="Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer/HBoxContainer"]
 margin_right = 188.0
 margin_bottom = 82.0
+mouse_default_cursor_shape = 2
 size_flags_horizontal = 3
 text = " Save "
 
@@ -122,6 +125,7 @@ text = " Save "
 margin_left = 208.0
 margin_right = 445.0
 margin_bottom = 82.0
+mouse_default_cursor_shape = 2
 text = " Cancel "
 
 [node name="Label" type="Label" parent="Window/MainContainer/RowContainer/NewLevelContainer"]
@@ -129,9 +133,9 @@ margin_right = 1753.0
 margin_bottom = 80.0
 
 [node name="SettingsContainer" type="GridContainer" parent="Window/MainContainer/RowContainer"]
-margin_top = 83.0
+margin_top = 78.0
 margin_right = 824.0
-margin_bottom = 310.0
+margin_bottom = 305.0
 custom_constants/vseparation = 25
 custom_constants/hseparation = 20
 columns = 4
@@ -146,6 +150,7 @@ margin_left = 180.0
 margin_right = 397.0
 margin_bottom = 37.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 enabled_focus_mode = 0
 
 [node name="Label8" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
@@ -158,6 +163,7 @@ text = "  Player Color"
 margin_left = 607.0
 margin_right = 824.0
 margin_bottom = 37.0
+mouse_default_cursor_shape = 2
 
 [node name="Label4" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_top = 63.0
@@ -170,6 +176,7 @@ margin_left = 180.0
 margin_top = 62.0
 margin_right = 397.0
 margin_bottom = 101.0
+mouse_default_cursor_shape = 2
 size_flags_horizontal = 3
 
 [node name="Label3" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
@@ -201,6 +208,7 @@ margin_left = 99.0
 margin_right = 148.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 theme_type_variation = "MonoButton"
 text = " ↑ "
 
@@ -209,6 +217,7 @@ margin_left = 168.0
 margin_right = 217.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 theme_type_variation = "MonoButton"
 text = " ↓ "
 
@@ -240,6 +249,7 @@ margin_left = 99.0
 margin_right = 148.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 theme_type_variation = "MonoButton"
 text = " ↑ "
 
@@ -248,6 +258,7 @@ margin_left = 168.0
 margin_right = 217.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 theme_type_variation = "MonoButton"
 text = " ↓ "
 
@@ -280,6 +291,7 @@ margin_left = 99.0
 margin_right = 148.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 theme_type_variation = "MonoButton"
 text = " ↑ "
 
@@ -288,10 +300,11 @@ margin_left = 168.0
 margin_right = 217.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 theme_type_variation = "MonoButton"
 text = " ↓ "
 
-[node name="Label5" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
+[node name="FullScreenLabel" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_top = 190.0
 margin_right = 160.0
 margin_bottom = 227.0
@@ -303,6 +316,7 @@ margin_top = 190.0
 margin_right = 229.0
 margin_bottom = 227.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 size_flags_horizontal = 0
 theme_type_variation = "MonoButton"
 text = " ✓ "
@@ -332,9 +346,9 @@ margin_bottom = 180.0
 rect_min_size = Vector2( 400, 140 )
 
 [node name="RemoteContainer" type="MarginContainer" parent="Window/MainContainer/RowContainer"]
-margin_top = 360.0
+margin_top = 355.0
 margin_right = 824.0
-margin_bottom = 476.0
+margin_bottom = 471.0
 rect_clip_content = true
 mouse_filter = 1
 custom_constants/margin_bottom = 20
@@ -379,6 +393,7 @@ margin_left = 422.0
 margin_right = 676.0
 margin_bottom = 39.0
 focus_mode = 0
+mouse_default_cursor_shape = 2
 size_flags_horizontal = 3
 text = "  Connect  "
 

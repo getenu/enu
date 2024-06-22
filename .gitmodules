@@ -7,3 +7,7 @@
 	url = https://github.com/dsrw/godot.git
 	branch = enu
 	ignore = untracked
+[submodule "vendor/pcre"]
+	path = vendor/pcre
+	url = https://github.com/luvit/pcre
+	ignore = dirty

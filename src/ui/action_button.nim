@@ -1,4 +1,8 @@
-import godotapi/[button, style_box_flat]
+import
+  godotapi/[
+    button, style_box_flat, input_event_screen_touch, input_event_screen_drag,
+    scene_tree
+  ]
 import godot
 import ".."/[core, gdutils]
 
@@ -20,3 +24,6 @@ gdobj ActionButton of Button:
 
   method on_pressed*() =
     self.get_parent.trigger("action_changed", self.name)
+
+  method input(event: InputEvent) =
+    self.ignore_touches(event)

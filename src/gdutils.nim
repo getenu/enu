@@ -1,7 +1,10 @@
 import std/[strformat]
 import pkg/[godot]
 import
-  godotapi/[node, scene_tree, voxel_buffer, canvas_item, control, option_button]
+  godotapi/[
+    node, scene_tree, voxel_buffer, canvas_item, control, option_button,
+    input_event_screen_touch
+  ]
 import core, models/[states]
 export strformat.`&`, states, types
 
@@ -82,3 +85,11 @@ proc select*(self: OptionButton, text: string): int {.discardable.} =
       self.select(i)
       return i
   result = -1
+
+proc ignore_touches*(self: Control, event: InputEvent) =
+  if event of InputEventScreenTouch and TouchControls in state.local_flags:
+    let event = event as InputEventScreenTouch
+    if event.pressed and
+        event.position.within(self.rect_global_position, self.rect_size):
+      state.ignored_touches.incl byte(event.index)
+      self.get_tree().set_input_as_handled()
