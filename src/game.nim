@@ -475,8 +475,9 @@ gdobj Game of Node:
 
       if event.is_action_pressed("previous"):
         state.update_action_index(-1)
-        # NOTE: alt+enter isn't being picked up on windows if the editor is
-        # open. Needs investigation.
+
+    # NOTE: alt+enter isn't being picked up on windows if the editor is
+    # open. Needs investigation.
     if event.is_action_pressed("toggle_fullscreen") or (
       host_os == "windows" and CommandMode in state.local_flags and
       EditorVisible in state.local_flags and event of InputEventKey and

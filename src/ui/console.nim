@@ -16,37 +16,42 @@ gdobj Console of RichTextLabel:
     let width = self.rect_size.x
     self.rect_position = vec2(width * offset, self.rect_position.y)
 
+  proc show() =
+    self.opacity = 1.0
+    if ?self.tween:
+      self.tween.kill
+    self.tween = self.get_tree.create_tween
+    self.visible = true
+    discard
+      self.tween
+      .tween_method(
+        self, "_offset_x", -1.0.to_variant, 0.0.to_variant, animation_duration
+      )
+      .set_trans(TRANS_EXPO)
+      .set_ease(EASE_IN_OUT)
+
+  proc hide() =
+    if ?self.tween:
+      self.tween.kill
+    self.tween = self.get_tree.create_tween
+    self.rect_position = vec2(0.0, self.rect_position.y)
+    discard
+      self.tween
+      .tween_method(
+        self, "_offset_x", 0.0.to_variant, -1.0.to_variant, animation_duration
+      )
+      .set_trans(TRANS_EXPO)
+      .set_ease(EASE_IN_OUT)
+    discard self.tween.tween_callback(
+      self, "set_visible", new_array(false.to_variant)
+    )
+
   proc init*() =
     state.local_flags.changes:
       if ConsoleVisible.added:
-        if ?self.tween:
-          self.tween.kill
-        self.tween = self.get_tree.create_tween
-        self.visible = true
-        discard
-          self.tween
-          .tween_method(
-            self, "_offset_x", -1.0.to_variant, 0.0.to_variant,
-            animation_duration
-          )
-          .set_trans(TRANS_EXPO)
-          .set_ease(EASE_IN_OUT)
+        self.show()
       elif ConsoleVisible.removed:
-        if ?self.tween:
-          self.tween.kill
-        self.tween = self.get_tree.create_tween
-        self.rect_position = vec2(0.0, self.rect_position.y)
-        discard
-          self.tween
-          .tween_method(
-            self, "_offset_x", 0.0.to_variant, -1.0.to_variant,
-            animation_duration
-          )
-          .set_trans(TRANS_EXPO)
-          .set_ease(EASE_IN_OUT)
-        discard self.tween.tween_callback(
-          self, "set_visible", new_array(false.to_variant)
-        )
+        self.hide()
       elif CommandMode.added:
         self.ghost()
       elif CommandMode.removed:
@@ -72,14 +77,8 @@ gdobj Console of RichTextLabel:
     state.nodes.game.bind_signal(self, "gui_input", self.name)
 
     if ConsoleVisible notin state.local_flags:
-      let tween = self.get_tree.create_tween
       self.opacity = 0.0
-      discard tween.tween_property(
-        self, "rect_position:y", (self.rect_size.y).to_variant, 0.0
-      )
-      discard
-        tween.tween_callback(self, "set_visible", new_array(false.to_variant))
-      discard tween.tween_property(self, "modulate:a", 1.0.to_variant, 0.0)
+      self.hide()
 
     for child in self.get_children():
       let o = child.as_object(Node) as VScrollBar
