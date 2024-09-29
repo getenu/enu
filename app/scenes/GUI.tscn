@@ -135,20 +135,22 @@ custom_constants/separation = 2
 margin_right = 961.0
 margin_bottom = 678.0
 mouse_filter = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 size_flags_stretch_ratio = 2.0
 
 [node name="Editor" parent="LeftPanel/ThemeHolder/MarginContainer" instance=ExtResource( 1 )]
 visible = false
+margin_right = 961.0
 margin_bottom = 678.0
-middle_mouse_paste_enabled = false
-deselect_on_focus_loss_enabled = false
-drag_and_drop_selection_enabled = false
+mouse_filter = 1
 
 [node name="Console" parent="LeftPanel/ThemeHolder" instance=ExtResource( 2 )]
 margin_top = 680.0
 margin_right = 961.0
 margin_bottom = 1080.0
+size_flags_horizontal = 1
+size_flags_vertical = 1
 
 [node name="RightPanel" type="MarginContainer" parent="."]
 visible = false
