@@ -19,7 +19,11 @@ proc bind_signal*(
   var variants = new_array()
   for obj in binds:
     variants.add(obj)
-  discard sender.connect(signal.name, receiver, "_on_" & signal.meth, variants)
+  var method_name = signal.meth
+  if not signal.meth.starts_with("_"):
+    method_name = "_on_" & method_name
+
+  discard sender.connect(signal.name, receiver, method_name, variants)
 
 proc bind_signal*(
     receiver: Object,
