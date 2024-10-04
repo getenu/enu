@@ -40,6 +40,7 @@ always_draw_caret = true
 indent_size = 2
 syntax_highlighting = true
 show_line_numbers = true
+drag_and_drop_selection_enabled = false
 smooth_scrolling = true
 wrap_enabled = true
 caret_blink = true

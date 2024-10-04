@@ -5,10 +5,19 @@ import
   godotapi/[
     text_edit, scene_tree, node, input_event, global_constants, input_event_key,
     style_box_flat, gd_os, tween, scene_tree_tween, property_tweener,
-    method_tweener, input
+    method_tweener, input, scroll_container, input_event_screen_touch
   ]
 import core, gdutils
 import models except Color
+
+type ScrollState = enum
+  Idle
+  Detecting
+  Scrolling
+  Selecting
+  WaitingForSelection
+
+const clear = init_color(0.0, 0.0, 0.0, 0.0)
 
 proc configure_highlighting*(self: TextEdit) =
   # strings
@@ -26,6 +35,16 @@ gdobj Editor of MarginContainer:
     tween: SceneTreeTween
     scroll_bar: VScrollBar
     text_edit: TextEdit
+    scroll_container: ScrollContainer
+    adjust_scroll_next_frame: bool
+
+    start_scroll: int64
+    scroll_state = Idle
+    selection_color: Color
+    caret_color: Color
+    selecting: bool
+    selection_timer: MonoTime
+    touch_timer: MonoTime
 
   proc indent_new_line() =
     let editor = self.text_edit
@@ -49,8 +68,10 @@ gdobj Editor of MarginContainer:
         self.get_tree.set_input_as_handled()
 
   method input*(event: InputEvent) =
-    var event = event.as(InputEventKey)
-    if not event.is_nil and event.pressed:
+    if event of InputEventKey and not event.is_nil:
+      let event = event.as(InputEventKey)
+      if not event.pressed:
+        return
       if event.scancode == KEY_ENTER and host_os != "ios":
         self.indent_new_line()
       if event.scancode == KEY_SEMICOLON and state.config.semicolon_as_colon:
@@ -64,6 +85,15 @@ gdobj Editor of MarginContainer:
           self.text_edit.cursor_get_line
         ).len
         self.get_tree.set_input_as_handled()
+      self.adjust_scroll_next_frame = true
+    elif event of InputEventScreenTouch:
+      let event = event as InputEventScreenTouch
+      if event.pressed:
+        self.touch_timer = get_mono_time() + 0.5.seconds
+      else:
+        self.touch_timer = MonoTime.high
+    elif event of InputEventScreenDrag and self.scroll_state == Idle:
+      self.get_tree.set_input_as_handled()
 
   method unhandled_input*(event: InputEvent) =
     if EditorFocused in state.local_flags and
@@ -90,13 +120,44 @@ gdobj Editor of MarginContainer:
     else:
       self.text_edit.clear_executing_line()
 
+  proc line_rect(
+      line_num: int
+  ): tuple[top_left: Vector2, bottom_right: Vector2] =
+    let line_height = float self.text_edit.get_line_height
+    for line in 1 ..< line_num:
+      result.top_left.y +=
+        (self.text_edit.get_line_wrap_count(line).float + 1) * line_height
+    result.bottom_right = vec2(
+      self.rect_size.x,
+      result.top_left.y +
+        (self.text_edit.get_line_wrap_count(line_num).float + 1) * line_height,
+    )
+
+  proc visible_window(): tuple[top_left: Vector2, bottom_right: Vector2] =
+    let vscroll = float self.scroll_container.scroll_vertical
+    result = (
+      vec2(0.0, vscroll), vec2(self.rect_size.x, self.rect_size.y + vscroll)
+    )
+
+  proc scroll_to_cursor() =
+    let rect = self.line_rect(self.text_edit.cursor_get_line + 1)
+    let window = self.visible_window
+    if rect.top_left.y <= window.top_left.y:
+      self.scroll_container.scroll_vertical = int rect.top_left.y
+    elif rect.bottom_right.y >= window.bottom_right.y:
+      self.scroll_container.scroll_vertical =
+        int(rect.bottom_right.y - self.rect_size.y)
+
   method on_text_changed*() =
     state.player.open_code = self.text_edit.text
+    self.rescale
 
   method on_cursor_changed*() =
     state.player.cursor_position = (
       int self.text_edit.cursor_get_line, int self.text_edit.cursor_get_column
     )
+    if self.text_edit.is_selection_active:
+      self.scroll_to_cursor
 
   method set_opacity*(opacity: float) {.gdexport.} =
     self.opacity = opacity
@@ -147,6 +208,7 @@ gdobj Editor of MarginContainer:
       )
       .set_trans(TRANS_EXPO)
       .set_ease(EASE_IN_OUT)
+    discard self.tween.tween_callback(self, "_rescale")
 
   proc watch_open_unit() =
     var line_zid: ZID
@@ -202,10 +264,23 @@ gdobj Editor of MarginContainer:
     self.watch_open_unit()
     self.watch_local_flags()
 
+  proc content_height(): float =
+    self.line_rect(self.text_edit.get_line_count).bottom_right.y
+
+  method rescale() =
+    self.text_edit.rect_min_size =
+      vec2(self.rect_size.x, max(float self.content_height, self.rect_size.y))
+    self.text_edit.rect_size = self.text_edit.rect_min_size
+    self.scroll_to_cursor
+
   method ready*() =
     self.text_edit = find("TextEdit", TextEdit)
+    self.caret_color = self.text_edit.get_color("caret_color")
+    self.selection_color = self.text_edit.get_color("selection_color")
+    self.scroll_container = find("ScrollContainer", ScrollContainer)
     self.bind_signals(self.text_edit, "text_changed", "cursor_changed")
-    # self.text_edit.bind_signal(self, "gui_input")
+    self.bind_signals(self.scroll_container, "scroll_started", "scroll_ended")
+    self.bind_signal(self, ("resized", "_rescale"))
     state.nodes.game.bind_signal(self, "gui_input", self.name)
 
     for name in ["Close", "Run"]:
@@ -222,21 +297,70 @@ gdobj Editor of MarginContainer:
       let o = child.as_object(Node) as VScrollBar
       if ?o:
         self.scroll_bar = o
-        o.modulate = Color(r: 1.0, g: 1.0, b: 1.0, a: 0.0)
+        o.modulate = clear
     assert ?self.scroll_bar
+    self.rescale()
     self.watch()
 
-  proc content_height(): int =
-    let line_height = self.text_edit.get_line_height
-    for line in 0 ..< self.text_edit.get_line_count:
-      result += int(
-        (self.text_edit.get_line_wrap_count(line) + 1) * line_height
-      )
+  proc enable_selecting() =
+    self.text_edit.add_color_override("selection_color", self.selection_color)
+    self.text_edit.add_color_override("caret_color", self.caret_color)
+    self.scroll_state = Selecting
+    self.text_edit.mouse_filter = MOUSE_FILTER_STOP
+    self.text_edit.selecting_enabled = true
+    if not self.text_edit.is_selection_active:
+      self.selection_timer = get_mono_time() + 2.0.seconds
+      self.scroll_state = WaitingForSelection
+
+  proc enable_scrolling() =
+    self.text_edit.add_color_override("selection_color", clear)
+    self.text_edit.add_color_override("caret_color", clear)
+    self.scroll_state = Scrolling
+    self.text_edit.mouse_filter = MOUSE_FILTER_IGNORE
+    self.text_edit.selecting_enabled = false
+
+  proc enable_detecting() =
+    self.start_scroll = self.scroll_container.scroll_vertical
+    self.text_edit.add_color_override("selection_color", clear)
+    self.text_edit.add_color_override("caret_color", clear)
+    self.scroll_state = Detecting
+
+  proc enable_idle() =
+    self.text_edit.add_color_override("selection_color", self.selection_color)
+    self.text_edit.add_color_override("caret_color", self.caret_color)
+    self.scroll_state = Idle
+    self.text_edit.mouse_filter = MOUSE_FILTER_PASS
+    self.text_edit.selecting_enabled = true
 
   method process(delta: float) =
-    self.text_edit.rect_min_size =
-      vec2(self.rect_size.x, max(float self.content_height, self.rect_size.y))
-    self.text_edit.rect_size = self.text_edit.rect_min_size
+    if self.adjust_scroll_next_frame:
+      self.adjust_scroll_next_frame = false
+      self.scroll_to_cursor()
+
+    if self.scroll_state == Detecting:
+      if abs(self.scroll_container.scroll_vertical - self.start_scroll) > 20:
+        self.enable_scrolling
+      elif get_mono_time() > self.touch_timer:
+        self.enable_selecting()
+    elif self.scroll_state == Selecting and
+        not self.text_edit.is_selection_active:
+      self.selection_timer = get_mono_time() + 0.5.seconds
+      self.scroll_state = WaitingForSelection
+    elif self.scroll_state == WaitingForSelection and
+        self.text_edit.is_selection_active:
+      self.scroll_state = Selecting
+    elif self.scroll_state == WaitingForSelection and
+        get_mono_time() > self.selection_timer:
+      self.enable_idle
+
+  method on_scroll_started() =
+    if not self.text_edit.is_selection_active:
+      self.enable_detecting
+    else:
+      self.enable_selecting
+
+  method on_scroll_ended() =
+    self.enable_idle
 
   method on_close() =
     if ?state.open_unit:
