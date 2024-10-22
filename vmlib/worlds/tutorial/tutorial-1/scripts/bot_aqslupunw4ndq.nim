@@ -44,8 +44,8 @@ proc get_bot(): Bot =
     Enu is a 3D world where you can code and create almost anything using a
     programming language called [Nim](https://nim-lang.org). It's a place to
     make games, experiment, and learn to code. You're using an early prototype
-    that's missing important features and is full of bugs, but it's getting
-    better quickly. Please contact me at [dsrw@me.com](mailto:dsrw@me.com) if
+    that's missing important features and is full of bugs, but it's slowly
+    getting better. Please contact me at [dsrw@me.com](mailto:dsrw@me.com) if
     you have any questions or suggestions.
 
     In this tutorial you'll learn to move and do some simple coding. In later
