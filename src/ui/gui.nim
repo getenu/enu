@@ -5,9 +5,13 @@ import
 import core, nodes/player_node, gdutils
 
 gdobj GUI of Control:
+  var left_stick: Control
   method ready() =
     self.bind_signals self,
       "mouse_entered", "mouse_exited", "focus_entered", "focus_exited"
+    self.left_stick = find("LeftStick", Control)
+    state.local_flags.changes:
+      self.left_stick.visible = TouchControls in state.local_flags
 
   method on_mouse_entered() =
     state.push_flag ViewportFocused
@@ -21,17 +25,7 @@ gdobj GUI of Control:
   method on_focus_exited() =
     state.pop_flag ViewportFocused
 
-  method gui_input(event: InputEvent) =
-    (state.nodes.player as PlayerNode).viewport_input(event)
-    self.accept_event()
-
   method input(event: InputEvent) =
-    if host_os == "ios":
-      (state.nodes.player as PlayerNode).viewport_input(event)
-    else:
-      if event of InputEventKey:
-        (state.nodes.player as PlayerNode).viewport_input(event)
-
     if event of InputEventScreenTouch:
       let event = event as InputEventScreenTouch
       let index = byte(event.index)
@@ -44,3 +38,10 @@ gdobj GUI of Control:
       let index = byte(event.index)
       if index in state.ignored_touches:
         self.get_tree().set_input_as_handled()
+        return
+
+    if TouchControls in state.local_flags:
+      (state.nodes.player as PlayerNode).viewport_input(event)
+    else:
+      if event of InputEventKey:
+        (state.nodes.player as PlayerNode).viewport_input(event)

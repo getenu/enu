@@ -92,7 +92,9 @@ gdobj Editor of MarginContainer:
         self.touch_timer = get_mono_time() + 0.5.seconds
       else:
         self.touch_timer = MonoTime.high
-    elif event of InputEventScreenDrag and self.scroll_state == Idle:
+    elif EditorVisible in state.local_flags and
+        CommandMode notin state.local_flags and event of InputEventScreenDrag and
+        self.scroll_state == Idle:
       self.get_tree.set_input_as_handled()
 
   method unhandled_input*(event: InputEvent) =
