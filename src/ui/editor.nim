@@ -21,12 +21,12 @@ const clear = init_color(0.0, 0.0, 0.0, 0.0)
 
 proc configure_highlighting*(self: TextEdit) =
   # strings
-  self.add_color_region("\"", "\"", ir_black[text], false)
-  self.add_color_region("\"\"\"", "\"\"\"", ir_black[text], false)
+  self.add_color_region("\"", "\"", ir_black[Text], false)
+  self.add_color_region("\"\"\"", "\"\"\"", ir_black[Text], false)
   # block comments
-  self.add_color_region("#[", "]#", ir_black[comment], false)
+  self.add_color_region("#[", "]#", ir_black[Comment], false)
   # line comments
-  self.add_color_region("#", "\n", ir_black[comment], true)
+  self.add_color_region("#", "\n", ir_black[Comment], true)
 
 gdobj Editor of MarginContainer:
   var

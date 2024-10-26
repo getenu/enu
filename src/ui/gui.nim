@@ -25,6 +25,10 @@ gdobj GUI of Control:
   method on_focus_exited() =
     state.pop_flag ViewportFocused
 
+  method gui_input(event: InputEvent) =
+    (state.nodes.player as PlayerNode).viewport_input(event)
+    self.accept_event()
+
   method input(event: InputEvent) =
     if event of InputEventScreenTouch:
       let event = event as InputEventScreenTouch

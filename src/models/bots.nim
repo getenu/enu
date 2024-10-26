@@ -82,7 +82,7 @@ proc init*(
     animation_value: ~"auto",
     speed: 1.0,
     clone_of: clone_of,
-    start_color: action_colors[black],
+    start_color: action_colors[Black],
     parent: parent,
   )
 

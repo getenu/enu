@@ -14,51 +14,51 @@ proc col*(hex: string): chroma.Color =
 
 type
   Colors* = enum
-    eraser
-    blue
-    red
-    green
-    black
-    white
-    brown
+    Eraser
+    Blue
+    Red
+    Green
+    Black
+    White
+    Brown
 
   Theme* = enum
-    normal
-    comment
-    entity
-    keyword
-    operator
-    class
-    storage
-    constant
-    text
-    number
-    variable
-    invalid
+    Normal
+    Comment
+    Entity
+    Keyword
+    Operator
+    Class
+    Storage
+    Constant
+    Text
+    Number
+    Variable
+    Invalid
 
 const ir_black* = [
-  normal: col"F6F3E8",
-  comment: col"7C7C7C",
-  entity: col"FFD2A7",
-  keyword: col"96CBFE",
-  operator: col"EDEDED",
-  class: col"FFFFB6",
-  storage: col"CFCB90",
-  constant: col"99CC99",
-  text: col"A8FF60",
-  number: col"FF73FD",
-  variable: col"C6C5FE",
-  invalid: col"FD5FF1"
+  Normal: col"F6F3E8",
+  Comment: col"7C7C7C",
+  Entity: col"FFD2A7",
+  Keyword: col"96CBFE",
+  Operator: col"EDEDED",
+  Class: col"FFFFB6",
+  Storage: col"CFCB90",
+  Constant: col"99CC99",
+  Text: col"A8FF60",
+  Number: col"FF73FD",
+  Variable: col"C6C5FE",
+  Invalid: col"FD5FF1"
 ]
 
 const action_colors* = [
-  eraser: chroma.Color(),
-  blue: col"0067ff",
-  red: col"fc0e0b",
-  green: col"14f707",
-  black: col"000000",
-  white: col"d9eed8",
-  brown: col"3f302b"
+  Eraser: chroma.Color(),
+  Blue: col"0067ff",
+  Red: col"fc0e0b",
+  Green: col"14f707",
+  Black: col"000000",
+  White: col"d9eed8",
+  Brown: col"3f302b"
 ]
 
 proc action_index*(self: Color): Colors =

@@ -19,7 +19,7 @@ type
 
 gdobj VirtualJoystick of Control:
   var
-    pressed_color {.gdexport.} = godot.Color(ir_black[number])
+    pressed_color {.gdexport.} = godot.Color(ir_black[Number])
     deadzone_size {.gdexport, hint: Range, hint_str = "0,200,1".} = 10.0
     clampzone_size {.gdexport, hint: Range, hint_str = "0,500,1".} = 75.0
     joystick_mode {.gdexport.} = FIXED
