@@ -229,7 +229,10 @@ proc load_user_config*(dir = ""): UserConfig =
   let config_file = join_path(work_dir, "config.json")
   if file_exists(config_file):
     let opt = Joptions(allow_missing_keys: true, allow_extra_keys: true)
-    result.from_json(read_file(config_file).parse_json, opt)
+    try:
+      result.from_json(read_file(config_file).parse_json, opt)
+    except Exception as e:
+      error "Failed to load user config", error = e[]
 
 proc build_user_config*(config: Config): UserConfig =
   for config_name, config_field in config.field_pairs:
