@@ -44,10 +44,10 @@ gdobj Settings of PanelContainer:
     self.environments.select(state.config.environment)
     let level_label = find("LevelLabel", Label)
     if ?state.config.connect_address:
-      level_label.add_color_override("font_color", ir_black[comment])
+      level_label.add_color_override("font_color", ir_black[Comment])
       self.levels.disabled = true
     else:
-      level_label.add_color_override("font_color", ir_black[normal])
+      level_label.add_color_override("font_color", ir_black[Normal])
       self.levels.disabled = false
       self.levels.select(state.config.level)
 
@@ -109,7 +109,7 @@ gdobj Settings of PanelContainer:
 
     var add_hex = true
     for color in Colors:
-      if color != eraser:
+      if color != Eraser:
         self.colors.add_item($color)
         if state.config.player_color == action_colors[color]:
           add_hex = false

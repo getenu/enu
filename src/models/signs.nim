@@ -22,7 +22,7 @@ proc init*(
     size_value: ~size,
     billboard_value: ~billboard,
     frame_created: state.frame_count,
-    start_color: action_colors[black],
+    start_color: action_colors[Black],
     start_transform: transform,
     owner_value: ~owner,
     text_only: text_only,

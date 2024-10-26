@@ -9,7 +9,7 @@ const ChunkSize = vec3(16, 16, 16)
 
 include "build_code_template.nim.nimf"
 
-const default_color = action_colors[blue]
+const default_color = action_colors[Blue]
 
 var
   current_build* {.threadvar.}: Build
@@ -55,7 +55,7 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
         var loc = position - offset
         if loc in unit:
           var info = unit.chunks[loc.buffer][loc]
-          if info.kind != Hole and info.color != action_colors[eraser]:
+          if info.kind != Hole and info.color != action_colors[Eraser]:
             return unit
       let first = unit.units.find_first(positions)
       if ?first:
@@ -214,11 +214,11 @@ proc remove(self: Build) =
 
     skip_point = vec3()
     last_point = self.target_point
-    self.draw(point, (Hole, action_colors[eraser]))
+    self.draw(point, (Hole, action_colors[Eraser]))
 
     if self.units.len == 0 and
         not self.chunks.any_it(
-          it.value.any_it(it.value.color != action_colors[eraser])
+          it.value.any_it(it.value.color != action_colors[Eraser])
         ):
       if self.parent.is_nil:
         state.units -= self
@@ -374,11 +374,11 @@ method ensure_visible*(self: Build) =
   # single block.
   if self.units.len == 0 and
       not self.chunks.any_it(
-        it.value.any_it(it.value.color != action_colors[eraser])
+        it.value.any_it(it.value.color != action_colors[Eraser])
       ):
     let color =
-      if self.start_color == action_colors[eraser]:
-        action_colors[blue]
+      if self.start_color == action_colors[Eraser]:
+        action_colors[Blue]
       else:
         self.start_color
     self.draw(vec3(), (Computed, color))
