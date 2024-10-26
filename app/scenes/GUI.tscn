@@ -115,6 +115,36 @@ margin_top = 0.0
 margin_right = 1920.0
 margin_bottom = 516.0
 
+[node name="HBoxContainer2" type="HBoxContainer" parent="."]
+anchor_left = 0.821
+anchor_top = 0.646
+anchor_right = 0.821
+anchor_bottom = 0.646
+margin_left = -5.34058e-05
+margin_top = 2.38419e-05
+margin_right = 118.0
+margin_bottom = 33.0
+size_flags_horizontal = 0
+size_flags_vertical = 0
+theme = ExtResource( 6 )
+custom_constants/separation = 20
+
+[node name="Up" type="Button" parent="HBoxContainer2"]
+visible = false
+margin_right = 49.0
+margin_bottom = 33.0
+mouse_default_cursor_shape = 2
+theme_type_variation = "MonoButton"
+text = " ↑ "
+
+[node name="Down" type="Button" parent="HBoxContainer2"]
+visible = false
+margin_right = 49.0
+margin_bottom = 33.0
+mouse_default_cursor_shape = 2
+theme_type_variation = "MonoButton"
+text = " ↓ "
+
 [node name="LeftPanel" type="MarginContainer" parent="."]
 anchor_right = 0.5
 anchor_bottom = 1.0
@@ -133,7 +163,7 @@ custom_constants/separation = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="LeftPanel/ThemeHolder"]
 margin_right = 961.0
-margin_bottom = 678.0
+margin_bottom = 1080.0
 mouse_filter = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -142,10 +172,11 @@ size_flags_stretch_ratio = 2.0
 [node name="Editor" parent="LeftPanel/ThemeHolder/MarginContainer" instance=ExtResource( 1 )]
 visible = false
 margin_right = 961.0
-margin_bottom = 678.0
+margin_bottom = 1080.0
 mouse_filter = 1
 
 [node name="Console" parent="LeftPanel/ThemeHolder" instance=ExtResource( 2 )]
+visible = false
 margin_top = 680.0
 margin_right = 961.0
 margin_bottom = 1080.0
