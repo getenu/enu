@@ -72,7 +72,7 @@ gdobj BuildNode of VoxelTerrain:
       let m = self.get_material(i).as(ShaderMaterial)
       if not m.is_nil:
         if self.error_highlight_on:
-          m.set_shader_param("emission", action_colors[red].to_variant)
+          m.set_shader_param("emission", action_colors[Red].to_variant)
         else:
           m.set_shader_param(
             "emission", self.model.shared.emission_colors[i].to_variant
@@ -94,7 +94,7 @@ gdobj BuildNode of VoxelTerrain:
         # `and not modified` isn't required, but the block will be
         # replaced on the next iteration anyway.
         if removed and not modified:
-          self.draw(change.item.key, action_colors[eraser])
+          self.draw(change.item.key, action_colors[Eraser])
         elif added:
           self.draw(change.item.key, change.item.value.color)
       self.draw_block(self.model.chunks[chunk_id])

@@ -41,16 +41,16 @@ gdobj BotNode of KinematicBody:
 
   proc set_color(color: chroma.Color) =
     var adjusted: chroma.Color
-    if color == action_colors[green]:
+    if color == action_colors[Green]:
       adjusted = color
       adjusted.a = 0.015
-    elif color == action_colors[white]:
+    elif color == action_colors[White]:
       adjusted = color
       adjusted.a = 0.1
     else:
-      var dist = (color.distance(action_colors[brown]) + 10).cbrt / 7.5
+      var dist = (color.distance(action_colors[Brown]) + 10).cbrt / 7.5
       adjusted = color.saturate(0.2).darken(dist - 0.15)
-      adjusted.a = 0.95 - color.distance(action_colors[black]) / 100
+      adjusted.a = 0.95 - color.distance(action_colors[Black]) / 100
 
     debug "setting bot color", color, adjusted
     SpatialMaterial(self.material).albedo_color = adjusted

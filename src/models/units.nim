@@ -114,11 +114,11 @@ method collect_garbage*(self: Unit) {.base, gcsafe.} =
   for id, chunk in self.shared.edits.value:
     var cleaned_chunk = chunk
     for loc, voxel in chunk.value:
-      if voxel.kind == Hole and voxel.color == action_colors[eraser]:
+      if voxel.kind == Hole and voxel.color == action_colors[Eraser]:
         cleaned_chunk.del(loc)
       elif voxel.kind == Hole:
         var voxel = voxel
-        voxel.color = action_colors[eraser]
+        voxel.color = action_colors[Eraser]
         cleaned_chunk[loc] = voxel
     self.shared.edits[id] = cleaned_chunk
 

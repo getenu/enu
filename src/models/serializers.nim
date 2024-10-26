@@ -11,7 +11,7 @@ type LevelInfo = object
 
 proc to_json_hook(self: Color): JsonNode =
   result =
-    if self == action_colors[eraser]:
+    if self == action_colors[Eraser]:
       %""
     else:
       for i, color in Colors.enum_fields:
@@ -22,10 +22,10 @@ proc to_json_hook(self: Color): JsonNode =
 proc from_json_hook(self: var Color, json: JsonNode) =
   let hex = json.get_str
   if hex == "":
-    self = action_colors[eraser]
+    self = action_colors[Eraser]
   else:
     for i, color in Colors.enum_fields:
-      if color == hex:
+      if color.to_lower == hex.to_lower:
         self = action_colors[Colors(i)]
         return
     self = hex.parse_html_hex

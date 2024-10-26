@@ -11,6 +11,7 @@ from pkg/godot import NimGodotObject
 export Vector3, Transform, vector3, basis, AABB, aabb
 export godotbase except print
 export Interpreter
+export lineinfos.`==`
 
 type
   EnuError* = object of CatchableError
