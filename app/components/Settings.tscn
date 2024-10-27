@@ -11,34 +11,6 @@ margin_bottom = 541.0
 theme = ExtResource( 1 )
 script = ExtResource( 2 )
 
-[node name="HBoxContainer" type="HBoxContainer" parent="."]
-margin_right = 874.0
-margin_bottom = 62.0
-size_flags_horizontal = 3
-size_flags_vertical = 0
-alignment = 2
-
-[node name="MarginContainer" type="MarginContainer" parent="HBoxContainer"]
-margin_left = 798.0
-margin_right = 874.0
-margin_bottom = 62.0
-custom_constants/margin_right = 30
-custom_constants/margin_top = 25
-
-[node name="Label" type="Label" parent="HBoxContainer/MarginContainer"]
-margin_top = 25.0
-margin_right = 46.0
-margin_bottom = 62.0
-text = " "
-
-[node name="Open" type="Button" parent="HBoxContainer/MarginContainer"]
-margin_top = 25.0
-margin_right = 46.0
-margin_bottom = 62.0
-mouse_default_cursor_shape = 2
-theme_type_variation = "IconButton"
-text = "  "
-
 [node name="Window" type="PanelContainer" parent="."]
 margin_right = 874.0
 margin_bottom = 516.0

@@ -23,7 +23,7 @@ gdobj Settings of PanelContainer:
     megapixels, font_size, toolbar_size, server_address, level_name: LineEdit
     megapixels_up, megapixels_down, font_size_up, font_size_down,
       toolbar_size_up, toolbar_size_down, switch_level, full_screen, run_server,
-      connect, close, open, save, cancel: Button
+      connect, close, save, cancel: Button
     remote_container, main_container, new_level_container, row_container,
       settings_container, window: Container
     repeat_timers: Table[string, MonoTime]
@@ -97,7 +97,6 @@ gdobj Settings of PanelContainer:
       window = find("Window", Container)
       tween = find("Tween", Tween)
       close = find("Close", Button)
-      open = find("Open", Button)
 
     self.separation = self.row_container.get_constant("separation")
 
@@ -130,7 +129,6 @@ gdobj Settings of PanelContainer:
       self.bind_signal(option_button, "item_selected", option_button.name)
 
     self.bind_signal(self.connect, "pressed", "Connect")
-    self.bind_signal(self.open, ("pressed", "opened"))
     self.bind_signal(self.close, ("pressed", "closed"))
     self.bind_signal(self.cancel, ("pressed", "cancelled"))
     self.bind_signal(self.save, "pressed", self.save.name)
@@ -354,9 +352,6 @@ gdobj Settings of PanelContainer:
 
   method on_closed() =
     state.pop_flag SettingsVisible
-
-  method on_opened() =
-    state.push_flag SettingsVisible
 
   method on_cancelled() =
     self.update_values()
