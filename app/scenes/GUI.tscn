@@ -98,22 +98,31 @@ margin_bottom = 50.0
 group = SubResource( 1 )
 icon = null
 
-[node name="GridContainer" type="GridContainer" parent="."]
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
 anchor_right = 1.0
-mouse_filter = 2
-columns = 2
+theme = ExtResource( 6 )
+alignment = 2
 
-[node name="Label" type="Label" parent="GridContainer"]
-margin_right = 1042.0
-margin_bottom = 516.0
-size_flags_horizontal = 3
-size_flags_vertical = 1
-
-[node name="Settings" parent="GridContainer" instance=ExtResource( 12 )]
-margin_left = 1046.0
-margin_top = 0.0
+[node name="MarginContainer" type="MarginContainer" parent="HBoxContainer"]
+margin_left = 1844.0
 margin_right = 1920.0
-margin_bottom = 516.0
+margin_bottom = 62.0
+custom_constants/margin_right = 30
+custom_constants/margin_top = 25
+
+[node name="Label" type="Label" parent="HBoxContainer/MarginContainer"]
+margin_top = 25.0
+margin_right = 46.0
+margin_bottom = 62.0
+text = " "
+
+[node name="OpenSettings" type="Button" parent="HBoxContainer/MarginContainer"]
+margin_top = 25.0
+margin_right = 46.0
+margin_bottom = 62.0
+mouse_default_cursor_shape = 2
+theme_type_variation = "IconButton"
+text = "  "
 
 [node name="HBoxContainer2" type="HBoxContainer" parent="."]
 anchor_left = 0.821
@@ -238,6 +247,24 @@ margin_bottom = 28.0
 mouse_default_cursor_shape = 2
 theme_type_variation = "IconButton"
 text = "  "
+
+[node name="GridContainer" type="GridContainer" parent="."]
+anchor_right = 1.0
+margin_bottom = 516.0
+mouse_filter = 2
+columns = 2
+
+[node name="Label" type="Label" parent="GridContainer"]
+margin_right = 1042.0
+margin_bottom = 516.0
+size_flags_horizontal = 3
+size_flags_vertical = 1
+
+[node name="Settings" parent="GridContainer" instance=ExtResource( 12 )]
+margin_left = 1046.0
+margin_top = 0.0
+margin_right = 1920.0
+margin_bottom = 516.0
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
