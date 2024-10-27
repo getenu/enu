@@ -108,6 +108,7 @@ type
     status_message_value*: ZenValue[string]
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
+    logger*: proc(level, msg: string) {.gcsafe.}
 
   Model* = ref object of RootObj
     id*: string

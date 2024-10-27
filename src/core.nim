@@ -156,6 +156,21 @@ proc wrap*[T](value, min, max: T): float =
 
 # output
 
+proc logger*(level, msg: string) =
+  if not state.logger.is_nil:
+    state.logger(level, msg)
+  else:
+    error "logger not initialized", level, msg
+
+proc debug*(self: GameState, args: varargs[string, `$`]) =
+  logger("debug", args.join)
+
+proc info*(self: GameState, args: varargs[string, `$`]) =
+  logger("info", args.join)
+
+proc err*(self: GameState, args: varargs[string, `$`]) =
+  logger("err", \"[color=#FF0000]{args.join}[/color]")
+
 when not defined(no_godot):
   import pkg/godot
 
@@ -163,11 +178,16 @@ when not defined(no_godot):
     default_chronicles_stream.outputs[0].writer = proc(
         log_level: LogLevel, msg: LogOutputStr
     ) {.gcsafe.} =
-      # when defined(release):
-      godot.print msg
-      # else:
-      #   if log_level >= INFO:
-      #     echo msg
+      try:
+        # when defined(release):
+        godot.print msg
+        if log_level >= ERROR:
+          state.err(msg)
+        # else:
+        #   if log_level >= INFO:
+        #     echo msg
+      except Exception as e:
+        error "Error in logging", error = e.msg
 
   when default_chronicles_stream.outputs.tuple_len > 1:
     discard default_chronicles_stream.outputs[1].open(
