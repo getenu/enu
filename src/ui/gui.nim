@@ -65,6 +65,18 @@ gdobj GUI of Control:
     (state.nodes.player as PlayerNode).viewport_input(event)
     self.accept_event()
 
+  method unhandled_input*(event: InputEvent) =
+    if CommandMode notin state.local_flags and
+        event.is_action_pressed("ui_cancel") and
+        ViewportFocused in state.local_flags:
+      let flags = state.try_pop(ViewportFocused)
+      if SettingsFocused in flags:
+        state.pop_flags SettingsFocused, SettingsVisible
+      elif EditorFocused in flags:
+        state.open_unit = nil
+      elif DocsFocused in flags:
+        state.open_sign = nil
+
   method input(event: InputEvent) =
     if event of InputEventScreenTouch:
       let event = event as InputEventScreenTouch
