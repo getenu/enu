@@ -2,23 +2,27 @@ import pkg/godot
 import
   godotapi/[
     control, input_event_screen_touch, input_event_screen_drag, scene_tree,
-    input_event_action, input
+    input_event_action, input, button
   ]
 import core, nodes/player_node, gdutils
 
 gdobj GUI of Control:
   var
     left_stick: Control
-    up: Control
-    down: Control
+    up: Button
+    down: Button
 
   method ready() =
     self.left_stick = find("LeftStick", Control)
-    self.up = find("Up", Control)
-    self.down = find("Down", Control)
+    self.up = find("Up", Button)
+    self.down = find("Down", Button)
 
     self.bind_signals self,
       "mouse_entered", "mouse_exited", "focus_entered", "focus_exited"
+
+    self.bind_signal(
+      find("OpenSettings", Button), ("pressed", "settings_opened")
+    )
 
     for button in [self.up, self.down]:
       self.bind_signal(button, "button_up", button.name)
@@ -41,6 +45,9 @@ gdobj GUI of Control:
     ev.action = if name == "Up": "jump" else: "crouch"
     ev.pressed = true
     parse_input_event(ev)
+
+  method on_settings_opened() =
+    state.push_flag SettingsVisible
 
   method on_mouse_entered() =
     state.push_flag ViewportFocused
