@@ -170,10 +170,13 @@ gdobj Editor of MarginContainer:
 
   method ghost*() {.gdexport.} =
     self.text_edit.ghost()
+    self.scroll_container.ghost()
 
   method unghost*() {.gdexport.} =
     self.text_edit.unghost()
+    self.scroll_container.unghost()
     self.text_edit.mouse_filter = MOUSE_FILTER_PASS
+    self.scroll_container.mouse_filter = MOUSE_FILTER_PASS
 
   proc close_editor() =
     self.text_edit.release_focus()
