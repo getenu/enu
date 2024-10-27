@@ -19,11 +19,12 @@ const groups =
     {Playing, Flying}
   ]
 
-proc resolve_flags(self: GameState) =
+proc resolve_flags*(
+    self: GameState, wants: seq[LocalStateFlags]
+): set[LocalStateFlags] =
   debug "resolving flags",
     flags = self.local_flags.value, wants = self.wants.value
-  var result: set[LocalStateFlags]
-  for flag in self.wants:
+  for flag in wants:
     for group in groups:
       if flag in group:
         for f in group:
@@ -59,6 +60,9 @@ proc resolve_flags(self: GameState) =
     result.excl(ReticleVisible)
 
   debug "resolved flags", flags = result
+
+proc resolve_flags(self: GameState) =
+  let result = self.resolve_flags(self.wants.value)
   self.local_flags.value = result
 
 proc replace_flags*(self: GameState, flags: varargs[LocalStateFlags]) =
@@ -90,6 +94,12 @@ proc pop_flags*(self: GameState, flags: varargs[LocalStateFlags]) =
 
   self.resolve_flags
 
+proc try_pop*(
+    self: GameState, flags: varargs[LocalStateFlags]
+): set[LocalStateFlags] =
+  var wants = self.wants.value.filter_it(it notin flags)
+  return self.resolve_flags(wants)
+
 proc pop_flag*(self: GameState, flag: LocalStateFlags) =
   self.pop_flags flag
 
@@ -116,23 +126,6 @@ proc `-=`*(
 proc selected_color*(self: GameState): Color =
   action_colors[Colors(ord self.tool)]
 
-proc logger*(level, msg: string) =
-  if level == "err":
-    debug "console visible"
-    state.push_flag ConsoleVisible
-  let msg = \"[b]{level.to_upper}[/b] {msg}"
-  debug "logging", msg
-  state.console.log += msg & "\n"
-
-proc debug*(self: GameState, args: varargs[string, `$`]) =
-  logger("debug", args.join)
-
-proc info*(self: GameState, args: varargs[string, `$`]) =
-  logger("info", args.join)
-
-proc err*(self: GameState, args: varargs[string, `$`]) =
-  logger("err", \"[color=#FF0000]{args.join}[/color]")
-
 proc init*(_: type GameState): GameState =
   let flags = {SyncLocal}
   let self = GameState(
@@ -152,6 +145,15 @@ proc init*(_: type GameState): GameState =
     status_message_value: ~("", flags),
     voxel_tasks_value: ~(0, flags),
   )
+
+  self.logger = proc(level, msg: string) {.closure.} =
+    if level == "err":
+      debug "console visible"
+      state.push_flag ConsoleVisible
+    let msg = \"[b]{level.to_upper}[/b] {msg}"
+    debug "logging", msg
+    state.console.log += msg & "\n"
+
   result = self
   self.open_unit_value.changes:
     if added and change.item != nil:
