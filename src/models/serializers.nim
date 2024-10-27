@@ -199,28 +199,32 @@ proc load_units(parent: Unit) =
     if not file_exists(file_name):
       error "Missing unit file", file_name
       continue
-    let data_file = read_file(dir / unit_id & ".json").parse_json
-    var unit: Unit
-    if unit_id.starts_with("bot_"):
-      unit = data_file.json_to(Bot, opts)
-    elif unit_id.starts_with("build_"):
-      unit = data_file.json_to(Build, opts)
-    else:
-      quit "Unknown unit type: " & unit_id
 
-    unit.global_flags += ScriptInitializing
-    if parent.is_nil:
-      state.units.add(unit)
-    else:
-      parent.units.add(unit)
-    if unit of Build:
-      Build(unit).reset_bounds
-      Build(unit).restore_edits
+    try:
+      let data_file = read_file(dir / unit_id & ".json").parse_json
+      var unit: Unit
+      if unit_id.starts_with("bot_"):
+        unit = data_file.json_to(Bot, opts)
+      elif unit_id.starts_with("build_"):
+        unit = data_file.json_to(Build, opts)
+      else:
+        quit "Unknown unit type: " & unit_id
 
-    if file_exists(unit.script_ctx.script):
-      unit.code = Code.init(read_file(unit.script_ctx.script))
-    else:
-      unit.global_flags -= ScriptInitializing
+      unit.global_flags += ScriptInitializing
+      if parent.is_nil:
+        state.units.add(unit)
+      else:
+        parent.units.add(unit)
+      if unit of Build:
+        Build(unit).reset_bounds
+        Build(unit).restore_edits
+
+      if file_exists(unit.script_ctx.script):
+        unit.code = Code.init(read_file(unit.script_ctx.script))
+      else:
+        unit.global_flags -= ScriptInitializing
+    except Exception as e:
+      error "Failed to load unit", unit_id, error = e[]
 
 proc load_user_config*(dir = ""): UserConfig =
   var work_dir = dir
@@ -294,9 +298,12 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   debug "loading ", level_file
   if file_exists(level_file):
-    let level_json = read_file(level_file)
-    let level = level_json.parse_json.json_to(LevelInfo)
-    load_chunks = level.format_version == "v0.9"
+    try:
+      let level_json = read_file(level_file)
+      let level = level_json.parse_json.json_to(LevelInfo)
+      load_chunks = level.format_version == "v0.9"
+    except Exception as e:
+      error "Failed to load level", error = e[]
 
   dont_join = true
   worker.retry_failures = true
