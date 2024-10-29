@@ -126,6 +126,15 @@ proc `-=`*(
 proc selected_color*(self: GameState): Color =
   action_colors[Colors(ord self.tool)]
 
+proc init_logger*(self: GameState) =
+  self.logger = proc(level, msg: string) {.closure.} =
+    if level == "err":
+      debug "console visible"
+      state.push_flag ConsoleVisible
+    let msg = \"[b]{level.to_upper}[/b] {msg}"
+    debug "logging", msg
+    state.console.log += msg & "\n"
+
 proc init*(_: type GameState): GameState =
   let flags = {SyncLocal}
   let self = GameState(
@@ -146,13 +155,7 @@ proc init*(_: type GameState): GameState =
     voxel_tasks_value: ~(0, flags),
   )
 
-  self.logger = proc(level, msg: string) {.closure.} =
-    if level == "err":
-      debug "console visible"
-      state.push_flag ConsoleVisible
-    let msg = \"[b]{level.to_upper}[/b] {msg}"
-    debug "logging", msg
-    state.console.log += msg & "\n"
+  self.init_logger
 
   result = self
   self.open_unit_value.changes:

@@ -34,6 +34,8 @@ proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
   var msg = e.msg
   if ?e.parent:
     msg = e.parent.msg
+
+  info "vm error", msg, file = unit.script_ctx.file_name
   state.err(\"[url=unit://{unit.id}]{msg}[/url]")
   unit.local_flags += HighlightError
   unit.global_flags -= ScriptInitializing
@@ -75,7 +77,6 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
         error "File not found handling error", file_name
 
       var loc = \"{file_name}({int info.line},{int info.col})"
-      error "vm error", msg, file = ctx.file_name
       errors.add (msg, info, loc)
       ctx.exit_code = error_code
       raise (ref VMQuit)(info: info, msg: msg, location: loc)
