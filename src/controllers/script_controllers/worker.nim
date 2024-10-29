@@ -167,6 +167,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   ctx.subscribe(Zen.thread_ctx)
 
   state = GameState.init_from(main_thread_state)
+  state.init_logger
   let connect_address = main_thread_state.config.connect_address
   if ?listen_address or not ?connect_address:
     state.push_flag Server
