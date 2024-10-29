@@ -2,7 +2,7 @@ import std/[algorithm, math, os]
 import
   godotapi/[
     panel_container, option_button, line_edit, margin_container, tween,
-    input_event, scene_tree
+    input_event, scene_tree, v_separator, viewport, grid_container,
   ]
 import godot
 import core, gdutils, models/[colors, serializers]
@@ -24,8 +24,10 @@ gdobj Settings of PanelContainer:
     megapixels_up, megapixels_down, font_size_up, font_size_down,
       toolbar_size_up, toolbar_size_down, switch_level, full_screen, run_server,
       connect, close, save, cancel: Button
-    remote_container, main_container, new_level_container, row_container,
-      settings_container, window: Container
+    remote_container, main_container, new_level_container, row_container, window:
+      Container
+    settings_container: GridContainer
+    left_separator, right_separator: VSeparator
     repeat_timers: Table[string, MonoTime]
     size_timer = MonoTime.high
     tween: Tween
@@ -93,12 +95,13 @@ gdobj Settings of PanelContainer:
       main_container = find("MainContainer", Container)
       new_level_container = find("NewLevelContainer", Container)
       row_container = find("RowContainer", Container)
-      settings_container = find("SettingsContainer", Container)
+      settings_container = find("SettingsContainer", GridContainer)
       window = find("Window", Container)
       tween = find("Tween", Tween)
       close = find("Close", Button)
-
-    self.separation = self.row_container.get_constant("separation")
+      separation = self.row_container.get_constant("separation")
+      left_separator = find("LeftSeparator", VSeparator)
+      right_separator = find("RightSeparator", VSeparator)
 
     self.environments.add_item("default")
     for env in environments.keys.to_seq.sorted:
@@ -119,7 +122,7 @@ gdobj Settings of PanelContainer:
 
     for button in [
       self.megapixels_up, self.megapixels_down, self.font_size_up,
-      self.font_size_down, self.toolbar_size_up, self.toolbar_size_down
+      self.font_size_down, self.toolbar_size_up, self.toolbar_size_down,
     ]:
       self.bind_signal(button, "pressed", button.name)
       self.bind_signal(button, "button_up", button.name)
@@ -208,7 +211,7 @@ gdobj Settings of PanelContainer:
       (0.05, 0.4, 0.05),
       (0.4, 1.0, 0.1),
       (1.0, 4.0, 0.5),
-      (4.0, 10.0, 1.0)
+      (4.0, 10.0, 1.0),
     ]
     if name == "MegapixelsUp":
       let megapixels = state.config.megapixels
@@ -258,7 +261,7 @@ gdobj Settings of PanelContainer:
   proc resize(start_margin, end_margin: float, node: Node, property: string) =
     discard self.tween.interpolate_property(
       node, property, start_margin.to_variant, end_margin.to_variant,
-      animation_duration, transition, EASE_IN_OUT
+      animation_duration, transition, EASE_IN_OUT,
     )
     discard self.tween.start()
 
@@ -304,14 +307,13 @@ gdobj Settings of PanelContainer:
     self.action_steps =
       @[
         proc() =
-          self.window.anchor_left = 1.0
-        ,
+          self.window.anchor_left = 1.0,
         proc() =
           self.window.opacity = 1.0
-          self.resize(1.0, 0.0, node = self.window, property = "anchor_right")
-        ,
+          self.resize(1.0, 0.0, node = self.window, property = "anchor_right"),
         proc() =
           self.resize_y self.expanded_margin()
+        ,
       ]
 
   proc close_window() =
@@ -322,31 +324,27 @@ gdobj Settings of PanelContainer:
             self.resize_y self.collapsed_margin()
           ,
           proc() =
-            self.resize(0.0, 1.0, node = self.window, property = "anchor_left")
-          ,
+            self.resize(0.0, 1.0, node = self.window, property = "anchor_left"),
           proc() =
             self.window.opacity = 0.0
-            self.window.visible = false
+            self.window.visible = false,
         ]
       else:
         @[
           proc() =
             self.resize_y(
               self.expanded_new_level_margin, self.collapsed_new_level_margin
-            )
-          ,
+            ),
           proc() =
             self.new_level_container.visible = false
             self.main_container.add_constant_override(
               "margin_bottom", self.collapsed_margin
-            )
-          ,
+            ),
           proc() =
-            self.resize(0.0, 1.0, node = self.window, property = "anchor_left")
-          ,
+            self.resize(0.0, 1.0, node = self.window, property = "anchor_left"),
           proc() =
             self.window.opacity = 0.0
-            self.window.visible = false
+            self.window.visible = false,
         ]
     self.state = Closed
 
@@ -361,16 +359,14 @@ gdobj Settings of PanelContainer:
         proc() =
           self.resize_y(
             self.expanded_new_level_margin, self.collapsed_new_level_margin
-          )
-        ,
+          ),
         proc() =
           self.new_level_container.visible = false
           self.main_container.add_constant_override(
             "margin_bottom", self.collapsed_margin
-          )
-        ,
+          ),
         proc() =
-          self.resize_y(self.collapsed_margin, self.expanded_margin)
+          self.resize_y(self.collapsed_margin, self.expanded_margin),
       ]
 
   proc show_new_level() =
@@ -380,19 +376,17 @@ gdobj Settings of PanelContainer:
     self.action_steps =
       @[
         proc() =
-          self.resize_y(self.expanded_margin, self.collapsed_margin)
-        ,
+          self.resize_y(self.expanded_margin, self.collapsed_margin),
         proc() =
           self.new_level_container.visible = true
           self.level_name.grab_focus()
           self.main_container.add_constant_override(
             "margin_bottom", self.collapsed_new_level_margin
-          )
-        ,
+          ),
         proc() =
           self.resize_y(
             self.collapsed_new_level_margin, self.expanded_new_level_margin
-          )
+          ),
       ]
 
   method on_button_up*(name: string) =
@@ -450,6 +444,13 @@ gdobj Settings of PanelContainer:
     elif name == "ServerAddress":
       self.on_pressed("Connect")
 
+  proc approximate_full_width(): float =
+    let width = self.settings_container.rect_size.x
+    let columns = self.settings_container.columns
+    let column_width = width / float(columns)
+    result =
+      (column_width * 4) + 80 - (9 * float self.settings_container.columns)
+
   method process*(delta: float) =
     let now = get_mono_time()
     for name, time in self.repeat_timers.mpairs:
@@ -464,6 +465,19 @@ gdobj Settings of PanelContainer:
     elif self.action_steps.len == 0 and not self.tween.is_active and
         self.state == Opened and self.margin_y != self.expanded_margin:
       self.resize_y(self.expanded_margin)
+
+    if self.state == Opened:
+      let viewport = self.get_viewport()
+      let width = self.approximate_full_width
+      if width > viewport.size.x and
+          (self.window.rect_size.y * 1.2) < viewport.size.y:
+        self.settings_container.columns = 2
+        self.left_separator.size_flags_stretch_ratio = 0.0
+        self.right_separator.size_flags_stretch_ratio = 0.0
+      elif viewport.size.x > width + 10:
+        self.settings_container.columns = 4
+        self.left_separator.size_flags_stretch_ratio = 0.5
+        self.right_separator.size_flags_stretch_ratio = 0.5
 
   method input(event: InputEvent) =
     self.ignore_touches(event)

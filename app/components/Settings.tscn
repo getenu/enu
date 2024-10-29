@@ -12,7 +12,7 @@ theme = ExtResource( 1 )
 script = ExtResource( 2 )
 
 [node name="Window" type="PanelContainer" parent="."]
-margin_right = 874.0
+margin_right = 862.0
 margin_bottom = 516.0
 rect_clip_content = true
 mouse_filter = 1
@@ -22,7 +22,7 @@ size_flags_vertical = 0
 [node name="MainContainer" type="MarginContainer" parent="Window"]
 margin_left = 20.0
 margin_top = 20.0
-margin_right = 854.0
+margin_right = 842.0
 margin_bottom = 496.0
 mouse_filter = 1
 custom_constants/margin_right = 10
@@ -31,19 +31,19 @@ custom_constants/margin_bottom = 0
 
 [node name="RowContainer" type="VBoxContainer" parent="Window/MainContainer"]
 margin_top = 5.0
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 476.0
 custom_constants/separation = 50
 
 [node name="VFlowContainer" type="HBoxContainer" parent="Window/MainContainer/RowContainer"]
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 28.0
 size_flags_horizontal = 3
 alignment = 2
 
 [node name="Close" type="Button" parent="Window/MainContainer/RowContainer/VFlowContainer"]
-margin_left = 784.0
-margin_right = 824.0
+margin_left = 772.0
+margin_right = 812.0
 margin_bottom = 28.0
 mouse_default_cursor_shape = 2
 theme_type_variation = "IconButton"
@@ -66,8 +66,8 @@ margin_top = 1.0
 margin_right = 378.0
 margin_bottom = 81.0
 size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.51
-text = "Level Name"
+text = "Name"
+align = 2
 
 [node name="LevelName" type="LineEdit" parent="Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer"]
 margin_left = 398.0
@@ -106,7 +106,7 @@ margin_bottom = 80.0
 
 [node name="SettingsContainer" type="GridContainer" parent="Window/MainContainer/RowContainer"]
 margin_top = 78.0
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 305.0
 custom_constants/vseparation = 25
 custom_constants/hseparation = 20
@@ -116,6 +116,7 @@ columns = 4
 margin_right = 160.0
 margin_bottom = 37.0
 text = "Level"
+align = 2
 
 [node name="Levels" type="OptionButton" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 180.0
@@ -127,13 +128,14 @@ enabled_focus_mode = 0
 
 [node name="Label8" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 417.0
-margin_right = 587.0
+margin_right = 575.0
 margin_bottom = 37.0
-text = "  Player Color"
+text = "Player Color"
+align = 2
 
 [node name="PlayerColors" type="OptionButton" parent="Window/MainContainer/RowContainer/SettingsContainer"]
-margin_left = 607.0
-margin_right = 824.0
+margin_left = 595.0
+margin_right = 812.0
 margin_bottom = 37.0
 mouse_default_cursor_shape = 2
 
@@ -142,6 +144,7 @@ margin_top = 63.0
 margin_right = 160.0
 margin_bottom = 100.0
 text = "Environment"
+align = 2
 
 [node name="Environments" type="OptionButton" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 180.0
@@ -154,14 +157,15 @@ size_flags_horizontal = 3
 [node name="Label3" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 417.0
 margin_top = 63.0
-margin_right = 587.0
+margin_right = 575.0
 margin_bottom = 100.0
-text = "  Megapixels"
+text = "Megapixels"
+align = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="Window/MainContainer/RowContainer/SettingsContainer"]
-margin_left = 607.0
+margin_left = 595.0
 margin_top = 62.0
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 101.0
 custom_constants/separation = 20
 
@@ -198,6 +202,7 @@ margin_top = 127.0
 margin_right = 160.0
 margin_bottom = 164.0
 text = "Font Size"
+align = 2
 
 [node name="HBoxContainer3" type="HBoxContainer" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 180.0
@@ -237,14 +242,15 @@ text = " ↓ "
 [node name="Label2" type="Label" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 417.0
 margin_top = 127.0
-margin_right = 587.0
+margin_right = 575.0
 margin_bottom = 164.0
-text = "  Toolbar Size"
+text = "Toolbar Size"
+align = 2
 
 [node name="HBoxContainer2" type="HBoxContainer" parent="Window/MainContainer/RowContainer/SettingsContainer"]
-margin_left = 607.0
+margin_left = 595.0
 margin_top = 126.0
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 165.0
 custom_constants/separation = 20
 
@@ -281,6 +287,7 @@ margin_top = 190.0
 margin_right = 160.0
 margin_bottom = 227.0
 text = "Full Screen"
+align = 2
 
 [node name="FullScreen" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 margin_left = 180.0
@@ -319,39 +326,39 @@ rect_min_size = Vector2( 400, 140 )
 
 [node name="RemoteContainer" type="MarginContainer" parent="Window/MainContainer/RowContainer"]
 margin_top = 355.0
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 471.0
 rect_clip_content = true
 mouse_filter = 1
 custom_constants/margin_bottom = 20
 
 [node name="VBoxContainer2" type="VBoxContainer" parent="Window/MainContainer/RowContainer/RemoteContainer"]
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 96.0
 custom_constants/separation = 20
 
 [node name="Label11" type="Label" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2"]
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 37.0
 text = "Remote Server Address"
 align = 1
 
 [node name="HBoxContainer" type="HBoxContainer" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2"]
 margin_top = 57.0
-margin_right = 824.0
+margin_right = 812.0
 margin_bottom = 96.0
 size_flags_horizontal = 3
 custom_constants/separation = 20
 
-[node name="VSeparator" type="VSeparator" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer"]
-margin_right = 127.0
+[node name="LeftSeparator" type="VSeparator" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer"]
+margin_right = 125.0
 margin_bottom = 39.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.5
 
 [node name="ServerAddress" type="LineEdit" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer"]
-margin_left = 147.0
-margin_right = 402.0
+margin_left = 145.0
+margin_right = 396.0
 margin_bottom = 39.0
 mouse_filter = 1
 size_flags_horizontal = 3
@@ -361,17 +368,17 @@ caret_blink = true
 caret_blink_speed = 0.5
 
 [node name="Connect" type="Button" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer"]
-margin_left = 422.0
-margin_right = 676.0
+margin_left = 416.0
+margin_right = 666.0
 margin_bottom = 39.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
 size_flags_horizontal = 3
 text = "  Connect  "
 
-[node name="VSeparator2" type="VSeparator" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer"]
-margin_left = 696.0
-margin_right = 824.0
+[node name="RightSeparator" type="VSeparator" parent="Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer"]
+margin_left = 686.0
+margin_right = 812.0
 margin_bottom = 39.0
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.5
