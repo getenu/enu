@@ -181,7 +181,7 @@ when not defined(no_godot):
       try:
         # when defined(release):
         godot.print msg
-        if log_level >= ERROR:
+        if log_level >= ERROR and not state.logger.is_nil:
           state.err(msg)
         # else:
         #   if log_level >= INFO:
