@@ -2,7 +2,7 @@ import pkg/[godot]
 import
   godotapi/[
     margin_container, input_event, scene_tree, scene_tree_tween, method_tweener,
-    tween
+    tween, control,
   ]
 import ui/markdown_label
 import core, gdutils, models/[states, colors]
@@ -21,12 +21,16 @@ proc md(self: Sign, md: string): string =
     md
 
 gdobj RightPanel of MarginContainer:
-  var label: MarkdownLabel
-  var zid: ZID
+  var
+    label: MarkdownLabel
+    zid: ZID
+    margin = 3.0
+    center = 1.0
 
   method offset_x*(offset: float) {.gdexport.} =
     let width = self.rect_size.x
-    self.rect_position = vec2(width * offset + 3.0, self.rect_position.y)
+    self.rect_position =
+      vec2(width * offset + self.margin, self.rect_position.y)
 
   method ready*() =
     self.label = self.find_node("MarkdownLabel") as MarkdownLabel
@@ -62,31 +66,48 @@ gdobj RightPanel of MarginContainer:
         state.pop_flags DocsFocused, DocsVisible
 
     state.local_flags.changes:
+      if FullWidthPanels.added:
+        self.margin = 63.0
+        self.center = 0.0
+        self.anchor_left = 0.0
+        self.margin_left = 63.0
+        self.margin_right = 1.0
+      elif FullWidthPanels.removed:
+        self.margin = 3.0
+        self.center = 1.0
+        self.anchor_left = 0.5
+        self.margin_left = 2.0
+        self.margin_right = 1.0
+
       if DocsVisible.added:
         var tween = self.get_tree.create_tween()
         self.visible = true
-        discard
-          tween
+        discard tween
           .tween_method(
-            self, "_offset_x", 2.0.to_variant, 1.0.to_variant,
-            animation_duration
+            self, "_offset_x", 2.0.to_variant, self.center.to_variant,
+            animation_duration,
           )
           .set_trans(TRANS_EXPO)
           .set_ease(EASE_IN_OUT)
       elif DocsVisible.removed:
         var tween = self.get_tree.create_tween()
-        discard
-          tween
+        discard tween
           .tween_method(
-            self, "_offset_x", 1.0.to_variant, 2.0.to_variant,
-            animation_duration
+            self, "_offset_x", self.center.to_variant, 2.0.to_variant,
+            animation_duration,
           )
           .set_trans(TRANS_EXPO)
           .set_ease(EASE_IN_OUT)
         discard
           tween.tween_callback(self, "set_visible", new_array(false.to_variant))
+      elif DocsFocused.added:
+        self.raisee()
+        find("Close", Control).visible = true
       elif DocsFocused.removed:
         self.label.release_focus
+        if FullWidthPanels in state.local_flags and
+            ViewportFocused notin state.local_flags:
+          find("Close", Control).visible = false
       elif CommandMode.added:
         self.ghost()
       elif CommandMode.removed:
