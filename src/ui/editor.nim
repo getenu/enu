@@ -5,7 +5,7 @@ import
   godotapi/[
     text_edit, scene_tree, node, input_event, global_constants, input_event_key,
     style_box_flat, gd_os, tween, scene_tree_tween, property_tweener,
-    method_tweener, input, scroll_container, input_event_screen_touch
+    method_tweener, input, scroll_container, input_event_screen_touch,
   ]
 import core, gdutils
 import models except Color
@@ -45,6 +45,7 @@ gdobj Editor of MarginContainer:
     selecting: bool
     selection_timer: MonoTime
     touch_timer: MonoTime
+    left_panel: Container
 
   proc indent_new_line() =
     let editor = self.text_edit
@@ -137,9 +138,8 @@ gdobj Editor of MarginContainer:
 
   proc visible_window(): tuple[top_left: Vector2, bottom_right: Vector2] =
     let vscroll = float self.scroll_container.scroll_vertical
-    result = (
-      vec2(0.0, vscroll), vec2(self.rect_size.x, self.rect_size.y + vscroll)
-    )
+    result =
+      (vec2(0.0, vscroll), vec2(self.rect_size.x, self.rect_size.y + vscroll))
 
   proc scroll_to_cursor() =
     let rect = self.line_rect(self.text_edit.cursor_get_line + 1)
@@ -155,9 +155,8 @@ gdobj Editor of MarginContainer:
     self.rescale
 
   method on_cursor_changed*() =
-    state.player.cursor_position = (
-      int self.text_edit.cursor_get_line, int self.text_edit.cursor_get_column
-    )
+    state.player.cursor_position =
+      (int self.text_edit.cursor_get_line, int self.text_edit.cursor_get_column)
     if self.text_edit.is_selection_active:
       self.scroll_to_cursor
 
@@ -184,8 +183,7 @@ gdobj Editor of MarginContainer:
     if ?self.tween:
       self.tween.kill
     self.tween = self.get_tree.create_tween()
-    discard
-      self.tween
+    discard self.tween
       .tween_method(
         self, "_offset_x", 0.0.to_variant, -1.0.to_variant, animation_duration
       )
@@ -206,8 +204,7 @@ gdobj Editor of MarginContainer:
     discard self.tween.tween_property(self, "modulate:a", 1.0.to_variant, 0.0)
     if CommandMode in state.local_flags:
       discard self.tween.tween_callback(self.text_edit, "_ghost")
-    discard
-      self.tween
+    discard self.tween
       .tween_method(
         self, "_offset_x", -1.0.to_variant, 0.0.to_variant, animation_duration
       )
@@ -248,22 +245,32 @@ gdobj Editor of MarginContainer:
 
   proc watch_local_flags() =
     state.local_flags.changes:
+      if FullWidthPanels.added:
+        self.left_panel.margin_right = -60.0
+        self.left_panel.anchor_right = 1.0
+      elif FullWidthPanels.removed:
+        self.left_panel.margin_right = -1.0
+        self.left_panel.anchor_right = 0.5
+
       if ConsoleVisible.added:
         self.highlight_errors()
       elif ConsoleVisible.removed:
         self.clear_errors()
       elif EditorFocused.added:
         self.text_edit.grab_focus
+        self.left_panel.raisee()
       if CommandMode.added:
         if EditorVisible in state.local_flags:
           state.open_unit.code = Code.init(self.text_edit.text)
 
           self.ghost()
           self.text_edit.release_focus()
+          self.mouse_filter = MOUSE_FILTER_IGNORE
       elif CommandMode.removed:
         if EditorVisible in state.local_flags:
           self.unghost()
           self.text_edit.grab_focus()
+          self.mouse_filter = MOUSE_FILTER_STOP
 
   proc watch() =
     self.watch_open_unit()
@@ -283,6 +290,7 @@ gdobj Editor of MarginContainer:
     self.caret_color = self.text_edit.get_color("caret_color")
     self.selection_color = self.text_edit.get_color("selection_color")
     self.scroll_container = find("ScrollContainer", ScrollContainer)
+    self.left_panel = state.nodes.game.find("LeftPanel", Container)
     self.bind_signals(self.text_edit, "text_changed", "cursor_changed")
     self.bind_signals(self.scroll_container, "scroll_started", "scroll_ended")
     self.bind_signal(self, ("resized", "_rescale"))
@@ -298,7 +306,9 @@ gdobj Editor of MarginContainer:
     self.text_edit.configure_highlighting()
 
     # hide verticle scrollbar. Should be restyled and re-enabled in the future.
-    for child in self.text_edit.get_children():
+    for child in self.text_edit.get_children().to_seq.concat(
+      self.scroll_container.get_children().to_seq
+    ):
       let o = child.as_object(Node) as VScrollBar
       if ?o:
         self.scroll_bar = o

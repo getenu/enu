@@ -1,7 +1,7 @@
 import
   godotapi/[
     text_edit, scene_tree, node, input_event, input_event_key, rich_text_label,
-    global_constants, scene_tree_tween, tween, property_tweener, method_tweener
+    global_constants, scene_tree_tween, tween, property_tweener, method_tweener,
   ]
 import godot
 import std/strutils
@@ -17,13 +17,15 @@ gdobj Console of RichTextLabel:
     self.rect_position = vec2(width * offset, self.rect_position.y)
 
   proc show() =
-    self.opacity = 1.0
+    if CommandMode in state.local_flags:
+      self.modulate = dimmed_alpha
+    else:
+      self.opacity = 1.0
     if ?self.tween:
       self.tween.kill
     self.tween = self.get_tree.create_tween
     self.visible = true
-    discard
-      self.tween
+    discard self.tween
       .tween_method(
         self, "_offset_x", -1.0.to_variant, 0.0.to_variant, animation_duration
       )
@@ -35,8 +37,7 @@ gdobj Console of RichTextLabel:
       self.tween.kill
     self.tween = self.get_tree.create_tween
     self.rect_position = vec2(0.0, self.rect_position.y)
-    discard
-      self.tween
+    discard self.tween
       .tween_method(
         self, "_offset_x", 0.0.to_variant, -1.0.to_variant, animation_duration
       )
@@ -46,7 +47,7 @@ gdobj Console of RichTextLabel:
       self, "set_visible", new_array(false.to_variant)
     )
 
-  proc init*() =
+  method ready*() =
     state.local_flags.changes:
       if ConsoleVisible.added:
         self.show()
@@ -56,6 +57,12 @@ gdobj Console of RichTextLabel:
         self.ghost()
       elif CommandMode.removed:
         self.unghost()
+
+      if MouseCaptured.added:
+        self.mouse_filter = MOUSE_FILTER_IGNORE
+      elif MouseCaptured.removed:
+        self.mouse_filter = self.default_mouse_filter
+
     state.console.log.changes:
       if added:
         discard self.append_bbcode(change.item)
@@ -65,13 +72,6 @@ gdobj Console of RichTextLabel:
         break
 
     self.default_mouse_filter = self.mouse_filter
-
-  method ready*() =
-    state.local_flags.changes:
-      if MouseCaptured.added:
-        self.mouse_filter = MOUSE_FILTER_IGNORE
-      elif MouseCaptured.removed:
-        self.mouse_filter = self.default_mouse_filter
 
     state.nodes.game.bind_signals(self, "meta_clicked")
     state.nodes.game.bind_signal(self, "gui_input", self.name)

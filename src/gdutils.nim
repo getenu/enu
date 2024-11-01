@@ -3,7 +3,7 @@ import pkg/[godot]
 import
   godotapi/[
     node, scene_tree, voxel_buffer, canvas_item, control, option_button,
-    input_event_screen_touch
+    input_event_screen_touch,
   ]
 import core, models/[states]
 export strformat.`&`, states, types
@@ -58,11 +58,14 @@ proc opacity*(node: CanvasItem): float =
 proc trigger*(signal: string, args: varargs[Variant]) =
   trigger(state.nodes.game, signal, args)
 
-template find*(name: string, T: type Node): untyped =
+template find*(self: Node, name: string, T: type Node): untyped =
   {.line.}:
     let obj = self.find_node(name) as T
     assert ?obj
     obj
+
+template find*(name: string, T: type Node): untyped =
+  self.find(name, T)
 
 proc set_mouse_filter_recursive*(control: Control, mouse_filter: int) =
   control.mouse_filter = mouse_filter
