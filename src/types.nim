@@ -44,6 +44,7 @@ type
     Connecting
     SceneReady
     TouchControls
+    FullWidthPanels
 
   GlobalStateFlags* = enum
     LoadingLevel

@@ -7,7 +7,7 @@ import
     viewport, viewport_texture, performance, label, theme, dynamic_font,
     resource_loader, main_loop, project_settings, input_map, input_event_action,
     input_event_key, input_event, global_constants, scroll_container,
-    voxel_server, world_environment
+    voxel_server, world_environment,
   ]
 
 import ui/virtual_joystick
@@ -22,9 +22,8 @@ when defined(metrics):
 ZenContext.init_metrics "main", "worker"
 
 # saved state when restarting worker thread
-const savable_flags = {
-  ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed
-}
+const savable_flags =
+  {ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed}
 
 var environment_cache {.threadvar.}: Table[string, Environment]
 
@@ -243,6 +242,18 @@ gdobj Game of Node:
 
     save_user_config(uc)
 
+  proc set_panel_width() =
+    let
+      theme = self.find_node("LeftPanel").as(Container).theme
+      mono_font = theme.get_font("font", "MonoButton").as(DynamicFont)
+      font_width = mono_font.get_string_size(" ".repeat(34)).x
+      viewport_width = self.get_viewport().size.x
+
+    if font_width > viewport_width / 2.0:
+      state.push_flag FullWidthPanels
+    else:
+      state.pop_flag FullWidthPanels
+
   proc set_font_size(size: int) =
     if state.config.font_size != size:
       var user_config = load_user_config()
@@ -250,8 +261,7 @@ gdobj Game of Node:
         font_size = size
 
     let
-      theme_holder = self.find_node("LeftPanel").as(Container)
-      theme = theme_holder.theme
+      theme = find("LeftPanel", Container).theme
       font = theme.default_font.as(DynamicFont)
       bold_font = theme.get_font("bold_font", "RichTextLabel").as(DynamicFont)
       icon_font = theme.get_font("font", "IconButton").as(DynamicFont)
@@ -265,7 +275,8 @@ gdobj Game of Node:
     mono_font.size = font.size
     label_font.size = font.size
     normal_font.size = font.size
-    theme_holder.theme = theme
+
+    self.set_panel_width()
 
   method on_gui_input*(event: InputEvent, name: string) =
     if event of InputEventMouseButton:
@@ -415,6 +426,7 @@ gdobj Game of Node:
 
   method on_size_changed() =
     self.rescale_at = get_mono_time()
+    self.set_panel_width()
 
   method on_global_menu_action(action: string, id: string) =
     if action == "help":

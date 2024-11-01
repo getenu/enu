@@ -25,6 +25,7 @@ config/windows_native_icon="res://media/enu_icon.ico"
 window/size/width=1920
 window/size/height=1080
 window/dpi/allow_hidpi=true
+window/handheld/orientation="sensor"
 window/stretch/aspect="expand"
 
 [editor_plugins]
