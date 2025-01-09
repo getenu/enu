@@ -179,6 +179,7 @@ gdobj Game of Node:
       state.push_flag TouchControls
       let vmlib = join_path(get_executable_path().parent_dir(), "vmlib")
     else:
+      # state.push_flag TouchControls
       let vmlib =
         join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
 

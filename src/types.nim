@@ -45,6 +45,8 @@ type
     SceneReady
     TouchControls
     FullWidthPanels
+    EditorOpening
+    EditorClosing
 
   GlobalStateFlags* = enum
     LoadingLevel

@@ -7,7 +7,7 @@ import
     input_event_screen_drag, input_event_screen_touch,
     input_event_joypad_motion, ray_cast, scene_tree, input_event_pan_gesture,
     viewport, camera, global_constants, collision_shape, kinematic_collision,
-    packed_scene, resource_loader
+    packed_scene, resource_loader,
   ]
 import core, gdutils, nodes/helpers
 import aim_target, models
@@ -92,16 +92,16 @@ gdobj PlayerNode of KinematicBody:
     self.camera_rig.rotation = r
 
   proc get_input_direction(): Vector3 =
-    if CommandMode in state.local_flags or
-        (
-          {EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused} -
-          state.local_flags.value
-        ).card == 4:
-      result = vec3(
-        get_action_strength("move_right") - get_action_strength("move_left"),
-        get_action_strength("jump") - get_action_strength("crouch"),
-        get_action_strength("move_back") - get_action_strength("move_front"),
-      )
+    # if CommandMode in state.local_flags or
+    #     (
+    #       {EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused} -
+    #       state.local_flags.value
+    #     ).card == 4:
+    result = vec3(
+      get_action_strength("move_right") - get_action_strength("move_left"),
+      get_action_strength("jump") - get_action_strength("crouch"),
+      get_action_strength("move_back") - get_action_strength("move_front"),
+    )
 
   proc calculate_velocity(
       velocity_current: Vector3,
@@ -184,24 +184,24 @@ gdobj PlayerNode of KinematicBody:
   method process*(delta: float) =
     self.model.velocity_value.pause self.velocity_zid:
       self.model.velocity = self.velocity
-    if EditorVisible notin state.local_flags or CommandMode in state.local_flags:
-      var transform = self.camera_rig.global_transform
-      transform.origin = self.global_transform.origin + self.position_start
+    #if EditorVisible notin state.local_flags or CommandMode in state.local_flags:
+    var transform = self.camera_rig.global_transform
+    transform.origin = self.global_transform.origin + self.position_start
 
-      var look_direction = self.get_look_direction()
+    var look_direction = self.get_look_direction()
 
-      if self.input_relative.length() > 0:
-        self.update_rotation(self.input_relative * mouse_sensitivity)
-        self.input_relative = vec2()
-      elif look_direction.length() > 0:
-        self.update_rotation(look_direction * gamepad_sensitivity * delta)
+    if self.input_relative.length() > 0:
+      self.update_rotation(self.input_relative * mouse_sensitivity)
+      self.input_relative = vec2()
+    elif look_direction.length() > 0:
+      self.update_rotation(look_direction * gamepad_sensitivity * delta)
 
-      var r = self.camera_rig.rotation
-      r.y = wrap(r.y, -PI, PI)
-      self.camera_rig.rotation = r
+    var r = self.camera_rig.rotation
+    r.y = wrap(r.y, -PI, PI)
+    self.camera_rig.rotation = r
 
-      self.model.rotation_value.pause(self.rotation_zid):
-        self.model.rotation = rad_to_deg r.y
+    self.model.rotation_value.pause(self.rotation_zid):
+      self.model.rotation = rad_to_deg r.y
 
     if LoadingLevel notin state.global_flags:
       self.update_raycast()
@@ -214,8 +214,8 @@ gdobj PlayerNode of KinematicBody:
 
     const forward_rotation = deg_to_rad(-90.0)
     let
-      process_input =
-        EditorVisible notin state.local_flags or CommandMode in state.local_flags
+      process_input = true
+        # EditorVisible notin state.local_flags or CommandMode in state.local_flags
       input_direction =
         if process_input:
           self.get_input_direction()
@@ -259,8 +259,7 @@ gdobj PlayerNode of KinematicBody:
         if self.down_ray.is_colliding():
           let length = 1.85
           let diff =
-            length -
-            (
+            length - (
               self.down_ray.global_transform.origin -
               self.down_ray.get_collision_point
             ).y
@@ -304,10 +303,10 @@ gdobj PlayerNode of KinematicBody:
       self.aim_target.update(self.aim_ray)
 
   method viewport_input*(event: InputEvent) =
-    if event of InputEventJoypadMotion:
-      let event = event as InputEventJoypadMotion
-      if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
-        return
+    # if event of InputEventJoypadMotion:
+    #   let event = event as InputEventJoypadMotion
+    #   if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
+    #     return
 
     if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
         TouchControls notin state.local_flags:
@@ -352,6 +351,7 @@ gdobj PlayerNode of KinematicBody:
         state.push_flag CommandMode
 
     if event.is_action_pressed("jump"):
+      self.get_tree().set_input_as_handled()
       self.jump_down = true
       let
         time = get_mono_time()
@@ -366,9 +366,11 @@ gdobj PlayerNode of KinematicBody:
       else:
         self.jump_time = some time
     elif event.is_action_released("jump"):
+      self.get_tree().set_input_as_handled()
       self.jump_down = false
 
     if event.is_action_pressed("run"):
+      self.get_tree().set_input_as_handled()
       let
         time = get_mono_time()
         toggle = ?self.run_time and time < self.run_time.get + alt_speed_toggle
@@ -383,6 +385,7 @@ gdobj PlayerNode of KinematicBody:
         self.run_time = some time
       self.alt_speed = true
     elif event.is_action_released("run"):
+      self.get_tree().set_input_as_handled()
       self.alt_speed = false
 
     if event of InputEventPanGesture and state.tool notin {CodeMode, PlaceBot}:
