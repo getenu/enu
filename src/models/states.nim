@@ -13,10 +13,10 @@ const groups =
   @[
     {
       EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused,
-      ViewportFocused
+      ViewportFocused,
     },
     {ReticleVisible, BlockTargetVisible},
-    {Playing, Flying}
+    {Playing, Flying},
   ]
 
 proc resolve_flags*(
@@ -160,8 +160,9 @@ proc init*(_: type GameState): GameState =
   result = self
   self.open_unit_value.changes:
     if added and change.item != nil:
-      self.push_flag EditorVisible
+      self.push_flags EditorVisible, EditorOpening
     elif added:
+      self.push_flag EditorOpening
       self.pop_flag EditorVisible
 
   self.local_flags.changes:

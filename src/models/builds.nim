@@ -1,7 +1,7 @@
 import
   std/[
     tables, sets, options, sequtils, math, wrapnils, monotimes, sugar, deques,
-    macros, base64
+    macros, base64,
   ]
 import godotapi/spatial
 import core, models/[states, bots, colors, units]
@@ -317,8 +317,7 @@ method on_begin_turn*(
     let axis = self.transform.basis.orthonormalized.xform(axis)
     let scale = self.scale
     var final_transform = self.transform
-    final_transform.basis =
-      final_transform.basis
+    final_transform.basis = final_transform.basis
       .rotated(axis, deg_to_rad(degrees)).orthonormalized
       .scaled(vec3(scale, scale, scale))
 
@@ -422,7 +421,8 @@ method main_thread_joined*(self: Build) =
 
   self.local_flags.watch:
     if Hover.added and state.tool == CodeMode:
-      if Playing notin state.local_flags:
+      if Playing notin state.local_flags and
+          TouchControls notin state.local_flags:
         let root = self.find_root(true)
         root.walk_tree proc(unit: Unit) =
           unit.local_flags += Highlight
@@ -452,8 +452,17 @@ method main_thread_joined*(self: Build) =
       else:
         state.pop_flag BlockTargetVisible
 
+  # self.local_flags.watch:
+  #   if Hover.added:
+  #     if PrimaryDown in state.local_flags:
+  #       state.draw_unit_id = self.id
+  #       self.fire
+  #     elif SecondaryDown in state.local_flags:
+  #       state.draw_unit_id = self.id
+  #       self.remove
+
   state.local_flags.watch:
-    if Hover in self.local_flags:
+    if Hover in self.local_flags and ViewportFocused in state.local_flags:
       if PrimaryDown.added:
         state.draw_unit_id = self.id
         self.fire

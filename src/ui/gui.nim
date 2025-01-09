@@ -2,7 +2,7 @@ import pkg/godot
 import
   godotapi/[
     control, input_event_screen_touch, input_event_screen_drag, scene_tree,
-    input_event_action, input, button
+    input_event_action, input, button, gd_os,
   ]
 import core, nodes/player_node, gdutils
 
@@ -61,10 +61,6 @@ gdobj GUI of Control:
   method on_focus_exited() =
     state.pop_flag ViewportFocused
 
-  method gui_input(event: InputEvent) =
-    (state.nodes.player as PlayerNode).viewport_input(event)
-    self.accept_event()
-
   method unhandled_input*(event: InputEvent) =
     if CommandMode notin state.local_flags and
         event.is_action_pressed("ui_cancel") and
@@ -77,7 +73,23 @@ gdobj GUI of Control:
       elif DocsFocused in flags:
         state.open_sign = nil
 
-  method input(event: InputEvent) =
+    if event of InputEventKey:
+      (state.nodes.player as PlayerNode).viewport_input(event)
+      # self.get_tree().set_input_as_handled()
+      # self.accept_event()
+
+  # method gui_input(event: InputEvent) =
+  #   (state.nodes.player as PlayerNode).viewport_input(event)
+  #   self.accept_event()
+
+  method gui_input*(event: InputEvent) =
+    template touch_controls() =
+      if TouchControls in state.local_flags:
+        let index = byte(event.index)
+        if index notin state.ignored_touches:
+          (state.nodes.player as PlayerNode).viewport_input(event)
+        self.accept_event()
+
     if event of InputEventScreenTouch:
       let event = event as InputEventScreenTouch
       let index = byte(event.index)
@@ -85,15 +97,19 @@ gdobj GUI of Control:
         self.get_tree().set_input_as_handled()
         if not event.pressed:
           state.ignored_touches.excl index
+      touch_controls
     elif event of InputEventScreenDrag:
       let event = event as InputEventScreenDrag
       let index = byte(event.index)
       if index in state.ignored_touches:
+        echo \"ignored touch {index}"
         self.get_tree().set_input_as_handled()
         return
-
-    if TouchControls in state.local_flags:
+      touch_controls
+    elif event of InputEventMouseMotion or event of InputEventMouseButton:
       (state.nodes.player as PlayerNode).viewport_input(event)
-    else:
-      if event of InputEventKey:
-        (state.nodes.player as PlayerNode).viewport_input(event)
+      self.get_tree().set_input_as_handled()
+      self.accept_event()
+
+  method process(delta: float) =
+    self.margin_bottom = float(get_virtual_keyboard_height() * -1)

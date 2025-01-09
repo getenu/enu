@@ -69,7 +69,7 @@ gdobj Editor of MarginContainer:
         self.get_tree.set_input_as_handled()
 
   method input*(event: InputEvent) =
-    if event of InputEventKey and not event.is_nil:
+    if event of InputEventKey and EditorFocused in state.local_flags:
       let event = event.as(InputEventKey)
       if not event.pressed:
         return
@@ -87,16 +87,21 @@ gdobj Editor of MarginContainer:
         ).len
         self.get_tree.set_input_as_handled()
       self.adjust_scroll_next_frame = true
-    elif event of InputEventScreenTouch:
+
+  method gui_input*(event: InputEvent) =
+    if event of InputEventScreenTouch:
       let event = event as InputEventScreenTouch
+      self.ignore_touches(event)
       if event.pressed:
         self.touch_timer = get_mono_time() + 0.5.seconds
       else:
         self.touch_timer = MonoTime.high
-    elif EditorVisible in state.local_flags and
-        CommandMode notin state.local_flags and event of InputEventScreenDrag and
+    elif (
+      EditorVisible in state.local_flags or EditorClosing in state.local_flags
+    ) and CommandMode notin state.local_flags and event of InputEventScreenDrag and
         self.scroll_state == Idle:
       self.get_tree.set_input_as_handled()
+      self.ignore_touches(event)
 
   method unhandled_input*(event: InputEvent) =
     if EditorFocused in state.local_flags and
@@ -170,12 +175,14 @@ gdobj Editor of MarginContainer:
   method ghost*() {.gdexport.} =
     self.text_edit.ghost()
     self.scroll_container.ghost()
+    self.mouse_filter = MOUSE_FILTER_PASS
 
   method unghost*() {.gdexport.} =
     self.text_edit.unghost()
     self.scroll_container.unghost()
     self.text_edit.mouse_filter = MOUSE_FILTER_PASS
     self.scroll_container.mouse_filter = MOUSE_FILTER_PASS
+    self.mouse_filter = MOUSE_FILTER_STOP
 
   proc close_editor() =
     self.text_edit.release_focus()
@@ -192,6 +199,9 @@ gdobj Editor of MarginContainer:
     discard self.tween.tween_callback(
       self, "set_visible", new_array(false.to_variant)
     )
+
+  method open_done() =
+    state.pop_flag EditorClosing
 
   proc open_editor() =
     self.opacity = 0.0
@@ -210,6 +220,7 @@ gdobj Editor of MarginContainer:
       )
       .set_trans(TRANS_EXPO)
       .set_ease(EASE_IN_OUT)
+    discard self.tween.tween_callback(self, "_open_done")
     discard self.tween.tween_callback(self, "_rescale")
 
   proc watch_open_unit() =
@@ -246,8 +257,8 @@ gdobj Editor of MarginContainer:
   proc watch_local_flags() =
     state.local_flags.changes:
       if FullWidthPanels.added:
-        self.left_panel.margin_right = -60.0
         self.left_panel.anchor_right = 1.0
+        self.left_panel.margin_right = 0.0
       elif FullWidthPanels.removed:
         self.left_panel.margin_right = -1.0
         self.left_panel.anchor_right = 0.5
