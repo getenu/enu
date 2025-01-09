@@ -479,8 +479,8 @@ gdobj Settings of PanelContainer:
         self.left_separator.size_flags_stretch_ratio = 0.5
         self.right_separator.size_flags_stretch_ratio = 0.5
 
-  method input(event: InputEvent) =
-    self.ignore_touches(event)
+  # method input(event: InputEvent) =
+  #   self.ignore_touches(event)
 
   method unhandled_input*(event: InputEvent) =
     if SettingsFocused in state.local_flags and

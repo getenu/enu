@@ -67,17 +67,14 @@ gdobj RightPanel of MarginContainer:
 
     state.local_flags.changes:
       if FullWidthPanels.added:
-        self.margin = 63.0
         self.center = 0.0
         self.anchor_left = 0.0
-        self.margin_left = 63.0
+        self.margin_left = 0.0
         self.margin_right = 1.0
       elif FullWidthPanels.removed:
-        self.margin = 3.0
         self.center = 1.0
         self.anchor_left = 0.5
         self.margin_left = 2.0
-        self.margin_right = 1.0
 
       if DocsVisible.added:
         var tween = self.get_tree.create_tween()
