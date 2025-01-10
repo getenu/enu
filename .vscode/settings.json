@@ -4,6 +4,7 @@
         "elif",
         "gcsafe",
         "gdexport",
+        "gdnew",
         "gdobj",
         "gdutils",
         "godotapi",
