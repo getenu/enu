@@ -43,6 +43,7 @@ proc resolve_flags*(
     result.incl(MouseCaptured)
     for flag in groups[0]:
       result.excl(flag)
+    result.incl(ViewportFocused)
   else:
     if EditorVisible in result or DocsVisible in result or
         SettingsVisible in result:
