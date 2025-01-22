@@ -31,8 +31,8 @@ bin_dir = "app"
 src_dir = "src"
 bin = @["enu" & lib_ext]
 
-requires "nim >= 2.0.2",
-  "https://github.com/dsrw/Nim#44959b7",
+requires "nim >= 2.2.0",
+  "https://github.com/dsrw/Nim#31b77d0",
   "https://github.com/dsrw/godot-nim#43addc1",
   "https://github.com/dsrw/model_citizen 0.19.3",
   "https://github.com/dsrw/nanoid.nim 0.2.1", "cligen 1.6.17",
