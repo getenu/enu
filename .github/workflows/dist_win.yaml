@@ -34,7 +34,7 @@ jobs:
           path: |
             vendor/godot/bin
             fonts
-          key: ${{ runner.os }}-prereq-cache-v3-${{ hashFiles('.submodules.tmp') }}
+          key: ${{ runner.os }}-prereq-cache-v4-${{ hashFiles('.submodules.tmp') }}
       - name: build prereqs
         run: nimble dist_prereqs
         if: steps.prereq-cache.outputs.cache-hit != 'true'
