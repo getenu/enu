@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=2]
+[gd_scene load_steps=24 format=2]
 
 [ext_resource path="res://components/Editor.tscn" type="PackedScene" id=1]
 [ext_resource path="res://components/Console.tscn" type="PackedScene" id=2]
@@ -14,8 +14,21 @@
 [ext_resource path="res://components/Settings.tscn" type="PackedScene" id=12]
 [ext_resource path="res://joystick/virtual_joystick.tscn" type="PackedScene" id=13]
 [ext_resource path="res://scenes/GUI.gdns" type="Script" id=14]
+[ext_resource path="res://themes/icons.otf" type="DynamicFontData" id=17]
 
 [sub_resource type="ButtonGroup" id=1]
+
+[sub_resource type="DynamicFont" id=9]
+size = 76
+font_data = ExtResource( 17 )
+
+[sub_resource type="StyleBoxEmpty" id=12]
+
+[sub_resource type="StyleBoxEmpty" id=13]
+
+[sub_resource type="StyleBoxFlat" id=14]
+
+[sub_resource type="StyleBoxEmpty" id=15]
 
 [sub_resource type="StyleBoxFlat" id=8]
 bg_color = Color( 0.6, 0.6, 0.6, 0 )
@@ -126,6 +139,7 @@ theme_type_variation = "IconButton"
 text = "  "
 
 [node name="HBoxContainer2" type="VBoxContainer" parent="."]
+modulate = Color( 1, 1, 1, 0.509804 )
 anchor_left = 0.85
 anchor_top = 0.5
 anchor_right = 0.85
@@ -139,23 +153,27 @@ theme = ExtResource( 6 )
 custom_constants/separation = 20
 
 [node name="Up" type="Button" parent="HBoxContainer2"]
-modulate = Color( 1, 1, 1, 0.509804 )
 margin_right = 78.0
 margin_bottom = 77.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
-theme_type_variation = "RoundButton"
-text = " ↑ "
+custom_fonts/font = SubResource( 9 )
+custom_styles/hover = SubResource( 12 )
+custom_styles/normal = SubResource( 13 )
+action_mode = 0
+text = ""
 
 [node name="Down" type="Button" parent="HBoxContainer2"]
-modulate = Color( 1, 1, 1, 0.509804 )
 margin_top = 97.0
 margin_right = 78.0
 margin_bottom = 174.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
-theme_type_variation = "RoundButton"
-text = " ↓ "
+custom_fonts/font = SubResource( 9 )
+custom_styles/focus = SubResource( 14 )
+custom_styles/normal = SubResource( 15 )
+action_mode = 0
+text = ""
 
 [node name="Panels" type="Control" parent="."]
 anchor_right = 1.0
@@ -259,6 +277,7 @@ theme_type_variation = "IconButton"
 text = "  "
 
 [node name="GridContainer" type="GridContainer" parent="."]
+visible = false
 anchor_right = 1.0
 margin_bottom = 516.0
 mouse_filter = 2
@@ -275,6 +294,10 @@ margin_left = 1058.0
 margin_top = 0.0
 margin_right = 1920.0
 margin_bottom = 516.0
+
+[node name="Window" parent="GridContainer/Settings" index="0"]
+margin_right = 40.0
+margin_bottom = 40.0
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
