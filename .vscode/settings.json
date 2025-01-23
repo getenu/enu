@@ -1,20 +1,35 @@
 {
+    "nim.project": [
+        "src/enu.nim"
+    ],
     "cSpell.words": [
         "bbcode",
+        "cligen",
+        "dotenv",
         "elif",
+        "fontawesome",
         "gcsafe",
         "gdexport",
         "gdnew",
+        "gdns",
         "gdobj",
         "gdutils",
         "godotapi",
         "Joypad",
+        "nimibook",
         "notin",
+        "otfs",
+        "pcre",
+        "Roboto",
         "scancode",
+        "scons",
         "strutils",
         "stylebox",
+        "tnode",
         "tweener",
         "unghost",
-        "vmlib"
+        "varargs",
+        "vmlib",
+        "Wadden"
     ]
 }
