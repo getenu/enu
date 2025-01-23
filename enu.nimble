@@ -133,6 +133,10 @@ proc copy_fonts() =
       cp_file "Roboto-Bold.ttf", dest / "display-bold.otf"
       cp_file "Roboto-BoldItalic.ttf", dest / "display-bold-italic.otf"
 
+  with_dir "fonts/fontawesome-free-6.7.2-desktop/otfs":
+    let dest = "../../../app/themes"
+    cp_file "Font Awesome 6 Free-Solid-900.otf", dest / "icons.otf"
+
 proc download_fonts() =
   p "Downloading fonts..."
   rm_dir "fonts"
@@ -153,6 +157,9 @@ proc download_fonts() =
       exec "curl -Lo RobotoMono.zip \"https://github.com/mobiledesres/Google-UI-fonts/blob/main/zip/Roboto%20Mono.zip?raw=true\""
       exec "unzip Roboto.zip"
       exec "unzip -o RobotoMono.zip"
+
+    exec "curl -OJL https://github.com/FortAwesome/Font-Awesome/releases/download/6.7.2/fontawesome-free-6.7.2-desktop.zip"
+    exec "unzip -o fontawesome-free-6.7.2-desktop.zip"
 
 proc mingw_path(): string =
   var pre, match: string
