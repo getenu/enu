@@ -277,7 +277,6 @@ theme_type_variation = "IconButton"
 text = "  "
 
 [node name="GridContainer" type="GridContainer" parent="."]
-visible = false
 anchor_right = 1.0
 margin_bottom = 516.0
 mouse_filter = 2
@@ -294,10 +293,6 @@ margin_left = 1058.0
 margin_top = 0.0
 margin_right = 1920.0
 margin_bottom = 516.0
-
-[node name="Window" parent="GridContainer/Settings" index="0"]
-margin_right = 40.0
-margin_bottom = 40.0
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
