@@ -73,7 +73,7 @@ gdobj GUI of Control:
       elif DocsFocused in flags:
         state.open_sign = nil
 
-    if event of InputEventKey:
+    if event of InputEventKey or event of InputEventAction:
       (state.nodes.player as PlayerNode).viewport_input(event)
       # self.get_tree().set_input_as_handled()
       # self.accept_event()
@@ -102,14 +102,13 @@ gdobj GUI of Control:
       let event = event as InputEventScreenDrag
       let index = byte(event.index)
       if index in state.ignored_touches:
-        echo \"ignored touch {index}"
         self.get_tree().set_input_as_handled()
         return
       touch_controls
     elif event of InputEventMouseMotion or event of InputEventMouseButton:
       (state.nodes.player as PlayerNode).viewport_input(event)
-      self.get_tree().set_input_as_handled()
-      self.accept_event()
+      # self.get_tree().set_input_as_handled()
+      # self.accept_event()
 
   method process(delta: float) =
     self.margin_bottom = float(get_virtual_keyboard_height() * -1)
