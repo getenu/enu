@@ -39,7 +39,7 @@ jobs:
         if: steps.prereq-cache.outputs.cache-hit != 'true'
       - name: Dist
         run: nimble dist_package
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: Enu Linux Distribution
           path: |
