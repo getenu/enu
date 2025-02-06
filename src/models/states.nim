@@ -13,10 +13,10 @@ const groups =
   @[
     {
       EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused,
-      ViewportFocused,
+      ViewportFocused
     },
     {ReticleVisible, BlockTargetVisible},
-    {Playing, Flying},
+    {Playing, Flying}
   ]
 
 proc resolve_flags*(
@@ -40,10 +40,11 @@ proc resolve_flags*(
     result.incl ReticleVisible
 
   if CommandMode in result:
-    result.incl(MouseCaptured)
     for flag in groups[0]:
       result.excl(flag)
     result.incl(ViewportFocused)
+    if TouchControls notin result:
+      result.incl(MouseCaptured)
   else:
     if EditorVisible in result or DocsVisible in result or
         SettingsVisible in result:
