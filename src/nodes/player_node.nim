@@ -7,7 +7,7 @@ import
     input_event_screen_drag, input_event_screen_touch,
     input_event_joypad_motion, ray_cast, scene_tree, input_event_pan_gesture,
     viewport, camera, global_constants, collision_shape, kinematic_collision,
-    packed_scene, resource_loader,
+    packed_scene, resource_loader
   ]
 import core, gdutils, nodes/helpers
 import aim_target, models
@@ -51,7 +51,7 @@ gdobj PlayerNode of KinematicBody:
     alt_speed, skip_release, skip_next_mouse_move, jump_down: bool
 
     aim_ray, world_ray, down_ray: RayCast
-    jump_time, run_time: Option[MonoTime]
+    jump_time, run_time, crouch_time: Option[MonoTime]
 
     position_start: Vector3
     input_relative* = vec2()
@@ -214,8 +214,8 @@ gdobj PlayerNode of KinematicBody:
 
     const forward_rotation = deg_to_rad(-90.0)
     let
-      process_input = true
-        # EditorVisible notin state.local_flags or CommandMode in state.local_flags
+      process_input =
+        EditorVisible notin state.local_flags or CommandMode in state.local_flags
       input_direction =
         if process_input:
           self.get_input_direction()
@@ -259,7 +259,8 @@ gdobj PlayerNode of KinematicBody:
         if self.down_ray.is_colliding():
           let length = 1.85
           let diff =
-            length - (
+            length -
+            (
               self.down_ray.global_transform.origin -
               self.down_ray.get_collision_point
             ).y
@@ -307,6 +308,7 @@ gdobj PlayerNode of KinematicBody:
     #   let event = event as InputEventJoypadMotion
     #   if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
     #     return
+    let time = get_mono_time()
 
     if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
         TouchControls notin state.local_flags:
@@ -353,9 +355,7 @@ gdobj PlayerNode of KinematicBody:
     if event.is_action_pressed("jump"):
       self.get_tree().set_input_as_handled()
       self.jump_down = true
-      let
-        time = get_mono_time()
-        toggle = ?self.jump_time and time < self.jump_time.get + fly_toggle
+      let toggle = ?self.jump_time and time < self.jump_time.get + fly_toggle
 
       if toggle and Playing notin state.local_flags:
         self.jump_time = nil_time
@@ -368,6 +368,15 @@ gdobj PlayerNode of KinematicBody:
     elif event.is_action_released("jump"):
       self.get_tree().set_input_as_handled()
       self.jump_down = false
+
+    if event.is_action_pressed("crouch") and self.flying:
+      self.get_tree().set_input_as_handled()
+
+      if ?self.crouch_time and time < self.crouch_time.get + fly_toggle:
+        self.crouch_time = nil_time
+        self.flying(false)
+      else:
+        self.crouch_time = some time
 
     if event.is_action_pressed("run"):
       self.get_tree().set_input_as_handled()

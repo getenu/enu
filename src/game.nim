@@ -7,7 +7,7 @@ import
     viewport, viewport_texture, performance, label, theme, dynamic_font,
     resource_loader, main_loop, project_settings, input_map, input_event_action,
     input_event_key, input_event, global_constants, scroll_container,
-    voxel_server, world_environment,
+    voxel_server, world_environment
   ]
 
 import ui/virtual_joystick
@@ -22,8 +22,9 @@ when defined(metrics):
 ZenContext.init_metrics "main", "worker"
 
 # saved state when restarting worker thread
-const savable_flags =
-  {ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed}
+const savable_flags = {
+  ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed
+}
 
 var environment_cache {.threadvar.}: Table[string, Environment]
 
