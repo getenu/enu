@@ -65,9 +65,11 @@ gdobj VirtualJoystick of Control:
             self.tip.modulate = self.pressed_color
             self.update_joystick(event.position)
             self.get_tree().set_input_as_handled()
+            state.push_flag CommandMode
       elif event.index == self.touch_index:
         self.reset()
         self.get_tree().set_input_as_handled()
+        state.pop_flag CommandMode
     elif event of InputEventScreenDrag:
       let event = event as InputEventScreenDrag
       if event.index == self.touch_index:
