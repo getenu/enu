@@ -340,5 +340,9 @@ const environments* = {
   "gb": 0.02,
   "gb2": 0.02,
   "strange": 0.5,
-  "wild_imagination": 0.3
+  "wild_imagination": 0.3,
 }.to_table
+
+template `?=`*[T](a: var T, b: T) =
+  if not ?a:
+    a = b
