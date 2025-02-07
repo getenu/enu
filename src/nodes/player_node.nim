@@ -7,7 +7,7 @@ import
     input_event_screen_drag, input_event_screen_touch,
     input_event_joypad_motion, ray_cast, scene_tree, input_event_pan_gesture,
     viewport, camera, global_constants, collision_shape, kinematic_collision,
-    packed_scene, resource_loader
+    packed_scene, resource_loader,
   ]
 import core, gdutils, nodes/helpers
 import aim_target, models
@@ -214,8 +214,7 @@ gdobj PlayerNode of KinematicBody:
 
     const forward_rotation = deg_to_rad(-90.0)
     let
-      process_input =
-        EditorVisible notin state.local_flags or CommandMode in state.local_flags
+      process_input = ViewportFocused in state.local_flags
       input_direction =
         if process_input:
           self.get_input_direction()
@@ -259,8 +258,7 @@ gdobj PlayerNode of KinematicBody:
         if self.down_ray.is_colliding():
           let length = 1.85
           let diff =
-            length -
-            (
+            length - (
               self.down_ray.global_transform.origin -
               self.down_ray.get_collision_point
             ).y
