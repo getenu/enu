@@ -7,7 +7,7 @@ import
     viewport, viewport_texture, performance, label, theme, dynamic_font,
     resource_loader, main_loop, project_settings, input_map, input_event_action,
     input_event_key, input_event, global_constants, scroll_container,
-    voxel_server, world_environment
+    voxel_server, world_environment,
   ]
 
 import ui/virtual_joystick
@@ -22,9 +22,8 @@ when defined(metrics):
 ZenContext.init_metrics "main", "worker"
 
 # saved state when restarting worker thread
-const savable_flags = {
-  ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed
-}
+const savable_flags =
+  {ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed}
 
 var environment_cache {.threadvar.}: Table[string, Environment]
 
@@ -150,17 +149,27 @@ gdobj Game of Node:
 
     randomize()
 
+    var args = get_cmdline_args().to_seq
+
     var connect_address = ""
     var listen_address = ""
+    if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
+      connect_address = args[i + 1]
+      args.delete(i .. i + 1)
+    if (let i = args.find("--listen"); i) > -1:
+      if args.len > i + 1:
+        listen_address = args[i + 1]
+        args.delete(i .. i + 1)
+      else:
+        listen_address = "0.0.0.0"
+        args.delete(i)
 
-    if ?get_env("ENU_LISTEN_ADDRESS") and ?get_env("ENU_CONNECT_ADDRESS"):
-      fail "Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS"
-    elif ?get_env("ENU_LISTEN_ADDRESS"):
+    if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address:
       listen_address = get_env("ENU_LISTEN_ADDRESS")
-      connect_address = ""
-    elif ?get_env("ENU_CONNECT_ADDRESS"):
+    if ?get_env("ENU_CONNECT_ADDRESS") and not ?connect_address:
       connect_address = get_env("ENU_CONNECT_ADDRESS")
-      listen_address = ""
+    if ?listen_address and ?connect_address:
+      fail "Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS"
 
     if ?saved_state.connect_address:
       connect_address = saved_state.connect_address
