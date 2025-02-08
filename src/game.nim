@@ -426,6 +426,7 @@ gdobj Game of Node:
 
     if TouchControls notin state.local_flags:
       state.push_flag MouseCaptured
+    state.push_flag ViewportFocused
 
     state.queued_action_value.changes:
       if added and change.item != "":
