@@ -78,6 +78,9 @@ gdobj GUI of Control:
       # self.get_tree().set_input_as_handled()
       # self.accept_event()
 
+    if event of InputEventJoypadButton:
+      (state.nodes.player as PlayerNode).viewport_input(event)
+
   # method gui_input(event: InputEvent) =
   #   (state.nodes.player as PlayerNode).viewport_input(event)
   #   self.accept_event()
