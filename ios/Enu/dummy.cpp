@@ -28,6 +28,26 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+extern void register_dynamic_symbol(char *name, void *address);
+extern void add_ios_init_callback(void (*cb)());
+extern "C" void godot_gdnative_init(void);
+extern "C" void godot_gdnative_terminate(void) __attribute__((weak));
+extern "C" void godot_nativescript_init(void) __attribute__((weak));
+extern "C" void godot_nativescript_frame(void) __attribute__((weak));
+extern "C" void godot_nativescript_thread_enter(void) __attribute__((weak));
+extern "C" void godot_nativescript_thread_exit(void) __attribute__((weak));
+extern "C" void godot_gdnative_singleton(void) __attribute__((weak));
+void godot_init() {
+  if (&godot_gdnative_init) register_dynamic_symbol((char *)"godot_gdnative_init", (void *)godot_gdnative_init);
+  if (&godot_gdnative_terminate) register_dynamic_symbol((char *)"godot_gdnative_terminate", (void *)godot_gdnative_terminate);
+  if (&godot_nativescript_init) register_dynamic_symbol((char *)"godot_nativescript_init", (void *)godot_nativescript_init);
+  if (&godot_nativescript_frame) register_dynamic_symbol((char *)"godot_nativescript_frame", (void *)godot_nativescript_frame);
+  if (&godot_nativescript_thread_enter) register_dynamic_symbol((char *)"godot_nativescript_thread_enter", (void *)godot_nativescript_thread_enter);
+  if (&godot_nativescript_thread_exit) register_dynamic_symbol((char *)"godot_nativescript_thread_exit", (void *)godot_nativescript_thread_exit);
+  if (&godot_gdnative_singleton) register_dynamic_symbol((char *)"godot_gdnative_singleton", (void *)godot_gdnative_singleton);
+}
+struct godot_struct {godot_struct() {add_ios_init_callback(godot_init);}};
+godot_struct godot_struct_instance;
 
 // Godot Plugins
 void godot_ios_plugins_initialize();
