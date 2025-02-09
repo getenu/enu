@@ -107,7 +107,7 @@ gdobj Game of Node:
       state.push_flag Quitting
 
     if what == main_loop.NOTIFICATION_WM_ABOUT:
-      alert \"Enu {enu_version}\n\n© 2024 Scott Wadden", "Enu"
+      alert \"Enu {enu_version}\n\n© 2025 Scott Wadden", "Enu"
 
   proc add_platform_input_actions() =
     let suffix = "." & host_os
