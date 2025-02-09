@@ -17,8 +17,9 @@ gdobj GUI of Control:
     self.up = find("Up", Button)
     self.down = find("Down", Button)
 
-    self.bind_signals self,
-      "mouse_entered", "mouse_exited", "focus_entered", "focus_exited"
+    for control in [self, self.up, self.down]:
+      self.bind_signals control,
+        "mouse_entered", "mouse_exited", "focus_entered", "focus_exited"
 
     self.bind_signal(
       find("OpenSettings", Button), ("pressed", "settings_opened")
