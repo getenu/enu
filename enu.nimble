@@ -74,6 +74,9 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   with_dir "vendor/godot":
     exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} -j{cores}"
 
+task build_ios_godot, "Build godot for ios":
+  build_godot(target = "iphone", cpu = "arm64")
+
 task build_godot, "Build godot":
   build_godot()
 
