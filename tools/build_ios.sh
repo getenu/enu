@@ -14,6 +14,6 @@ cd ../..
 
 nim c --os:ios --debugger:native -o:libenu.a src/enu.nim
 
-libtool -static -o dist/ios/Enu/libenu.a libenu.a vendor/pcre/.libs/libpcre.a
+libtool -static -o ios/Enu/libenu.a libenu.a vendor/pcre/.libs/libpcre.a
 
-cp vendor/godot/bin/libgodot.iphone.debug.arm64.a dist/ios/Enu.xcframework/ios-arm64/libgodot.a
+cp vendor/godot/bin/libgodot.iphone.debug.arm64.a ios/Enu/libgodot.a
