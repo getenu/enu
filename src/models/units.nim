@@ -42,6 +42,7 @@ proc init_unit*[T: Unit](self: T, shared = true) =
 
   self.init_shared
   self.global_flags += Visible
+  self.global_flags += Dirty
 
 proc position*(self: Unit): Vector3 =
   if Global in self.global_flags:
