@@ -1,3 +1,4 @@
 *.a
 Enu.pck
 **/xcuserdata
+build/

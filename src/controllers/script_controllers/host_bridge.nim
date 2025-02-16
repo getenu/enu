@@ -154,6 +154,22 @@ proc reset_level(self: Worker) =
     state.config_value.value:
       level_dir = current_level
 
+proc ensure_unit(self: Worker, unit: Unit) =
+  if unit notin self.node_map:
+    var node = self.node_map[self.active_unit].copy_tree
+    self.map_unit(unit, node)
+
+proc current_collider(self: Unit, kind: string): Unit =
+  var collider: Unit
+  state.units.value.walk_tree proc(unit: Unit) =
+    if self.collisions.value.any_it(it.id == unit.id):
+      if kind == "Unit" or kind == "Player" and unit of Player or
+          kind == "Bot" and unit of Bot or kind == "Build" and unit of Build or
+          kind == "Sign" and unit of Sign:
+        collider = unit
+        return
+  result = collider
+
 proc world_name(): string =
   state.config.world
 
@@ -391,9 +407,7 @@ proc all_units(T: type Unit, self: Worker): PNode =
     if unit of T:
       # objects without scripts won't show up in the node map. Create
       # a new dummy object
-      if unit notin self.node_map:
-        var node = self.node_map[self.active_unit].copy_tree
-        self.map_unit(unit, node)
+      self.ensure_unit(unit)
       node.add self.to_node(unit)
   result = node
 
@@ -425,9 +439,8 @@ proc draw_position_set(self: Build, position: Vector3) =
       (position - self.position).local_to(self.parent)
 
 proc save(self: Build, name: string) =
-  self.save_points[name] = (
-    self.draw_transform, self.color_value.value, self.drawing
-  )
+  self.save_points[name] =
+    (self.draw_transform, self.color_value.value, self.drawing)
 
 proc restore(self: Build, name: string) =
   (self.draw_transform, self.color_value.value, self.drawing) =
@@ -561,10 +574,9 @@ proc `open=`(self: Sign, value: bool) =
 
 proc coding(self: Worker, unit: Unit): Unit =
   if unit == state.player:
-    if ?state.open_unit and state.open_unit notin self.node_map:
-      var node = self.node_map[self.active_unit].copy_tree
-      self.map_unit(state.open_unit, node)
-    result = state.open_unit
+    if ?state.open_unit:
+      self.ensure_unit(state.open_unit)
+      result = state.open_unit
 
 proc `coding=`(self: Unit, value: Unit) =
   state.open_unit = value
@@ -583,7 +595,8 @@ proc bridge_to_vm*(worker: Worker) =
     glow, `glow=`, speed, `speed=`, scale, `scale=`, velocity, `velocity=`,
     active_unit, color, `color=`, sees, start_position, wake, frame_count,
     write_stack_trace, show, `show=`, frame_created, lock, `lock=`, reset,
-    press_action, load_level, level_name, world_name, reset_level
+    press_action, load_level, level_name, world_name, reset_level,
+    current_collider
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,

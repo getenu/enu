@@ -43,6 +43,8 @@ type
 
   Sign* = ref object of Unit
 
+  Player* = ref object of Unit
+
   Colors* = enum
     eraser
     blue
