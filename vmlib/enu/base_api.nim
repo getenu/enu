@@ -371,6 +371,9 @@ template t*(enu_target: NegativeNode) =
 template hit*(node: Unit): Vector3 =
   enu_target.hit(node)
 
+proc hit*[T: Unit](_: type T): T =
+  T(active_unit().current_collider($T))
+
 proc distance*(position: Vector3): float =
   position.distance_to(active_unit().position)
 

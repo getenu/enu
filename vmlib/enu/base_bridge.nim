@@ -49,6 +49,7 @@ bridged_to_host:
   proc reset_level*()
   proc level_name*(): string
   proc world_name*(): string
+  proc current_collider*(self: Unit, name: string): Unit
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)

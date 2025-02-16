@@ -55,7 +55,6 @@ type
     Hover
     TargetMoved
     Highlight
-    HighlightError
     Hide
 
   GlobalModelFlags* = enum
@@ -66,6 +65,7 @@ type
     ScriptInitializing
     Dirty
     Resetting
+    HighlightError
 
   Tools* = enum
     CodeMode
@@ -129,7 +129,8 @@ type
     emission_colors*: seq[godot.Color]
     edits*: ZenTable[string, ZenTable[Vector3, VoxelInfo]]
 
-  ScriptErrors* = ZenSeq[tuple[msg: string, info: TLineInfo, location: string]]
+  ScriptErrors* =
+    ZenSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
 
   SightQuery* = object
     target*: Unit
