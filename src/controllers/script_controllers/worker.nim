@@ -62,7 +62,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
 proc change_code(self: Worker, unit: Unit, code: Code) =
   debug "code changing", unit = unit.id
   unit.errors.clear
-  unit.local_flags -= HighlightError
+  unit.global_flags -= HighlightError
   if ?unit.script_ctx and unit.script_ctx.running and not ?unit.clone_of:
     unit.collect_garbage
 
@@ -74,7 +74,6 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
       edit.destroy
 
   unit.reset()
-  state.pop_flag ConsoleVisible
   if LoadingScript notin state.local_flags and code.nim.strip == "":
     self.interpreter.reset_module(unit.script_ctx.module_name)
     debug "reset module", module = unit.script_ctx.module_name
@@ -97,10 +96,9 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
 proc watch_code(self: Worker, unit: Unit) =
   unit.code_value.changes:
     if added or touched:
-      if change.item.owner == "" or change.item.owner == Zen.thread_ctx.id:
+      if Server in state.local_flags:
         save_level(state.config.level_dir)
         self.change_code(unit, change.item)
-      elif Server in state.local_flags:
         if change.item.nim == "":
           remove_file unit.script_ctx.script
         else:
@@ -113,6 +111,18 @@ proc watch_code(self: Worker, unit: Unit) =
         self.eval(unit, change.item)
       except VMQuit as e:
         self.script_error(unit, e)
+
+  unit.zids.add:
+    unit.errors.changes:
+      if unit.code.owner == Zen.thread_ctx.id:
+        if added and change.item.log:
+          state.err(
+            \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
+          )
+          state.push_flags ConsoleVisible
+
+        if removed:
+          state.pop_flags ConsoleVisible
 
   if unit.script_ctx.is_nil:
     unit.script_ctx =

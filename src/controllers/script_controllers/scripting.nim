@@ -36,11 +36,14 @@ proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
     msg = e.parent.msg
 
   info "vm error", msg, file = unit.script_ctx.file_name
-  state.err(\"[url=unit://{unit.id}]{msg}[/url]")
-  unit.local_flags += HighlightError
+  for i, error in unit.errors.value:
+    var error = error
+    error.log = true
+    unit.errors[i] = error
+
+  unit.global_flags += HighlightError
   unit.global_flags -= ScriptInitializing
   unit.ensure_visible
-  state.push_flags ConsoleVisible
 
 proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   private_access ScriptCtx
@@ -77,7 +80,7 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
         error "File not found handling error", file_name
 
       var loc = \"{file_name}({int info.line},{int info.col})"
-      errors.add (msg, info, loc)
+      errors.add (msg, info, loc, false)
       ctx.exit_code = error_code
       raise (ref VMQuit)(info: info, msg: msg, location: loc)
 
@@ -131,7 +134,7 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
   try:
     self.active_unit = unit
     unit.errors.clear
-    unit.local_flags -= HighlightError
+    unit.global_flags -= HighlightError
 
     if not state.paused:
       let module_name = ctx.script.split_file.name

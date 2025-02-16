@@ -3,7 +3,7 @@ import pkg/godot except print, Color
 import
   godotapi/[
     node, voxel_terrain, voxel_mesher_blocky, voxel_tool, voxel_library,
-    shader_material, resource_loader, packed_scene, ray_cast
+    shader_material, resource_loader, packed_scene, ray_cast,
   ]
 import core, models/[units, builds, colors], gdutils
 import ./queries
@@ -80,7 +80,7 @@ gdobj BuildNode of VoxelTerrain:
 
         if Highlight in self.model.local_flags or
             (
-              HighlightError in self.model.local_flags and
+              HighlightError in self.model.global_flags and
               self.error_highlight_on
             ):
           m.set_shader_param("emission_energy", highlight_glow.to_variant)
@@ -168,15 +168,17 @@ gdobj BuildNode of VoxelTerrain:
       elif Resetting.removed:
         self.generator = gdnew[VoxelGeneratorFlat]()
         self.track_chunks()
-
-    self.model.local_flags.watch:
-      if HighlightError.added:
+      elif HighlightError.added:
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.error_highlight_on = true
+        self.set_highlight
       elif HighlightError.removed:
         self.toggle_error_highlight_at = MonoTime.high
         self.error_highlight_on = false
-      if change.item in [Highlight, HighlightError]:
+        self.set_highlight
+
+    self.model.local_flags.watch:
+      if change.item == Highlight:
         self.set_highlight
 
     state.local_flags.watch:
