@@ -64,6 +64,8 @@ proc await_future[T](future: Future[T], a: VmArgs) =
   future.add_callback proc(future: Future[T]) =
     set_result(a, to_result(future.read))
 
+const unit_types = ["Unit", "Bot", "Build", "Sign", "Player"]
+
 macro bridged_from_vm(
     self: Worker, module_name: string, proc_refs: varargs[untyped]
 ): untyped =
@@ -76,8 +78,7 @@ macro bridged_from_vm(
     let
       symbol = bind_sym($proc_ref)
       proc_impl = (if symbol.kind == nnkSym: symbol
-      else: symbol[0]
-      ).get_impl
+      else: symbol[0]).get_impl
       proc_name = proc_impl[0].str_val
       proc_impl_name = proc_name.replace("=", "_set") & "_impl"
       return_node = proc_impl[3][0]
@@ -87,7 +88,7 @@ macro bridged_from_vm(
       block:
         var pos = -1
         for ident_def in arg_nodes:
-          let typ = ident_def[1].str_val
+          let typ = ident_def[1].repr
           if typ == $Worker.type:
             ident"script_engine"
           elif typ == "VmArgs":
@@ -95,12 +96,15 @@ macro bridged_from_vm(
           elif typ == "ScriptCtx":
             quote:
               script_engine.active_unit.script_ctx
-          elif typ in ["Unit", "Bot", "Build", "Sign"]:
+          elif typ in unit_types:
             let getter = "get_" & typ
             pos.inc
             new_call(
               bind_sym(getter), ident"script_engine", ident"a", new_lit(pos)
             )
+          elif typ in unit_types.map_it(\"type {it}"):
+            let type_name = typ.split(" ")[1]
+            ident(type_name)
           else:
             let getter = "get_" & typ
             pos.inc
@@ -108,7 +112,7 @@ macro bridged_from_vm(
 
     var call = new_call(proc_ref, args)
     if return_node.kind == nnk_sym:
-      if return_node.str_val in ["Unit", "Bot", "Build", "Sign"]:
+      if return_node.str_val in unit_types:
         call = new_call(
           bind_sym"set_result",
           ident"a",

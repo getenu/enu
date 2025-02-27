@@ -3,47 +3,24 @@ import std/[strutils, math, wrapnils, options]
 import types, base_api, vm_bridge_utils, base_bridge_private
 
 bridged_to_host:
-  proc message*(self: Sign): string =
-    discard
+  proc message*(self: Sign): string
+  proc `message=`*(self: Sign, value: string)
+  proc more*(self: Sign): string
+  proc `more=`*(self: Sign, value: string)
+  proc width*(self: Sign): float
+  proc `width=`*(self: Sign, value: float)
+  proc height*(self: Sign): float
+  proc `height=`*(self: Sign, value: float)
+  proc size*(self: Sign): int
+  proc `size=`*(self: Sign, value: int)
+  proc open*(self: Sign): bool
+  proc `open=`*(self: Sign, value: bool)
+  proc billboard*(self: Sign): bool
+  proc `billboard=`*(self: Sign, value: bool)
+  proc all_signs(): Sign
 
-  proc `message=`*(self: Sign, value: string) =
-    discard
-
-  proc more*(self: Sign): string =
-    discard
-
-  proc `more=`*(self: Sign, value: string) =
-    discard
-
-  proc width*(self: Sign): float =
-    discard
-
-  proc `width=`*(self: Sign, value: float) =
-    discard
-
-  proc height*(self: Sign): float =
-    discard
-
-  proc `height=`*(self: Sign, value: float) =
-    discard
-
-  proc size*(self: Sign): int =
-    discard
-
-  proc `size=`*(self: Sign, value: int) =
-    discard
-
-  proc open*(self: Sign): bool =
-    discard
-
-  proc `open=`*(self: Sign, value: bool) =
-    discard
-
-  proc billboard*(self: Sign): bool =
-    discard
-
-  proc `billboard=`*(self: Sign, value: bool) =
-    discard
+proc all*(_: type Sign): Sign =
+  all_signs()
 
 proc say*(
     self: Unit,

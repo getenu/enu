@@ -5,17 +5,17 @@ bridged_to_host:
   proc drawing*(self: Build): bool
   proc `drawing=`*(self: Build, drawing: bool)
   proc initial_position(self: Build): Vector3
-  proc all_builds(): seq[Build]
   proc save*(self: Build, name = "default")
   proc restore*(self: Build, name = "default")
   proc draw_position*(self: Build): Vector3
   proc `draw_position=`*(self: Build, value: Vector3)
+  proc all_builds(): Build
+
+proc all*(_: type Build): Build =
+  all_builds()
 
 proc `draw_position=`*(self: Build, unit: Unit) =
   self.draw_position = unit.position
-
-proc all*(_: type Build): seq[Build] =
-  all_builds()
 
 proc go_home*(self: Build) =
   self.rotation = 0
