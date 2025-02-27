@@ -17,6 +17,9 @@ proc `position=`*(self: Unit, position: Vector3) =
 proc `position=`*(self: Unit, unit: Unit) =
   self.position_set(unit.position)
 
+proc go*(self: Unit, position: Unit | Vector3) =
+  self.position = position
+
 proc link_dependency*(dep: Unit) =
   if not dep.is_nil:
     link_dependency_impl(dep)

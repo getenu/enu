@@ -131,6 +131,7 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
 
 proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
   let ctx = unit.script_ctx
+  ctx.query_results.clear
   try:
     self.active_unit = unit
     unit.errors.clear

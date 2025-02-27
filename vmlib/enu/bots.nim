@@ -2,10 +2,10 @@ import std/[strutils, math]
 import types, base_api, vm_bridge_utils
 
 bridged_to_host:
-  proc all_bots(): seq[Bot]
+  proc all_bots(): Bot
   proc play*(self: Bot, animation_name: string)
 
-proc all*(_: type Bot): seq[Bot] =
+proc all*(_: type Bot): Bot =
   all_bots()
 
 proc walk*(self: Bot) =

@@ -50,6 +50,7 @@ bridged_to_host:
   proc level_name*(): string
   proc world_name*(): string
   proc current_collider*(self: Unit, name: string): Unit
+  proc added*[T: Unit](kind: type T): T
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)
@@ -59,3 +60,4 @@ bridged_to_host:
   proc wake*(self: Unit)
   proc create_new*(self: Unit)
   proc frame_count*(): int
+  proc loop_finished*()

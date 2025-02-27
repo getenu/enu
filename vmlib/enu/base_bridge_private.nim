@@ -7,9 +7,7 @@ bridged_to_host:
   proc action_running*(self: Unit): bool
   proc `action_running=`*(self: Unit, value: bool)
   proc yield_script*(self: Unit)
-  proc begin_move*(
-    self: Unit, direction: Vector3, steps: float, move_mode: int
-  )
+  proc begin_move*(self: Unit, direction: Vector3, steps: float, move_mode: int)
 
   proc begin_turn*(
     self: Unit, axis: Vector3, steps: float, lean: bool, move_mode: int

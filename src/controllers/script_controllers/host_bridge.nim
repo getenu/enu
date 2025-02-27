@@ -154,21 +154,35 @@ proc reset_level(self: Worker) =
     state.config_value.value:
       level_dir = current_level
 
+template query(
+    T: type Unit, key: string, ctx: ScriptCtx, body: untyped
+): untyped =
+  var result: T
+  if key in ctx.query_results:
+    result = T(ctx.query_results[key][^1])
+  else:
+    let results = body
+    if ?results:
+      result = results[^1]
+      ctx.query_results[key] = cast[seq[Unit]](results)
+  result
+
 proc ensure_unit(self: Worker, unit: Unit) =
   if unit notin self.node_map:
     var node = self.node_map[self.active_unit].copy_tree
     self.map_unit(unit, node)
 
-proc current_collider(self: Unit, kind: string): Unit =
-  var collider: Unit
-  state.units.value.walk_tree proc(unit: Unit) =
-    if self.collisions.value.any_it(it.id == unit.id):
-      if kind == "Unit" or kind == "Player" and unit of Player or
-          kind == "Bot" and unit of Bot or kind == "Build" and unit of Build or
-          kind == "Sign" and unit of Sign:
-        collider = unit
-        return
-  result = collider
+proc current_collider(self: Worker, unit: Unit, kind: string): Unit =
+  Unit.query(kind & "-collider", unit.script_ctx):
+    var colliders: seq[Unit]
+    state.units.value.walk_tree proc(other: Unit) =
+      if unit.collisions.value.any_it(it.id == other.id):
+        if kind == "Unit" or kind == "Player" and other of Player or
+            kind == "Bot" and other of Bot or kind == "Build" and other of Build or
+            kind == "Sign" and other of Sign:
+          colliders.add(other)
+          self.ensure_unit(other)
+    colliders
 
 proc world_name(): string =
   state.config.world
@@ -219,10 +233,56 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   ctx.last_ran = MonoTime.default
   self.pause_script()
 
+proc loop_finished(self: Worker, ctx: ScriptCtx) =
+  if ?ctx.query_results:
+    let key = ctx.query_results.first_key
+    let res = ctx.query_results[key].pop
+    if not ?ctx.query_results[key]:
+      ctx.query_results.del key
+      if not ?ctx.query_results:
+        self.sleep_impl(ctx, 0.0)
+  else:
+    self.sleep_impl(ctx, 0.0)
+
 proc hit(unit_a: Unit, unit_b: Unit): Vector3 =
   for collision in unit_a.collisions:
     if collision.id == unit_b.id:
       return collision.normal.snapped(vec3(1, 1, 1))
+
+proc find_all[T: Unit](worker: Worker, _: type T): seq[T] =
+  var units: seq[T]
+  state.units.value.walk_tree proc(unit: Unit) =
+    if unit of T:
+      worker.ensure_unit(unit)
+      units.add T(unit)
+  units
+
+proc all_players(ctx: ScriptCtx, worker: Worker): Player =
+  Player.query("all-players", ctx):
+    worker.find_all(Player)
+
+proc all_bots(ctx: ScriptCtx, worker: Worker): Bot =
+  Bot.query("all-bots", ctx):
+    worker.find_all(Bot)
+
+proc all_builds(ctx: ScriptCtx, worker: Worker): Build =
+  Build.query("all-builds", ctx):
+    worker.find_all(Build)
+
+proc all_signs(ctx: ScriptCtx, worker: Worker): Sign =
+  Sign.query("all-builds", ctx):
+    worker.find_all(Sign)
+
+proc all_units(ctx: ScriptCtx, worker: Worker): Unit =
+  Unit.query("all-builds", ctx):
+    worker.find_all(Unit)
+
+proc added*(_: type Player, ctx: ScriptCtx, worker: Worker): Player =
+  Player.query("players-added", ctx):
+    collect:
+      for player in worker.find_all(Player):
+        if player.frame_created == state.frame_count:
+          player
 
 proc echo_console(msg: string) =
   logger("info", msg & "\n")
@@ -596,7 +656,8 @@ proc bridge_to_vm*(worker: Worker) =
     active_unit, color, `color=`, sees, start_position, wake, frame_count,
     write_stack_trace, show, `show=`, frame_created, lock, `lock=`, reset,
     press_action, load_level, level_name, world_name, reset_level,
-    current_collider
+    current_collider, added, all_players, all_builds, all_bots, all_signs,
+    all_units, loop_finished
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,
