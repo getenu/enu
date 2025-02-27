@@ -3,15 +3,20 @@ import godotapi/spatial
 import core, models/units
 
 proc init*(_: type Player): Player =
-  result = Player(
+  let self = Player(
     id: \"player-{Zen.thread_ctx.id}",
     rotation_value: ~0.0,
     start_transform: Transform.init(origin = vec3(0, 1, 0)),
     input_direction_value: ~Vector3,
     cursor_position_value: ~((0, 0)),
   )
-  result.init_unit(shared = false)
-  result.global_flags += Global
+  self.init_unit(shared = false)
+  self.global_flags += Global
+
+  state.local_flags.changes:
+    if ResettingVM.added:
+      self.frame_created = state.frame_count
+  result = self
 
 method on_begin_turn*(
     self: Player, direction: Vector3, degrees: float, lean: bool, move_mode: int

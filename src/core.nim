@@ -346,3 +346,13 @@ const environments* = {
 template `?=`*[T](a: var T, b: T) =
   if not ?a:
     a = b
+
+template `?`*[T](self: seq[T]): bool =
+  self.len > 0
+
+template `?`*(self: Table): bool =
+  self.len > 0
+
+proc first_key*[K, V](self: Table[K, V]): K =
+  for key in self.keys:
+    return key

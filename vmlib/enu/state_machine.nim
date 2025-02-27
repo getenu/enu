@@ -73,7 +73,7 @@ template loop_body(body: untyped) =
   if main_loop and not looping:
     # regular while loop.
     while manager(true):
-      discard
+      loop_finished()
   else:
     while looping:
       done = false
@@ -85,7 +85,7 @@ template loop_body(body: untyped) =
           # we didn't change states and the action didn't do anything. This probably means that
           # we're stuck in an infinite loop, or idling on a finished command like `up home`.
           # Sleep so we don't freeze or burn excessive CPU.
-          sleep()
+          loop_finished()
       except Halt:
         if frame in ctx.stack:
           # we're in the stack (which has already been shrunk)
