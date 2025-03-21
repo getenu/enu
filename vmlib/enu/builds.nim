@@ -9,10 +9,6 @@ bridged_to_host:
   proc restore*(self: Build, name = "default")
   proc draw_position*(self: Build): Vector3
   proc `draw_position=`*(self: Build, value: Vector3)
-  proc all_builds(): Build
-
-proc all*(_: type Build): Build =
-  all_builds()
 
 proc `draw_position=`*(self: Build, unit: Unit) =
   self.draw_position = unit.position

@@ -1,5 +1,5 @@
 import system except echo
-import std/[strformat, math, importutils, strutils, options, sets]
+import std/[strformat, math, importutils, strutils, options, sets, sequtils]
 import random as rnd except rand
 import types, state_machine, base_bridge, base_bridge_private
 
@@ -36,7 +36,7 @@ proc seed*(self: Unit): int =
   private_access Unit
   self.seed
 
-proc bounce*(me: PlayerType, power = 1.0) =
+proc bounce*(me: Player, power = 1.0) =
   me.velocity = me.velocity + UP * power * 30
 
 template wait(body: untyped) =
@@ -371,12 +371,6 @@ template turn*(enu_target: NegativeNode) =
 template t*(enu_target: NegativeNode) =
   turn(enu_target)
 
-template hit*(node: Unit): Vector3 =
-  enu_target.hit(node)
-
-proc hit*[T: Unit](_: type T): T =
-  T(active_unit().current_collider($T))
-
 proc distance*(position: Vector3): float =
   position.distance_to(active_unit().position)
 
@@ -541,6 +535,9 @@ template `?`*(self: string): bool =
 template `?`*[T](self: open_array[T]): bool =
   self.len > 0
 
+template `?`*(self: Table): bool =
+  self.len > 0
+
 template `?`*[T](self: set[T]): bool =
   self.card > 0
 
@@ -553,5 +550,69 @@ proc `or`*[T: not bool](a, b: T): T =
   else:
     result = b
 
+proc first_key*[K, V](self: Table[K, V]): K =
+  for key in self.keys:
+    return key
+
 template reset*(clear = false) =
   enu_target.reset(clear)
+
+proc loop_finished*() =
+  let unit = active_unit()
+  if ?unit.query_results:
+    let key = unit.query_results.first_key
+    let res = unit.query_results[key].pop
+    if not ?unit.query_results[key]:
+      unit.query_results.del key
+      if not ?unit.query_results:
+        sleep()
+  else:
+    sleep()
+
+template query(T: type Unit, key: string, body: untyped): untyped =
+  var result: T
+  let unit = active_unit()
+  if key in unit.query_results:
+    result = T(unit.query_results[key][^1])
+  else:
+    let results = body
+    if ?results:
+      result = results[^1]
+      unit.query_results[key] = results.map_it(Unit(it))
+  result
+
+proc all*(_: type Bot): Bot =
+  Bot.query("all-bots"):
+    all_bots()
+
+proc all*(T: type Build): Build =
+  Build.query("all-builds"):
+    all_builds()
+
+proc all*(_: type Sign): Sign =
+  Sign.query("all-signs"):
+    all_signs()
+
+proc all*(_: type Player): Player =
+  Player.query("all-players"):
+    all_players()
+
+proc all*(_: type Unit): Unit =
+  Unit.query("all-units"):
+    all_units()
+
+proc added*(_: type Player): Player =
+  Player.query("added-players"):
+    added_units().filter_it(it of Player).map_it(Player(it))
+
+proc hit*(_: type Player): Player =
+  Player.query("Player-hit"):
+    active_unit().current_colliders("Player").map_it(Player(it))
+
+proc register_type[T: Unit](unit: T) =
+  register_template_node(unit, $T)
+
+register_type Player()
+register_type Bot()
+register_type Build()
+register_type Sign()

@@ -1,8 +1,9 @@
-import std/[os, re]
+import std/[os, re, posix]
 
 import pkg/godot except print
 import pkg/compiler/ast except new_node
 import pkg/compiler/[lineinfos, renderer, msgs, vmdef]
+from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, units, signs, players]
 import libs/[interpreters, eval]
@@ -61,9 +62,11 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   ) {.gcsafe.} =
     var info = info
     var msg = msg
+
     let ctx = controller.active_unit.script_ctx
     let errors = controller.active_unit.errors
     if severity == Severity.Error and config.error_counter >= config.error_max:
+      echo msg
       var file_name =
         if info.file_index.int >= 0:
           config.m.file_infos[info.file_index.int].full_path.string
@@ -72,7 +75,15 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
 
       if file_exists(file_name) and ?ctx.file_name:
         if file_name.get_file_info != ctx.file_name.get_file_info:
-          (file_name, info) = extract_file_info msg
+          msg_writeln(
+            config, "stack trace: (most recent call last)", {msg_no_unit_sep}
+          )
+          stack_trace_aux(ctx.ctx, ctx.tos, ctx.pc)
+          let file_info = extract_file_info msg
+
+          if ?file_info:
+            (file_name, info) = file_info
+          # discard `raise` SIGINT
           # msg = msg.replace(re"unhandled exception:.*\) Error\: ", "")
         # else:
         # msg = msg.replace(re"(?ms);.*", "")
@@ -93,6 +104,11 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
     assert ?controller.active_unit.script_ctx
 
     let ctx = controller.active_unit.script_ctx
+
+    ctx.ctx = c
+    ctx.pc = pc
+    ctx.tos = tos
+
     let info = c.debug[pc]
     inc count
     if count == 255:
@@ -123,15 +139,11 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
         (ctx.previous_line, ctx.current_line) = (ctx.current_line, info)
 
     if ctx.pause_requested:
-      ctx.ctx = c
-      ctx.pc = pc
-      ctx.tos = tos
       ctx.pause_requested = false
       raise VMPause.new_exception("vm paused")
 
 proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
   let ctx = unit.script_ctx
-  ctx.query_results.clear
   try:
     self.active_unit = unit
     unit.errors.clear

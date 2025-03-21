@@ -68,8 +68,8 @@ template loop_body(body: untyped) =
   when declared(loop_ended):
     defer:
       loop_ended(ctx, main_loop)
-
   var looping = ctx.advance(frame)
+  loop_finished()
   if main_loop and not looping:
     # regular while loop.
     while manager(true):

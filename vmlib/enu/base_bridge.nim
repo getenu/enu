@@ -33,7 +33,6 @@ bridged_to_host:
   proc `global=`*(self: Unit, global: bool)
   proc rotation*(self: Unit): float
   proc `rotation=`*(self: Unit, degrees: float)
-  proc hit*(self: Unit, node: Unit): Vector3
   proc `velocity=`*(self: Unit, velocity: Vector3)
   proc velocity*(self: Unit): Vector3
   proc color*(self: Unit): Colors
@@ -49,8 +48,14 @@ bridged_to_host:
   proc reset_level*()
   proc level_name*(): string
   proc world_name*(): string
-  proc current_collider*(self: Unit, name: string): Unit
-  proc added*[T: Unit](kind: type T): T
+  proc current_colliders*(self: Unit, name: string): seq[Unit]
+  proc all_builds*(): seq[Build]
+  proc all_bots*(): seq[Bot]
+  proc all_signs*(): seq[Sign]
+  proc all_players*(): seq[Player]
+  proc all_units*(): seq[Unit]
+  proc added_units*(): seq[Unit]
+  proc register_template_node*(self: Unit, name: string)
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)
@@ -60,4 +65,3 @@ bridged_to_host:
   proc wake*(self: Unit)
   proc create_new*(self: Unit)
   proc frame_count*(): int
-  proc loop_finished*()
