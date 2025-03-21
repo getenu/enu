@@ -17,10 +17,6 @@ bridged_to_host:
   proc `open=`*(self: Sign, value: bool)
   proc billboard*(self: Sign): bool
   proc `billboard=`*(self: Sign, value: bool)
-  proc all_signs(): Sign
-
-proc all*(_: type Sign): Sign =
-  all_signs()
 
 proc say*(
     self: Unit,

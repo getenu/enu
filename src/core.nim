@@ -3,7 +3,10 @@ export types
 
 import pkg/model_citizen/utils
 import
-  std/[sequtils, strutils, sugar, macros, asyncfutures, importutils, typetraits]
+  std/[
+    sequtils, strutils, sugar, macros, asyncfutures, importutils, typetraits,
+    posix,
+  ]
 export utils, sequtils, strutils, sugar, importutils
 
 ### Globals ###
@@ -196,6 +199,10 @@ when not defined(no_godot):
 
 # misc
 
+template breakpoint*() =
+  {.line.}:
+    discard `raise` SIGINT
+
 proc resolve_level_name*(world, level: string, diff: int): string =
   var level = level
   let prefix = world & "-"
@@ -352,6 +359,9 @@ template `?`*[T](self: seq[T]): bool =
 
 template `?`*(self: Table): bool =
   self.len > 0
+
+template `?`*(self: tuple): bool =
+  self != self.type.default
 
 proc first_key*[K, V](self: Table[K, V]): K =
   for key in self.keys:

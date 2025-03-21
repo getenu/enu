@@ -79,10 +79,22 @@ proc to_node(self: Worker, unit: Unit): PNode =
   else:
     ast.new_node(nkNilLit)
 
+proc to_node[T: Unit](self: Worker, units: seq[T]): PNode =
+  var node = ast.new_node(nkBracketExpr)
+  for unit in units:
+    if ?unit:
+      node.add self.to_node(unit)
+    else:
+      node.add ast.new_node(nk_nil_lit)
+  result = node
+
 # Common bindings
 
 proc press_action(self: Worker, name: string) =
   state.queued_action = name
+
+proc register_template_node(self: Worker, pnode: PNode, name: string) =
+  self.template_node_map[name] = pnode
 
 proc register_active(self: Worker, pnode: PNode) =
   assert not self.active_unit.is_nil
@@ -154,35 +166,36 @@ proc reset_level(self: Worker) =
     state.config_value.value:
       level_dir = current_level
 
-template query(
-    T: type Unit, key: string, ctx: ScriptCtx, body: untyped
-): untyped =
-  var result: T
-  if key in ctx.query_results:
-    result = T(ctx.query_results[key][^1])
-  else:
-    let results = body
-    if ?results:
-      result = results[^1]
-      ctx.query_results[key] = cast[seq[Unit]](results)
-  result
-
-proc ensure_unit(self: Worker, unit: Unit) =
+proc ensure_unit_impl[T: Unit](self: Worker, unit: T) {.gcsafe.} =
   if unit notin self.node_map:
-    var node = self.node_map[self.active_unit].copy_tree
+    var node = self.template_node_map[$T].copy_tree
     self.map_unit(unit, node)
 
-proc current_collider(self: Worker, unit: Unit, kind: string): Unit =
-  Unit.query(kind & "-collider", unit.script_ctx):
-    var colliders: seq[Unit]
-    state.units.value.walk_tree proc(other: Unit) =
-      if unit.collisions.value.any_it(it.id == other.id):
-        if kind == "Unit" or kind == "Player" and other of Player or
-            kind == "Bot" and other of Bot or kind == "Build" and other of Build or
-            kind == "Sign" and other of Sign:
-          colliders.add(other)
-          self.ensure_unit(other)
-    colliders
+method ensure_exists(self: Unit, worker: Worker) {.base, gcsafe.} =
+  raise_assert "ensure_unit not implemented for " & $self.type
+
+method ensure_exists(self: Player, worker: Worker) =
+  worker.ensure_unit_impl(self)
+
+method ensure_exists(self: Bot, worker: Worker) =
+  worker.ensure_unit_impl(self)
+
+method ensure_exists(self: Build, worker: Worker) =
+  worker.ensure_unit_impl(self)
+
+method ensure_exists(self: Sign, worker: Worker) =
+  worker.ensure_unit_impl(self)
+
+proc current_colliders*(self: Worker, unit: Unit, kind: string): seq[Unit] =
+  var colliders: seq[Unit]
+  state.units.value.walk_tree proc(other: Unit) =
+    if unit.collisions.value.any_it(it.id == other.id):
+      if kind == "Unit" or kind == "Player" and other of Player or
+          kind == "Bot" and other of Bot or kind == "Build" and other of Build or
+          kind == "Sign" and other of Sign:
+        colliders.add(other)
+        other.ensure_exists(self)
+  colliders
 
 proc world_name(): string =
   state.config.world
@@ -233,17 +246,6 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   ctx.last_ran = MonoTime.default
   self.pause_script()
 
-proc loop_finished(self: Worker, ctx: ScriptCtx) =
-  if ?ctx.query_results:
-    let key = ctx.query_results.first_key
-    let res = ctx.query_results[key].pop
-    if not ?ctx.query_results[key]:
-      ctx.query_results.del key
-      if not ?ctx.query_results:
-        self.sleep_impl(ctx, 0.0)
-  else:
-    self.sleep_impl(ctx, 0.0)
-
 proc hit(unit_a: Unit, unit_b: Unit): Vector3 =
   for collision in unit_a.collisions:
     if collision.id == unit_b.id:
@@ -253,38 +255,33 @@ proc find_all[T: Unit](worker: Worker, _: type T): seq[T] =
   var units: seq[T]
   state.units.value.walk_tree proc(unit: Unit) =
     if unit of T:
-      worker.ensure_unit(unit)
+      unit.ensure_exists(worker)
       units.add T(unit)
   units
 
-proc all_players(ctx: ScriptCtx, worker: Worker): Player =
-  Player.query("all-players", ctx):
-    worker.find_all(Player)
+proc all_players(worker: Worker): seq[Player] =
+  worker.find_all(Player)
 
-proc all_bots(ctx: ScriptCtx, worker: Worker): Bot =
-  Bot.query("all-bots", ctx):
-    worker.find_all(Bot)
+proc all_bots(worker: Worker): seq[Bot] =
+  worker.find_all(Bot)
 
-proc all_builds(ctx: ScriptCtx, worker: Worker): Build =
-  Build.query("all-builds", ctx):
-    worker.find_all(Build)
+proc all_builds(worker: Worker): seq[Build] =
+  worker.find_all(Build)
 
-proc all_signs(ctx: ScriptCtx, worker: Worker): Sign =
-  Sign.query("all-builds", ctx):
-    worker.find_all(Sign)
+proc all_signs(worker: Worker): seq[Sign] =
+  worker.find_all(Sign)
 
-proc all_units(ctx: ScriptCtx, worker: Worker): Unit =
-  Unit.query("all-builds", ctx):
-    worker.find_all(Unit)
+proc all_units(worker: Worker): seq[Unit] =
+  worker.find_all(Unit)
 
-proc added*(_: type Player, ctx: ScriptCtx, worker: Worker): Player =
-  Player.query("players-added", ctx):
-    collect:
-      for player in worker.find_all(Player):
-        if player.frame_created == state.frame_count:
-          player
+proc added_units(worker: Worker): seq[Unit] =
+  collect:
+    for unit in worker.find_all(Unit):
+      if unit.frame_created == state.frame_count:
+        unit
 
 proc echo_console(msg: string) =
+  echo(msg)
   logger("info", msg & "\n")
   state.push_flag ConsoleVisible
 
@@ -461,23 +458,7 @@ proc reset(self: Unit, clear: bool) =
 proc play(self: Bot, animation_name: string) =
   self.animation = animation_name
 
-proc all_units(T: type Unit, self: Worker): PNode =
-  var node = ast.new_node(nkBracketExpr)
-  state.units.value.walk_tree proc(unit: Unit) =
-    if unit of T:
-      # objects without scripts won't show up in the node map. Create
-      # a new dummy object
-      self.ensure_unit(unit)
-      node.add self.to_node(unit)
-  result = node
-
-proc all_bots(self: Worker): PNode =
-  Bot.all_units(self)
-
 # Build bindings
-
-proc all_builds(self: Worker): PNode =
-  Build.all_units(self)
 
 proc drawing(self: Build): bool =
   self.drawing
@@ -635,7 +616,7 @@ proc `open=`(self: Sign, value: bool) =
 proc coding(self: Worker, unit: Unit): Unit =
   if unit == state.player:
     if ?state.open_unit:
-      self.ensure_unit(state.open_unit)
+      state.open_unit.ensure_exists(self)
       result = state.open_unit
 
 proc `coding=`(self: Unit, value: Unit) =
@@ -650,25 +631,25 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "vm_bridge_utils", get_last_error
 
   result.bridged_from_vm "base_bridge",
-    register_active, echo_console, new_instance, exec_instance, hit, exit,
-    global, `global=`, position, local_position, rotation, `rotation=`, id,
-    glow, `glow=`, speed, `speed=`, scale, `scale=`, velocity, `velocity=`,
-    active_unit, color, `color=`, sees, start_position, wake, frame_count,
-    write_stack_trace, show, `show=`, frame_created, lock, `lock=`, reset,
-    press_action, load_level, level_name, world_name, reset_level,
-    current_collider, added, all_players, all_builds, all_bots, all_signs,
-    all_units, loop_finished
+    register_active, register_template_node, echo_console, new_instance,
+    exec_instance, hit, exit, global, `global=`, position, local_position,
+    rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
+    velocity, `velocity=`, active_unit, color, `color=`, sees, start_position,
+    wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
+    `lock=`, reset, press_action, load_level, level_name, world_name,
+    reset_level, current_colliders, added_units, all_players, all_builds,
+    all_bots, all_signs, all_units
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,
     begin_turn, begin_move, sleep_impl, position_set, new_markdown_sign,
     update_markdown_sign
 
-  result.bridged_from_vm "bots", play, all_bots
+  result.bridged_from_vm "bots", play
 
   result.bridged_from_vm "builds",
-    drawing, `drawing=`, initial_position, save, restore, all_builds,
-    draw_position, draw_position_set
+    drawing, `drawing=`, initial_position, save, restore, draw_position,
+    draw_position_set
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,
