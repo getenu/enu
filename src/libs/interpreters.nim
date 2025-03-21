@@ -8,9 +8,8 @@ export Interpreter, VmArgs, set_result
 log_scope:
   topics = "scripting"
 
-const STDLIB_PATHS = [
-  ".", "core", "pure", "pure/collections", "pure/concurrency", "std", "fusion"
-]
+const STDLIB_PATHS =
+  [".", "core", "pure", "pure/collections", "pure/concurrency", "std", "fusion"]
 
 private_access ScriptCtx
 
@@ -47,7 +46,7 @@ proc run*(self: ScriptCtx): bool =
   except VMPause:
     private_access ScriptCtx
     result = self.exit_code.is_none
-  except CatchableError as e:
+  except Exception as e:
     self.running = false
     self.exit_code = some(99)
     raise VMQuit.new_exception("Unhandled err", e)

@@ -15,7 +15,3 @@ bridged_to_host:
   proc `coding=`*(self: Player, value: Unit)
   proc open_sign*(self: Player): Sign
   proc `open_sign=`*(self: Player, value: Sign)
-  proc all_players(): Player
-
-proc all*(_: type Player): Player =
-  all_players()

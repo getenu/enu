@@ -281,7 +281,6 @@ type
     pass_context*: PContext
     last_ran*: MonoTime
     file_index*: int
-    query_results*: Table[string, seq[Unit]]
 
   VMError* = object of CatchableError
   QuitKind* = enum
@@ -307,6 +306,7 @@ type
     active_unit*: Unit
     unit_map*: Table[PNode, Unit]
     node_map*: Table[Unit, PNode]
+    template_node_map*: Table[string, PNode]
     failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]

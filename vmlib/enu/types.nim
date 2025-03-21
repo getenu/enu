@@ -29,6 +29,7 @@ type
     rng: Rand
     seed: int
     sign*: Sign
+    query_results*: Table[string, seq[Unit]]
 
   World* = ref object of RootObj
 
@@ -53,8 +54,6 @@ type
     black
     white
     brown
-
-  PlayerType* = ref object of Unit
 
   Context* = ref object
     stack*: seq[Frame]

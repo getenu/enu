@@ -111,17 +111,18 @@ macro bridged_from_vm(
             new_call(bind_sym(getter), ident"a", new_lit(pos))
 
     var call = new_call(proc_ref, args)
-    if return_node.kind == nnk_sym:
-      if return_node.str_val in unit_types:
-        call = new_call(
-          bind_sym"set_result",
-          ident"a",
-          new_call(bind_sym"to_node", ident"script_engine", call),
-        )
-      else:
-        call = new_call(
-          bind_sym"set_result", ident"a", new_call(bind_sym"to_result", call)
-        )
+    let return_type = return_node.repr
+    if return_type in unit_types or
+        return_type in unit_types.map_it(\"seq[{it}]"):
+      call = new_call(
+        bind_sym"set_result",
+        ident"a",
+        new_call(bind_sym"to_node", ident"script_engine", call),
+      )
+    elif return_node.kind == nnk_sym:
+      call = new_call(
+        bind_sym"set_result", ident"a", new_call(bind_sym"to_result", call)
+      )
     elif return_node.kind == nnk_bracket_expr and return_node.len == 2 and
         return_node[0].str_val == "Future":
       call = new_call(bind_sym"await_future", call, ident"a")
