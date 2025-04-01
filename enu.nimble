@@ -30,6 +30,7 @@ install_files = @["enu.nim"]
 bin_dir = "app"
 src_dir = "src"
 bin = @["enu" & lib_ext]
+backend = "cpp"
 
 requires "nim >= 2.2.0",
   "https://github.com/dsrw/Nim#31b77d0",
