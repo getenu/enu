@@ -45,15 +45,15 @@ jobs:
         run: brew install nim scons yasm
       - name: Install nim
         run: |
-          curl -LO https://github.com/nim-lang/nightlies/releases/download/2024-03-28-version-2-0-b47747d31844c6bd9af4322efe55e24fefea544c/nim-2.0.4-macosx_x64.tar.xz
-          tar xzf nim-2.0.4-macosx_x64.tar.xz
-          echo "$(pwd)/nim-2.0.4/bin" >> $GITHUB_PATH
+          curl -LO https://github.com/nim-lang/nightlies/releases/download/2024-10-02-version-2-2-78983f1876726a49c69d65629ab433ea1310ece1/nim-2.2.0-macosx_x64.tar.xz
+          tar xzf nim-2.2.0-macosx_x64.tar.xz
+          echo "$(pwd)/nim-2.2.0/bin" >> $GITHUB_PATH
       - name: Update path
         run: echo "$HOME/.nimble/bin" >> $GITHUB_PATH
       - name: Install nimble deps
         run: nimble setup -y
       - name: Save SHAs of submodules
-        run: 'git submodule status > .submodules.tmp'
+        run: "git submodule status > .submodules.tmp"
       - name: prereq cache
         id: prereq-cache
         uses: actions/cache@v3
