@@ -6,27 +6,35 @@
     {
       "label": "Build enu",
       "command": "nimble",
-      "args": ["build", "--debugger:native"],
+      "args": [
+        "build",
+        "--debugger:native"
+      ],
       "options": {
-          "cwd": "${workspaceRoot}"
+        "cwd": "${workspaceRoot}"
       },
       "type": "shell",
       "group": {
-          "kind": "build",
-          "isDefault": true
+        "kind": "build",
+        "isDefault": true
       }
     },
     {
       "label": "Build Current File",
       "command": "nim",
-      "args": ["c", "--debugger:native", "--out:${relativeFileDirname}/${fileBasenameNoExtension}.out", "${relativeFile}"],
+      "args": [
+        "c",
+        "--debugger:native",
+        "--out:${relativeFileDirname}/${fileBasenameNoExtension}.out",
+        "${relativeFile}"
+      ],
       "options": {
-          "cwd": "${workspaceRoot}"
+        "cwd": "${workspaceRoot}"
       },
       "type": "shell",
       "group": {
-          "kind": "build",
-          "isDefault": true
+        "kind": "build",
+        "isDefault": true
       }
     }
   ]
