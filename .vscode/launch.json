@@ -37,10 +37,6 @@
       "args": [],
       "cwd": "${workspaceFolder}/app",
       "preLaunchTask": "Build enu",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true // <-- this line
       }
@@ -60,10 +56,6 @@
       "args": [],
       "cwd": "${workspaceFolder}/app",
       "preLaunchTask": "Build enu",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true // <-- this line
       }
@@ -82,10 +74,6 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}/app",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true // <-- this line
       }
@@ -104,10 +92,6 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}/app",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true // <-- this line
       }
@@ -122,10 +106,6 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}/app",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true // <-- this line
       }
@@ -141,12 +121,8 @@
       "args": [],
       "cwd": "${workspaceFolder}/app",
       "preLaunchTask": "Build enu",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
-        "clear": true // <-- this line
+        "clear": true
       }
     },
     {
@@ -156,11 +132,7 @@
       "program": "${relativeFileDirname}/${fileBasenameNoExtension}.out",
       "args": [],
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Build Current File",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
+      "preLaunchTask": "Build Current File"
     },
     {
       "type": "lldb",
