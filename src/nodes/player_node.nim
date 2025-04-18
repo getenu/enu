@@ -302,6 +302,8 @@ gdobj PlayerNode of KinematicBody:
       self.aim_target.update(self.aim_ray)
 
   method viewport_input*(event: InputEvent) =
+    if not ?self:
+      return
     # if event of InputEventJoypadMotion:
     #   let event = event as InputEventJoypadMotion
     #   if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
