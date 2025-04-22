@@ -130,19 +130,19 @@ proc `$`(self: Unit): string =
   let edits = $self.shared.edits
   result =
     \"""
-    {{
-      "id": "{self.id}",
-      "start_transform": {{
-        "basis": [
-    {elements.indent(6)}
-        ],
-        "origin": {$self.start_transform.origin}
-      }},
-      "start_color": {self.start_color},
-      "edits": {{
-    {edits.indent(4)}
-      }}
-    }}
+{{
+  "id": "{self.id}",
+  "start_transform": {{
+    "basis": [
+{elements.indent(6)}
+    ],
+    "origin": {$self.start_transform.origin}
+  }},
+  "start_color": {self.start_color},
+  "edits": {{
+{edits.indent(4)}
+  }}
+}}
     """
 
 proc save*(unit: Unit) =
