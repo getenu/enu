@@ -14,10 +14,6 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}/app",
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true
       }
@@ -142,10 +138,6 @@
       "windows": {
         "program": "${workspaceFolder}/vendor/godot/bin/godot.windows.opt.tools.64"
       },
-      "initCommands": [
-        "script import shutil;sys.path.append(os.path.join(shutil.which('nim'), '../../tools/debug'))",
-        "command script import nimlldb"
-      ],
       "presentation": {
         "clear": true // <-- this line
       }
