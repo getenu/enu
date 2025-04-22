@@ -253,6 +253,8 @@ type
     mouse_sensitivity*: Option[float]
     gamepad_sensitivity*: Option[float]
     invert_gamepad_y_axis*: Option[bool]
+    listen_address*: Option[string]
+    connect_address*: Option[string]
 
   Code* = object
     owner*: string

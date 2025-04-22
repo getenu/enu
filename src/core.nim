@@ -363,6 +363,9 @@ template `?`*(self: Table): bool =
 template `?`*(self: tuple): bool =
   self != self.type.default
 
+template `?`*(self: bool): bool =
+  self
+
 proc first_key*[K, V](self: Table[K, V]): K =
   for key in self.keys:
     return key

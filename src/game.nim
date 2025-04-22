@@ -139,6 +139,7 @@ gdobj Game of Node:
       chan_size = 2000,
       buffer = true,
       label = "main",
+      max_recv_duration = (1.0 / 30.0).seconds,
     )
 
     state = GameState.init
@@ -206,8 +207,8 @@ gdobj Game of Node:
       full_screen = uc.full_screen ||= true
       semicolon_as_colon = uc.semicolon_as_colon ||= false
       lib_dir = vmlib
-      connect_address = connect_address
-      listen_address = listen_address
+      connect_address = uc.connect_address ||= ""
+      listen_address = uc.listen_address ||= ""
       player_color = uc.player_color ||= color(rand(1.0), rand(1.0), rand(1.0))
       world_dir = join_path(value.work_dir, value.world)
       level_dir = join_path(value.world_dir, value.level)
@@ -220,6 +221,14 @@ gdobj Game of Node:
       invert_gamepad_y_axis = uc.invert_gamepad_y_axis ||= false
       environment = uc.environment ||= "default"
       megapixels_override = environments[value.environment]
+
+    if ?listen_address:
+      state.config_value.value:
+        listen_address = listen_address
+
+    if ?connect_address:
+      state.config_value.value:
+        connect_address = connect_address
 
     state.set_flag(God, uc.god_mode ||= false)
 
