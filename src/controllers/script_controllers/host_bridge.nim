@@ -398,7 +398,7 @@ proc `rotation=`(self: Unit, degrees: float) =
   self.transform = t
 
 proc sees(
-    self: Worker, unit: Unit, target: Unit, distance: float
+    worker: Worker, self: Unit, target: Unit, distance: float
 ): Future[bool] =
   result = Future.init(bool, "sees")
 
@@ -406,23 +406,23 @@ proc sees(
     result.complete(false)
     return
 
-  if unit of Build or unit of Bot:
-    unit.sight_query = SightQuery(target: target, distance: distance)
+  if ?target and (self of Build or self of Bot):
+    self.sight_query = SightQuery(target: target, distance: distance)
   else:
     result.complete(false)
     return
 
   let future = result
-  unit.script_ctx.callback = proc(delta: float, timeout: MonoTime): TaskStates =
-    let query = unit.sight_query
+  self.script_ctx.callback = proc(delta: float, timeout: MonoTime): TaskStates =
+    let query = self.sight_query
     if ?query.answer:
       future.complete(query.answer.get)
       result = Done
     else:
       result = Running
 
-  unit.script_ctx.last_ran = MonoTime.default
-  self.pause_script()
+  self.script_ctx.last_ran = MonoTime.default
+  worker.pause_script()
 
 proc frame_count(): int =
   state.frame_count
