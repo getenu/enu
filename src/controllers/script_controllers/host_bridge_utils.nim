@@ -60,6 +60,14 @@ proc to_result(val: Vector3 or string or tuple): PNode =
 proc to_result(val: PNode): PNode =
   result = val
 
+proc assert_self[T: ref](self: T, proc_name: string): T =
+  if self.is_nil:
+    raise NilAccessDefect.init(
+      "Could not call `" & proc_name & "` on type `" & $T &
+        "` because it is nil."
+    )
+  self
+
 proc await_future[T](future: Future[T], a: VmArgs) =
   future.add_callback proc(future: Future[T]) =
     set_result(a, to_result(future.read))
@@ -89,6 +97,7 @@ macro bridged_from_vm(
         var pos = -1
         for ident_def in arg_nodes:
           let typ = ident_def[1].repr
+          let name = ident_def[0].repr
           if typ == $Worker.type:
             ident"script_engine"
           elif typ == "VmArgs":
@@ -99,9 +108,12 @@ macro bridged_from_vm(
           elif typ in unit_types:
             let getter = "get_" & typ
             pos.inc
-            new_call(
+            var call = new_call(
               bind_sym(getter), ident"script_engine", ident"a", new_lit(pos)
             )
+            if name == "self":
+              call = new_call(bind_sym("assert_self"), call, new_lit(proc_name))
+            call
           elif typ in unit_types.map_it(\"type {it}"):
             let type_name = typ.split(" ")[1]
             ident(type_name)
