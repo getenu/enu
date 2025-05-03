@@ -54,8 +54,14 @@ template loop_body(body: untyped) =
 
   proc manager(active: bool): bool =
     let active {.inject, used.} = active
+    var body_running = false
     while true:
+      if body_running:
+        # Should only be true on `continue`.
+        sleep()
+      body_running = true
       body
+      body_running = false
       return true
 
   validate_loop()
