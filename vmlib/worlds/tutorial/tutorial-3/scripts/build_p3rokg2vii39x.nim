@@ -1,3 +1,5 @@
+var player*: Player = nil
+
 name inky(charge_player = false)
 move me
 
@@ -53,6 +55,8 @@ move me
   player.playing = false
 
 loop:
+  if not ?player:
+    continue
   nil -> sleep
   if not maze.building:
     sleep -> explore
@@ -60,9 +64,9 @@ loop:
     (explore, hunt, attack) ==> charge
     charge_player = false
 
-  if player.hit == UP:
+  if hit(player) and over(player):
     others ==> win_game
-  elif player.hit:
+  elif hit(player):
     (others, -win_game) ==> lose_game
 
   if sees(player, 150):

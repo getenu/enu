@@ -246,13 +246,13 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   ctx.last_ran = MonoTime.default
   self.pause_script()
 
-proc hit(self: Unit, unit_b: Unit): Vector3 =
+proc hit(self: Unit, unit_b: Unit): bool =
   if not ?unit_b:
     return
 
   for collision in self.collisions:
     if collision.id == unit_b.id:
-      return collision.normal.snapped(vec3(1, 1, 1))
+      return true
 
 proc find_all[T: Unit](worker: Worker, _: type T): seq[T] =
   var units: seq[T]
