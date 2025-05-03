@@ -517,32 +517,42 @@ template `\`*(s: string): string =
   f.remove_suffix("\n\n")
   f
 
-template `?`*(self: ref): bool =
-  not self.is_nil
+proc init*[T](_: type QueryAnswer, results: open_array[T]): QueryAnswer[T] =
+  result.results = results.to_seq
+  result.truthy = results.len > 0
 
-template `?`*(self: object): bool =
-  self != self.type.default
+template `?`*[T: ref](self: T): Answer[T] =
+  Answer[T](truthy: not self.is_nil)
 
-template `?`*[T](option: Option[T]): bool =
-  option.is_some
+template `?`*[T: object](self: T): Answer[T] =
+  Answer[T](truthy: self != self.type.default)
 
-template `?`*(self: SomeNumber): bool =
-  self != 0
+template `?`*[T](option: Option[T]): Answer[T] =
+  if option.is_some:
+    Answer[T](truthy: true)
+  else:
+    Answer[T]()
 
-template `?`*(self: string): bool =
-  self != ""
+template `?`*[T: SomeNumber](self: SomeNumber): Answer[T] =
+  Answer[T](truthy: self != 0)
 
-template `?`*[T](self: open_array[T]): bool =
-  self.len > 0
+template `?`*(self: string): Answer[string] =
+  Answer[string](truthy: self != "")
 
-template `?`*(self: Table): bool =
-  self.len > 0
+template `?`*[T: open_array](self: T): Answer[T] =
+  Answer[T](truthy: self.len > 0)
 
-template `?`*[T](self: set[T]): bool =
-  self.card > 0
+template `?`*[T: Table](self: T): Answer[T] =
+  Answer[T](truthy: self.len > 0)
 
-template `?`*[T](self: HashSet[T]): bool =
-  self.card > 0
+template `?`*[T: set](self: T): Answer[T] =
+  Answer[T](truthy: self.card > 0)
+
+template `?`*[T: HashSet](self: T): Answer[T] =
+  Answer[T](truthy: self.card > 0)
+
+converter to_bool*(src: Answer): bool =
+  src.truthy
 
 proc `or`*[T: not bool](a, b: T): T =
   if ?a:
@@ -581,36 +591,49 @@ template query(T: type Unit, key: string, body: untyped): untyped =
       unit.query_results[key] = results.map_it(Unit(it))
   result
 
-proc all*(_: type Bot): Bot =
-  Bot.query("all-bots"):
-    all_bots()
+iterator items*[T](self: QueryAnswer[T]): T =
+  for item in self.results:
+    yield item
 
-proc all*(T: type Build): Build =
-  Build.query("all-builds"):
-    all_builds()
+proc all*(_: type Bot): QueryAnswer[Bot] =
+  QueryAnswer.init all_bots()
 
-proc all*(_: type Sign): Sign =
-  Sign.query("all-signs"):
-    all_signs()
+proc all*(T: type Build): QueryAnswer[Build] =
+  QueryAnswer.init all_builds()
 
-proc all*(_: type Player): Player =
-  Player.query("all-players"):
-    all_players()
+proc all*(_: type Sign): QueryAnswer[Sign] =
+  QueryAnswer.init all_signs()
 
-proc all*(_: type Unit): Unit =
-  Unit.query("all-units"):
-    all_units()
+proc all*(_: type Player): QueryAnswer[Player] =
+  QueryAnswer.init all_players()
 
-proc added*(_: type Player): Player =
-  Player.query("added-players"):
-    added_units().filter_it(it of Player).map_it(Player(it))
+proc all*(_: type Unit): QueryAnswer[Unit] =
+  QueryAnswer.init all_units()
 
-proc hit*(_: type Player): Player =
-  Player.query("Player-hit"):
-    active_unit().current_colliders("Player").map_it(Player(it))
+proc added*(_: type Player): QueryAnswer[Player] =
+  QueryAnswer.init added_units().filter_it(it of Player).map_it(Player(it))
+
+proc hit*(_: type Player): QueryAnswer[Player] =
+  QueryAnswer.init active_unit().current_colliders("Player").map_it(Player(it))
 
 proc register_type[T: Unit](unit: T) =
   register_template_node(unit, $T)
+
+template `as`*[T](answer: QueryAnswer[T], name: untyped): bool =
+  if loop_context.is_nil:
+    raise
+      ObjectConversionDefect.init("`as` can only be used inside an action loop")
+  let ans = answer
+  let key = $T & "-" & $instantiation_info()
+  var result = false
+  let name {.inject.}: T =
+    if ans.truthy:
+      result = true
+      T.query(key):
+        ans.results
+    else:
+      T.default
+  result
 
 register_type Player()
 register_type Bot()
