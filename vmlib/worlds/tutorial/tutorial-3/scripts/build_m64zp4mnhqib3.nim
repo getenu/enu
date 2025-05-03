@@ -3,7 +3,7 @@ move me
 
 loop:
   nil -> up(home + 0.2)
-  if player.hit:
+  if ?player and player.hit:
     up -> down(home + 0.2) do:
       door.open = true
       ghost.charge_player = true

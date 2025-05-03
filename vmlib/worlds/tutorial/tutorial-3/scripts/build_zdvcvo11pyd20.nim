@@ -36,12 +36,12 @@ proc level_menu*(me: Build, show_restart = true) =
   let sign2 = me.say(copy, width = 4, height = 2, size = 200)
   me.left 3
 
-  forever:
+  loop:
     let return_action =
       if show_restart: "- [RETURN TO START](<nim://restart()>)" else: ""
 
     let toolbar_action =
-      if player.playing:
+      if ?player and player.playing:
         "- [SHOW TOOLBAR AND STOP PLAYING](<nim://player.playing = false;player.running = false;player.open_sign = nil>)"
       else:
         ""
@@ -67,6 +67,5 @@ proc level_menu*(me: Build, show_restart = true) =
       """
     sign1.more = more
     sign2.more = more
-    sleep 1
 
 level_menu(me)
