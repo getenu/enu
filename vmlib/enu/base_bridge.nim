@@ -33,6 +33,7 @@ bridged_to_host:
   proc `global=`*(self: Unit, global: bool)
   proc rotation*(self: Unit): float
   proc `rotation=`*(self: Unit, degrees: float)
+  proc hit*(self: Unit, node: Unit): Vector3
   proc `velocity=`*(self: Unit, velocity: Vector3)
   proc velocity*(self: Unit): Vector3
   proc color*(self: Unit): Colors
