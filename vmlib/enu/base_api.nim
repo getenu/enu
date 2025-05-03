@@ -383,6 +383,12 @@ proc near*(node: Unit | Vector3, less_than = 5.0): bool =
 proc far*(node: Unit | Vector3, greater_than = 100.0): bool =
   result = node.distance > greater_than
 
+proc over*(node: Unit): bool =
+  result = active_unit().position.z > node.position.z
+
+proc under*(node: Unit): bool =
+  result = active_unit().position.z < node.position.z
+
 proc height*(self: Vector3): float =
   self.y
 
@@ -615,6 +621,9 @@ proc added*(_: type Player): QueryAnswer[Player] =
 
 proc hit*(_: type Player): QueryAnswer[Player] =
   QueryAnswer.init active_unit().current_colliders("Player").map_it(Player(it))
+
+proc hit*(unit: Unit): bool =
+  active_unit().hit(unit)
 
 proc register_type[T: Unit](unit: T) =
   register_template_node(unit, $T)
