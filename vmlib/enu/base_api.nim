@@ -523,41 +523,41 @@ template `\`*(s: string): string =
   f.remove_suffix("\n\n")
   f
 
-proc init*[T](_: type QueryAnswer, results: open_array[T]): QueryAnswer[T] =
-  result.results = results.to_seq
+proc init*[T](_: type Query, results: open_array[T]): Query[seq[T]] =
+  result.result = results.to_seq
   result.truthy = results.len > 0
 
-template `?`*[T: ref](self: T): Answer[T] =
-  Answer[T](truthy: not self.is_nil)
+template `?`*[T: ref](self: T): Query[T] =
+  Query[T](truthy: not self.is_nil)
 
-template `?`*[T: object](self: T): Answer[T] =
-  Answer[T](truthy: self != self.type.default)
+template `?`*[T: object](self: T): Query[T] =
+  Query[T](truthy: self != self.type.default)
 
-template `?`*[T](option: Option[T]): Answer[T] =
+template `?`*[T](option: Option[T]): Query[T] =
   if option.is_some:
-    Answer[T](truthy: true)
+    Query[T](truthy: true)
   else:
-    Answer[T]()
+    Query[T]()
 
-template `?`*[T: SomeNumber](self: SomeNumber): Answer[T] =
-  Answer[T](truthy: self != 0)
+template `?`*[T: SomeNumber](self: SomeNumber): Query[T] =
+  Query[T](truthy: self != 0)
 
-template `?`*(self: string): Answer[string] =
-  Answer[string](truthy: self != "")
+template `?`*(self: string): Query[string] =
+  Query[string](truthy: self != "")
 
-template `?`*[T: open_array](self: T): Answer[T] =
-  Answer[T](truthy: self.len > 0)
+template `?`*[T: open_array](self: T): Query[T] =
+  Query[T](truthy: self.len > 0)
 
-template `?`*[T: Table](self: T): Answer[T] =
-  Answer[T](truthy: self.len > 0)
+template `?`*[T: Table](self: T): Query[T] =
+  Query[T](truthy: self.len > 0)
 
-template `?`*[T: set](self: T): Answer[T] =
-  Answer[T](truthy: self.card > 0)
+template `?`*[T: set](self: T): Query[T] =
+  Query[T](truthy: self.card > 0)
 
-template `?`*[T: HashSet](self: T): Answer[T] =
-  Answer[T](truthy: self.card > 0)
+template `?`*[T: HashSet](self: T): Query[T] =
+  Query[T](truthy: self.card > 0)
 
-converter to_bool*(src: Answer): bool =
+converter to_bool*(src: Query): bool =
   src.truthy
 
 proc `or`*[T: not bool](a, b: T): T =
@@ -597,49 +597,51 @@ template query(T: type Unit, key: string, body: untyped): untyped =
       unit.query_results[key] = results.map_it(Unit(it))
   result
 
-iterator items*[T](self: QueryAnswer[T]): T =
+iterator items*[T](self: Query[seq[T]]): T =
   for item in self.results:
     yield item
 
-proc all*(_: type Bot): QueryAnswer[Bot] =
-  QueryAnswer.init all_bots()
+proc all*(_: type Bot): Query[seq[Bot]] =
+  Query.init all_bots()
 
-proc all*(T: type Build): QueryAnswer[Build] =
-  QueryAnswer.init all_builds()
+proc all*(T: type Build): Query[seq[Build]] =
+  Query.init all_builds()
 
-proc all*(_: type Sign): QueryAnswer[Sign] =
-  QueryAnswer.init all_signs()
+proc all*(_: type Sign): Query[seq[Sign]] =
+  Query.init all_signs()
 
-proc all*(_: type Player): QueryAnswer[Player] =
-  QueryAnswer.init all_players()
+proc all*(_: type Player): Query[seq[Player]] =
+  Query.init all_players()
 
-proc all*(_: type Unit): QueryAnswer[Unit] =
-  QueryAnswer.init all_units()
+proc all*(_: type Unit): Query[seq[Unit]] =
+  Query.init all_units()
 
-proc added*(_: type Player): QueryAnswer[Player] =
-  QueryAnswer.init added_units().filter_it(it of Player).map_it(Player(it))
+proc added*(_: type Player): Query[seq[Player]] =
+  Query.init added_units().filter_it(it of Player).map_it(Player(it))
 
-proc hit*(_: type Player): QueryAnswer[Player] =
-  QueryAnswer.init active_unit().current_colliders("Player").map_it(Player(it))
+proc hit*(_: type Player): Query[seq[Player]] =
+  let rr = active_unit().current_colliders("Player").map_it(Player(it))
+  result = Query.init rr
 
 proc hit*(unit: Unit): bool =
   active_unit().hit(unit)
 
+proc `in`*(unit: Unit): bool =
+  unit.hit(active_unit())
+
 proc register_type[T: Unit](unit: T) =
   register_template_node(unit, $T)
 
-template `as`*[T](answer: QueryAnswer[T], name: untyped): bool =
+template `as`*[T](q: Query[seq[T]], name: untyped): bool =
   if loop_context.is_nil:
     raise
       ObjectConversionDefect.init("`as` can only be used inside an action loop")
-  let ans = answer
   let key = $T & "-" & $instantiation_info()
   var result = false
   let name {.inject.}: T =
-    if ans.truthy:
+    if q.truthy:
       result = true
-      T.query(key):
-        ans.results
+      T.query(key, q.result)
     else:
       T.default
   result

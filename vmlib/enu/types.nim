@@ -31,11 +31,9 @@ type
     sign*: Sign
     query_results*: Table[string, seq[Unit]]
 
-  Answer*[T] = object of RootObj
+  Query*[T] = object of RootObj
+    result*: T
     truthy*: bool
-
-  QueryAnswer*[T] = object of Answer[T]
-    results*: seq[T]
 
   World* = ref object of RootObj
 
