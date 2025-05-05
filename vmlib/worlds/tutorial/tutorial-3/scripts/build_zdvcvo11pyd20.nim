@@ -7,6 +7,8 @@ proc restart*() =
 proc stop_playing*() =
   player.playing = false
   player.running = false
+  player.open_sign = nil
+  player = nil
 
 proc level_menu*(me: Build, show_restart = true) =
   let blurb =
@@ -42,7 +44,7 @@ proc level_menu*(me: Build, show_restart = true) =
 
     let toolbar_action =
       if ?player and player.playing:
-        "- [SHOW TOOLBAR AND STOP PLAYING](<nim://player.playing = false;player.running = false;player.open_sign = nil>)"
+        "- [SHOW TOOLBAR AND STOP PLAYING](<nim://stop_playing()>)"
       else:
         ""
 
