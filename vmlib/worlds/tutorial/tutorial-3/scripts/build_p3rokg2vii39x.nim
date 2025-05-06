@@ -44,15 +44,17 @@ move me
   position = spin_spot
   scale = 1
   speed = 5
-  player.playing = false
   30.times:
     turn right
     glow = cycle(1, 0)
+  player.playing = false
+  player = nil
 
 - lose_game:
   player.position = lose_spot
   player.turn end_sign
   player.playing = false
+  player = nil
 
 loop:
   if not ?player:
