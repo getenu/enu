@@ -58,7 +58,7 @@ gdobj PlayerNode of KinematicBody:
     camera_rig: Spatial
     camera: Camera
     aim_target: AimTarget
-    velocity = vec3()
+    velocity* = vec3()
     pan_delta = 0.0
     index = 0
     collision_shape: CollisionShape
@@ -71,10 +71,13 @@ gdobj PlayerNode of KinematicBody:
     delete_timer = MonoTime.high
     deleting = false
 
-  proc flying(): bool =
+  proc is_on_floor*(): bool =
+    KinematicBody(self).is_on_floor()
+
+  proc flying*(): bool =
     Flying in state.local_flags
 
-  proc flying(value: bool) =
+  proc flying*(value: bool) =
     state.set_flag Flying, value
 
   proc get_look_direction(): Vector2 =
@@ -281,7 +284,7 @@ gdobj PlayerNode of KinematicBody:
       if is_joy_button_pressed(device, button):
         return true
 
-  proc update_raycast() =
+  proc update_raycast*() =
     let ray_length = if state.tool == CodeMode: 200.0 else: 100.0
     if MouseCaptured notin state.local_flags:
       let
@@ -301,124 +304,124 @@ gdobj PlayerNode of KinematicBody:
       self.aim_ray.cast_to = vec3(0, 0, -ray_length)
       self.aim_target.update(self.aim_ray)
 
-  method viewport_input*(event: InputEvent) =
-    if not ?self:
-      return
-    # if event of InputEventJoypadMotion:
-    #   let event = event as InputEventJoypadMotion
-    #   if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
-    #     return
-    let time = get_mono_time()
-
-    if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
-        TouchControls notin state.local_flags:
-      if not self.skip_next_mouse_move:
-        self.input_relative += event.as(InputEventMouseMotion).relative()
-      else:
-        self.skip_next_mouse_move = false
-
-    if event of InputEventScreenTouch and TouchControls in state.local_flags:
-      let event = event as InputEventScreenTouch
-      if event.index == 0:
-        if event.pressed:
-          self.touch_position = some event.position
-          # self.touch_time = get_mono_time()
-          self.delete_timer = get_mono_time() + first_delete
-        else:
-          if ?self.touch_position and self.touch_position.get == event.position:
-            self.update_raycast()
-            state.push_flag PrimaryDown
-            state.pop_flag PrimaryDown
-            self.deleting = false
-            self.delete_timer = MonoTime.high
-            self.touch_position = none(Vector2)
-
-    if event of InputEventScreenDrag and TouchControls in state.local_flags:
-      let event = event as InputEventScreenDrag
-      if event.index == 0:
-        self.touch_position = none(Vector2)
-      self.input_relative += event.relative()
-      if not self.deleting:
-        self.delete_timer = MonoTime.high
-
-    if EditorVisible in state.local_flags and not self.skip_release and
-        (event of InputEventJoypadButton or event of InputEventJoypadMotion):
-      let active_input = self.has_active_input(event.device.int)
-      if CommandMode in state.local_flags and not active_input:
-        self.command_timer = input_command_timeout
-      elif CommandMode in state.local_flags and active_input:
-        self.command_timer = 0.0
-      elif active_input:
-        self.command_timer = 0.0
-        state.push_flag CommandMode
-
-    if event.is_action_pressed("jump"):
-      self.get_tree().set_input_as_handled()
-      self.jump_down = true
-      let toggle = ?self.jump_time and time < self.jump_time.get + fly_toggle
-
-      if toggle and Playing notin state.local_flags:
-        self.jump_time = nil_time
-        self.flying(not self.flying)
-      elif self.is_on_floor():
-        self.velocity += vec3(0, jump_impulse, 0)
-        self.jump_time = some time
-      else:
-        self.jump_time = some time
-    elif event.is_action_released("jump"):
-      self.get_tree().set_input_as_handled()
-      self.jump_down = false
-
-    if event.is_action_pressed("crouch") and self.flying:
-      self.get_tree().set_input_as_handled()
-
-      if ?self.crouch_time and time < self.crouch_time.get + fly_toggle:
-        self.crouch_time = nil_time
-        self.flying(false)
-      else:
-        self.crouch_time = some time
-
-    if event.is_action_pressed("run"):
-      self.get_tree().set_input_as_handled()
-      let
-        time = get_mono_time()
-        toggle = ?self.run_time and time < self.run_time.get + alt_speed_toggle
-
-      if toggle:
-        self.run_time = nil_time
-        if self.flying:
-          state.toggle_flag(AltFlySpeed)
-        else:
-          state.toggle_flag(AltWalkSpeed)
-      else:
-        self.run_time = some time
-      self.alt_speed = true
-    elif event.is_action_released("run"):
-      self.get_tree().set_input_as_handled()
-      self.alt_speed = false
-
-    if event of InputEventPanGesture and state.tool notin {CodeMode, PlaceBot}:
-      let pan = event as InputEventPanGesture
-      self.pan_delta += pan.delta.y
-      if self.pan_delta > 2:
-        self.pan_delta = 0
-        state.update_action_index(1)
-      elif self.pan_delta < -2:
-        self.pan_delta = 0
-        state.update_action_index(-1)
-
-    if event.is_action_pressed("fire"):
-      if EditorVisible in state.local_flags:
-        self.skip_release = true
-      state.push_flag PrimaryDown
-    elif event.is_action_released("fire"):
-      self.skip_release = false
-      state.pop_flag PrimaryDown
-
-    if event.is_action_pressed("remove"):
-      state.push_flag SecondaryDown
-    elif event.is_action_released("remove"):
-      state.pop_flag SecondaryDown
+  # method viewport_input*(event: InputEvent) =
+  #   if not ?self:
+  #     return
+  #   # if event of InputEventJoypadMotion:
+  #   #   let event = event as InputEventJoypadMotion
+  #   #   if event.axis == JOY_ANALOG_L2 or event.axis == JOY_ANALOG_R2:
+  #   #     return
+  #   let time = get_mono_time()
+  #
+  #   if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
+  #       TouchControls notin state.local_flags:
+  #     if not self.skip_next_mouse_move:
+  #       self.input_relative += event.as(InputEventMouseMotion).relative()
+  #     else:
+  #       self.skip_next_mouse_move = false
+  #
+  #   if event of InputEventScreenTouch and TouchControls in state.local_flags:
+  #     let event = event as InputEventScreenTouch
+  #     if event.index == 0:
+  #       if event.pressed:
+  #         self.touch_position = some event.position
+  #         # self.touch_time = get_mono_time()
+  #         self.delete_timer = get_mono_time() + first_delete
+  #       else:
+  #         if ?self.touch_position and self.touch_position.get == event.position:
+  #           self.update_raycast()
+  #           state.push_flag PrimaryDown
+  #           state.pop_flag PrimaryDown
+  #           self.deleting = false
+  #           self.delete_timer = MonoTime.high
+  #           self.touch_position = none(Vector2)
+  #
+  #   if event of InputEventScreenDrag and TouchControls in state.local_flags:
+  #     let event = event as InputEventScreenDrag
+  #     if event.index == 0:
+  #       self.touch_position = none(Vector2)
+  #     self.input_relative += event.relative()
+  #     if not self.deleting:
+  #       self.delete_timer = MonoTime.high
+  #
+  #   if EditorVisible in state.local_flags and not self.skip_release and
+  #       (event of InputEventJoypadButton or event of InputEventJoypadMotion):
+  #     let active_input = self.has_active_input(event.device.int)
+  #     if CommandMode in state.local_flags and not active_input:
+  #       self.command_timer = input_command_timeout
+  #     elif CommandMode in state.local_flags and active_input:
+  #       self.command_timer = 0.0
+  #     elif active_input:
+  #       self.command_timer = 0.0
+  #       state.push_flag CommandMode
+  #
+  #   if event.is_action_pressed("jump"):
+  #     self.get_tree().set_input_as_handled()
+  #     self.jump_down = true
+  #     let toggle = ?self.jump_time and time < self.jump_time.get + fly_toggle
+  #
+  #     if toggle and Playing notin state.local_flags:
+  #       self.jump_time = nil_time
+  #       self.flying(not self.flying)
+  #     elif self.is_on_floor():
+  #       self.velocity += vec3(0, jump_impulse, 0)
+  #       self.jump_time = some time
+  #     else:
+  #       self.jump_time = some time
+  #   elif event.is_action_released("jump"):
+  #     self.get_tree().set_input_as_handled()
+  #     self.jump_down = false
+  #
+  #   if event.is_action_pressed("crouch") and self.flying:
+  #     self.get_tree().set_input_as_handled()
+  #
+  #     if ?self.crouch_time and time < self.crouch_time.get + fly_toggle:
+  #       self.crouch_time = nil_time
+  #       self.flying(false)
+  #     else:
+  #       self.crouch_time = some time
+  #
+  #   if event.is_action_pressed("run"):
+  #     self.get_tree().set_input_as_handled()
+  #     let
+  #       time = get_mono_time()
+  #       toggle = ?self.run_time and time < self.run_time.get + alt_speed_toggle
+  #
+  #     if toggle:
+  #       self.run_time = nil_time
+  #       if self.flying:
+  #         state.toggle_flag(AltFlySpeed)
+  #       else:
+  #         state.toggle_flag(AltWalkSpeed)
+  #     else:
+  #       self.run_time = some time
+  #     self.alt_speed = true
+  #   elif event.is_action_released("run"):
+  #     self.get_tree().set_input_as_handled()
+  #     self.alt_speed = false
+  #
+  #   if event of InputEventPanGesture and state.tool notin {CodeMode, PlaceBot}:
+  #     let pan = event as InputEventPanGesture
+  #     self.pan_delta += pan.delta.y
+  #     if self.pan_delta > 2:
+  #       self.pan_delta = 0
+  #       state.update_action_index(1)
+  #     elif self.pan_delta < -2:
+  #       self.pan_delta = 0
+  #       state.update_action_index(-1)
+  #
+  #   if event.is_action_pressed("fire"):
+  #     if EditorVisible in state.local_flags:
+  #       self.skip_release = true
+  #     state.push_flag PrimaryDown
+  #   elif event.is_action_released("fire"):
+  #     self.skip_release = false
+  #     state.pop_flag PrimaryDown
+  #
+  #   if event.is_action_pressed("remove"):
+  #     state.push_flag SecondaryDown
+  #   elif event.is_action_released("remove"):
+  #     state.pop_flag SecondaryDown
 
 proc get_player*(): PlayerNode =
   PlayerNode(state.nodes.player)
