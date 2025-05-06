@@ -598,7 +598,7 @@ template query(T: type Unit, key: string, body: untyped): untyped =
   result
 
 iterator items*[T](self: Query[seq[T]]): T =
-  for item in self.results:
+  for item in self.result:
     yield item
 
 proc all*(_: type Bot): Query[seq[Bot]] =
