@@ -30,7 +30,6 @@ install_files = @["enu.nim"]
 bin_dir = "app"
 src_dir = "src"
 bin = @["enu" & lib_ext]
-backend = "cpp"
 
 requires "nim >= 2.2.0",
   "https://github.com/dsrw/Nim#31b77d0",
@@ -39,6 +38,8 @@ requires "nim >= 2.2.0",
   "https://github.com/dsrw/nanoid.nim 0.2.1", "cligen 1.6.17",
   "https://github.com/treeform/pretty", "chroma", "markdown", "chronicles",
   "dotenv", "nimibook", "metrics#51f1227", "zippy"
+
+let git_version = static_exec("git describe --tags HEAD").strip
 
 proc godot_bin(target = target): string =
   result = this_dir() & &"/vendor/godot/bin/godot.{target}.tools.{cpu}{exe_ext}"
@@ -75,8 +76,16 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   with_dir "vendor/godot":
     exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} -j{cores}"
 
-task build_ios_godot, "Build godot for ios":
+task ios_prereqs, "Build godot for ios":
+  with_dir "vendor/pcre":
+    exec "./configure  --host=arm-apple-darwin10 --target=arm-apple-darwin10"
+    exec "make"
+
   build_godot(target = "iphone", cpu = "arm64")
+
+task ios, "Build ios":
+  exec &"{gen()} write_export_presets --enu_version {git_version}"
+  exec &"{godot_bin()} --path app --export-pack \"ios\" " & "ios"
 
 task build_godot, "Build godot":
   build_godot()
@@ -241,7 +250,6 @@ proc copy_vmlib(src, dest: string) =
 
 task dist_package, "Build distribution binaries":
   p "Packaging distribution..."
-  let git_version = static_exec("git describe --tags HEAD").strip
   copy_fonts()
   rm_dir "dist"
   mk_dir "dist"
