@@ -1,0 +1,17 @@
+---
+description:
+globs: **/*.nim
+alwaysApply: false
+---
+- This project is Enu, a 3D sandbox that allows Logo-like scripting in a Minecraft style voxel world. It's written in Nim, and also uses Nim for its scripts, which run inside the Nim VM.
+- `src` contains the main application. `nimble build` builds it.
+- `vmlib` contains files that run in the script engine.
+- `src` and `vmlib` contain some types with the same names. These represent the same objects, but in general you'll be working working one or the other. Assume I mean the version from `src` unless directed otherwise.
+- `vmlib/stdlib` is a copy of the Nim stdlib that's loaded by the script engine. In general you can ignore this directory, but it's there if you need it.
+- `vmlib/enu` is the enu specific stuff that's loaded in the vm.
+- `vmlib/worlds` are the default worlds that ship with Enu. You can ignore this unless I ask you about something in it.
+- This project uses the nim-godot binding. Most of the binding is auto-generated, based on the Godot 3.5 API. The generated code lives in the `generated` directory. You can inspect the files here to see what is available.
+- The code in `generated` uses `camelCase`, but you should always use `snake_case`.
+- Don't worry about fixing lint errors, but you can use them for hints if you're fixing a compile error.
+- Use `nimble build` to build the project and check for errors.
+- Be careful not to get stuck in a loop generating code.
