@@ -37,7 +37,7 @@ requires "nim >= 2.2.0",
   "https://github.com/dsrw/model_citizen 0.19.3",
   "https://github.com/dsrw/nanoid.nim 0.2.1", "cligen 1.6.17",
   "https://github.com/treeform/pretty", "chroma", "markdown", "chronicles",
-  "dotenv", "nimibook", "metrics#51f1227", "zippy"
+  "dotenv", "nimibook", "metrics#51f1227", "zippy", "futhark"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 

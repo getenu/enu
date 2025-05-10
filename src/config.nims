@@ -6,6 +6,8 @@
   off
 --deepcopy:
   on
+# --experimental:
+#   strictNotNil
 
 if host_os == "windows":
   --pass_l:
@@ -45,6 +47,13 @@ if defined(release):
     off
   --define:
     "zen_lax_free"
+
+# FIXME
+--passL:
+  "-L/opt/homebrew/lib -lllama -lggml"
+
+--define:
+  nodeclguards
 
 if project_name() == "enu":
   if host_os == "ios":
