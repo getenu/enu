@@ -11,7 +11,6 @@ alwaysApply: false
 - `vmlib/enu` is the enu specific stuff that's loaded in the vm.
 - `vmlib/worlds` are the default worlds that ship with Enu. You can ignore this unless I ask you about something in it.
 - This project uses the nim-godot binding. Most of the binding is auto-generated, based on the Godot 3.5 API. The generated code lives in the `generated` directory. You can inspect the files here to see what is available.
-- The code in `generated` uses `camelCase`, but you should always use `snake_case`.
+- Use `PascalCase` for types, constants, and enum values. Use `snake_case` for everything else.
 - Don't worry about fixing lint errors, but you can use them for hints if you're fixing a compile error.
 - Use `nimble build` to build the project and check for errors.
-- Be careful not to get stuck in a loop generating code.
