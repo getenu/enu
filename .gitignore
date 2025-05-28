@@ -25,7 +25,6 @@ app/.import
 app/enu.exp
 app/enu.lib
 
-generated/
 app/export_presets.cfg
 docs/build
 dist/
@@ -42,3 +41,4 @@ nimbledeps/
 .submodules.tmp
 
 *.previous
+gemma-3-4b-it-q4_0.gguf
