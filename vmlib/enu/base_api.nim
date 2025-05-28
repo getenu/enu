@@ -616,6 +616,13 @@ proc all*(_: type Player): Query[seq[Player]] =
 proc all*(_: type Unit): Query[seq[Unit]] =
   Query.init all_units()
 
+proc len*[T: Unit](self: Query[seq[T]]): int =
+  self.result.len
+
+proc first*[T: Unit](_: type T): T =
+  for player in T.all.result:
+    return player
+
 proc added*(_: type Player): Query[seq[Player]] =
   Query.init added_units().filter_it(it of Player).map_it(Player(it))
 
