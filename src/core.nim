@@ -1,6 +1,9 @@
 import types
 export types
 
+import libs/llama
+export llama
+
 import pkg/model_citizen/utils
 import
   std/[

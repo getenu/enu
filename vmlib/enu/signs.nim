@@ -61,8 +61,20 @@ proc say*(
     elif self of Bot:
       result.position = result.position + (UP * 2) + (LEFT * 1)
 
+proc say*(
+    self: Unit,
+    message: Prompt,
+    more = "",
+    width = float.high,
+    height = float.high,
+    size = int.high,
+    billboard = none(bool),
+): Sign {.discardable.} =
+  let response = generate(message.prompt)
+  self.say(response, more, width, height, size, billboard)
+
 template say*(
-    message: string,
+    message: string | Prompt,
     more = "",
     width = float.high,
     height = float.high,

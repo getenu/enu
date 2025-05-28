@@ -82,6 +82,9 @@ type
     BrownBlock
     PlaceBot
 
+  Prompt* = object
+    prompt*: string
+
 proc vec3*(x, y, z: float): Vector3 {.inline.} =
   (x: x, y: y, z: z)
 

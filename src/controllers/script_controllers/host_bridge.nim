@@ -90,6 +90,10 @@ proc to_node[T: Unit](self: Worker, units: seq[T]): PNode =
 
 # Common bindings
 
+proc generate(self: Worker, prompt: string): string =
+  for token in self.llm.generate(prompt):
+    result.add token
+
 proc press_action(self: Worker, name: string) =
   state.queued_action = name
 
@@ -641,7 +645,7 @@ proc bridge_to_vm*(worker: Worker) =
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
-    all_bots, all_signs, all_units
+    all_bots, all_signs, all_units, generate
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,

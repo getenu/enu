@@ -653,6 +653,9 @@ template `as`*[T](q: Query[seq[T]], name: untyped): bool =
       T.default
   result
 
+proc ai*(prompt: string): Prompt =
+  Prompt(prompt: prompt)
+
 register_type Player()
 register_type Bot()
 register_type Build()

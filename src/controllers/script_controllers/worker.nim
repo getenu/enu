@@ -1,7 +1,7 @@
 import std/[locks, os, random, net]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
-import core, models, models/[serializers], libs/[interpreters, eval]
+import core, models, models/[serializers], libs/[interpreters, eval, llama]
 import ./[vars, host_bridge, scripting]
 
 var
@@ -190,10 +190,12 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   state.player = Player.init
   state.player.color = state.config.player_color
 
+  var worker = Worker()
+
+  worker.llm = LLM.init(state.config.model_path)
+
   work_done.signal
   worker_lock.release
-
-  var worker = Worker()
 
   worker.for_all_units:
     if added:

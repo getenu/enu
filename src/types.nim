@@ -4,7 +4,7 @@ import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
 import pkg/[model_citizen]
-import models/colors, libs/[eval]
+import models/colors, libs/[eval, llama]
 
 from pkg/godot import NimGodotObject
 
@@ -232,6 +232,7 @@ type
     gamepad_sensitivity*: float
     invert_gamepad_y_axis*: bool
     screen_scale*: float
+    model_path*: string
 
   UserConfig* = object
     font_size*: Option[int]
@@ -255,6 +256,7 @@ type
     invert_gamepad_y_axis*: Option[bool]
     listen_address*: Option[string]
     connect_address*: Option[string]
+    model_path*: Option[string]
 
   Code* = object
     owner*: string
@@ -312,6 +314,7 @@ type
     failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
+    llm*: LLM
 
   NodeController* = ref object
 

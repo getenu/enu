@@ -1,5 +1,3 @@
-import core
-
 when defined(generate_llama_binding):
   import std/os
   import pkg/futhark
@@ -71,7 +69,7 @@ proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
 
   let model = llama_model_load_from_file(model_path, model_params)
   if model.is_nil:
-    raise LlamaError.init("failed to load model")
+    raise LlamaError.new_exception("failed to load model")
 
   let vocab = llama_model_get_vocab(model)
 
@@ -81,7 +79,7 @@ proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
 
   let ctx = llama_init_from_model(model, ctx_params)
   if ctx.is_nil:
-    raise LlamaError.init("failed to create context")
+    raise LlamaError.new_exception("failed to create context")
 
   var sparams = llama_sampler_chain_default_params()
   sparams.no_perf = false
@@ -129,7 +127,7 @@ iterator generate*(self: var LLM, input: string): string =
       self.formatted.len.int32,
     )
   if new_len < 0:
-    raise LlamaError.init("failed to apply the chat template")
+    raise LlamaError.new_exception("failed to apply the chat template")
 
   let prompt = self.formatted[self.prev_len ..< new_len]
 
@@ -150,7 +148,7 @@ iterator generate*(self: var LLM, input: string): string =
     self.vocab, prompt.cstring, prompt.len.int32, prompt_tokens,
     n_prompt_tokens, is_first, true,
   ) < 0:
-    raise LlamaError.init("failed to tokenize the prompt")
+    raise LlamaError.new_exception("failed to tokenize the prompt")
 
   var batch = llama_batch_get_one(prompt_tokens, n_prompt_tokens)
   var new_token_id: LlamaToken
@@ -159,10 +157,10 @@ iterator generate*(self: var LLM, input: string): string =
     let n_ctx = llama_n_ctx(self.ctx).int32
     let n_ctx_used = llama_kv_self_used_cells(self.ctx)
     if n_ctx_used + batch.n_tokens > n_ctx:
-      raise LlamaError.init("context size exceeded")
+      raise LlamaError.new_exception("context size exceeded")
 
     if (llama_decode(self.ctx, batch) != 0):
-      raise LlamaError.init("failed to decode")
+      raise LlamaError.new_exception("failed to decode")
 
     new_token_id = llama_sampler_sample(self.sampler, self.ctx, -1)
     if llama_vocab_is_eog(self.vocab, new_token_id):
@@ -173,7 +171,7 @@ iterator generate*(self: var LLM, input: string): string =
       self.vocab, new_token_id, buf.cstring, sizeof(buf).int32, 0, true
     )
     if n < 0:
-      raise LlamaError.init("failed to convert token to piece")
+      raise LlamaError.new_exception("failed to convert token to piece")
 
     buf.set_len(buf.cstring.len)
     yield buf
@@ -194,7 +192,7 @@ iterator generate*(self: var LLM, input: string): string =
   )
 
   if self.prev_len < 0:
-    raise LlamaError.init("failed to apply the chat template")
+    raise LlamaError.new_exception("failed to apply the chat template")
 
 when is_main_module:
   try:

@@ -221,6 +221,7 @@ gdobj Game of Node:
       invert_gamepad_y_axis = uc.invert_gamepad_y_axis ||= false
       environment = uc.environment ||= "default"
       megapixels_override = environments[value.environment]
+      model_path = uc.model_path ||= "gemma-3-4b-it-q4_0.gguf"
 
     if ?listen_address:
       state.config_value.value:

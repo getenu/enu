@@ -57,6 +57,7 @@ bridged_to_host:
   proc all_units*(): seq[Unit]
   proc added_units*(): seq[Unit]
   proc register_template_node*(self: Unit, name: string)
+  proc generate*(prompt: string): string
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)
