@@ -1,6 +1,8 @@
 lock = true
 color = white
 
+let player = Player.first
+
 var test_mode = false
 
 var bot_id = ""
