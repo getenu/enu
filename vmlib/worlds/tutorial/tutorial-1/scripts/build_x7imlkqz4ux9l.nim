@@ -39,6 +39,8 @@ let details =
 say overview, details, height = 3, width = 3, size = 320
 
 move me
+let player = Player.first
+
 forever:
   turn player
   sleep()
