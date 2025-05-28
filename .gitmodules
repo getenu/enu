@@ -11,3 +11,6 @@
 	path = vendor/pcre
 	url = https://github.com/luvit/pcre
 	ignore = dirty
+[submodule "vendor/llama.cpp"]
+	path = vendor/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp
