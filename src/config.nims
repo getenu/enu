@@ -6,8 +6,6 @@
   off
 --deepcopy:
   on
-# --experimental:
-#   strictNotNil
 
 if host_os == "windows":
   --pass_l:
@@ -48,9 +46,14 @@ if defined(release):
   --define:
     "zen_lax_free"
 
-# FIXME
---passL:
-  "-L/opt/homebrew/lib -lllama -lggml"
+if defined(generate_bindings):
+  --define:
+    "generate_llama_binding"
+
+switch("passL", "-rpath " & this_dir() & "/../vendor/llama.cpp/build/bin")
+switch(
+  "passl", "-L" & this_dir() & "/../vendor/llama.cpp/build/bin -lllama -lggml"
+)
 
 --define:
   nodeclguards

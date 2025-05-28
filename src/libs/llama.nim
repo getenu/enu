@@ -1,48 +1,67 @@
-import pkg/futhark
 import core
 
-proc rename_symbol(
-    n: string, k: SymbolKind, p: string, overloading: var bool
-): string =
-  result = n
-  if k in [Typedef, Enum, Struct, Anon]:
-    result = n.split("_").map_it(it.capitalize_ascii()).join("")
+when defined(generate_llama_binding):
+  import std/os
+  import pkg/futhark
 
-importc:
-  renameCallback rename_symbol
-  sysPath "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
-  path "/Users/scott/src/github.com/dsrw/enu/vendor/llama.cpp/src/include"
-  path "/Users/scott/src/github.com/dsrw/enu/vendor/llama.cpp/src/ggml/include"
-  retype StructLlamaBatch.token, ptr UncheckedArray[LlamaToken]
-  retype StructLlamaBatch.pos, ptr UncheckedArray[LlamaPos]
-  retype StructLlamaBatch.lama_seq_id, ptr UncheckedArray[ptr LlamaSeqId]
-  "llama.h"
+  proc rename_symbol(
+      n: string, k: SymbolKind, p: string, overloading: var bool
+  ): string =
+    result = n
+    if k in [Typedef, Enum, Struct, Anon]:
+      result = n.split("_").map_it(it.capitalize_ascii()).join("")
+
+  const
+    base_dir =
+      current_source_path.parent_dir / ".." / ".." / "vendor" / "llama.cpp"
+    include_dir = base_dir / "include"
+    ggml_include_dir = base_dir / "ggml" / "include"
+    sys_path =
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
+    output_path =
+      current_source_path.parent_dir / "generated" / "llama_binding.nim"
+
+  importc:
+    # futhark symbols must be camelCase
+    renameCallback rename_symbol
+    sysPath sys_path
+    path include_dir
+    path ggml_include_dir
+    outputPath output_path
+    "llama.h"
+else:
+  import generated/llama_binding
 
 type
   LLM* = object
     ctx: ptr StructLlamaContext
     vocab: ptr StructLlamaVocab
     sampler: ptr StructLlamaSampler
+    model: ptr StructLlamaModel
     messages: seq[LlamaChatMessage]
-    ctx_size: uint32
+    msg_strings: seq[string]
     formatted: string
-    tmpl: cstring
     prev_len: int
 
   LlamaError* = object of CatchableError
 
+proc `=destroy`(self: LLM) =
+  llama_sampler_free(self.sampler)
+  llama_free(self.ctx)
+  llama_model_free(self.model)
+  llama_backend_free()
+
 const
   ngl = 99
-  n_ctx = 2048
-  n_predict = 32
+  n_ctx = 128000
 
 proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
   ggml_backend_load_all()
 
   llama_log_set(
     proc(level: EnumGgmlLogLevel, text: cstring, _: pointer) {.cdecl.} =
-      if level >= GGML_LOG_LEVEL_ERROR and text.len > 1:
-        echo text
+      if level >= GGML_LOG_LEVEL_ERROR:
+        stdout.write text
     ,
     nil,
   )
@@ -51,14 +70,18 @@ proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
   model_params.n_gpu_layers = ngl
 
   let model = llama_model_load_from_file(model_path, model_params)
+  if model.is_nil:
+    raise LlamaError.init("failed to load model")
+
   let vocab = llama_model_get_vocab(model)
 
   var ctx_params = llama_context_default_params()
   ctx_params.n_ctx = n_ctx
   ctx_params.n_batch = n_ctx
-  ctx_params.no_perf = false
 
   let ctx = llama_init_from_model(model, ctx_params)
+  if ctx.is_nil:
+    raise LlamaError.init("failed to create context")
 
   var sparams = llama_sampler_chain_default_params()
   sparams.no_perf = false
@@ -76,40 +99,43 @@ proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
     ctx: ctx,
     vocab: vocab,
     sampler: sampler,
-    tmpl: llama_model_chat_template(model, nil),
-    ctx_size: ctx_size,
+    model: model,
     formatted: new_string(ctx_size),
     prev_len: 0,
   )
 
 iterator generate*(self: var LLM, input: string): string =
-  self.messages.add LlamaChatMessage(role: "user", content: input)
+  self.msg_strings.add input
+  let tmpl = llama_model_chat_template(self.model, nil)
+  self.messages.add LlamaChatMessage(role: "user", content: self.msg_strings[^1].cstring)
+
   var new_len = llama_chat_apply_template(
-    self.tmpl,
+    tmpl,
     cast[ptr StructLlamaChatMessage](self.messages[0].addr),
     cast[csize_t](self.messages.len),
     true,
     self.formatted.cstring,
-    self.ctx_size.int32,
+    self.formatted.len.int32,
   )
 
-  if new_len > self.formatted.len:
+  if new_len >= self.formatted.len:
     self.formatted.set_len(new_len)
     new_len = llama_chat_apply_template(
-      self.tmpl,
+      tmpl,
       cast[ptr StructLlamaChatMessage](self.messages[0].addr),
       cast[csize_t](self.messages.len),
       true,
       self.formatted.cstring,
-      self.ctx_size.int32,
+      self.formatted.len.int32,
     )
   if new_len < 0:
     raise LlamaError.init("failed to apply the chat template")
 
-  let prompt = self.formatted[self.prev_len .. new_len]
-  var response = ""
+  let prompt = self.formatted[self.prev_len ..< new_len]
 
   let is_first = llama_kv_self_used_cells(self.ctx) == 0
+
+  var response = ""
 
   let n_prompt_tokens =
     -llama_tokenize(
@@ -117,6 +143,8 @@ iterator generate*(self: var LLM, input: string): string =
     )
   var prompt_tokens =
     cast[ptr LlamaToken](alloc(n_prompt_tokens * sizeof(LlamaToken)))
+  defer:
+    dealloc(prompt_tokens)
 
   if llama_tokenize(
     self.vocab, prompt.cstring, prompt.len.int32, prompt_tokens,
@@ -147,28 +175,44 @@ iterator generate*(self: var LLM, input: string): string =
     if n < 0:
       raise LlamaError.init("failed to convert token to piece")
 
+    buf.set_len(buf.cstring.len)
     yield buf
+    response.add buf
 
     batch = llama_batch_get_one(new_token_id.addr, 1)
 
-  self.messages.add LlamaChatMessage(role: "assistant", content: response)
+  self.msg_strings.add response
+  self.messages.add LlamaChatMessage(role: "assistant", content: self.msg_strings[^1].cstring)
 
   self.prev_len = llama_chat_apply_template(
-    self.tmpl,
+    tmpl,
     cast[ptr StructLlamaChatMessage](self.messages[0].addr),
     cast[csize_t](self.messages.len),
     false,
     nil,
     0,
   )
+
   if self.prev_len < 0:
     raise LlamaError.init("failed to apply the chat template")
 
 when is_main_module:
-  var llm = LLM.init
-  while true:
-    stdout.write "\n\n> "
-    let input = stdin.read_line
+  try:
+    var llm = LLM.init
+    while true:
+      stdout.write "\n\n\e[32m> \e[0m"
+      let input = stdin.read_line
+      if input == "":
+        break
+      stdout.write "\n"
 
-    for msg in llm.generate(input):
-      stdout.write(msg)
+      stdout.write("\e[33m");
+
+      for msg in llm.generate(input):
+        stdout.write(msg)
+        stdout.flush_file()
+
+      stdout.write("\n\e[0m");
+  except Defect as e:
+    echo e.msg
+    echo e.get_stack_trace
