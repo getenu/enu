@@ -32,12 +32,12 @@ src_dir = "src"
 bin = @["enu" & lib_ext]
 
 requires "nim >= 2.2.0",
-  "https://github.com/dsrw/Nim#31b77d0",
-  "https://github.com/dsrw/godot-nim#43addc1",
-  "https://github.com/dsrw/model_citizen 0.19.3",
+  "https://github.com/dsrw/Nim 2.2.0",
+  "https://github.com/dsrw/godot-nim 0.8.5",
+  "https://github.com/dsrw/model_citizen 0.19.4",
   "https://github.com/dsrw/nanoid.nim 0.2.1", "cligen 1.6.17",
-  "https://github.com/treeform/pretty", "chroma", "markdown", "chronicles",
-  "dotenv", "nimibook", "metrics#51f1227", "zippy", "futhark"
+  "https://github.com/treeform/pretty 0.2.0", "chroma", "markdown", "chronicles",
+  "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
@@ -92,6 +92,9 @@ task build_godot, "Build godot":
 
 task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
+
+task setup_futhark, "Setup futhark":
+  exec "nimble --requires:futhark setup"
 
 task test, "run godot tests":
   exec "nimble c tests/godot/tnode_factories"
