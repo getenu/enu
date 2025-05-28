@@ -65,9 +65,18 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
-proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
-  p "Building Godot..."
+task submodules, "Update submodules":
   exec "git submodule update --init"
+
+task build_llama_cpp, "Build llama.cpp":
+  with_dir "vendor/llama.cpp":
+    exec "cmake -B build"
+    exec "cmake --build build"
+
+proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
+  p "Updating submodules..."
+  submodules_task()
+  p "Building Godot..."
   let
     scons = find_exe "scons"
     cores = gorge(gen() & " core_count")
@@ -75,6 +84,8 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
     exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} -j{cores}"
+  p "Building llama.cpp..."
+  build_llama_cpp_task()
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
