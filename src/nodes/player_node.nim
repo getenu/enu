@@ -81,10 +81,12 @@ gdobj PlayerNode of KinematicBody:
     state.set_flag Flying, value
 
   proc get_look_direction(): Vector2 =
-    vec2(
-      get_action_strength("look_right") - get_action_strength("look_left"),
-      get_action_strength("look_up") - get_action_strength("look_down"),
-    )
+    if EditorVisible notin state.local_flags or CommandMode in state.local_flags or
+        TouchControls in state.local_flags:
+      result = vec2(
+        get_action_strength("look_right") - get_action_strength("look_left"),
+        get_action_strength("look_up") - get_action_strength("look_down"),
+      )
 
   proc update_rotation(offset: Vector2) =
     var r = self.camera_rig.rotation
@@ -100,11 +102,13 @@ gdobj PlayerNode of KinematicBody:
     #       {EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused} -
     #       state.local_flags.value
     #     ).card == 4:
-    result = vec3(
-      get_action_strength("move_right") - get_action_strength("move_left"),
-      get_action_strength("jump") - get_action_strength("crouch"),
-      get_action_strength("move_back") - get_action_strength("move_front"),
-    )
+    if EditorVisible notin state.local_flags or CommandMode in state.local_flags or
+        TouchControls in state.local_flags:
+      result = vec3(
+        get_action_strength("move_right") - get_action_strength("move_left"),
+        get_action_strength("jump") - get_action_strength("crouch"),
+        get_action_strength("move_back") - get_action_strength("move_front"),
+      )
 
   proc calculate_velocity(
       velocity_current: Vector3,
