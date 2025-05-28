@@ -65,6 +65,9 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
+task download_gemma, "Download gemma":
+  exec "curl -OJL https://files.getenu.com/gemma-3-4b-it-q4_0.gguf"
+
 task submodules, "Update submodules":
   exec "git submodule update --init"
 
