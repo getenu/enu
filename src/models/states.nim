@@ -143,13 +143,10 @@ proc init_logger*(self: GameState) =
 proc clone_local*(self: GameState, local_ctx: ZenContext): GameState =
   result = GameState(
     local_ctx: local_ctx,
-    player_value: local_ctx[self.player_value],
     local_flags: local_ctx[self.local_flags],
-    open_unit_value: local_ctx[self.open_unit_value],
     tool_value: local_ctx[self.tool_value],
     gravity: self.gravity,
     console: ConsoleModel(log: local_ctx[self.console.log]),
-    open_sign_value: local_ctx[self.open_sign_value],
     wants: local_ctx[self.wants],
     queued_action_value: local_ctx[self.queued_action_value],
     status_message_value: local_ctx[self.status_message_value],
@@ -166,23 +163,26 @@ proc clone*(
   result.units = global_ctx[self.units]
   result.config_value = global_ctx[self.config_value]
   result.level_name_value = global_ctx[self.level_name_value]
+  result.player_value = global_ctx[self.player_value]
+  result.open_unit_value = global_ctx[self.open_unit_value]
+  result.open_sign_value = global_ctx[self.open_sign_value]
 
 proc init*(
     _: type GameState, local_ctx: ZenContext, global_ctx: ZenContext
 ): GameState =
   let flags = {SyncLocal}
   let self = GameState(
-    player_value: ~(Player, flags, ctx = local_ctx),
+    player_value: ~(Player, flags, ctx = global_ctx),
     local_flags: ~(set[LocalStateFlags], flags, ctx = local_ctx),
     global_flags:
       ~(set[GlobalStateFlags], id = "state_global_flags", ctx = global_ctx),
     units: ~(seq[Unit], id = "root_units", ctx = global_ctx),
-    open_unit_value: ~(Unit, flags, ctx = local_ctx),
+    open_unit_value: ~(Unit, flags, ctx = global_ctx),
     config_value: ~(Config, flags, id = "config", ctx = global_ctx),
     tool_value: ~(BlueBlock, flags, ctx = local_ctx),
     gravity: -80.0,
     console: ConsoleModel(log: ~(seq[string], flags, ctx = local_ctx)),
-    open_sign_value: ~(Sign, flags, ctx = local_ctx),
+    open_sign_value: ~(Sign, flags, ctx = global_ctx),
     wants: ~(seq[LocalStateFlags], flags, ctx = local_ctx),
     level_name_value: ~("", id = "level_name", ctx = global_ctx),
     queued_action_value: ~("", flags, ctx = local_ctx),
