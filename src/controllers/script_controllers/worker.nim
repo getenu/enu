@@ -160,8 +160,7 @@ template for_all_units(self: Worker, body: untyped) {.dirty.} =
     ) {.gcsafe.} =
       body
 
-proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
-  let (ctx, main_thread_state) = params
+proc worker_thread(main_thread_state: GameState) {.gcsafe.} =
   worker_lock.acquire
 
   var listen_address = main_thread_state.config.listen_address
@@ -173,17 +172,21 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     label = "worker",
   )
 
-  Zen.thread_ctx = worker_ctx
-  ctx.subscribe(Zen.thread_ctx)
+  let local_ctx = ZenContext.init(
+    id = \"local-worker-{generate_id()}", label = "local-worker"
+  )
 
-  state = GameState.init_from(main_thread_state)
+  Zen.thread_ctx = worker_ctx
+  main_thread_state.global_ctx.subscribe(Zen.thread_ctx)
+  main_thread_state.local_ctx.subscribe(local_ctx)
+
+  state =
+    main_thread_state.clone(local_ctx = local_ctx, global_ctx = Zen.thread_ctx)
   state.init_logger
   let connect_address = main_thread_state.config.connect_address
   if ?listen_address or not ?connect_address:
     state.push_flag Server
 
-  state.config_value = ZenValue[Config](Zen.thread_ctx["config"])
-  state.console = ConsoleModel.init_from(main_thread_state.console)
   state.worker_ctx_name = worker_ctx.id
   main_thread_state.worker_ctx_name = worker_ctx.id
 
@@ -330,8 +333,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       let frame_start = get_mono_time()
       let timeout = frame_start + max_time
       let wait_until = frame_start + min_time
-
-      Zen.thread_ctx.boop
+      state.local_ctx.boop
+      state.global_ctx.boop
       run_deferred()
 
       inc state.frame_count
@@ -394,14 +397,15 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         Zen.thread_ctx.reactor.socket.close
       state.pop_flag NeedsRestart
 
-    Zen.thread_ctx.boop
+    state.local_ctx.boop
+    state.global_ctx.boop
   except Exception:
     discard
 
 proc launch_worker*(
     ctx: ZenContext, state: GameState
-): system.Thread[tuple[ctx: ZenContext, state: GameState]] =
+): system.Thread[GameState] =
   worker_lock.acquire
-  result.create_thread(worker_thread, (ctx, state))
+  result.create_thread(worker_thread, state)
   work_done.wait(worker_lock)
   worker_lock.release

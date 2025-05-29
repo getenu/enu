@@ -87,6 +87,8 @@ type
     log*: ZenSeq[string]
 
   GameState* = ref object
+    local_ctx*: ZenContext
+    global_ctx*: ZenContext
     local_flags*: ZenSet[LocalStateFlags]
     wants*: ZenSeq[LocalStateFlags]
     global_flags*: ZenSet[GlobalStateFlags]
@@ -301,7 +303,7 @@ type
   Callback* = proc(delta: float, timeout: MonoTime): TaskStates {.gcsafe.}
 
   ScriptController* = ref object
-    worker_thread*: system.Thread[tuple[ctx: ZenContext, state: GameState]]
+    worker_thread*: system.Thread[GameState]
 
   Worker* = ref object
     retry_failures*: bool

@@ -44,7 +44,8 @@ gdobj Game of Node:
     left_stick: VirtualJoystick
 
   method process*(delta: float) =
-    Zen.thread_ctx.boop
+    state.local_ctx.boop
+    state.global_ctx.boop
     inc state.frame_count
     let time = get_mono_time()
     when defined(metrics):
@@ -142,7 +143,11 @@ gdobj Game of Node:
       max_recv_duration = (1.0 / 30.0).seconds,
     )
 
-    state = GameState.init
+    let local_zen_ctx =
+      ZenContext.init(id = \"local-main-{generate_id()}", label = "local-main")
+
+    state =
+      GameState.init(local_ctx = local_zen_ctx, global_ctx = Zen.thread_ctx)
     state.nodes.game = self
 
     var uc = initial_user_config

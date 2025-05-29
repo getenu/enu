@@ -140,24 +140,52 @@ proc init_logger*(self: GameState) =
     debug "logging", msg
     state.console.log += msg & "\n"
 
-proc init*(_: type GameState): GameState =
+proc clone*(
+    self: GameState, local_ctx: ZenContext, global_ctx: ZenContext
+): GameState =
+  result = GameState(
+    local_ctx: local_ctx,
+    global_ctx: global_ctx,
+    player_value: local_ctx[self.player_value],
+    local_flags: local_ctx[self.local_flags],
+    global_flags: global_ctx[self.global_flags],
+    units: global_ctx[self.units],
+    open_unit_value: local_ctx[self.open_unit_value],
+    config_value: global_ctx[self.config_value],
+    tool_value: local_ctx[self.tool_value],
+    gravity: self.gravity,
+    console: ConsoleModel(log: local_ctx[self.console.log]),
+    open_sign_value: local_ctx[self.open_sign_value],
+    wants: local_ctx[self.wants],
+    level_name_value: global_ctx[self.level_name_value],
+    queued_action_value: local_ctx[self.queued_action_value],
+    status_message_value: local_ctx[self.status_message_value],
+    voxel_tasks_value: local_ctx[self.voxel_tasks_value],
+  )
+
+proc init*(
+    _: type GameState, local_ctx: ZenContext, global_ctx: ZenContext
+): GameState =
   let flags = {SyncLocal}
   let self = GameState(
-    player_value: ~(Player, flags),
-    local_flags: ~(set[LocalStateFlags], flags),
-    global_flags: ~(set[GlobalStateFlags], id = "state_global_flags"),
-    units: ~(seq[Unit], id = "root_units"),
-    open_unit_value: ~(Unit, flags),
-    config_value: ~(Config, flags, id = "config"),
-    tool_value: ~(BlueBlock, flags),
+    player_value: ~(Player, flags, ctx = local_ctx),
+    local_flags: ~(set[LocalStateFlags], flags, ctx = local_ctx),
+    global_flags:
+      ~(set[GlobalStateFlags], id = "state_global_flags", ctx = global_ctx),
+    units: ~(seq[Unit], id = "root_units", ctx = global_ctx),
+    open_unit_value: ~(Unit, flags, ctx = local_ctx),
+    config_value: ~(Config, flags, id = "config", ctx = global_ctx),
+    tool_value: ~(BlueBlock, flags, ctx = local_ctx),
     gravity: -80.0,
-    console: ConsoleModel(log: ~(seq[string], flags)),
-    open_sign_value: ~(Sign, flags),
-    wants: ~(seq[LocalStateFlags], flags),
-    level_name_value: ~("", id = "level_name"),
-    queued_action_value: ~("", flags),
-    status_message_value: ~("", flags),
-    voxel_tasks_value: ~(0, flags),
+    console: ConsoleModel(log: ~(seq[string], flags, ctx = local_ctx)),
+    open_sign_value: ~(Sign, flags, ctx = local_ctx),
+    wants: ~(seq[LocalStateFlags], flags, ctx = local_ctx),
+    level_name_value: ~("", id = "level_name", ctx = global_ctx),
+    queued_action_value: ~("", flags, ctx = local_ctx),
+    status_message_value: ~("", flags, ctx = local_ctx),
+    voxel_tasks_value: ~(0, flags, ctx = local_ctx),
+    local_ctx: local_ctx,
+    global_ctx: global_ctx,
   )
 
   self.init_logger
