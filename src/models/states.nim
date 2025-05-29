@@ -140,28 +140,32 @@ proc init_logger*(self: GameState) =
     debug "logging", msg
     state.console.log += msg & "\n"
 
-proc clone*(
-    self: GameState, local_ctx: ZenContext, global_ctx: ZenContext
-): GameState =
+proc clone_local*(self: GameState, local_ctx: ZenContext): GameState =
   result = GameState(
     local_ctx: local_ctx,
-    global_ctx: global_ctx,
     player_value: local_ctx[self.player_value],
     local_flags: local_ctx[self.local_flags],
-    global_flags: global_ctx[self.global_flags],
-    units: global_ctx[self.units],
     open_unit_value: local_ctx[self.open_unit_value],
-    config_value: global_ctx[self.config_value],
     tool_value: local_ctx[self.tool_value],
     gravity: self.gravity,
     console: ConsoleModel(log: local_ctx[self.console.log]),
     open_sign_value: local_ctx[self.open_sign_value],
     wants: local_ctx[self.wants],
-    level_name_value: global_ctx[self.level_name_value],
     queued_action_value: local_ctx[self.queued_action_value],
     status_message_value: local_ctx[self.status_message_value],
     voxel_tasks_value: local_ctx[self.voxel_tasks_value],
+    ai_queries: local_ctx[self.ai_queries],
   )
+
+proc clone*(
+    self: GameState, local_ctx: ZenContext, global_ctx: ZenContext
+): GameState =
+  result = self.clone_local(local_ctx)
+  result.global_ctx = global_ctx
+  result.global_flags = global_ctx[self.global_flags]
+  result.units = global_ctx[self.units]
+  result.config_value = global_ctx[self.config_value]
+  result.level_name_value = global_ctx[self.level_name_value]
 
 proc init*(
     _: type GameState, local_ctx: ZenContext, global_ctx: ZenContext
@@ -184,6 +188,7 @@ proc init*(
     queued_action_value: ~("", flags, ctx = local_ctx),
     status_message_value: ~("", flags, ctx = local_ctx),
     voxel_tasks_value: ~(0, flags, ctx = local_ctx),
+    ai_queries: ~(Table[string, AIQuery], flags, ctx = local_ctx),
     local_ctx: local_ctx,
     global_ctx: global_ctx,
   )

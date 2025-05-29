@@ -90,10 +90,6 @@ proc to_node[T: Unit](self: Worker, units: seq[T]): PNode =
 
 # Common bindings
 
-proc generate(self: Worker, prompt: string): string =
-  for token in self.llm.generate(prompt):
-    result.add token
-
 proc press_action(self: Worker, name: string) =
   state.queued_action = name
 
@@ -459,6 +455,23 @@ proc reset(self: Unit, clear: bool) =
       Build(self).reset_state()
     elif self of Bot:
       Bot(self).reset_state()
+
+proc generate(worker: Worker, self: Unit, prompt: string): Future[string] =
+  let id = \"{self.id}-{generate_id()}"
+  state.ai_queries[id] = AIQuery(prompt: prompt)
+
+  let future = Future.init(string, "generate")
+  self.script_ctx.callback = proc(delta: float, timeout: MonoTime): TaskStates =
+    let query = state.ai_queries[id]
+    if query.done:
+      state.ai_queries.del(id)
+      future.complete(query.response)
+      result = Done
+    else:
+      result = Running
+  result = future
+  self.script_ctx.last_ran = MonoTime.default
+  worker.pause_script()
 
 # Bot bindings
 

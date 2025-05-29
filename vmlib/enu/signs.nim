@@ -70,7 +70,7 @@ proc say*(
     size = int.high,
     billboard = none(bool),
 ): Sign {.discardable.} =
-  let response = generate(message.prompt)
+  let response = active_unit().generate(message.prompt)
   self.say(response, more, width, height, size, billboard)
 
 template say*(

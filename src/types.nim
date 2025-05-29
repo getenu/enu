@@ -114,6 +114,7 @@ type
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
+    ai_queries*: ZenTable[string, AIQuery]
 
   Model* = ref object of RootObj
     id*: string
@@ -138,6 +139,11 @@ type
     target*: Unit
     distance*: float
     answer*: Option[bool]
+
+  AIQuery* = object
+    prompt*: string
+    response*: string
+    done*: bool
 
   Unit* = ref object of Model
     parent*: Unit
@@ -304,6 +310,7 @@ type
 
   ScriptController* = ref object
     worker_thread*: system.Thread[GameState]
+    thinker_thread*: system.Thread[GameState]
 
   Worker* = ref object
     retry_failures*: bool
@@ -316,7 +323,10 @@ type
     failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
+
+  Thinker* = ref object
     llm*: LLM
+    queries*: ZenTable[string, AIQuery]
 
   NodeController* = ref object
 

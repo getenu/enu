@@ -193,12 +193,10 @@ proc worker_thread(main_thread_state: GameState) {.gcsafe.} =
   state.player = Player.init
   state.player.color = state.config.player_color
 
-  var worker = Worker()
-
-  worker.llm = LLM.init(state.config.model_path)
-
   work_done.signal
   worker_lock.release
+
+  var worker = Worker()
 
   worker.for_all_units:
     if added:
@@ -402,9 +400,7 @@ proc worker_thread(main_thread_state: GameState) {.gcsafe.} =
   except Exception:
     discard
 
-proc launch_worker*(
-    ctx: ZenContext, state: GameState
-): system.Thread[GameState] =
+proc launch_worker*(state: GameState): system.Thread[GameState] =
   worker_lock.acquire
   result.create_thread(worker_thread, state)
   work_done.wait(worker_lock)
