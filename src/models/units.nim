@@ -175,6 +175,8 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   if ?parent:
     parent.units.pause:
       parent.units -= self
+  if self.id in state.ai_queries:
+    state.ai_queries.del(self.id)
   Zen.thread_ctx.free(self)
 
 proc clear_all*(units: ZenSeq[Unit]) =

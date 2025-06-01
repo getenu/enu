@@ -11,9 +11,13 @@ proc remove_from_scene(unit: Unit) =
   if unit == current_build:
     current_build = nil
 
-  for zid in unit.zids:
-    Zen.thread_ctx.untrack zid
-  unit.zids = @[]
+  for zid in unit.global_zids:
+    state.global_ctx.untrack zid
+  for zid in unit.local_zids:
+    state.local_ctx.untrack zid
+
+  unit.global_zids = @[]
+  unit.local_zids = @[]
 
   unit.global_flags -= Ready
 

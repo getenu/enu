@@ -457,14 +457,11 @@ proc reset(self: Unit, clear: bool) =
       Bot(self).reset_state()
 
 proc generate(worker: Worker, self: Unit, prompt: string): Future[string] =
-  let id = \"{self.id}-{generate_id()}"
-  state.ai_queries[id] = AIQuery(prompt: prompt)
-
+  state.ai_queries.touch(self.id, AIQuery(prompt: prompt))
   let future = Future.init(string, "generate")
   self.script_ctx.callback = proc(delta: float, timeout: MonoTime): TaskStates =
-    let query = state.ai_queries[id]
+    let query = state.ai_queries[self.id]
     if query.done:
-      state.ai_queries.del(id)
       future.complete(query.response)
       result = Done
     else:

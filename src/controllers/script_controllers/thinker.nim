@@ -1,4 +1,4 @@
-import std/[locks]
+import std/[locks, os]
 import core
 import models/states
 import libs/llama
@@ -8,6 +8,7 @@ var
   work_done: locks.Cond
   thinker {.threadvar.}: Thinker
   state {.threadvar.}: GameState
+  conversations {.threadvar.}: Table[string, Conversation]
 
 thinker_lock.init_lock
 work_done.init_cond
@@ -28,18 +29,27 @@ proc thinker_thread(main_thread_state: GameState) {.gcsafe.} =
     main_thread_state.global_ctx[main_thread_state.config_value].value
 
   var thinker = Thinker(queries: local_ctx[main_thread_state.ai_queries])
-
   thinker.queries.changes:
     if added:
       var ai_query = change.item.value
-      for token in thinker.llm.generate(ai_query.prompt):
+      if change.item.key notin conversations:
+        conversations[change.item.key] = Conversation.init(thinker.llm)
+
+      for token in conversations[change.item.key].generate(ai_query.prompt):
         ai_query.response.add token
         thinker.queries[change.item.key] = ai_query
       ai_query.done = true
       thinker.queries[change.item.key] = ai_query
+    if removed:
+      if change.item.key notin thinker.queries:
+        conversations.del(change.item.key)
 
   work_done.signal
   thinker_lock.release
+
+  LLM.init_backend
+  defer:
+    LLM.free_backend
 
   thinker.llm = LLM.init(config.model_path)
 
@@ -47,6 +57,7 @@ proc thinker_thread(main_thread_state: GameState) {.gcsafe.} =
   try:
     while running:
       local_ctx.boop
+      sleep(50)
   except Exception as e:
     error "Unhandled worker thread exception",
       kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace

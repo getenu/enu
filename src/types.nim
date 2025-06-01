@@ -164,7 +164,8 @@ type
     color_value*: ZenValue[Color]
     sight_ray*: RayCast
     frame_created*: int
-    zids* {.zen_ignore.}: seq[ZID]
+    global_zids* {.zen_ignore.}: seq[ZID]
+    local_zids* {.zen_ignore.}: seq[ZID]
     errors*: ScriptErrors
     current_line_value*: ZenValue[int]
     sight_query_value*: ZenValue[SightQuery]

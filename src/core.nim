@@ -290,7 +290,10 @@ template watch*[T, O](zen: Zen[T, O], unit: untyped, body: untyped) =
     mixin thread_ctx
     let zid = zen.changes:
       body
-    unit.zids.add(zid)
+    if zen.ctx == state.global_ctx:
+      unit.global_zids.add(zid)
+    else:
+      unit.local_zids.add(zid)
     make_discardable(zid)
   else:
     {.

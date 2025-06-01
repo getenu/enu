@@ -112,7 +112,7 @@ proc watch_code(self: Worker, unit: Unit) =
       except VMQuit as e:
         self.script_error(unit, e)
 
-  unit.zids.add:
+  unit.global_zids.add:
     unit.errors.changes:
       if unit.code.owner == Zen.thread_ctx.id:
         if added and change.item.log:
@@ -215,10 +215,14 @@ proc worker_thread(main_thread_state: GameState) {.gcsafe.} =
           remove_file unit.script_ctx.script
           remove_dir unit.data_dir
 
-      for zid in unit.zids:
-        debug "untracking zid", zid, unit = unit.id
-        Zen.thread_ctx.untrack zid
-      unit.zids = @[]
+        for zid in unit.global_zids:
+          debug "untracking zid", zid, unit = unit.id
+          state.global_ctx.untrack zid
+        for zid in unit.local_zids:
+          state.local_ctx.untrack zid
+
+        unit.global_zids = @[]
+        unit.local_zids = @[]
       unit.destroy
 
   let player = state.player
