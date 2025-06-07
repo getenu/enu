@@ -445,13 +445,20 @@ proc fuzzed*(self: Vector3, range: float): Vector3 =
 proc fuzzed*(self: Vector3, x, y, z: float): Vector3 =
   self.fuzzed(vec3(x, y, z))
 
-template times*(count: int, body: untyped): untyped =
-  for x in 0 ..< count:
+template times*(count: int | float, body: untyped): untyped =
+  when count is float:
+    if not almost_equal(count.int.float, count):
+      raise ValueError.init("count must be an integer")
+    let i = count.int
+  else:
+    let i = count
+
+  for x in 0 ..< i:
     let first {.inject.} = (x == 0)
     let last {.inject.} = (x == count - 1)
     body
 
-template times*(count: int, name: untyped, body: untyped): untyped =
+template times*(count: int | float, name: untyped, body: untyped): untyped =
   for name {.inject.} in 0 ..< count:
     let first {.inject.} = (name == 0)
     let last {.inject.} = (name == count - 1)

@@ -32,6 +32,14 @@ when defined(generate_llama_binding):
 else:
   import generated/llama_binding
 
+proc llama_log_callback(
+    level: EnumGgmlLogLevel, text: cstring, user_data: pointer
+) {.cdecl.} =
+  if level >= GGML_LOG_LEVEL_ERROR:
+    let nim_text = $text
+    stdout.write nim_text
+    # stdout.flush_file() # Consider uncommenting if errors aren't showing up before a crash
+
 type
   LLM* = ref object
     vocab: ptr StructLlamaVocab
@@ -43,12 +51,13 @@ type
   Conversation* = ref object
     llm: LLM
     messages: seq[LlamaChatMessage]
-    msg_strings: seq[string]
+    msg_strings: seq[string] # Stores Nim strings to prevent GC of cstrings used in messages
     formatted: string
     prev_len: int
     sampler: ptr StructLlamaSampler
     sequence_id: LlamaSeqId
     current_token_pos: LlamaPos
+    system_context_string: string
 
   LlamaError* = object of CatchableError
 
@@ -62,8 +71,7 @@ proc `=destroy`(self: type Conversation()[]) =
   if not self.sampler.is_nil:
     llama_sampler_free(self.sampler)
 
-  if not self.llm.ctx.is_nil and self.llm.ctx != nil:
-    discard llama_kv_cache_seq_rm(self.llm.ctx, self.sequence_id, 0, -1)
+  discard llama_kv_cache_seq_rm(self.llm.ctx, self.sequence_id, 0, -1)
 
 const
   ngl = 99
@@ -79,13 +87,7 @@ proc free_backend*(_: type LLM) =
   llama_backend_free()
 
 proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
-  llama_log_set(
-    proc(level: EnumGgmlLogLevel, text: cstring, _: pointer) {.cdecl.} =
-      if level >= GGML_LOG_LEVEL_ERROR:
-        stdout.write text
-    ,
-    nil,
-  )
+  llama_log_set(llama_log_callback, nil)
 
   var model_params = llama_model_default_params()
   model_params.n_gpu_layers = ngl
@@ -112,7 +114,9 @@ proc init*(_: type LLM, model_path = "gemma-3-4b-it-q4_0.gguf"): LLM =
     next_sequence_id: 0,
   )
 
-proc init*(_: type Conversation, llm: var LLM): Conversation =
+proc init*(
+    _: type Conversation, llm: var LLM, enu_context_path: string = ""
+): Conversation =
   var sampler = llama_sampler_chain_init llama_sampler_chain_default_params()
 
   llama_sampler_chain_add(sampler, llama_sampler_init_min_p(0.05, 1))
@@ -123,13 +127,35 @@ proc init*(_: type Conversation, llm: var LLM): Conversation =
 
   let sequence_id = llm.next_sequence_id
   llm.next_sequence_id += 1
+  var initial_messages: seq[LlamaChatMessage] = @[]
+  var initial_msg_strings: seq[string] = @[]
+  var system_context_content = ""
+
+  if enu_context_path != "":
+    try:
+      system_context_content = readFile(enu_context_path)
+      if system_context_content.len > 0:
+        initial_msg_strings.add(system_context_content)
+        initial_messages.add(LlamaChatMessage(
+          role: "system", content: initial_msg_strings[^1].cstring
+        ))
+    except IOError as e:
+      stderr.write_line(
+        fmt"Warning: Could not read enu_context_path '{enu_context_path}': {e.msg}"
+      )
+
   result = Conversation(
-    llm: llm, sampler: sampler, sequence_id: sequence_id, current_token_pos: 0
+    llm: llm,
+    sampler: sampler,
+    sequence_id: sequence_id,
+    current_token_pos: 0,
+    messages: initial_messages,
+    msg_strings: initial_msg_strings,
+    system_context_string: system_context_content
   )
 
 iterator generate*(self: var Conversation, input: string): string =
   self.msg_strings.add input
-
   self.messages.add LlamaChatMessage(
     role: "user", content: self.msg_strings[^1].cstring
   )
@@ -157,12 +183,13 @@ iterator generate*(self: var Conversation, input: string): string =
     raise LlamaError.init("failed to apply the chat template")
 
   let prompt = self.formatted[self.prev_len ..< new_len]
-  let is_first = llama_kv_self_used_cells(self.llm.ctx) == 0
+
+  let is_first_eval_for_ctx = llama_kv_self_used_cells(self.llm.ctx) == 0
   var response = ""
 
   let n_prompt_tokens_cint =
     -llama_tokenize(
-      self.llm.vocab, prompt.cstring, prompt.len.int32, nil, 0, is_first, true
+      self.llm.vocab, prompt.cstring, prompt.len.int32, nil, 0, is_first_eval_for_ctx, true
     )
   if n_prompt_tokens_cint <= 0:
     raise LlamaError.init("failed to get prompt token count for tokenization")
@@ -174,7 +201,7 @@ iterator generate*(self: var Conversation, input: string): string =
     prompt.len.int32,
     temp_prompt_tokens[0].addr,
     n_prompt_tokens_cint,
-    is_first,
+    is_first_eval_for_ctx,
     true,
   )
   if actual_n_tokens < 0:
@@ -184,42 +211,60 @@ iterator generate*(self: var Conversation, input: string): string =
   var new_token_id: LlamaToken
 
   try:
-    current_batch.n_tokens = 0
-    for i in 0 ..< actual_n_tokens:
-      let token_idx = current_batch.n_tokens
-      current_batch.token[token_idx.int] = temp_prompt_tokens[i]
-      current_batch.pos[token_idx.int] = self.currentTokenPos + i.LlamaPos
+    var tokens_processed_in_prompt = 0
+    while tokens_processed_in_prompt < actual_n_tokens:
+      current_batch.n_tokens = 0
+      let tokens_in_this_batch =
+        min(actual_n_tokens - tokens_processed_in_prompt, 512)
 
-      let n_seq_id_ua = cast[ptr UncheckedArray[int32]](current_batch.n_seq_id)
-      n_seq_id_ua[token_idx.int] = 1
+      for i in 0 ..< tokens_in_this_batch:
+        let token_idx_in_batch = current_batch.n_tokens
+        current_batch.token[token_idx_in_batch.int] =
+          temp_prompt_tokens[tokens_processed_in_prompt + i]
+        current_batch.pos[token_idx_in_batch.int] =
+          self.currentTokenPos + i.LlamaPos
 
-      let seq_id_outer_ua =
-        cast[ptr UncheckedArray[ptr LlamaSeqId]](current_batch.seq_id)
-      let inner_seq_id_ptr = seq_id_outer_ua[token_idx.int]
-      let inner_seq_id_ua =
-        cast[ptr UncheckedArray[LlamaSeqId]](inner_seq_id_ptr)
-      inner_seq_id_ua[0] = self.sequence_id # Use self.sequence_id
+        let n_seq_id_ua =
+          cast[ptr UncheckedArray[int32]](current_batch.n_seq_id)
+        n_seq_id_ua[token_idx_in_batch.int] = 1
 
-      current_batch.logits[token_idx.int] = char(0)
-      current_batch.n_tokens += 1
+        let seq_id_outer_ua =
+          cast[ptr UncheckedArray[ptr LlamaSeqId]](current_batch.seq_id)
+        let inner_seq_id_ptr = seq_id_outer_ua[token_idx_in_batch.int]
+        let inner_seq_id_ua =
+          cast[ptr UncheckedArray[LlamaSeqId]](inner_seq_id_ptr)
+        inner_seq_id_ua[0] = self.sequence_id
 
-    if current_batch.n_tokens > 0:
-      current_batch.logits[current_batch.n_tokens.int - 1] = char(1)
+        # Set logits to true only for the very last token of the entire initial prompt
+        let overall_token_index = tokens_processed_in_prompt + i
+        if overall_token_index == actual_n_tokens - 1:
+          current_batch.logits[token_idx_in_batch.int] = char(1)
+        else:
+          current_batch.logits[token_idx_in_batch.int] = char(0)
+        current_batch.n_tokens += 1
 
-    self.currentTokenPos += actual_n_tokens
-
-    while self.current_token_pos < n_ctx:
       if current_batch.n_tokens > 0:
         let n_ctx_val = llama_n_ctx(self.llm.ctx).int32
         let n_kv_cached = llama_kv_self_used_cells(self.llm.ctx)
         if n_kv_cached + current_batch.n_tokens > n_ctx_val:
-          raise LlamaError.init(
-            fmt"context size exceeded before decode: used {n_kv_cached}, batch {current_batch.n_tokens}, total_ctx {n_ctx_val}"
-          )
+          # This is a simplified eviction strategy, might need llama_kv_cache_seq_rm_nth etc. for more complex scenarios
+          let tokens_to_evict =
+            (n_kv_cached + current_batch.n_tokens) - n_ctx_val
+          discard llama_kv_cache_seq_rm(
+            self.llm.ctx, self.sequence_id, 0, tokens_to_evict.LlamaPos
+          ) # Evict oldest
 
         if llama_decode(self.llm.ctx, current_batch) != 0:
-          raise LlamaError.init("failed to decode")
+          raise LlamaError.init(
+            fmt"failed to decode prompt batch part {tokens_processed_in_prompt / 512}"
+          )
 
+      self.currentTokenPos += current_batch.n_tokens
+      tokens_processed_in_prompt += current_batch.n_tokens
+
+    current_batch.n_tokens = 0 # Reset batch for sampling the first new token
+
+    while self.current_token_pos < n_ctx:
       new_token_id = llama_sampler_sample(self.sampler, self.llm.ctx, -1)
       self.current_token_pos += 1
 
@@ -254,7 +299,21 @@ iterator generate*(self: var Conversation, input: string): string =
       inner_seq_id_next_ua[0] = self.sequence_id
 
       current_batch.logits[0] = char(1)
+        # Logits true for the token we are providing to generate the next one
       current_batch.n_tokens = 1
+
+      # KV cache check before decoding the single sampled token
+      let n_ctx_val = llama_n_ctx(self.llm.ctx).int32
+      let n_kv_cached = llama_kv_self_used_cells(self.llm.ctx)
+      if n_kv_cached + current_batch.n_tokens > n_ctx_val:
+        let tokens_to_evict = (n_kv_cached + current_batch.n_tokens) - n_ctx_val
+        discard llama_kv_cache_seq_rm(
+          self.llm.ctx, self.sequence_id, 0, tokens_to_evict.LlamaPos
+        ) # Evict oldest
+        echo fmt"KV cache overflow during generation: Evicted {tokens_to_evict} tokens for seq {self.sequence_id}"
+
+      if llama_decode(self.llm.ctx, current_batch) != 0:
+        raise LlamaError.init("failed to decode during generation")
   finally:
     llama_batch_free(current_batch)
 
@@ -281,7 +340,8 @@ when is_main_module:
     defer:
       llama_backend_free()
     var llm = LLM.init
-    var conv = Conversation.init(llm = llm)
+    var conv =
+      Conversation.init(llm = llm, enu_context_path = "enu_context.txt")
 
     while true:
       stdout.write "\n\n\e[32m> \e[0m"

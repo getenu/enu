@@ -327,6 +327,7 @@ type
 
   Thinker* = ref object
     llm*: LLM
+    prompt_dir*: string
     queries*: ZenTable[string, AIQuery]
 
   NodeController* = ref object

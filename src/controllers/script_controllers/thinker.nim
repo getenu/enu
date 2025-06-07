@@ -33,7 +33,10 @@ proc thinker_thread(main_thread_state: GameState) {.gcsafe.} =
     if added:
       var ai_query = change.item.value
       if change.item.key notin conversations:
-        conversations[change.item.key] = Conversation.init(thinker.llm)
+        conversations[change.item.key] = Conversation.init(
+          thinker.llm,
+          enu_context_path = thinker.prompt_dir / "enu_context.txt"
+        )
 
       for token in conversations[change.item.key].generate(ai_query.prompt):
         ai_query.response.add token
@@ -52,6 +55,7 @@ proc thinker_thread(main_thread_state: GameState) {.gcsafe.} =
     LLM.free_backend
 
   thinker.llm = LLM.init(config.model_path)
+  thinker.prompt_dir = config.lib_dir / "prompts"
 
   var running = true
   try:
