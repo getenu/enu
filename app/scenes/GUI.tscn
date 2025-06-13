@@ -134,8 +134,10 @@ text = " "
 margin_top = 25.0
 margin_right = 46.0
 margin_bottom = 62.0
+focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = "IconButton"
+enabled_focus_mode = 0
 text = "  "
 
 [node name="HBoxContainer2" type="VBoxContainer" parent="."]
