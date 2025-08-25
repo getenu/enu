@@ -1,4 +1,5 @@
 import std/[tables, strutils, sequtils, sets, sugar]
+import pkg/json_serialization
 import core, models/[colors]
 
 proc write_value*(w: var JsonWriter, self: set[LocalStateFlags]) =
