@@ -82,3 +82,81 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 - The project uses ZenContext for metrics and threading
 - Scripts are Logo-inspired but use Nim syntax
 - World data is stored as JSON with accompanying Nim scripts
+
+## Coding Conventions
+
+This project follows specific naming conventions inherited from the `model_citizen` library:
+
+### Naming Style
+- **Variables and procedures**: Use `snake_case` exclusively (e.g., `my_variable`, `process_changes`)
+- **Types**: Use `UpperCamelCase` (e.g., `GameState`, `LocalStateFlags`)
+- **Constants**: Use `snake_case` (e.g., `default_world`)
+- **Fields**: Use `snake_case` (e.g., `player_color`, `world_dir`)
+
+### Standard Library Usage
+- **IMPORTANT**: When calling Nim standard library functions, always use `snake_case` style
+- Use `init_hash_set()` instead of `initHashSet()`
+- Use `to_flatty()` instead of `toFlatty()`
+- Use `join_path()` instead of `joinPath()`
+
+### Custom `?` Operator (Presence/Truth Testing)
+The project uses a custom `?` operator from `model_citizen` for consistent presence checking:
+
+```nim
+# Usage examples
+if ?my_ref_object:        # checks if not nil
+if ?my_string:            # checks if not empty
+if ?my_sequence:          # checks if length > 0
+if ?my_option:            # checks if is_some
+if ?my_number:            # checks if != 0
+```
+
+**Rule**: Always use `?` instead of manual nil checks, emptiness checks, or is_some calls.
+
+### Logging Conventions
+The project uses [Chronicles](https://github.com/status-im/nim-chronicles) for structured logging. Follow these patterns:
+
+#### Basic Logging
+```nim
+info "Simple message"
+info "Message with context", value = 42, name = "example"
+```
+
+#### Multi-Field Logging (Preferred)
+```nim
+# Good - single log line with multiple fields
+info "[VERIFY] Systems initialized",
+  vm = ?self.script_controller,
+  node_controller = not self.node_controller.is_nil,
+  world = state.config.world,
+  level = state.config.level
+```
+
+#### Error Logging  
+```nim
+state.err "Error message", error = e.msg
+```
+
+**Rule**: Use structured logging with named fields rather than string concatenation. Group related information into single log statements when possible.
+
+## Development Tools
+
+### Verification Mode
+The project includes a verification mode for testing system health:
+
+```bash
+# From project root
+cd app && ../vendor/godot/bin/godot.osx.tools.arm64 --verbose scenes/game.tscn -- --verify
+```
+
+This mode:
+- Tests VM initialization, controllers, and scene system
+- Validates configuration loading and world/level directories
+- Checks scene tree accessibility
+- Outputs structured logs for comparison between Godot versions
+- Automatically exits after verification
+
+### Testing
+- `nimble test` - Run Godot-based tests
+- Always ensure tests pass before committing changes
+- Use verification mode to validate core system functionality
