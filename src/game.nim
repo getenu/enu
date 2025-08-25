@@ -42,6 +42,7 @@ gdobj Game of Node:
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
+    verify_mode: bool
 
   method process*(delta: float) =
     Zen.thread_ctx.boop
@@ -154,6 +155,7 @@ gdobj Game of Node:
 
     var connect_address = ""
     var listen_address = ""
+    var verify_mode = false
     if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
       connect_address = args[i + 1]
       args.delete(i .. i + 1)
@@ -164,6 +166,9 @@ gdobj Game of Node:
       else:
         listen_address = "0.0.0.0"
         args.delete(i)
+    if (let i = args.find("--verify"); i) > -1:
+      verify_mode = true
+      args.delete(i)
 
     if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address:
       listen_address = get_env("ENU_LISTEN_ADDRESS")
@@ -257,6 +262,7 @@ gdobj Game of Node:
         state.config_value.value:
           lib_dir = join_path(exe_dir.parent_dir, "lib", "vmlib")
 
+    self.verify_mode = verify_mode
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init
 
@@ -334,6 +340,41 @@ gdobj Game of Node:
     state.config_value.value:
       megapixels_override = environments[environment]
     info "Changed game mode", environment
+
+  proc run_verification*() =
+    info "[VERIFY] Enu verification starting..."
+
+    # Test basic systems and configuration
+    info "[VERIFY] Systems initialized",
+      vm = ?self.script_controller,
+      node_controller = not self.node_controller.is_nil,
+      scene_system = ?state.nodes,
+      world = state.config.world,
+      level = state.config.level,
+      work_dir = state.config.work_dir,
+      lib_dir = state.config.lib_dir
+
+    # Test VM context and paths
+    let world_path = join_path(state.config.work_dir, state.config.world)
+    let level_path = join_path(world_path, state.config.level)
+    
+    info "[VERIFY] System status",
+      vm_context = not Zen.thread_ctx.is_nil,
+      world_exists = dir_exists(world_path),
+      level_exists = dir_exists(level_path),
+      world_path = world_path,
+      level_path = level_path
+
+    # Test basic scene tree
+    let viewport = self.get_viewport()
+    let scene_tree = if not viewport.is_nil: self.get_tree() else: nil
+    
+    info "[VERIFY] Scene tree status",
+      viewport_ok = not viewport.is_nil,
+      scene_tree_ok = not scene_tree.is_nil
+
+    info "[VERIFY] Verification completed - setting quit flag"
+    state.push_flag(Quitting)
 
   method ready*() =
     state.nodes.data = state.nodes.game.find_node("Level").get_node("data")
@@ -444,6 +485,10 @@ gdobj Game of Node:
         ev.pressed = true
         state.queued_action = ""
         parse_input_event(ev)
+
+    # Run verification mode if requested
+    if self.verify_mode:
+      self.run_verification()
 
   method on_size_changed() =
     self.rescale_at = get_mono_time()

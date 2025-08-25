@@ -5,6 +5,7 @@
 !AppRun
 
 vendor/pcre
+.claude/settings.local.json
 
 *.dSYM
 *.so
