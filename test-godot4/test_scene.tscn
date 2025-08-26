@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://b8y5k7rvruaqk"]
+
+[ext_resource type="GDExtension" path="res://nim/hello_enu/Helloenu.gdextension" id="1_5wrkp"]
+
+[node name="TestScene" type="Node3D"]
+
+[node name="MyClass" type="MyClass" parent="."]
