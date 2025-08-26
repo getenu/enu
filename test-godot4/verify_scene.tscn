@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://c2h3v4n8m9w1x"]
+
+[ext_resource type="GDExtension" path="res://nim/enu_verify/Enuverify.gdextension" id="1_verify"]
+
+[node name="VerifyScene" type="Node3D"]
+
+[node name="VerifyGame" type="VerifyGame" parent="."]
