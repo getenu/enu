@@ -1,9 +1,9 @@
 [remap]
 
-importer="texture"
-type="CompressedTexture2D"
+importer="3d_texture"
+type="CompressedTexture3D"
 uid="uid://2bxq3wanrw3k"
-path.s3tc="res://.godot/imported/tile_nrm.png-246562e2e5a8991f4ede2a9ccd4db9e0.s3tc.ctex"
+path.s3tc="res://.godot/imported/tile_nrm.png-246562e2e5a8991f4ede2a9ccd4db9e0.s3tc.ctex3d"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -12,30 +12,16 @@ metadata={
 [deps]
 
 source_file="res://textures/tile_nrm.png"
-dest_files=["res://.godot/imported/tile_nrm.png-246562e2e5a8991f4ede2a9ccd4db9e0.s3tc.ctex"]
+dest_files=["res://.godot/imported/tile_nrm.png-246562e2e5a8991f4ede2a9ccd4db9e0.s3tc.ctex3d"]
 
 [params]
 
 compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
-compress/uastc_level=0
-compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
-roughness/mode=0
-roughness/src_normal=""
-process/channel_remap/red=0
-process/channel_remap/green=1
-process/channel_remap/blue=2
-process/channel_remap/alpha=3
-process/fix_alpha_border=true
-process/premult_alpha=false
-process/normal_map_invert_y=false
-process/hdr_as_srgb=false
-process/hdr_clamp_exposure=false
-process/size_limit=0
-detect_3d/compress_to=0
+slices/horizontal=8
+slices/vertical=8

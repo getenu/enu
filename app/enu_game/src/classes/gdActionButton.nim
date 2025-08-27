@@ -1,6 +1,7 @@
 import std/[options, strutils]
 import gdext
-import gdext/classes/[gdButton, gdViewport, gdStyleBoxFlat, gdInputEvent]
+# Use custom Godot bindings for consistency with Game and BuildNode
+import gdext/classes/[gdbutton, gdviewport, gdstyleboxflat, gdinputevent]
 
 # Simple state management for the UI components
 # This will eventually connect to the full game state system

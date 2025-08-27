@@ -9,7 +9,7 @@ const
       if get_env("TARGET") == "ios":
         ("iOS", ".a", "")
       else:
-        ("osx", ".dylib", "")
+        ("macos", ".dylib", "")
     else:
       ("x11", ".so", "")
   cpu = if host_cpu == "arm64": "arm64" else: "64"
@@ -20,7 +20,7 @@ const
     "https://docs.godotengine.org/en/stable/development/compiling/index.html"
   gcc_dlls = ["libgcc_s_seh-1.dll", "libwinpthread-1.dll"]
   nim_dlls = ["pcre64.dll"]
-  godot_opts = "target=debug"
+  godot_opts = "target=editor"
 
 version = "0.2.2"
 author = "Scott Wadden"
@@ -31,25 +31,27 @@ bin_dir = "app"
 src_dir = "src"
 bin = @["enu" & lib_ext]
 
-requires "nim >= 2.2.0",
-  "https://github.com/getenu/Nim#31b77d0",
-  "https://github.com/getenu/godot-nim#43addc1",
+requires "nim == 2.2.4",
   "https://github.com/getenu/model_citizen 0.19.3",
-  "https://github.com/getenu/nanoid.nim 0.2.1", "cligen 1.6.17",
-  "https://github.com/treeform/pretty", "chroma", "markdown", "chronicles",
+  "https://github.com/dsrw/nanoid.nim 0.2.1",
+  "https://github.com/godot-nim/gdext-nim",
+  "https://github.com/godot-nim/gdext-nim?subdir=coronation",
+  "https://github.com/treeform/pretty",
+  "cligen", "chroma", "markdown", "chronicles",
   "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
 proc godot_bin(target = target): string =
-  result = this_dir() & &"/vendor/godot/bin/godot.{target}.tools.{cpu}{exe_ext}"
+  result =
+    this_dir() & &"/vendor/godot/bin/godot.{target}.editor.{cpu}{exe_ext}"
   if target == "server":
     result = result.replace("godot.server", "godot_server.x11")
 
 var generator_path = ""
 proc gen(): string =
   if generator_path == "":
-    exec &"nimble c -d:ssl {generator}"
+    exec &"nim c -d:ssl {generator}"
     generator_path = find_exe generator
   generator_path
 
@@ -67,14 +69,19 @@ proc p(msg: varargs[string, `$`]) =
 
 proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   p "Building Godot..."
-  exec "git submodule update --init"
-  let
-    scons = find_exe "scons"
-    cores = gorge(gen() & " core_count")
+  exec "git submodule update --init --recursive"
+  when host_os == "macosx":
+    with_dir "vendor/godot":
+      exec "./misc/scripts/install_vulkan_sdk_macos.sh"
+
+  let scons = find_exe "scons"
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
-    exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} -j{cores}"
+    let str =
+      &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts}"
+    echo "building: ", str
+    exec str
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
@@ -94,7 +101,7 @@ task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
 
 task test, "run godot tests":
-  exec "nimble c tests/godot/tnode_factories"
+  exec "nim c tests/godot/tnode_factories"
   cd "tests/godot/app"
   exec this_dir() /
     &"vendor/godot/bin/godot_server.osx.opt.tools.{cpu} --quiet --script tests/tests.gdns"
@@ -196,11 +203,16 @@ proc gen_binding_and_copy_stdlib(target = target) =
   exec &"{gen()} generate_api -d={generated_dir} -j={api_json}"
   exec &"{gen()} copy_stdlib -d=vmlib/stdlib"
 
-task prereqs, "Build godot, download fonts, generate binding and stdlib":
+proc gen_godot_bindings() =
+  p "Generating complete Godot bindings from custom Godot build..."
+  exec "nim r tools/generate_godot_bindings.nim"
+
+task prereqs, "Build godot, download fonts, generate bindings and stdlib":
   build_godot()
   download_fonts()
   copy_fonts()
   gen_binding_and_copy_stdlib()
+  gen_godot_bindings()
 
 task import_assets,
   "Import Godot assets. Only required if you're not using the Godot editor":
@@ -224,6 +236,28 @@ task build_and_start, "Build and start":
 
 task gen, "Generate build_helpers":
   discard gen()
+
+task build_extension, "Build the gdextension":
+  p "Building gdextension..."
+  let output_lib =
+    case host_os
+    of "windows": "lib/libEnugame.windows.debug.dll"
+    of "macosx": "lib/libEnugame.macos.debug.dylib"
+    else: "lib/libEnugame.linux.debug.so"
+  with_dir "app/enu_game":
+    exec &"nim c --app:lib --out:{output_lib} bootstrap.nim"
+
+task generate_bindings, "Generate Godot extension API bindings":
+  p "Generating Godot extension API bindings..."
+  let extension_api_json = "extension_api.json"
+  let generated_dir = "generated"
+  rm_dir generated_dir
+  mk_dir generated_dir
+
+  with_dir(generated_dir):
+    exec &"{godot_bin()} --headless --dump-extension-api"
+
+  exec &"nimbledeps/bin/coronation --apisource:{generated_dir}/{extension_api_json} --outdir:{generated_dir}"
 
 proc code_sign(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"

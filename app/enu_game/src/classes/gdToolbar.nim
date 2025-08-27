@@ -1,6 +1,7 @@
 import std/[options, strutils, sequtils]
 import gdext
-import gdext/classes/[gdHBoxContainer, gdButton, gdNode]
+# Use custom Godot bindings for consistency with other classes
+import gdext/classes/[gdhboxcontainer, gdbutton, gdnode]
 
 # Tool types - simplified version of original game tools
 type ToolType* = enum

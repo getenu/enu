@@ -4,12 +4,9 @@
 	branch = 4.4.1-stable
 [submodule "vendor/godot_voxel"]
 	path = vendor/modules/voxel
-	url = https://github.com/getenu/godot_voxel.git
+	url = https://github.com/Zylann/godot_voxel.git
 	branch = master
 [submodule "vendor/pcre"]
 	path = vendor/pcre
 	url = https://github.com/luvit/pcre
 	ignore = dirty
-[submodule "vendor/gdext-nim"]
-	path = vendor/gdext-nim
-	url = https://github.com/godot-nim/gdext-nim.git

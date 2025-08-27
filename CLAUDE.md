@@ -8,12 +8,15 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 
 ## Build Commands
 
+Note that some of these are broken during the Godot 3 -> 4 migration. If you need one of these and it isn't working, and the fix isn't obvious, please stop and ask about it.
+
 ### Core Development Commands
-- `nimble build` - Build the main application (required after code changes)
-- `nimble prereqs` - Build Godot, download fonts, generate API bindings and stdlib (first-time setup)
-- `nimble start` - Run Enu in development mode
-- `nimble build_and_start` - Build and run in one command
-- `nimble edit` - Open project in Godot editor
+- `nimble setup` - Sync Nim dependencies
+- `nimble build_godot` - Fully build Godot
+- `nimble generate_bindings` - Generate Nim bindings. The `gdext` package we depend on also includes Godot bindings, but because our Godot is build with the voxel module it has ~70 additional classes.
+- `nimble build_extension` - build Enu.
+- `nimble edit` - Open project in Godot.
+- `nimble start` - Launch Enu
 
 ### Distribution and Packaging
 - `nimble dist` - Build complete distribution package for current platform
@@ -70,7 +73,7 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 
 **Godot Binding**: Uses nim-godot with auto-generated bindings from Godot 3.5 API. Generated code uses `camelCase` but project convention is `snake_case`.
 
-**Model-View Architecture**: 
+**Model-View Architecture**:
 - Models handle data and state (using model_citizen library)
 - Controllers manage game logic and coordinate between models and UI
 - UI components handle presentation and user interaction
@@ -132,7 +135,7 @@ info "[VERIFY] Systems initialized",
   level = state.config.level
 ```
 
-#### Error Logging  
+#### Error Logging
 ```nim
 state.err "Error message", error = e.msg
 ```

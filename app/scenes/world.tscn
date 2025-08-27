@@ -2,7 +2,6 @@
 
 [ext_resource path="res://environments/default.tres" type="Environment" id=2]
 [ext_resource path="res://materials/default_ground.tres" type="Material" id=3]
-[ext_resource path="res://components/GroundNode.gdns" type="Script" id=4]
 
 [sub_resource type="PlaneMesh" id=1]
 material = ExtResource( 3 )
@@ -29,12 +28,10 @@ directional_shadow_mode = 0
 
 [node name="Ground" type="MeshInstance" parent="."]
 mesh = SubResource( 1 )
-script = ExtResource( 4 )
 
 [node name="StaticBody" type="StaticBody" parent="Ground"]
 collision_layer = 524288
 collision_mask = 0
-script = ExtResource( 4 )
 
 [node name="CollisionShape" type="CollisionShape" parent="Ground/StaticBody"]
 shape = SubResource( 2 )

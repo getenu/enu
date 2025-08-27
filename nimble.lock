@@ -155,13 +155,13 @@
       }
     },
     "cligen": {
-      "version": "1.6.17",
-      "vcsRevision": "6f6cd154e88b33a21183e8f07edd253cf6dc00df",
+      "version": "1.9.0",
+      "vcsRevision": "b75a4a04bc74e28c692ce3d3152013aef0ff3eb6",
       "url": "https://github.com/c-blake/cligen.git",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "a7d0dcd86419c0f53363c8dd02e9afb3dc9e8890"
+        "sha1": "b218a8e2e01121aa8087ef4080cf2e31d9f21409"
       }
     },
     "dotenv": {
@@ -194,26 +194,14 @@
         "sha1": "408bde8679bce63dfb6f424e107eb37c5eb31510"
       }
     },
-    "nim": {
-      "version": "2.2.0",
-      "vcsRevision": "31b77d0c5224fb73190fc300b76c2bed19045a2b",
-      "url": "https://github.com/dsrw/Nim",
+    "gdext": {
+      "version": "0.13.1",
+      "vcsRevision": "1b29ff650ff96128d1772bf275bb94b2cedf6ae2",
+      "url": "https://github.com/godot-nim/gdext-nim",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "1a9d586b3e061e83ae600c49f4e2a10fb8d7b469"
-      }
-    },
-    "godot": {
-      "version": "0.8.5",
-      "vcsRevision": "43addc1a4d553e4bc7d76192be7ed6f6b4333dc5",
-      "url": "https://github.com/getenu/godot-nim",
-      "downloadMethod": "git",
-      "dependencies": [
-        "nim"
-      ],
-      "checksums": {
-        "sha1": "4919c3b24cfd0359be59dcb0f0eb5c93d25e02fd"
+        "sha1": "e87eacb118cf7a6256811807423e81b8fa87de05"
       }
     },
     "jsony": {
@@ -327,6 +315,16 @@
       "dependencies": [],
       "checksums": {
         "sha1": "9c7e49440ae9bb6494bd202eea6ef7405811c6bb"
+      }
+    },
+    "nim": {
+      "version": "2.2.4",
+      "vcsRevision": "",
+      "url": "https://github.com/nim-lang/Nim.git",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "bd4a70c2783ac88cd25d8098d13742e3b674dc7d"
       }
     },
     "parsetoml": {

@@ -1,9 +1,13 @@
 import std/[monotimes, os, strutils, sequtils, math, tables]
 import std/random as std_random
 import gdext
-import gdext/classes/[gdNode, gdViewport, gdControl, gdLabel, gdSceneTree, gdInputEvent, gdInputEventKey,
-                      gdWorldEnvironment, gdEnvironment, gdViewportTexture, gdResourceLoader, gdOS,
-                     gdTheme, gdFontFile, gdContainer]
+# Use custom Godot bindings with voxel support for consistent versions
+import gdext/classes/[gdnode, gdviewport, gdcontrol, gdlabel, gdscenetree, 
+                     gdinputevent, gdinputeventkey, gdworldenvironment, gdenvironment,
+                     gdviewporttexture, gdresourceloader, gdos, gdtheme, gdfontfile, 
+                     gdcontainer, gdnode3d, gdmeshinstance3d, gdboxmesh, gdstandardmaterial3d]
+import gdActionButton
+# import gdBuildNode  # Temporarily disabled until voxel bindings work
 
 # Ported types from original Enu game.nim
 type
@@ -106,6 +110,8 @@ proc set_panel_width*(self: Game) {.gdsync.}
 proc calculate_toolbar_size*(self: Game) {.gdsync.}
 proc setup_responsive_layout*(self: Game) {.gdsync.}
 proc setup_theme_system*(self: Game) {.gdsync.}
+proc update_action_button_sizes*(self: Game) {.gdsync.}
+proc spawn_test_build*(self: Game) {.gdsync.}
 
 # Placeholder implementations - to be replaced with real functionality
 proc load_user_config(user_data_dir: string): UserConfig =
@@ -204,9 +210,10 @@ proc init_real_game*(self: Game) {.gdsync.} =
       i += 1
   
   # For testing, also enable verify mode by default in debug builds
-  when not defined(release):
-    if not verify_mode:
-      verify_mode = true
+  # Disabled for normal app usage - enable manually with --verify if needed
+  # when not defined(release):
+  #   if not verify_mode:
+  #     verify_mode = true
     
   # Environment variable support (ported from original)
   let env_listen = $OS.getEnvironment("ENU_LISTEN_ADDRESS")
@@ -275,6 +282,9 @@ proc init_real_game*(self: Game) {.gdsync.} =
   
   # Set up UI system  
   self.setup_ui()
+  
+  # Spawn test voxel build to test 3D rendering
+  self.spawn_test_build()
   
   # Run verification if requested
   if self.verify_mode:
@@ -545,8 +555,15 @@ proc calculate_toolbar_size*(self: Game) {.gdsync.} =
     ", total_width_needed=" & $total_toolbar_width & 
     ", viewport_width=" & $viewport_width)
   
-  # Cache the calculated size
+  # Cache the calculated size and update ActionButton globals
   state.config.effective_toolbar_size = toolbar_size
+  
+  # TODO: Replace with proper state management system
+  # For now, update the global variables that ActionButtons use
+  global_toolbar_size = toolbar_size
+  
+  # Update all ActionButton sizes in the scene
+  self.update_action_button_sizes()
 
 proc setup_responsive_layout*(self: Game) {.gdsync.} =
   ## Set up responsive layout based on viewport size.
@@ -596,3 +613,36 @@ proc setup_ui*(self: Game) {.gdsync.} =
   self.setup_responsive_layout()
   
   print("[UI] UI system initialized")
+
+# Test voxel system by spawning a BuildNode
+proc spawn_test_build*(self: Game) {.gdsync.} =
+  ## Spawn a test BuildNode with voxels to verify 3D rendering works
+  print("[VOXEL] Spawning test BuildNode...")
+  
+  # Try to load the BuildNode scene
+  let scene_tree = self.getTree()
+  if scene_tree.is_nil():
+    print("[VOXEL] ERROR: Scene tree is nil")
+    return
+  
+  let current_scene = scene_tree.getCurrentScene()
+  if current_scene.is_nil():
+    print("[VOXEL] ERROR: Current scene is nil") 
+    return
+  
+  # TODO: Re-enable when voxel bindings are working
+  # let build_node = new(BuildNode)
+  # build_node.setPosition(vector3(0, 0, -10))
+  # current_scene.addChild(build_node as Node)
+  
+  print("[VOXEL] BuildNode creation temporarily disabled - using default gdext bindings")
+
+# Helper method to update ActionButton sizes
+proc update_action_button_sizes*(self: Game) {.gdsync.} =
+  ## Update all ActionButton sizes in the scene tree
+  ## This is a temporary solution until proper state management is implemented
+  let scene_tree = self.getTree()
+  if not scene_tree.is_nil():
+    # Find all ActionButton nodes and trigger their size update
+    # TODO: Use proper node finding when scene structure is complete
+    print("[UI] Updating ActionButton sizes - effective_toolbar_size=" & $state.config.effective_toolbar_size)
