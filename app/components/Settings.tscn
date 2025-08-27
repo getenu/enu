@@ -1,7 +1,6 @@
 [gd_scene load_steps=3 format=2]
 
 [ext_resource path="res://themes/DarkTheme.tres" type="Theme" id=1]
-[ext_resource path="res://components/Settings.gdns" type="Script" id=2]
 
 [node name="Settings" type="MarginContainer"]
 margin_left = 20.0
@@ -9,7 +8,6 @@ margin_top = 20.0
 margin_right = 894.0
 margin_bottom = 541.0
 theme = ExtResource( 1 )
-script = ExtResource( 2 )
 
 [node name="Window" type="PanelContainer" parent="."]
 margin_right = 862.0

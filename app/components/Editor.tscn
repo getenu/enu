@@ -1,8 +1,6 @@
 [gd_scene load_steps=5 format=2]
 
-[ext_resource path="res://components/Editor.gdns" type="Script" id=1]
 [ext_resource path="res://themes/DarkTheme.tres" type="Theme" id=2]
-[ext_resource path="res://components/FloatingButton.gdns" type="Script" id=3]
 
 [sub_resource type="StyleBoxFlat" id=5]
 bg_color = Color( 0, 0, 0, 0.839216 )
@@ -14,7 +12,6 @@ margin_right = 40.0
 margin_bottom = 40.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
-script = ExtResource( 1 )
 
 [node name="ScrollContainer" type="ScrollContainer" parent="."]
 margin_right = 74.0
@@ -80,7 +77,6 @@ rect_pivot_offset = Vector2( 138, 238 )
 mouse_default_cursor_shape = 2
 theme_type_variation = "IconButton"
 text = "  "
-script = ExtResource( 3 )
 
 [node name="Run" type="Button" parent="GridContainer/MarginContainer/GridContainer"]
 margin_top = 50.0
@@ -90,4 +86,3 @@ mouse_filter = 1
 mouse_default_cursor_shape = 2
 theme_type_variation = "IconButton"
 text = "  "
-script = ExtResource( 3 )

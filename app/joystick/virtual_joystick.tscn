@@ -2,7 +2,6 @@
 
 [ext_resource path="res://joystick/textures/joystick_base_outline.png" type="Texture" id=1]
 [ext_resource path="res://joystick/textures/joystick_tip_arrows.png" type="Texture" id=2]
-[ext_resource path="res://joystick/virtual_joystick.gdns" type="Script" id=3]
 
 [node name="Virtual joystick" type="Control"]
 modulate = Color( 1, 1, 1, 0.509804 )
@@ -12,7 +11,6 @@ margin_left = 50.0
 margin_top = -250.0
 margin_right = 250.0
 margin_bottom = -50.0
-script = ExtResource( 3 )
 joystick_mode = 1
 visibility_mode = 1
 action_left = "move_left"

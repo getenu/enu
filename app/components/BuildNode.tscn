@@ -1,6 +1,5 @@
 [gd_scene load_steps=25 format=2]
 
-[ext_resource path="res://components/BuildNode.gdns" type="Script" id=1]
 [ext_resource path="res://textures/black_block.png" type="Texture" id=2]
 [ext_resource path="res://textures/white_block.png" type="Texture" id=3]
 [ext_resource path="res://textures/red_block.png" type="Texture" id=4]
@@ -249,7 +248,6 @@ material/2 = SubResource( 13 )
 material/3 = SubResource( 14 )
 material/4 = SubResource( 15 )
 material/5 = SubResource( 16 )
-script = ExtResource( 1 )
 
 [node name="SightRay" type="RayCast" parent="."]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.5, -0.5 )

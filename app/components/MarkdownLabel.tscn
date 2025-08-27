@@ -1,6 +1,5 @@
 [gd_scene load_steps=19 format=2]
 
-[ext_resource path="res://components/MarkdownLabel.gdns" type="Script" id=1]
 [ext_resource path="res://themes/DarkTheme.tres" type="Theme" id=2]
 [ext_resource path="res://themes/text-bold-italic.otf" type="DynamicFontData" id=3]
 [ext_resource path="res://themes/text-italic.otf" type="DynamicFontData" id=4]
@@ -55,7 +54,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
-script = ExtResource( 1 )
 markdown = ""
 default_font = SubResource( 7 )
 italic_font = SubResource( 8 )

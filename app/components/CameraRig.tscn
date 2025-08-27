@@ -1,6 +1,5 @@
 [gd_scene load_steps=3 format=2]
 
-[ext_resource path="res://components/AimTarget.gdns" type="Script" id=1]
 [ext_resource path="res://textures/reticle.png" type="Texture" id=5]
 
 [node name="CameraRig" type="Spatial"]
@@ -20,4 +19,3 @@ collide_with_areas = true
 [node name="AimTarget" type="Sprite3D" parent="."]
 pixel_size = 0.002
 texture = ExtResource( 5 )
-script = ExtResource( 1 )

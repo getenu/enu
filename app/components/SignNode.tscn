@@ -2,7 +2,6 @@
 
 [ext_resource path="res://themes/mono.otf" type="DynamicFontData" id=1]
 [ext_resource path="res://components/MarkdownLabel.tscn" type="PackedScene" id=5]
-[ext_resource path="res://components/SignNode.gdns" type="Script" id=7]
 
 [sub_resource type="DynamicFont" id=19]
 size = 72
@@ -43,7 +42,6 @@ data = PoolVector3Array( -0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 0
 
 [node name="SignNode" type="Spatial"]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -1.99 )
-script = ExtResource( 7 )
 
 [node name="Viewport" type="Viewport" parent="."]
 size = Vector2( 1200, 1200 )
