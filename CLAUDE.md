@@ -116,6 +116,50 @@ if ?my_number:            # checks if != 0
 
 **Rule**: Always use `?` instead of manual nil checks, emptiness checks, or is_some calls.
 
+### Godot 4 Integration Conventions
+
+#### {.gdsync.} Pragma Usage
+The `{.gdsync.}` pragma is used specifically for methods that are called by Godot's signal/callback system:
+
+```nim
+# Godot lifecycle methods - MUST use {.gdsync.}
+method ready*(self: MyClass) {.gdsync.} =
+method process*(self: MyClass, delta: float) {.gdsync.} =
+method unhandled_input*(self: MyClass, event: InputEvent) {.gdsync.} =
+
+# Godot signal callbacks - MUST use {.gdsync.}
+method pressed*(self: ActionButton) {.gdsync.} =
+
+# Internal methods - do NOT use {.gdsync.}
+proc setup_ui(self: Game) =
+proc calculate_toolbar_size(self: Game) =
+```
+
+**Rule**: Only use `{.gdsync.}` for methods that Godot calls directly (lifecycle methods, signal callbacks). Internal methods should not use this pragma.
+
+#### Export Visibility (`*` symbol)
+Control visibility carefully to maintain clean APIs:
+
+```nim
+# Export types for external use
+type MyClass* {.gdsync.} = ptr object of Node
+
+# Export methods that need external access
+proc public_api*(self: MyClass) =
+
+# Keep internal methods private (no `*`)
+proc internal_helper(self: MyClass) =
+proc setup_internal_state(self: MyClass) =
+
+# Export global state/config that other modules need
+var state*: GameState
+
+# Keep module-local variables private
+var current_tool = BlueBlock
+```
+
+**Rule**: Export types and methods that are genuinely needed by other modules. Keep internal implementation details private by default.
+
 ### Logging Conventions
 The project uses [Chronicles](https://github.com/status-im/nim-chronicles) for structured logging. Follow these patterns:
 
@@ -163,3 +207,5 @@ This mode:
 - `nimble test` - Run Godot-based tests
 - Always ensure tests pass before committing changes
 - Use verification mode to validate core system functionality
+
+- Always use snake_case for variables and function names. Types and constants use UpperCamelCase

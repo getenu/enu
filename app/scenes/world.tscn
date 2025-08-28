@@ -1,39 +1,37 @@
-[gd_scene load_steps=6 format=2]
+[gd_scene load_steps=6 format=3 uid="uid://bxvxbxj8j8x8x"]
 
-[ext_resource path="res://environments/default.tres" type="Environment" id=2]
-[ext_resource path="res://materials/default_ground.tres" type="Material" id=3]
+[ext_resource type="Environment" uid="uid://dpg7oejg7j7j7" path="res://environments/default.tres" id="2"]
+[ext_resource type="Material" uid="uid://ck8k8k8k8k8k8" path="res://materials/default_ground.tres" id="3"]
 
-[sub_resource type="PlaneMesh" id=1]
-material = ExtResource( 3 )
-size = Vector2( 1000, 1000 )
+[sub_resource type="PlaneMesh" id="PlaneMesh_1"]
+material = ExtResource("3")
+size = Vector2(1000, 1000)
 
-[sub_resource type="ConcavePolygonShape" id=2]
-margin = 0.001
-data = PoolVector3Array( 500, 0, 500, -500, 0, 500, 500, 0, -500, -500, 0, 500, -500, 0, -500, 500, 0, -500 )
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_1"]
+data = PackedVector3Array(500, 0, 500, -500, 0, 500, 500, 0, -500, -500, 0, 500, -500, 0, -500, 500, 0, -500)
 
-[node name="Level" type="Spatial"]
+[node name="Level" type="Node3D"]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = ExtResource( 2 )
+environment = ExtResource("2")
 
-[node name="DirectionalLight" type="DirectionalLight" parent="WorldEnvironment"]
-transform = Transform( -0.720719, -0.691799, -0.0444846, -0.669706, 0.678255, 0.302431, -0.179049, 0.247759, -0.952133, 7.77656, 18.6011, 2.38791 )
-light_color = Color( 0.976471, 0.909804, 0.839216, 1 )
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="WorldEnvironment"]
+transform = Transform3D(-0.720719, -0.691799, -0.0444846, -0.669706, 0.678255, 0.302431, -0.179049, 0.247759, -0.952133, 7.77656, 18.6011, 2.38791)
+light_color = Color(0.976471, 0.909804, 0.839216, 1)
 light_energy = 0.786
-light_indirect_energy = 0.0
-light_specular = 0.8
 shadow_enabled = true
-shadow_color = Color( 0.658824, 0.658824, 0.658824, 1 )
-directional_shadow_mode = 0
 
-[node name="Ground" type="MeshInstance" parent="."]
-mesh = SubResource( 1 )
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_1")
 
-[node name="StaticBody" type="StaticBody" parent="Ground"]
+[node name="StaticBody3D" type="StaticBody3D" parent="Ground"]
 collision_layer = 524288
 collision_mask = 0
 
-[node name="CollisionShape" type="CollisionShape" parent="Ground/StaticBody"]
-shape = SubResource( 2 )
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_1")
 
-[node name="data" type="Spatial" parent="."]
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 2, 5)
+
+[node name="data" type="Node3D" parent="."]

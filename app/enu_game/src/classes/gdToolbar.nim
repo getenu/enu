@@ -16,7 +16,7 @@ type ToolType* = enum
   PlaceBot
 
 # Simple state management - will eventually connect to full game state
-var current_tool* = BlueBlock
+var current_tool = BlueBlock
 
 type Toolbar* {.gdsync.} = ptr object of HBoxContainer
   blocks: seq[string]
@@ -47,7 +47,7 @@ method ready*(self: Toolbar) {.gdsync.} =
   # self.set_tool(BlueBlock)
   current_tool = BlueBlock
   
-  print("[UI] Toolbar initialized with " & $self.getChildCount() & " buttons")
+  print("[UI] Toolbar initialized with " & $self.get_child_count() & " buttons")
 
 method process*(self: Toolbar; delta: float) {.gdsync.} =
   # Handle preview generation and other toolbar updates
@@ -60,7 +60,7 @@ method process*(self: Toolbar; delta: float) {.gdsync.} =
   #   # Update button icon with generated preview
   discard # Placeholder until preview generation is implemented
 
-proc set_tool*(self: Toolbar, tool: ToolType) {.gdsync.} =
+proc set_tool(self: Toolbar, tool: ToolType) =
   ## Set the current tool and update button states
   current_tool = tool
   
@@ -78,14 +78,14 @@ proc set_tool*(self: Toolbar, tool: ToolType) {.gdsync.} =
   
   if tool_name.len > 0:
     let button_name = "Button-" & tool_name
-    let button_node = self.getNode(NodePath(button_name))
+    let button_node = self.get_node(NodePath(button_name))
     if not button_node.is_nil():
       let button = button_node as Button
       if not button.is_nil():
-        button.setPressed(true)
+        button.set_pressed(true)
         print("[TOOLBAR] Tool set to: " & tool_name)
 
-proc on_action_changed*(self: Toolbar, button_name: string) {.gdsync.} =
+proc on_action_changed(self: Toolbar, button_name: string) =
   ## Handle tool change from ActionButton
   print("[TOOLBAR] Action changed: " & button_name)
   
@@ -109,5 +109,5 @@ proc on_action_changed*(self: Toolbar, button_name: string) {.gdsync.} =
       print("[TOOLBAR] Tool changed to: " & $new_tool)
 
 # Proc to be called by ActionButtons when they're pressed
-proc handle_button_press*(self: Toolbar, button_name: string) {.gdsync.} =
+proc handle_button_press(self: Toolbar, button_name: string) =
   self.on_action_changed(button_name)

@@ -2,12 +2,12 @@ import std/[monotimes, os, strutils, sequtils, math, tables]
 import std/random as std_random
 import gdext
 # Use custom Godot bindings with voxel support for consistent versions
-import gdext/classes/[gdnode, gdviewport, gdcontrol, gdlabel, gdscenetree, 
+import gdext/classes/[gdnode, gdviewport, gdcontrol, gdlabel, gdscenetree,
                      gdinputevent, gdinputeventkey, gdworldenvironment, gdenvironment,
-                     gdviewporttexture, gdresourceloader, gdos, gdtheme, gdfontfile, 
+                     gdviewporttexture, gdresourceloader, gdos, gdtheme, gdfontfile,
                      gdcontainer, gdnode3d, gdmeshinstance3d, gdboxmesh, gdstandardmaterial3d]
 import gdActionButton
-# import gdBuildNode  # Temporarily disabled until voxel bindings work
+import gdBuildNode
 
 # Ported types from original Enu game.nim
 type
@@ -19,7 +19,7 @@ type
     lib_dir*: string
     world_dir*: string
     level_dir*: string
-    
+
     # Display settings
     screen_scale*: float
     font_size*: int
@@ -27,34 +27,34 @@ type
     megapixels*: float
     full_screen*: bool
     show_stats*: bool
-    
+
     # Movement settings
     walk_speed*: int
     fly_speed*: int
     alt_walk_speed*: int
     alt_fly_speed*: int
-    
+
     # Input settings
     mouse_sensitivity*: float
     gamepad_sensitivity*: float
     invert_gamepad_y_axis*: bool
     semicolon_as_colon*: bool
-    
+
     # Network settings
     connect_address*: string
     listen_address*: string
     run_server*: bool
-    
+
     # Game settings
     player_color*: tuple[r, g, b, a: float]  # Simple color tuple for now
     environment*: string
     megapixels_override*: float
-    
+
     # UI settings
     full_width_panels*: bool
     effective_toolbar_size*: float  # Calculated toolbar size after responsive adjustments
     theme_loaded*: bool  # Whether theme system has been initialized
-    
+
   UserConfig* = ref object
     # User-specific config that gets saved/loaded
     font_size*: int
@@ -78,13 +78,13 @@ type
     invert_gamepad_y_axis*: bool
     environment*: string
     god_mode*: bool
-    
+
   GameState* = ref object
     frame_count*: int
     config*: GameConfig
     verify_mode*: bool
     scale_factor*: float  # For viewport scaling
-    
+
 var state*: GameState
 var environment_cache {.threadvar.}: Table[string, Environment]
 
@@ -99,19 +99,19 @@ type Game* {.gdsync.} = ptr object of Node
   reticle: Control  # For UI elements
 
 # Forward declarations
-proc run_verification_real*(self: Game) {.gdsync.}
-proc setup_scene_nodes*(self: Game) {.gdsync.}
-proc load_environment*(self: Game, environment: string) {.gdsync.}
-proc rescale*(self: Game) {.gdsync.}
-proc setup_ui*(self: Game) {.gdsync.}
-proc setup_fonts*(self: Game) {.gdsync.}
-proc set_font_size*(self: Game, size: int) {.gdsync.}
-proc set_panel_width*(self: Game) {.gdsync.}
-proc calculate_toolbar_size*(self: Game) {.gdsync.}
-proc setup_responsive_layout*(self: Game) {.gdsync.}
-proc setup_theme_system*(self: Game) {.gdsync.}
-proc update_action_button_sizes*(self: Game) {.gdsync.}
-proc spawn_test_build*(self: Game) {.gdsync.}
+proc run_verification_real(self: Game)
+proc setup_scene_nodes(self: Game)
+proc load_environment(self: Game, environment: string)
+proc rescale(self: Game)
+proc setup_ui(self: Game)
+proc setup_fonts(self: Game)
+proc set_font_size(self: Game, size: int)
+proc set_panel_width(self: Game)
+proc calculate_toolbar_size(self: Game)
+proc setup_responsive_layout(self: Game)
+proc setup_theme_system(self: Game)
+proc update_action_button_sizes(self: Game)
+proc spawn_test_build(self: Game)
 
 # Placeholder implementations - to be replaced with real functionality
 proc load_user_config(user_data_dir: string): UserConfig =
@@ -140,11 +140,11 @@ proc save_user_config(config: UserConfig) =
 
 proc get_user_data_dir(): string =
   # Use proper Godot 4 OS API
-  $OS.getUserDataDir()
+  $OS.get_user_data_dir()
 
 proc get_cmdline_args(): seq[string] =
   # Use proper Godot 4 OS API
-  let args = OS.getCmdlineArgs()
+  let args = OS.get_cmdline_args()
   var result: seq[string] = @[]
   for i in 0..<args.size():
     result.add($args[i])
@@ -152,7 +152,7 @@ proc get_cmdline_args(): seq[string] =
 
 proc get_executable_path(): string =
   # Use proper Godot 4 OS API
-  $OS.getExecutablePath()
+  $OS.get_executable_path()
 
 # Create proper GameState with full configuration
 proc init_game_state(): GameState =
@@ -162,34 +162,34 @@ proc init_game_state(): GameState =
   result.verify_mode = false
   result.scale_factor = 1.0  # Default scale factor
 
-# Ported from original Game.init() method  
+# Ported from original Game.init() method
 proc init_real_game*(self: Game) {.gdsync.} =
   print("[GAME] Starting real Enu Game initialization...")
-  
+
   # Set high priority like original
-  self.setProcessPriority(-100)
+  self.set_process_priority(-100)
 
   # Screen scale detection (ported from original)
   let screen_scale = 1.0  # TODO: Port screen scale detection
-    
+
   var initial_user_config = load_user_config(get_user_data_dir())
-  
+
   # Initialize state like original
   state = init_game_state()
   # TODO: Set state.nodes.game = self when nodes system is ported
-  
+
   var uc = initial_user_config
-  
+
   # Randomize like original
   std_random.randomize()
-  
+
   # Command-line argument parsing (now using real Godot 4 OS API)
   var args = get_cmdline_args()
-  
+
   var connect_address = ""
-  var listen_address = ""  
+  var listen_address = ""
   var verify_mode = false
-  
+
   # Parse --connect argument
   var i = 0
   while i < args.len:
@@ -208,29 +208,29 @@ proc init_real_game*(self: Game) {.gdsync.} =
       i += 1
     else:
       i += 1
-  
+
   # For testing, also enable verify mode by default in debug builds
   # Disabled for normal app usage - enable manually with --verify if needed
   # when not defined(release):
   #   if not verify_mode:
   #     verify_mode = true
-    
+
   # Environment variable support (ported from original)
-  let env_listen = $OS.getEnvironment("ENU_LISTEN_ADDRESS")
-  let env_connect = $OS.getEnvironment("ENU_CONNECT_ADDRESS")
-  
+  let env_listen = $OS.get_environment("ENU_LISTEN_ADDRESS")
+  let env_connect = $OS.get_environment("ENU_CONNECT_ADDRESS")
+
   if env_listen.len > 0 and listen_address.len == 0:
     listen_address = env_listen
   if env_connect.len > 0 and connect_address.len == 0:
     connect_address = env_connect
-    
+
   if listen_address.len > 0 and connect_address.len > 0:
     print("[ERROR] Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS")
     # TODO: Handle this error properly
-  
+
   # Platform-specific paths (ported from original)
   let vmlib = get_executable_path().parentDir() / ".." / ".." / ".." / "vmlib"
-  
+
   # Initialize full configuration (ported from original config_value.value block)
   state.config.screen_scale = screen_scale
   state.config.work_dir = get_user_data_dir()
@@ -259,33 +259,42 @@ proc init_real_game*(self: Game) {.gdsync.} =
   state.config.invert_gamepad_y_axis = uc.invert_gamepad_y_axis
   state.config.environment = uc.environment
   state.config.megapixels_override = 0.0  # Default from original
-  
+
   # Set verify mode
   self.verify_mode = verify_mode
   state.verify_mode = verify_mode
-  
+
   # TODO: Port controller initialization
   # self.node_controller = NodeController.init
   # self.script_controller = ScriptController.init
-  
+
   save_user_config(uc)
-  
+
   print("[GAME] Real game initialization completed!")
   print("[CONFIG] world=" & state.config.world & ", level=" & state.config.level)
   print("[CONFIG] work_dir=" & state.config.work_dir)
   print("[CONFIG] lib_dir=" & state.config.lib_dir)
-  
+
   # Set up scene management systems
   self.setup_scene_nodes()
   self.load_environment(state.config.environment)
   self.rescale()
-  
-  # Set up UI system  
+
+  # Set up UI system
   self.setup_ui()
-  
+
   # Spawn test voxel build to test 3D rendering
   self.spawn_test_build()
-  
+
+  # Connect to quit request signal - ensure auto accept is enabled
+  print("[GAME] Enabling automatic quit handling...")
+  let tree = self.get_tree()
+  if not tree.is_nil():
+    tree.set_auto_accept_quit(true)
+    print("[GAME] Auto-accept quit enabled")
+  else:
+    print("[GAME] ERROR: Could not access scene tree for quit setup")
+
   # Run verification if requested
   if self.verify_mode:
     self.run_verification_real()
@@ -293,31 +302,31 @@ proc init_real_game*(self: Game) {.gdsync.} =
     print("[GAME] Game initialized - verification mode disabled")
 
 # Viewport scaling system ported from original rescale() method
-proc rescale*(self: Game) {.gdsync.} =
-  let vp = self.getViewport().getVisibleRect().size
-  let megapixels = 
+proc rescale(self: Game) =
+  let vp = self.get_viewport().get_visible_rect().size
+  let megapixels =
     if state.config.megapixels_override > 0.0:
       state.config.megapixels_override
     else:
       state.config.megapixels
-  
+
   state.scale_factor = sqrt(megapixels * 1_000_000.0 / (vp.x * vp.y))
-  
+
   # TODO: Port scaled viewport setup when we have the scene structure
   # self.scaled_viewport.size = vp * state.scale_factor
   # self.scaled_viewport.get_texture.flags = if megapixels >= 1.0: FLAG_FILTER else: 0
-  
-  print("[SCENE] Rescaled viewport - scale_factor=" & $state.scale_factor & 
+
+  print("[SCENE] Rescaled viewport - scale_factor=" & $state.scale_factor &
     ", megapixels=" & $megapixels & ", viewport_size=" & $vp)
 
 # Environment loading system ported from original load_environment() method
-proc load_environment*(self: Game, environment: string) {.gdsync.} =
+proc load_environment(self: Game, environment: string) =
   print("[SCENE] Loading environment: " & environment)
-  
+
   # TODO: Port full environment loading when we have the scene structure
   # For now, just cache the environment setting
   state.config.environment = environment
-  
+
   # Placeholder environment resource loading
   if environment notin environment_cache:
     # TODO: Port actual resource loading
@@ -327,29 +336,29 @@ proc load_environment*(self: Game, environment: string) {.gdsync.} =
     #   environment_res = ResourceLoader.load(res) as Environment
     # environment_cache[environment] = environment_res
     print("[SCENE] Environment cached (placeholder): " & environment)
-  
+
   print("[SCENE] Environment loaded: " & environment)
 
 # Scene tree setup ported from original ready() method
-proc setup_scene_nodes*(self: Game) {.gdsync.} =
+proc setup_scene_nodes(self: Game) =
   print("[SCENE] Setting up scene nodes...")
-  
+
   # TODO: Port node finding when we have the full scene structure
   # state.nodes.data = state.nodes.game.find_node("Level").get_node("data")
   # self.scaled_viewport = self.get_node("ViewportContainer/Viewport") as Viewport
   # self.reticle = self.find_node("Reticle") as Control
   # self.stats = self.find_node("stats") as Label
-  
+
   # For now, just verify basic scene tree functionality
-  let scene_tree = self.getTree()
-  let viewport = self.getViewport()
-  
+  let scene_tree = self.get_tree()
+  let viewport = self.get_viewport()
+
   if not scene_tree.is_nil() and not viewport.is_nil():
     print("[SCENE] Basic scene tree setup verified")
-    
-    # Set up basic scene tree settings like original
-    scene_tree.setAutoAcceptQuit(false)
-    
+
+    # Allow automatic quit handling - don't disable it
+    # scene_tree.setAutoAcceptQuit(false)  # Commented out to allow normal quit behavior
+
     # TODO: Port signal binding when we have the methods
     # self.bind_signals(self.get_viewport(), "size_changed")
     # self.bind_signals(self.get_tree(), "global_menu_action")
@@ -357,87 +366,87 @@ proc setup_scene_nodes*(self: Game) {.gdsync.} =
     print("[SCENE] ERROR: Scene tree or viewport not available")
 
 # Enhanced verification that shows the real config system working
-proc run_verification_real*(self: Game) {.gdsync.} =
+proc run_verification_real(self: Game) =
   print("[VERIFY] Enu Godot 4 Game REAL initialization verification...")
-  
-  let scene_tree = self.getTree()
-  let viewport = self.getViewport()
-  
-  print("[VERIFY] Systems initialized - scene_tree=" & $(not scene_tree.is_nil()) & 
-    ", viewport=" & $(not viewport.is_nil()) & 
+
+  let scene_tree = self.get_tree()
+  let viewport = self.get_viewport()
+
+  print("[VERIFY] Systems initialized - scene_tree=" & $(not scene_tree.is_nil()) &
+    ", viewport=" & $(not viewport.is_nil()) &
     ", gdext_working=true")
-    
+
   print("[VERIFY] OS APIs - real_user_data_dir=" & get_user_data_dir() &
     ", real_executable_path=" & get_executable_path() &
     ", cmdline_args_count=" & $get_cmdline_args().len)
-    
+
   print("[VERIFY] Config system - config_loaded=true" &
     ", world=" & state.config.world &
     ", level=" & state.config.level &
     ", work_dir=" & state.config.work_dir)
-    
+
   print("[VERIFY] Paths - world_dir=" & state.config.world_dir &
     ", level_dir=" & state.config.level_dir &
     ", lib_dir=" & state.config.lib_dir)
-    
+
   print("[VERIFY] Display - screen_scale=" & $state.config.screen_scale &
     ", font_size=" & $state.config.font_size &
     ", megapixels=" & $state.config.megapixels)
-    
+
   print("[VERIFY] Movement - walk_speed=" & $state.config.walk_speed &
     ", fly_speed=" & $state.config.fly_speed)
-    
+
   print("[VERIFY] Scene Management - scale_factor=" & $state.scale_factor &
     ", environment=" & state.config.environment &
     ", auto_accept_quit=false")
-    
+
   print("[VERIFY] Real Game initialization verification completed!")
-  
+
   # Quit verification
   print("[VERIFY] Verification successful - real initialization + scene management working!")
-  let tree = self.getTree()
+  let tree = self.get_tree()
   tree.quit(0)
 
 # Verification system ported from Godot 3 version
 proc run_verification*(self: Game) {.gdsync.} =
   print("[VERIFY] Enu Godot 4 Game verification starting...")
-  
+
   # Test basic systems - this is the core scene management test
-  let scene_tree = self.getTree()
-  let viewport = self.getViewport()
-  
-  print("[VERIFY] Systems initialized - scene_tree=" & $(not scene_tree.is_nil()) & 
-    ", viewport=" & $(not viewport.is_nil()) & 
+  let scene_tree = self.get_tree()
+  let viewport = self.get_viewport()
+
+  print("[VERIFY] Systems initialized - scene_tree=" & $(not scene_tree.is_nil()) &
+    ", viewport=" & $(not viewport.is_nil()) &
     ", gdext_working=true")
-  
+
   # Test basic configuration paths (simplified for initial port)
   let work_dir = "/tmp/enu-test"
-  let world = "tutorial" 
+  let world = "tutorial"
   let level = "tutorial-1"
-  
-  print("[VERIFY] Config: paths_verified - work_dir=" & work_dir & 
+
+  print("[VERIFY] Config: paths_verified - work_dir=" & work_dir &
     ", world=" & world & ", level=" & level)
-  
+
   # Test directory structure (simulated for now)
   let world_path = work_dir / world
   let level_path = world_path / level
-  
-  print("[VERIFY] Paths: status - world_path_would_be=" & world_path & 
+
+  print("[VERIFY] Paths: status - world_path_would_be=" & world_path &
     ", level_path_would_be=" & level_path & ", work_dir_exists=" & $(dir_exists(work_dir)) &
     ", user_data_writable=true")
-  
+
   # Scene tree verification - core to scene management
   if not scene_tree.is_nil() and not viewport.is_nil():
     print("[VERIFY] Scene: tree_status - viewport_ok=true, scene_tree_ok=true")
-  
-  # Test input system availability  
+
+  # Test input system availability
   print("[VERIFY] Input: system_available=true")
-  
+
   print("[VERIFY] System: Game verification completed - Godot 4 + gdext-nim working!")
-  
+
   # Quit verification
   print("[VERIFY] Verification successful - quitting")
-  let tree = self.getTree()
+  let tree = self.get_tree()
   tree.quit(0)
 
 method onInit*(self: Game) =
@@ -450,7 +459,7 @@ method onInit*(self: Game) =
 
 method ready*(self: Game) {.gdsync.} =
   print("[VERIFY] Game ready() called")
-  
+
   # Call the real initialization system (ported from original Game.init)
   self.init_real_game()
 
@@ -458,190 +467,206 @@ method process*(self: Game; delta: float) {.gdsync.} =
   # Basic game loop - simplified from Godot 3 version
   inc state.frame_count
   let time = get_mono_time()
-  
+
   # Handle any time-based updates
   if time > self.rescale_at:
     self.rescale_at = MonoTime.high
     self.rescale()  # Now we have the rescale functionality!
-  
+
   if time > self.force_quit_at:
     # TODO: Port quit handling
     discard
+
+proc handle_quit_request(self: Game) =
+  ## Handle quit requests from dock, menu, close button, etc.
+  print("[GAME] Handling quit request...")
+  # TODO: Add any cleanup logic here when needed
+  let tree = self.get_tree()
+  if not tree.is_nil():
+    tree.quit(0)
+
+
+# Removed notification-based quit handling - let Godot handle it naturally
 
 method unhandled_input*(self: Game; event: InputEvent) {.gdsync.} =
   # Basic input handling - to be expanded with full port
   if event of InputEventKey:
     let key_event = InputEventKey(event)
     if key_event.isActionPressed("quit"):
-      let tree = self.getTree()
-      tree.quit(0)
+      self.handle_quit_request()
 
 # =============================================================================
 # UI and Font Management System (Ported from Godot 3)
 # =============================================================================
 
 # Font management - ported from original set_font_size() method
-proc set_font_size*(self: Game, size: int) {.gdsync.} =
-  ## Set font sizes across all UI elements. 
+proc set_font_size(self: Game, size: int) {.gdsync.} =
+  ## Set font sizes across all UI elements.
   ## Ported from original Godot 3 set_font_size() method.
   if state.config.font_size != size:
     # TODO: Port user_config saving
     state.config.font_size = size
-  
+
   # TODO: Find actual UI panel when scene structure is ported
   # For now, just update the config and log the change
   let scaled_size = (size.float * state.config.screen_scale).int
-  
-  print("[UI] Font size updated - font_size=" & $size & 
-    ", scaled_size=" & $scaled_size & 
+
+  print("[UI] Font size updated - font_size=" & $size &
+    ", scaled_size=" & $scaled_size &
     ", screen_scale=" & $state.config.screen_scale)
-  
+
   # This method will be expanded when we have the actual theme and UI panels
 
-proc set_panel_width*(self: Game) {.gdsync.} =
+proc set_panel_width(self: Game) {.gdsync.} =
   ## Calculate and set panel widths based on font size.
   ## Ported from original set_panel_width() method.
-  let viewport_width = self.getViewport().getVisibleRect().size.x
-  
+  let viewport_width = self.get_viewport().get_visible_rect().size.x
+
   # More accurate font width estimation based on monospace character width
   # Original used mono_font.get_string_size(" ".repeat(34)).x
   # For monospace fonts, width is roughly 0.6 * font_size per character
   let mono_char_width = state.config.font_size.float * 0.6
   let estimated_font_width = mono_char_width * 34.0  # 34 characters as in original
-  
+
   # Original logic: if font_width > viewport_width / 2.0: set FullWidthPanels flag
   let should_use_full_width = estimated_font_width > (viewport_width / 2.0)
-  
-  print("[UI] Panel width calculation - viewport_width=" & $viewport_width & 
+
+  print("[UI] Panel width calculation - viewport_width=" & $viewport_width &
     ", estimated_font_width=" & $estimated_font_width &
     ", mono_char_width=" & $mono_char_width &
     ", should_use_full_width=" & $should_use_full_width)
-  
+
   # TODO: Set actual FullWidthPanels flag when we have state flags system
   # For now, just cache the decision in config
   state.config.full_width_panels = should_use_full_width
 
 # Font loading and theme management - to be expanded
-proc setup_fonts*(self: Game) {.gdsync.} =
+proc setup_fonts(self: Game) {.gdsync.} =
   ## Initialize font system. This will be expanded to load actual fonts.
   print("[UI] Setting up font system...")
-  
+
   # TODO: Port font loading from resources
   # Original loaded fonts like:
   # - default_font from theme.default_font
-  # - bold_font from theme.get_font("bold_font", "RichTextLabel")  
+  # - bold_font from theme.get_font("bold_font", "RichTextLabel")
   # - icon_font from theme.get_font("font", "IconButton")
   # - mono_font from theme.get_font("font", "MonoButton")
-  
+
   # For now, just set up the font size system
   self.set_font_size(state.config.font_size)
-  
+
   print("[UI] Font system initialized - font_size=" & $state.config.font_size)
 
-proc calculate_toolbar_size*(self: Game) {.gdsync.} =
+proc calculate_toolbar_size(self: Game) {.gdsync.} =
   ## Calculate responsive toolbar size based on viewport width.
   ## Ported from original ActionButton sizing logic.
-  let viewport_width = self.getViewport().getVisibleRect().size.x
+  let viewport_width = self.get_viewport().get_visible_rect().size.x
   var toolbar_size = state.config.toolbar_size * state.config.screen_scale
-  
+
   # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit
   let total_toolbar_width = (toolbar_size + 4.0) * 8.0  # 8 buttons with 4px padding
-  
+
   if total_toolbar_width > viewport_width:
     toolbar_size = viewport_width / 8.0 - 4.0  # Fit 8 buttons with padding
-  
-  print("[UI] Toolbar sizing - original_size=" & $state.config.toolbar_size & 
-    ", scaled_size=" & $toolbar_size & 
-    ", total_width_needed=" & $total_toolbar_width & 
+
+  print("[UI] Toolbar sizing - original_size=" & $state.config.toolbar_size &
+    ", scaled_size=" & $toolbar_size &
+    ", total_width_needed=" & $total_toolbar_width &
     ", viewport_width=" & $viewport_width)
-  
+
   # Cache the calculated size and update ActionButton globals
   state.config.effective_toolbar_size = toolbar_size
-  
+
   # TODO: Replace with proper state management system
   # For now, update the global variables that ActionButtons use
   global_toolbar_size = toolbar_size
-  
+
   # Update all ActionButton sizes in the scene
   self.update_action_button_sizes()
 
-proc setup_responsive_layout*(self: Game) {.gdsync.} =
+proc setup_responsive_layout(self: Game) {.gdsync.} =
   ## Set up responsive layout based on viewport size.
   ## Combines panel width and toolbar calculations.
   print("[UI] Setting up responsive layout...")
-  
-  let viewport_size = self.getViewport().getVisibleRect().size
-  
+
+  let viewport_size = self.get_viewport().get_visible_rect().size
+
   # Calculate responsive sizes
   self.set_panel_width()
   self.calculate_toolbar_size()
-  
-  print("[UI] Responsive layout - viewport=" & $viewport_size & 
+
+  print("[UI] Responsive layout - viewport=" & $viewport_size &
     ", full_width_panels=" & $state.config.full_width_panels &
     ", effective_toolbar_size=" & $state.config.effective_toolbar_size)
 
-proc setup_theme_system*(self: Game) {.gdsync.} =
+proc setup_theme_system(self: Game) {.gdsync.} =
   ## Initialize theme system for UI consistency.
   ## Based on original theme system that loaded fonts from themes.
   print("[UI] Setting up theme system...")
-  
+
   # TODO: Port actual theme loading when we have scene structure
   # Original logic:
   # let theme = find("LeftPanel", Container).theme
   # Then extracted fonts: default_font, bold_font, icon_font, mono_font, etc.
-  
+
   # For now, just log theme system setup
   print("[UI] Theme system - would load fonts from theme resources")
   print("[UI] Theme system - would set up style boxes and UI theming")
-  
+
   # Cache theme-related config
   state.config.theme_loaded = true
-  
+
   print("[UI] Theme system initialized - ready for UI components")
 
-proc setup_ui*(self: Game) {.gdsync.} =
+proc setup_ui(self: Game) =
   ## Initialize UI system. Main entry point for UI setup.
   print("[UI] Setting up UI system...")
-  
+
   # Set up theme system first
   self.setup_theme_system()
-  
+
   # Set up fonts (which will eventually use theme system)
   self.setup_fonts()
-  
+
   # Set up responsive layout (panels and toolbar)
   self.setup_responsive_layout()
-  
+
   print("[UI] UI system initialized")
 
 # Test voxel system by spawning a BuildNode
-proc spawn_test_build*(self: Game) {.gdsync.} =
+proc spawn_test_build(self: Game) =
   ## Spawn a test BuildNode with voxels to verify 3D rendering works
   print("[VOXEL] Spawning test BuildNode...")
-  
+
   # Try to load the BuildNode scene
-  let scene_tree = self.getTree()
+  let scene_tree = self.get_tree()
   if scene_tree.is_nil():
     print("[VOXEL] ERROR: Scene tree is nil")
     return
-  
-  let current_scene = scene_tree.getCurrentScene()
+
+  let current_scene = scene_tree.get_current_scene()
   if current_scene.is_nil():
-    print("[VOXEL] ERROR: Current scene is nil") 
+    print("[VOXEL] ERROR: Current scene is nil")
     return
-  
-  # TODO: Re-enable when voxel bindings are working
-  # let build_node = new(BuildNode)
-  # build_node.setPosition(vector3(0, 0, -10))
-  # current_scene.addChild(build_node as Node)
-  
-  print("[VOXEL] BuildNode creation temporarily disabled - using default gdext bindings")
+
+  # Create and configure BuildNode
+  let build_node = BuildNode.instantiate
+  if build_node.is_nil():
+    print("[VOXEL] ERROR: Failed to create BuildNode")
+    return
+
+  # Position it in front of and slightly to the right of the camera view
+  # Camera is typically at (0, 2, 5) looking toward origin, so place voxels at (3, 0, 0)
+  build_node.position = vector3(3, 0, 0)
+  self.add_child(build_node)
+
+  print("[VOXEL] BuildNode created successfully")
 
 # Helper method to update ActionButton sizes
-proc update_action_button_sizes*(self: Game) {.gdsync.} =
+proc update_action_button_sizes(self: Game) {.gdsync.} =
   ## Update all ActionButton sizes in the scene tree
   ## This is a temporary solution until proper state management is implemented
-  let scene_tree = self.getTree()
+  let scene_tree = self.get_tree()
   if not scene_tree.is_nil():
     # Find all ActionButton nodes and trigger their size update
     # TODO: Use proper node finding when scene structure is complete

@@ -228,7 +228,13 @@ task edit, "Edit project in Godot":
 
 task start, "Run Enu":
   cd "app"
-  exec godot_bin() & " --verbose scenes/game.tscn"
+  var cmd = godot_bin() & " --verbose scenes/game.tscn"
+  # Support passing additional arguments to start task
+  # Usage: nimble start --headless --quit-after 1
+  for arg in command_line_params():
+    if arg.startsWith("--"):
+      cmd = cmd & " " & arg
+  exec cmd
 
 task build_and_start, "Build and start":
   exec "nimble build"
@@ -258,6 +264,11 @@ task generate_bindings, "Generate Godot extension API bindings":
     exec &"{godot_bin()} --headless --dump-extension-api"
 
   exec &"nimbledeps/bin/coronation --apisource:{generated_dir}/{extension_api_json} --outdir:{generated_dir}"
+
+task start_headless, "Run Enu":
+    build_extension_task()
+    cd "app"
+    exec godot_bin() & " --headless --quit-after 1 --verbose scenes/game.tscn"
 
 proc code_sign(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"

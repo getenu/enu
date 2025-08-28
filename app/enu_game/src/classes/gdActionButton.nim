@@ -10,16 +10,16 @@ var global_screen_scale* = 1.0
 
 type ActionButton* {.gdsync.} = ptr object of Button
 
-proc update_size(self: ActionButton, size: float) {.gdsync.} =
+proc update_size(self: ActionButton, size: float) =
   var toolbar_size = global_toolbar_size * global_screen_scale
-  let viewport_width = self.getViewport().getVisibleRect().size.x
+  let viewport_width = self.get_viewport().get_visible_rect().size.x
   
   # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit  
   if (toolbar_size + 4.0) * 8.0 > viewport_width:
     toolbar_size = viewport_width / 8.0 - 4.0
     
   let size_vec = vector2(toolbar_size, toolbar_size)
-  self.setCustomMinimumSize(size_vec)
+  self.set_custom_minimum_size(size_vec)
   
   # Update corner radius for responsive design
   let corner_radius = (8.0 * (toolbar_size / 100.0)).int32
@@ -31,11 +31,11 @@ proc update_size(self: ActionButton, size: float) {.gdsync.} =
   #   let flat_style = stylebox as StyleBoxFlat  
   #   flat_style.setCornerRadiusAll(corner_radius)
 
-proc trigger_action_changed(self: ActionButton) {.gdsync.} =
+proc trigger_action_changed(self: ActionButton) =
   ## Trigger action_changed signal on parent (Toolbar)
-  let parent = self.getParent()
+  let parent = self.get_parent()
   if not parent.is_nil():
-    let button_name = $self.getName()
+    let button_name = $self.get_name()
     print("[TOOLBAR] Action changed: " & button_name)
     
     # For now, we'll use a global approach to communicate with toolbar
@@ -50,7 +50,7 @@ method onInit*(self: ActionButton) =
   discard
 
 method ready*(self: ActionButton) {.gdsync.} =
-  print("[UI] ActionButton ready: " & $self.getName())
+  print("[UI] ActionButton ready: " & $self.get_name())
   
   # Set up initial size
   self.update_size(global_toolbar_size)
@@ -61,7 +61,7 @@ method ready*(self: ActionButton) {.gdsync.} =
   #     self.update_size(change.item.toolbar_size)
 
 method pressed*(self: ActionButton) {.gdsync.} =
-  print("[UI] ActionButton pressed: " & $self.getName())
+  print("[UI] ActionButton pressed: " & $self.get_name())
   self.trigger_action_changed()
 
 # TODO: Handle viewport resize for responsive design
