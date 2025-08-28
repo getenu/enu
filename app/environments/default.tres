@@ -1,11 +1,6 @@
-[gd_resource type="Environment" load_steps=3 format=3 uid="uid://dpg7oejg7j7j7"]
-
-[ext_resource type="Texture2D" uid="uid://bqp7qp7q7p7q7" path="res://textures/planet_sky.png" id="1"]
+[gd_resource type="Environment" load_steps=2 format=3 uid="uid://dpg7oejg7j7j7"]
 
 [sub_resource type="Sky" id="Sky_1"]
-sky_material = SubResource("Sky_1")
-
-[sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_1"]
 
 [resource]
 background_mode = 2
@@ -14,11 +9,9 @@ sky = SubResource("Sky_1")
 ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 1.5
-fog_enabled = true
-fog_light_color = Color(0.211765, 0.211765, 0.211765, 1)
-fog_density = 0.01
 tonemap_mode = 3
 tonemap_white = 0.13
 glow_enabled = true
 glow_normalized = true
-glow_strength = 1.0
+fog_enabled = true
+fog_light_color = Color(0.211765, 0.211765, 0.211765, 1)

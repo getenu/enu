@@ -1,88 +1,52 @@
-[gd_scene load_steps=5 format=2]
+[gd_scene load_steps=2 format=3 uid="uid://b7niuv3040wa1"]
 
-[ext_resource path="res://themes/DarkTheme.tres" type="Theme" id=2]
-
-[sub_resource type="StyleBoxFlat" id=5]
-bg_color = Color( 0, 0, 0, 0.839216 )
-border_width_right = 2
-border_color = Color( 0.964706, 0.952941, 0.909804, 1 )
+[ext_resource type="Theme" uid="uid://bp8yx1t6v72uf" path="res://themes/DarkTheme.tres" id="2"]
 
 [node name="MarginContainer" type="MarginContainer"]
-margin_right = 40.0
-margin_bottom = 40.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="ScrollContainer" type="ScrollContainer" parent="."]
-margin_right = 74.0
-margin_bottom = 95.0
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="TextEdit" type="TextEdit" parent="ScrollContainer"]
-margin_right = 74.0
-margin_bottom = 95.0
-mouse_filter = 1
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme = ExtResource( 2 )
-custom_colors/selection_color = Color( 0.207843, 0, 0.321569, 1 )
-custom_colors/executing_line_color = Color( 0.0392157, 0, 0.168627, 1 )
-custom_styles/read_only = SubResource( 5 )
-custom_styles/focus = SubResource( 5 )
-custom_styles/normal = SubResource( 5 )
-custom_styles/completion = SubResource( 5 )
-indent_using_spaces = true
-always_draw_caret = true
-indent_size = 2
-syntax_highlighting = true
-show_line_numbers = true
+mouse_filter = 1
+theme = ExtResource("2")
 drag_and_drop_selection_enabled = false
-smooth_scrolling = true
-wrap_enabled = true
 caret_blink = true
-caret_moving_by_right_click = false
 
 [node name="GridContainer" type="GridContainer" parent="."]
-margin_right = 74.0
-margin_bottom = 95.0
+layout_mode = 2
 mouse_filter = 2
 columns = 2
 
 [node name="Label" type="Label" parent="GridContainer"]
-margin_bottom = 95.0
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 1
 
 [node name="MarginContainer" type="MarginContainer" parent="GridContainer"]
-margin_left = 4.0
-margin_right = 74.0
-margin_bottom = 95.0
+layout_mode = 2
 mouse_filter = 2
-custom_constants/margin_right = 50
-custom_constants/margin_top = 25
 
 [node name="GridContainer" type="GridContainer" parent="GridContainer/MarginContainer"]
-margin_top = 25.0
-margin_right = 20.0
-margin_bottom = 95.0
-rect_pivot_offset = Vector2( -911, -78 )
+layout_mode = 2
 mouse_filter = 2
-custom_constants/vseparation = 30
 
 [node name="Close" type="Button" parent="GridContainer/MarginContainer/GridContainer"]
-margin_right = 20.0
-margin_bottom = 20.0
-rect_pivot_offset = Vector2( 138, 238 )
+layout_mode = 2
 mouse_default_cursor_shape = 2
-theme_type_variation = "IconButton"
+theme_type_variation = &"IconButton"
 text = "  "
 
 [node name="Run" type="Button" parent="GridContainer/MarginContainer/GridContainer"]
-margin_top = 50.0
-margin_right = 20.0
-margin_bottom = 70.0
+layout_mode = 2
 mouse_filter = 1
 mouse_default_cursor_shape = 2
-theme_type_variation = "IconButton"
+theme_type_variation = &"IconButton"
 text = "  "

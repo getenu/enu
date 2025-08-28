@@ -1,258 +1,36 @@
-[gd_scene load_steps=25 format=2]
+[gd_scene load_steps=8 format=3 uid="uid://dys0yixrpgurp"]
 
-[ext_resource path="res://textures/black_block.png" type="Texture" id=2]
-[ext_resource path="res://textures/white_block.png" type="Texture" id=3]
-[ext_resource path="res://textures/red_block.png" type="Texture" id=4]
-[ext_resource path="res://textures/green_block.png" type="Texture" id=5]
-[ext_resource path="res://textures/blue_block.png" type="Texture" id=6]
-[ext_resource path="res://shaders/terrain_voxel.shader" type="Shader" id=7]
-[ext_resource path="res://textures/tile_nrm.png" type="Texture" id=8]
+[ext_resource type="Material" path="res://materials/red-block-grid.tres" id="1_8d7lt"]
 
-[sub_resource type="VoxelGeneratorFlat" id=1]
+[sub_resource type="VoxelStreamMemory" id="VoxelStreamMemory_8d7lt"]
+
+[sub_resource type="VoxelGeneratorFlat" id="1"]
 channel = 0
 voxel_type = 0
 
-[sub_resource type="Voxel" id=2]
-voxel_name = "air"
-transparent = true
-transparency_index = 1
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2147483648
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
+[sub_resource type="VoxelBlockyModelCube" id="VoxelBlockyModelCube_tpott"]
+material_override_0 = ExtResource("1_8d7lt")
 
-[sub_resource type="Voxel" id=3]
-voxel_name = "blue"
-color = Color( 0, 0.403922, 1, 1 )
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2147483650
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
+[sub_resource type="VoxelBlockyLibrary" id="VoxelBlockyLibrary_nsgqw"]
+models = Array[VoxelBlockyModel]([SubResource("VoxelBlockyModelCube_tpott")])
 
-[sub_resource type="Voxel" id=4]
-voxel_name = "red"
-color = Color( 0.384314, 0.0117647, 0.00784314, 1 )
-material_id = 1
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
+[sub_resource type="VoxelMesherBlocky" id="10"]
+library = SubResource("VoxelBlockyLibrary_nsgqw")
 
-[sub_resource type="Voxel" id=5]
-color = Color( 0.0784314, 0.968627, 0.027451, 1 )
-material_id = 2
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
+[sub_resource type="VoxelFormat" id="VoxelFormat_8d7lt"]
 
-[sub_resource type="Voxel" id=6]
-color = Color( 0, 0, 0, 1 )
-material_id = 3
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
-
-[sub_resource type="Voxel" id=7]
-material_id = 4
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
-
-[sub_resource type="Voxel" id=8]
-color = Color( 0.247059, 0.188235, 0.168627, 1 )
-material_id = 5
-geometry_type = 1
-collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
-collision_mask = 2
-cube_geometry/padding_y = null
-cube_tiles/left = Vector2( 0, 0 )
-cube_tiles/right = Vector2( 0, 0 )
-cube_tiles/bottom = Vector2( 0, 0 )
-cube_tiles/top = Vector2( 0, 0 )
-cube_tiles/back = Vector2( 0, 0 )
-cube_tiles/front = Vector2( 0, 0 )
-
-[sub_resource type="VoxelLibrary" id=9]
-voxels/0 = SubResource( 2 )
-voxels/1 = SubResource( 3 )
-voxels/2 = SubResource( 4 )
-voxels/3 = SubResource( 5 )
-voxels/4 = SubResource( 6 )
-voxels/5 = SubResource( 7 )
-voxels/6 = SubResource( 8 )
-
-[sub_resource type="VoxelMesherBlocky" id=10]
-library = SubResource( 9 )
-
-[sub_resource type="ShaderMaterial" id=11]
-shader = ExtResource( 7 )
-shader_param/albedo = Color( 0, 0.403922, 1, 0.0392157 )
-shader_param/specular = 0.5
-shader_param/metallic = 0.0
-shader_param/draw_distance = 230.0
-shader_param/roughness = 1.0
-shader_param/point_size = 1.0
-shader_param/emission = Color( 0, 0.403922, 1, 1 )
-shader_param/emission_energy = 0.0
-shader_param/normal_scale = 2.0
-shader_param/uv1_blend_sharpness = 1.0
-shader_param/uv1_scale = Vector3( 1, 1, 1 )
-shader_param/uv1_offset = Vector3( 0, 0, 0 )
-shader_param/uv2_scale = Vector3( 1, 1, 1 )
-shader_param/uv2_offset = Vector3( 0, 0, 0 )
-shader_param/texture_albedo = ExtResource( 6 )
-shader_param/texture_normal = ExtResource( 8 )
-
-[sub_resource type="ShaderMaterial" id=12]
-shader = ExtResource( 7 )
-shader_param/albedo = Color( 0.192157, 0.164706, 0.121569, 0.117647 )
-shader_param/specular = 0.5
-shader_param/metallic = 0.0
-shader_param/draw_distance = 230.0
-shader_param/roughness = 1.0
-shader_param/point_size = 1.0
-shader_param/emission = Color( 0.988235, 0.054902, 0.0431373, 1 )
-shader_param/emission_energy = 0.0
-shader_param/normal_scale = 2.0
-shader_param/uv1_blend_sharpness = 1.0
-shader_param/uv1_scale = Vector3( 1, 1, 1 )
-shader_param/uv1_offset = Vector3( 0, 0, 0 )
-shader_param/uv2_scale = Vector3( 1, 1, 1 )
-shader_param/uv2_offset = Vector3( 0, 0, 0 )
-shader_param/texture_albedo = ExtResource( 4 )
-shader_param/texture_normal = ExtResource( 8 )
-
-[sub_resource type="ShaderMaterial" id=13]
-shader = ExtResource( 7 )
-shader_param/albedo = Color( 0.0156863, 0.25098, 0.00392157, 0.117647 )
-shader_param/specular = 0.5
-shader_param/metallic = 0.0
-shader_param/draw_distance = 230.0
-shader_param/roughness = 1.0
-shader_param/point_size = 1.0
-shader_param/emission = Color( 0.0784314, 0.968627, 0.027451, 1 )
-shader_param/emission_energy = 0.0
-shader_param/normal_scale = 2.0
-shader_param/uv1_blend_sharpness = 1.0
-shader_param/uv1_scale = Vector3( 1, 1, 1 )
-shader_param/uv1_offset = Vector3( 0, 0, 0 )
-shader_param/uv2_scale = Vector3( 1, 1, 1 )
-shader_param/uv2_offset = Vector3( 0, 0, 0 )
-shader_param/texture_albedo = ExtResource( 5 )
-shader_param/texture_normal = ExtResource( 8 )
-
-[sub_resource type="ShaderMaterial" id=14]
-shader = ExtResource( 7 )
-shader_param/albedo = Color( 0, 0, 0, 0.156863 )
-shader_param/specular = 0.5
-shader_param/metallic = 0.0
-shader_param/draw_distance = 230.0
-shader_param/roughness = 1.0
-shader_param/point_size = 1.0
-shader_param/emission = Color( 0.160784, 0, 0.298039, 1 )
-shader_param/emission_energy = 0.0
-shader_param/normal_scale = 2.0
-shader_param/uv1_blend_sharpness = 1.0
-shader_param/uv1_scale = Vector3( 1, 1, 1 )
-shader_param/uv1_offset = Vector3( 0, 0, 0 )
-shader_param/uv2_scale = Vector3( 1, 1, 1 )
-shader_param/uv2_offset = Vector3( 0, 0, 0 )
-shader_param/texture_albedo = ExtResource( 2 )
-shader_param/texture_normal = ExtResource( 8 )
-
-[sub_resource type="ShaderMaterial" id=15]
-shader = ExtResource( 7 )
-shader_param/albedo = Color( 0.447059, 0.447059, 0.447059, 0.117647 )
-shader_param/specular = 0.5
-shader_param/metallic = 0.0
-shader_param/draw_distance = 230.0
-shader_param/roughness = 1.0
-shader_param/point_size = 1.0
-shader_param/emission = Color( 1, 1, 1, 1 )
-shader_param/emission_energy = 1.0
-shader_param/normal_scale = 2.0
-shader_param/uv1_blend_sharpness = 1.0
-shader_param/uv1_scale = Vector3( 1, 1, 1 )
-shader_param/uv1_offset = Vector3( 0, 0, 0 )
-shader_param/uv2_scale = Vector3( 1, 1, 1 )
-shader_param/uv2_offset = Vector3( 0, 0, 0 )
-shader_param/texture_albedo = ExtResource( 3 )
-shader_param/texture_normal = ExtResource( 8 )
-
-[sub_resource type="ShaderMaterial" id=16]
-shader = ExtResource( 7 )
-shader_param/albedo = Color( 0.247059, 0.188235, 0.168627, 0.117647 )
-shader_param/specular = 0.5
-shader_param/metallic = 0.0
-shader_param/draw_distance = 230.0
-shader_param/roughness = 1.0
-shader_param/point_size = 1.0
-shader_param/emission = Color( 0.247059, 0.188235, 0.168627, 1 )
-shader_param/emission_energy = 1.0
-shader_param/normal_scale = 2.0
-shader_param/uv1_blend_sharpness = 1.0
-shader_param/uv1_scale = Vector3( 1, 1, 1 )
-shader_param/uv1_offset = Vector3( 0, 0, 0 )
-shader_param/uv2_scale = Vector3( 1, 1, 1 )
-shader_param/uv2_offset = Vector3( 0, 0, 0 )
-shader_param/texture_albedo = ExtResource( 3 )
-shader_param/texture_normal = ExtResource( 8 )
-
-[node name="Build" type="VoxelTerrain"]
-generator = SubResource( 1 )
-mesher = SubResource( 10 )
-bounds = AABB( -16, -16, -16, 32, 32, 32 )
+[node name="Build" type="BuildNode"]
+stream = SubResource("VoxelStreamMemory_8d7lt")
+generator = SubResource("1")
+mesher = SubResource("10")
+format = SubResource("VoxelFormat_8d7lt")
+bounds = AABB(-16, -16, -16, 32, 32, 32)
 max_view_distance = 256
-material/0 = SubResource( 11 )
-material/1 = SubResource( 12 )
-material/2 = SubResource( 13 )
-material/3 = SubResource( 14 )
-material/4 = SubResource( 15 )
-material/5 = SubResource( 16 )
 
-[node name="SightRay" type="RayCast" parent="."]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.5, -0.5 )
+[node name="SightRay" type="RayCast3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.5, -0.5)
 exclude_parent = false
 collision_mask = 4294967295
 collide_with_areas = true
-debug_shape_custom_color = Color( 0.172549, 1, 0, 1 )
+debug_shape_custom_color = Color(0.172549, 1, 0, 1)
 debug_shape_thickness = 5

@@ -1,5 +1,6 @@
 import gdext
-import classes/[gdGame, gdActionButton, gdToolbar]
-import classes/gdBuildNode  # Temporarily disabled until voxel bindings work
+import game
+import nodes/[build_node]
+import ui/[action_button, toolbar]  # Temporarily disabled until voxel bindings work
 
 GDExtensionEntryPoint

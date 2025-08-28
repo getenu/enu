@@ -209,3 +209,4 @@ This mode:
 - Use verification mode to validate core system functionality
 
 - Always use snake_case for variables and function names. Types and constants use UpperCamelCase
+- ALWAYS USE snake_case FOR VARIABLES AND FUNCTIONS!!!
