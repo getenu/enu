@@ -1,0 +1,17 @@
+#? stdtmpl
+#proc bot_code_template(base64_code, file_name, imports: string): string =
+import system except echo, quit
+import std / [strutils]
+import types, class_macros, worlds, players, state_machine, base_api, bots,
+  builds, signs, bots_private
+
+let instance_global_by_default = true
+var move_mode = 1
+
+${imports}
+
+{.experimental: "overloadable_enums".}
+
+load_enu_script r"${base64_code}", r"${file_name}", Bot
+
+exit()

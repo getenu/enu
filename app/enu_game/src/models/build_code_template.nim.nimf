@@ -1,0 +1,18 @@
+#? stdtmpl
+#proc build_code_template(base64_code, file_name, imports: string): string =
+import system except echo, quit
+import std / [strutils]
+import types, class_macros, players, worlds, state_machine, base_api, bots,
+  builds, signs, builds_private
+
+let instance_global_by_default = false
+var move_mode = 1
+
+${imports}
+
+{.experimental: "overloadable_enums".}
+
+load_enu_script r"${base64_code}", r"${file_name}", Build, drawing,
+  draw_position
+
+exit()
