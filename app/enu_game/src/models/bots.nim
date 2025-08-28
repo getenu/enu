@@ -119,10 +119,10 @@ method worker_thread_joined*(self: Bot) =
       zen_id = self.local_flags.id
 
     if Hover in self.local_flags:
-      if PrimaryDown.added and state.tool == CodeMode:
+      if PrimaryDown.added and state.current_tool == CodeMode:
         let root = self.find_root(true)
         state.open_unit = root
-      if SecondaryDown.added and state.tool == PlaceBot:
+      if SecondaryDown.added and state.current_tool == PlaceBot:
         # :(
         for unit in self.units:
           if unit of Sign:
@@ -145,7 +145,7 @@ method worker_thread_joined*(self: Bot) =
 
     if Hover.added:
       state.push_flag ReticleVisible
-      if state.tool in {CodeMode, PlaceBot}:
+      if state.current_tool in {CodeMode, PlaceBot}:
         let root = self.find_root(true)
         root.walk_tree proc(unit: Unit) =
           unit.local_flags += Highlight

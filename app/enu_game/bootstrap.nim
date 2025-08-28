@@ -1,6 +1,14 @@
-import gdext
-import game
-import nodes/[build_node]
-import ui/[action_button, toolbar]  # Temporarily disabled until voxel bindings work
+import core, game, gdext
+
+import ui/[
+  editor, console, toolbar, action_button, preview_maker, markdown_label,
+  right_panel, settings, virtual_joystick, gui, floating_button
+]
+import nodes/[
+  player_node, aim_target, selection_area, bot_node, ground_node, build_node,
+  sign_node, helpers, queries
+]
+
+Zen.bootstrap
 
 GDExtensionEntryPoint

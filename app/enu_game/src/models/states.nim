@@ -32,7 +32,7 @@ proc resolve_flags*(
           result.excl f
     result.incl flag
 
-  if self.tool == CodeMode:
+  if self.current_tool == CodeMode:
     for flag in groups[1]:
       result.excl(flag)
     result.incl(ReticleVisible)
@@ -130,7 +130,7 @@ proc `-=`*(
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc selected_color*(self: GameState): Color =
-  action_colors[Colors(ord self.tool)]
+  action_colors[Colors(ord self.current_tool)]
 
 proc init_logger*(self: GameState) =
   self.logger = proc(level, msg: string) {.closure.} =
@@ -150,7 +150,7 @@ proc init*(_: type GameState): GameState =
     units: ~(seq[Unit], id = "root_units"),
     open_unit_value: ~(Unit, flags),
     config_value: ~(Config, flags, id = "config"),
-    tool_value: ~(BlueBlock, flags),
+    current_tool_value: ~(BlueBlock, flags),
     gravity: -80.0,
     console: ConsoleModel(log: ~(seq[string], flags)),
     open_sign_value: ~(Sign, flags),

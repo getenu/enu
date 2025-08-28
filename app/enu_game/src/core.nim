@@ -282,13 +282,13 @@ proc init*(_: type Code, nim: string): Code =
   Code(owner: state.worker_ctx_name, nim: nim)
 
 proc update_action_index*(state: GameState, change: int) =
-  var index = int(state.tool) + change
+  var index = int(state.current_tool) + change
   if index < 0:
     index = int Tools.high
   elif index > int Tools.high:
     index = int Tools.low
 
-  state.tool = Tools(index)
+  state.current_tool = Tools(index)
 
 template watch*[T, O](zen: Zen[T, O], unit: untyped, body: untyped) =
   when unit is Unit:

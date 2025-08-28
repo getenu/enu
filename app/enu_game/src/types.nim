@@ -93,7 +93,7 @@ type
     global_flags*: ZenSet[GlobalStateFlags]
     config_value*: ZenValue[Config]
     open_unit_value*: ZenValue[Unit]
-    tool_value*: ZenValue[Tools]
+    current_tool_value*: ZenValue[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
     player_value*: ZenValue[Player]

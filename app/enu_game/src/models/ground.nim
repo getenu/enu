@@ -7,7 +7,7 @@ var add_to {.threadvar.}: Build
 proc fire(self: Ground, append = false) {.gcsafe.} =
   state.draw_unit_id = "ground"
   let point = (self.target_point - vector3(0.5, 0, 0.5)).trunc
-  if state.tool notin {Disabled, CodeMode, PlaceBot}:
+  if state.current_tool notin {Disabled, CodeMode, PlaceBot}:
     if not append:
       add_to = state.units.find_first(point.surrounding)
     if ?add_to:
@@ -21,7 +21,7 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
       )
 
       state.units += add_to
-  elif state.tool == PlaceBot and state.bot_at(self.target_point).is_nil:
+  elif state.current_tool == PlaceBot and state.bot_at(self.target_point).is_nil:
     var t = Transform3D.init(origin = self.target_point)
     state.units += Bot.init(transform = t)
 

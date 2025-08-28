@@ -516,11 +516,11 @@ proc running(self: Unit): bool =
 proc `running=`*(self: Unit, value: bool) =
   state.set_flag AltWalkSpeed, value
 
-proc tool(self: Unit): int =
-  int(state.tool)
+proc current_tool(self: Unit): int =
+  int(state.current_tool)
 
-proc `tool=`(self: Unit, value: int) =
-  state.tool = Tools(value)
+proc `current_tool=`(self: Unit, value: int) =
+  state.current_tool = Tools(value)
 
 proc open_sign(self: Unit): Sign =
   state.open_sign
@@ -659,7 +659,7 @@ proc bridge_to_vm*(worker: Worker) =
     size, `size=`, open, `open=`, billboard, `billboard=`
 
   result.bridged_from_vm "players",
-    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`, coding,
+    playing, `playing=`, god, `god=`, flying, `flying=`, current_tool, `current_tool=`, coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`
 
   result.bridged_from_vm "worlds",

@@ -208,7 +208,7 @@ proc drop_block(self: Build) =
     self.draw(p, (Computed, self.color))
 
 proc remove(self: Build) =
-  if state.tool notin {CodeMode, PlaceBot}:
+  if state.current_tool notin {CodeMode, PlaceBot}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point =
@@ -230,18 +230,18 @@ proc remove(self: Build) =
 
 proc fire(self: Build) =
   let global_point = self.target_point.global_from(self)
-  if state.tool notin {Disabled, CodeMode, PlaceBot}:
+  if state.current_tool notin {Disabled, CodeMode, PlaceBot}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point = (self.target_point + (self.target_normal * 0.5)).floor
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
     self.draw(point, (Manual, state.selected_color))
-  elif state.tool == PlaceBot and BlockTargetVisible in state.local_flags and
+  elif state.current_tool == PlaceBot and BlockTargetVisible in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform3D.init(origin = global_point)
     state.units += Bot.init(transform = transform)
-  elif state.tool == CodeMode:
+  elif state.current_tool == CodeMode:
     let root = self.find_root
     state.open_unit = root
 
@@ -434,7 +434,7 @@ method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))
 
   self.local_flags.watch:
-    if Hover.added and state.tool == CodeMode:
+    if Hover.added and state.current_tool == CodeMode:
       if Playing notin state.local_flags and
           TouchControls notin state.local_flags:
         let root = self.find_root(true)
@@ -460,7 +460,7 @@ method main_thread_joined*(self: Build) =
         elif PrimaryDown in state.local_flags:
           self.fire
 
-    if change.item in {TargetMoved, Hover} and state.tool == PlaceBot:
+    if change.item in {TargetMoved, Hover} and state.current_tool == PlaceBot:
       if self.target_normal == UP:
         state.push_flag BlockTargetVisible
       else:
