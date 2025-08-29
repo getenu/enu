@@ -9,7 +9,7 @@ proc get_pnode(a: VmArgs, pos: int): PNode {.inline.} =
 
 proc get_vector3(a: VmArgs, pos: int): Vector3 =
   let fields = a.get_node(pos).sons
-  result = vec3(fields[0].float_val, fields[1].float_val, fields[2].float_val)
+  result = vector3(fields[0].float_val, fields[1].float_val, fields[2].float_val)
 
 # adapted from https://github.com/h0lley/embeddedNimScript/blob/6101fb37d4bd3f947db86bac96f53b35d507736a/embeddedNims/enims.nim#L31
 proc to_node(val: int): PNode =
@@ -33,6 +33,9 @@ proc to_node(list: open_array[int | float | string | bool | enum]): PNode =
   for i in 0 .. list.high:
     result.sons[i] = list[i].to_node()
 
+proc to_node(vec: Vector3): PNode =
+  (array[3, real_elem](vec)).to_node
+
 proc to_node(tree: tuple | object): PNode =
   result = nkPar.new_tree
   for field in tree.fields:
@@ -47,6 +50,12 @@ proc to_node(tree: ref tuple | ref object): PNode =
     return result
   for field in tree.fields:
     result.sons.add(field.to_node)
+
+# proc to_node(val: gdext.Vector3): PNode =
+#   result = nkPar.new_tree
+#   result.sons.add(val[0].to_node)
+#   result.sons.add(val[1].to_node)
+#   result.sons.add(val[2].to_node)
 
 proc to_result(val: float): BiggestFloat =
   BiggestFloat(val)
@@ -120,10 +129,12 @@ macro bridged_from_vm(
           else:
             let getter = "get_" & typ
             pos.inc
+            echo "wrapping call ", getter, " for ", proc_name
             new_call(bind_sym(getter), ident"a", new_lit(pos))
 
     var call = new_call(proc_ref, args)
     let return_type = return_node.repr
+    # echo "!!! ", proc_name, " = ", return_type, " ", return_node.kind
     if return_type in unit_types or
         return_type in unit_types.map_it(\"seq[{it}]"):
       call = new_call(
@@ -139,6 +150,7 @@ macro bridged_from_vm(
         return_node[0].str_val == "Future":
       call = new_call(bind_sym"await_future", call, ident"a")
 
+    echo "bridging routine: " , proc_name
     result.add quote do:
       mixin implement_routine
       debug "implementing routine", name = `proc_name`
@@ -156,3 +168,4 @@ macro bridged_from_vm(
             error "Exception calling into host", kind = $e.type, msg = e.msg
             echo e.get_stack_trace()
             script_engine.last_exception = e
+    # echo result.repr

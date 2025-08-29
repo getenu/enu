@@ -289,7 +289,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     size = 244,
     billboard = true,
     text_only = true,
-    transform = Transform.init(origin = vec3(0, 4, 0)),
+    transform = Transform3D.init(origin = vector3(0, 4, 0)),
   )
 
   state.player.units += sign

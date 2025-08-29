@@ -1,15 +1,16 @@
 import std/[os, macros, math, asyncfutures, hashes]
 import locks except Lock
-import pkg/godot except print
 import pkg/compiler/vm except get_int
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import pkg/compiler/ast except new_node
 import pkg/compiler/[vmdef, renderer, msgs]
 
-import godotapi/[spatial, ray_cast]
+import gdext except Color, size
+import gdext/[math]
+import gdext/classes/[gdnode3d, gdraycast3d]
 import core, models/[states, bots, builds, units, colors, signs, serializers]
 import libs/[interpreters, eval]
-import shared/errors
+import ../../../../../vmlib/enu/shared/errors
 
 import ./[vars, scripting]
 include ./host_bridge_utils
@@ -70,6 +71,21 @@ proc get_sign(self: Worker, a: VmArgs, pos: int): Sign =
     let unit = self.get_unit(a, pos)
     assert not unit.is_nil and unit of Sign
     result = Sign(unit)
+
+# proc get_Player(self: Worker, a: VmArgs, pos: int): Player =
+#   let pnode = a.get_node(pos)
+#   if pnode.kind != nkNilLit:
+#     let unit = self.get_unit(a, pos)
+#     assert not unit.is_nil and unit of Player
+#     result = Player(unit)
+
+# proc get_Node3D(self: Worker, a: VmArgs, pos: int): Node3D =
+#   # For Node3D parameters, we expect the node from the unit
+#   let pnode = a.get_node(pos)
+#   if pnode.kind != nkNilLit:
+#     let unit = self.get_unit(a, pos)
+#     if not unit.is_nil and not unit.node.is_nil:
+#       result = unit.node
 
 proc to_node(self: Worker, unit: Unit): PNode =
   if ?unit:
@@ -376,7 +392,7 @@ proc rotation(self: Unit): float =
       return f
 
   proc nm(v: Vector3): Vector3 =
-    vec3(v.x.nm, v.y.nm, v.z.nm)
+    vector3(v[0].nm, v[1].nm, v[2].nm)
 
   if self of Player:
     result = Player(self).rotation
@@ -384,19 +400,19 @@ proc rotation(self: Unit): float =
     let e = self.transform.basis.orthonormalized.get_euler
 
     let n = e.nm
-    let v = vec3(nm(n.x).rad_to_deg, nm(n.y).rad_to_deg, nm(n.z).rad_to_deg)
+    let v = vector3(nm(n.x).rad_to_deg, nm(n.y).rad_to_deg, nm(n.z).rad_to_deg)
     let m = if v.z > 0: 1.0 else: -1.0
     result = (v.x - v.y) * m
 
 proc `rotation=`(self: Unit, degrees: float) =
-  var t = Transform.init
+  var t = Transform3D.init
   if self of Player:
     Player(self).rotation_value.touch degrees
     t.origin = self.transform.origin
   else:
-    t = Transform.init
+    t = Transform3D.init
     var s = self.scale
-    t = t.rotated(UP, deg_to_rad(degrees)).scaled(vec3(s, s, s))
+    t = t.rotated(Vector3.Up(), deg_to_rad(degrees)).scaled(vector3(s, s, s))
     t.origin = self.transform.origin
   self.transform = t
 
@@ -433,14 +449,14 @@ proc frame_count(): int =
 proc frame_created(unit: Unit): int =
   unit.frame_created
 
-proc drop_transform(unit: Unit): Transform =
+proc drop_transform(unit: Unit): Transform3D =
   if unit of Bot:
-    result = Transform.init
+    result = Transform3D.init
   elif unit of Build:
     result = Build(unit).draw_transform
-    result.origin = result.origin.snapped(vec3(1, 1, 1))
-    result = result.translated(FORWARD * 0.51)
-    result.origin = result.origin - (FORWARD + LEFT + DOWN) * 0.5
+    result.origin = result.origin.snapped(vector3(1, 1, 1))
+    result = result.translated(Vector3.Forward() * 0.51)
+    result.origin = result.origin - (Vector3.Forward() + Vector3.Left() + Vector3.Down()) * 0.5
   else:
     raise ObjectConversionDefect.init("Unknown unit type")
 
@@ -635,13 +651,16 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge",
     register_active, register_template_node, echo_console, new_instance,
-    exec_instance, hit, exit, global, `global=`, position, local_position,
+    exec_instance, hit, exit, global,  `global=`,
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
     velocity, `velocity=`, active_unit, color, `color=`, sees, start_position,
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units
+
+  # GD4: bind me
+  # position, local_position,
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,

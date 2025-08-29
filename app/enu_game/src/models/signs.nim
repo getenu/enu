@@ -1,4 +1,3 @@
-import gdext/classes/gdnode3d
 import core, states, bots, builds, models/[colors, units]
 
 proc init*(

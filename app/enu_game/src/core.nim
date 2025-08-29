@@ -68,7 +68,7 @@ proc optional_get*[T](self: var HashSet[T], key: T): Option[T] =
 ### Vector3 ###
 
 import gdext, math
-export Transform3D, Vector3, Vector2, Basis, AABB
+export Transform3D, Vector3, Vector2, Basis, AABB, print, vector3, vector2
 
 const
   UP* = vector3(0, 1, 0)
@@ -78,14 +78,8 @@ const
   RIGHT* = vector3(1, 0, 0)
   LEFT* = vector3(-1, 0, 0)
 
-proc vec3*(x, y, z: int): Vector3 {.inline.} =
+proc vector3(x, y, z: int): Vector3 {.inline.} =
   vector3(x.float, y.float, z.float)
-
-proc vec3*(x: int | float): Vector3 {.inline.} =
-  vector3(x, x, x)
-
-proc vec2*(x: int | float): Vector2 {.inline.} =
-  vector2(x, x)
 
 proc trunc*(self: Vector3): Vector3 {.inline.} =
   vector3(trunc(self.x), trunc(self.y), trunc(self.z))
@@ -121,32 +115,20 @@ proc within*(
 # Basis
 
 proc `x=`*(self: var Basis, value: Vector3) {.inline.} =
-  discard
-  # GD4: fixme
-  # self.elements[0].x = value.x
-  # self.elements[1].x = value.y
-  # self.elements[2].x = value.z
+  self.x = value
 
 proc `y=`*(self: var Basis, value: Vector3) {.inline.} =
-  discard
-  # GD4: fixme
-  # self.elements[0].y = value.x
-  # self.elements[1].y = value.y
-  # self.elements[2].y = value.z
+  self.y = value
 
 proc `z=`*(self: var Basis, value: Vector3) {.inline.} =
-  discard
-  # GD4: fixme
-  # self.elements[0].z = value.x
-  # self.elements[1].z = value.y
-  # self.elements[2].z = value.z
+  self.z = value
 
 proc surrounding*(point: Vector3): seq[Vector3] =
   collect(new_seq):
     for x in 0 .. 2:
       for y in 0 .. 2:
         for z in 0 .. 2:
-          point + vec3(x - 1, y - 1, z - 1)
+          point + vector3(x - 1, y - 1, z - 1)
 
 # math
 
@@ -188,8 +170,7 @@ when not defined(no_godot):
     ) {.gcsafe.} =
       try:
         # when defined(release):
-        # GD4: fixme
-        # print msg
+        # GD4: print msg - not GC-safe, need alternative approach
         if log_level >= ERROR and not state.logger.is_nil:
           state.err(msg)
         # else:
@@ -270,13 +251,10 @@ proc `basis=`*(self: ZenValue[Transform3D], value: Basis) =
   self.value = transform
 
 proc init*(_: type Basis): Basis =
-  discard
-  # GD4: fixme
-  # init_basis()
+  basis()
 
 proc init*(_: type Transform3D, origin = vector3()): Transform3D =
-  discard
-  # GD4: need to figure out how to create Transform3D with origin
+  Transform3D(basis: basis(), origin: origin)
 
 proc init*(_: type Code, nim: string): Code =
   Code(owner: state.worker_ctx_name, nim: nim)

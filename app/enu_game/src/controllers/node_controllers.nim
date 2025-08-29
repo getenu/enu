@@ -1,10 +1,14 @@
+{.push warning[GcUnsafe2]: off.}
+{.push warning[GcUnsafe]: off.}
+
 import std/[tables, typetraits]
-import gdext/classes/gdnode3d
+import gdext
+import gdext/classes/[gdnode, gdnode3d]
 import core, models, nodes/[bot_node, build_node, sign_node, player_node]
 
-proc remove_from_scene(unit: Unit) =
+proc remove_from_scene(unit: Unit) {.gcsafe.} =
   debug "removing unit", unit = unit.id
-  assert ?unit.node
+  assert not unit.node.is_nil
   if unit == previous_build:
     previous_build = nil
   if unit == current_build:
@@ -27,38 +31,51 @@ proc remove_from_scene(unit: Unit) =
     BotNode(unit.node).model = nil
   elif unit.node of SignNode:
     SignNode(unit.node).model = nil
-  unit.node.queue_free()
+  {.cast(gcsafe).}:
+    unit.node.queue_free()
   debug "removing node", unit_id = unit.id
   unit.node = nil
 
   unit.destroy
   unit.parent = nil
 
-proc add_to_scene(unit: Unit) =
+proc add_to_scene(unit: Unit) {.gcsafe.} =
   debug "adding unit to scene", unit = unit.id
-  proc add(unit: auto, T: type, parent_node: Node) =
+  proc add(unit: auto, T: type, parent_node: Node3D) {.gcsafe.} =
     unit.frame_created = state.frame_count
-    var node = unit.node as T
+    var node: T
+    {.cast(gcsafe).}:
+      node = unit.node.as(T)
     if node.is_nil:
-      node = T.init
+      {.cast(gcsafe).}:
+        node = T.init
     unit.node = node
     node.model = unit
-    node.transform = unit.transform
-    if node.owner != nil:
-      fail \"{T.name} node shouldn't be owned. unit = {unit.id}"
-    unit.node.visible =
-      Visible in unit.global_flags and
-      (ScriptInitializing notin unit.global_flags)
+    {.cast(gcsafe).}:
+      node.transform = unit.transform
+    {.cast(gcsafe).}:
+      if node.owner != nil:
+        fail \"{T.name} node shouldn't be owned. unit = {unit.id}"
+    {.cast(gcsafe).}:
+      unit.node.visible =
+        Visible in unit.global_flags and (ScriptInitializing notin unit.global_flags)
 
-    parent_node.add_child(unit.node)
-    unit.node.owner = parent_node
+    {.cast(gcsafe).}:
+      parent_node.add_child(unit.node)
+    {.cast(gcsafe).}:
+      unit.node.owner = parent_node
     when compiles(node.setup):
       node.setup
     unit.main_thread_joined
     unit.global_flags += Ready
 
-  let parent_node =
-    if Global in unit.global_flags: state.nodes.data else: unit.parent.node
+  var parent_node: Node3D
+  {.cast(gcsafe).}:
+    parent_node =
+      if Global in unit.global_flags:
+        state.nodes.data.as(Node3D)
+      else:
+        unit.parent.node.as(Node3D)
 
   if unit of Bot:
     Bot(unit).add(BotNode, parent_node)
@@ -73,7 +90,10 @@ proc add_to_scene(unit: Unit) =
       player.add(PlayerNode, parent_node)
     else:
       player.start_transform = player.transform
-      player.add(BotNode, state.nodes.data)
+      var global_node: Node3D
+      {.cast(gcsafe).}:
+        global_node = state.nodes.data.as(Node3D)
+      player.add(BotNode, global_node)
   else:
     fail "unknown unit type for " & unit.id
 
@@ -81,18 +101,20 @@ proc add_to_scene(unit: Unit) =
     child.parent = unit
     child.add_to_scene
 
-proc set_global(unit: Unit, global: bool) =
-  var parent_node = unit.node.get_node("..")
-  parent_node.remove_child(unit.node)
-  if global:
-    state.nodes.data.add_child(unit.node)
-    unit.node.owner = state.nodes.data
-    unit.transform_value.origin =
+proc set_global(unit: Unit, global: bool) {.gcsafe.} =
+  {.cast(gcsafe).}:
+    var parent_node = unit.node.get_node("..")
+    parent_node.remove_child(unit.node)
+    if global:
+      state.nodes.data.add_child(unit.node)
+      unit.node.owner = state.nodes.data
+    else:
+      unit.parent.node.add_child(unit.node)
+      unit.node.owner = unit.parent.node
+  unit.transform_value.origin =
+    if global:
       unit.transform.origin + unit.start_transform.origin
-  else:
-    unit.parent.node.add_child(unit.node)
-    unit.node.owner = unit.parent.node
-    unit.transform_value.origin =
+    else:
       unit.transform.origin - unit.start_transform.origin
 
 proc reset_nodes() =

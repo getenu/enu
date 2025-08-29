@@ -1,12 +1,15 @@
 import std/[tables, monotimes, times]
 import gdext
+import types
 import gdext/classes/[gdvoxelterrain, gdvoxeltool, gdvoxeltoolterrain, gdvoxelmesher, gdvoxelmesherblocky,
                      gdvoxelblockylibrary, gdvoxelblockylibrarybase, gdvoxelstream, gdvoxelstreammemory,
                      gdvoxelgenerator, gdvoxelgeneratorflat, gdvoxelblockymodel,
-                     gdvoxelblockymodelcube, gdvoxelblockymodelempty, gdvoxelbuffer]
+                     gdvoxelblockymodelcube, gdvoxelblockymodelempty, gdvoxelbuffer, 
+                     gdpackedscene, gdresourceloader]
 
 # BuildNode for Godot 4 using complete custom Godot bindings with voxel support
 type BuildNode* {.gdsync.} = ptr object of VoxelTerrain
+  model*: Build
   update_at: MonoTime
 
 proc create_test_voxels*(self: BuildNode) {.gdsync.} =
@@ -63,3 +66,7 @@ method ready*(self: BuildNode) {.gdsync.} =
   print("[VOXEL] Mesher: ", self.get_mesher())
   print("[VOXEL] Bounds: ", self.get_bounds())
   print("[VOXEL] VoxelTerrain initialized - waiting 2 seconds for area loading...")
+
+proc init*(_: type BuildNode): BuildNode =
+  let scene = cast[gdref PackedScene](ResourceLoader.load("res://components/Build.tscn"))
+  result = BuildNode(scene[].instantiate)

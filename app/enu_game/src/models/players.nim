@@ -1,13 +1,13 @@
 import std/[math]
-import gdext/classes/gdnode3d
 import core, models/units
+import pkg/gdext
 
 proc init*(_: type Player): Player =
   let self = Player(
     id: \"player-{Zen.thread_ctx.id}",
     rotation_value: ~0.0,
-    start_transform: Transform3D.init(origin = vec3(0, 1, 0)),
-    input_direction_value: ~Vector3,
+    start_transform: Transform3D.init(origin = vector3(0, 1, 0)),
+    input_direction_value: ZenValue[Vector3].init,
     cursor_position_value: ~((0, 0)),
   )
   self.init_unit(shared = false)

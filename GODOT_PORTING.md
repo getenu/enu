@@ -1,4 +1,4 @@
-# Godot 4 Migration Guide
+e# Godot 4 Migration Guide
 
 This document captures key findings and patterns from migrating Enu from Godot 3.5 to Godot 4.
 
@@ -6,7 +6,7 @@ This document captures key findings and patterns from migrating Enu from Godot 3
 
 ### Type System Changes
 - `Transform` → `Transform3D`
-- `Spatial` → `Node3D` 
+- `Spatial` → `Node3D`
 - All related imports must be updated accordingly
 
 ### Import Changes
@@ -39,7 +39,7 @@ method ready*(self: BuildNode) {.gdsync.} =
   self.update_at = get_mono_time() + init_duration(seconds = 2)
 ```
 
-**Technical Details**: 
+**Technical Details**:
 - `is_area_editable()` depends on `_terrain->get_storage().is_area_loaded(box)`
 - The streaming system loads areas asynchronously
 - Only LOD 0 areas are editable for LOD terrain

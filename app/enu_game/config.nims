@@ -22,6 +22,8 @@ if host_os == "windows":
   "LockLevel:off"
 --warning:
   "UseBase:off"
+--warning:
+  "GcUnsafe2:off"
 
 --experimental:
   "dynamic_bind_sym"
@@ -38,6 +40,9 @@ if host_os == "windows":
   "chronicles_log_level=INFO"
 --define:
   "chronicles_sinks=textlines[dynamic]"
+
+# GD4: remove me
+--threadAnalysis:off
 
 if defined(release):
   --define:

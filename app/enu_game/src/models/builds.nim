@@ -3,8 +3,7 @@ import
     tables, sets, options, sequtils, math, wrapnils, monotimes, sugar, deques,
     macros, base64,
   ]
-import gdext
-import gdext/classes/gdnode3d
+import gdext/math
 import core, models/[states, bots, colors, units]
 const ChunkSize = vector3(16, 16, 16)
 
@@ -16,9 +15,9 @@ var
   current_build* {.threadvar.}: Build
   previous_build* {.threadvar.}: Build
   dont_join*: bool
-  skip_point = vector3()
+  skip_point = vector3(0, 0, 0)
   last_point: Vector3
-  draw_normal = vector3()
+  draw_normal = vector3(0, 0, 0)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
 
@@ -51,7 +50,7 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
   for unit in units:
     if unit of Build:
       let unit = Build(unit)
-      let offset = vector3().global_from(unit)
+      let offset = vector3(0, 0, 0).global_from(unit)
       for position in positions:
         var loc = position - offset
         if loc in unit:
@@ -117,7 +116,7 @@ proc expand_bounds_to_chunk(self: Build, chunk_id: Vector3) =
 
 proc reset_bounds*(self: Build) =
   # GD4: fixme
-  # self.bounds = init_aabb(vector3(), vector3(-1, -1, -1))
+  # self.bounds = init_aabb(Vector3(0, 0, 0), Vector3(-1, -1, -1))
 
   for chunk_id, chunk in self.chunks:
     self.expand_bounds_to_chunk(chunk_id)
@@ -215,7 +214,7 @@ proc remove(self: Build) =
       self.target_point - self.target_normal -
       (self.target_normal.inverse_normalized * 0.5)
 
-    skip_point = vector3()
+    skip_point = vector3(0, 0, 0)
     last_point = self.target_point
     self.draw(point, (Hole, action_colors[Eraser]))
 
@@ -323,13 +322,13 @@ method on_begin_turn*(
     var duration = 0.0
     # GD4: fixme
     # let axis = self.transform.basis.orthonormalized.xform(axis)
-    let axis = vector3()
+    let axis = vector3(0, 0, 0)
     let scale = self.scale
     var final_transform = self.transform
     # GD4: fixme
     # final_transform.basis = final_transform.basis
     #   .rotated(axis, deg_to_rad(degrees)).orthonormalized
-    #   .scaled(vector3(scale, scale, scale))
+    #   .scaled(Vector3(scale, scale, scale))
 
     result = proc(delta: float, _: MonoTime): TaskStates =
       duration += delta
@@ -376,7 +375,7 @@ method reset*(self: Build) =
   self.units.clear()
   self.global_flags -= Resetting
   self.restore_edits
-  self.draw(vector3(), (Computed, self.start_color))
+  self.draw(vector3(0, 0, 0), (Computed, self.start_color))
 
 method ensure_visible*(self: Build) =
   # It's possible for a build to have no blocks of its own if has children with
@@ -393,7 +392,7 @@ method ensure_visible*(self: Build) =
         action_colors[Colors.Blue]
       else:
         self.start_color
-    self.draw(vector3(), (Computed, color))
+    self.draw(vector3(0, 0, 0), (Computed, color))
 
 method destroy*(self: Build) =
   self.destroy_impl
@@ -416,7 +415,7 @@ proc init*(
     start_color: color,
     drawing: true,
     # GD4: fixme
-    # bounds_value: ~init_aabb(vector3(), vector3(-1, -1, -1)),
+    # bounds_value: ~init_aabb(Vector3(0, 0, 0), Vector3(-1, -1, -1)),
     speed: 1.0,
     clone_of: clone_of,
     bot_collisions: bot_collisions,
@@ -485,7 +484,7 @@ method main_thread_joined*(self: Build) =
         self.remove
     if PrimaryDown.removed or SecondaryDown.removed:
       state.draw_unit_id = ""
-      last_point = vector3()
+      last_point = vector3(0, 0, 0)
     if Playing.added:
       self.local_flags -= Highlight
     elif Playing.removed:

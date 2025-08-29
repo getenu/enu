@@ -113,6 +113,7 @@ type
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
+    verify_mode*: bool
 
   Model* = ref object of RootObj
     id*: string
@@ -325,11 +326,11 @@ type
     error_message*: string
 
 # GD4: we probably need these
-# proc from_flatty*[N: NimGodotObject](s: string, i: var int, n: N) =
-#   discard
+proc from_flatty*[N: ptr object](s: string, i: var int, n: N) =
+  discard
 
-# proc to_flatty*[N: NimGodotObject](s: var string, n: N) =
-#   discard
+proc to_flatty*[N: ptr object](s: var string, n: N) =
+  discard
 
 proc from_flatty*(s: string, i: var int, n: var ScriptCtx) =
   discard
