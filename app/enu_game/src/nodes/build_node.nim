@@ -1,16 +1,213 @@
-import std/[tables, monotimes, times]
+import std/[tables, bitops, monotimes, times]
 import gdext
-import types
+import core, types, models/[units, builds, colors], gdutils
 import gdext/classes/[gdvoxelterrain, gdvoxeltool, gdvoxeltoolterrain, gdvoxelmesher, gdvoxelmesherblocky,
                      gdvoxelblockylibrary, gdvoxelblockylibrarybase, gdvoxelstream, gdvoxelstreammemory,
                      gdvoxelgenerator, gdvoxelgeneratorflat, gdvoxelblockymodel,
                      gdvoxelblockymodelcube, gdvoxelblockymodelempty, gdvoxelbuffer, 
-                     gdpackedscene, gdresourceloader]
+                     gdpackedscene, gdresourceloader, gdraycast3d, gdshadermaterial, gdshader]
+import ./queries
+
+const
+  highlight_glow = 1.0
+  default_glow = 0.0
+  empty_zid: ZID = 0
+  error_flash_time = 0.5.seconds
+
+var build_scene {.threadvar.}: gdref PackedScene
+var shader {.threadvar.}: gdref Shader
+var hidden_shader {.threadvar.}: gdref Shader
 
 # BuildNode for Godot 4 using complete custom Godot bindings with voxel support
 type BuildNode* {.gdsync.} = ptr object of VoxelTerrain
   model*: Build
+  active_chunks: Table[Vector3, ZID]
+  transform_zid: ZID
+  default_view_distance: int
+  chunks_zid: ZID
+  toggle_error_highlight_at: MonoTime
+  error_highlight_on: bool
   update_at: MonoTime
+
+method on_init*(self: BuildNode) =
+  # Constructor-like initialization - equivalent to gdobj's init
+  self.default_view_distance = self.get_max_view_distance().int
+
+proc prepare_materials(self: BuildNode) =
+  if ?self.model and self.model.shared.materials.len == 0:
+    # Generate our own copy of the library materials, so we can manipulate
+    # them without impacting other builds.
+    for i in 0 .. int.high:
+      let m = self.get_material(i)
+      if m.is_nil:
+        break
+      else:
+        let m = m[].duplicate().as(gdref ShaderMaterial)
+        m[].set_shader_parameter("emission_energy", default_glow.to_variant)
+        # TODO: Get emission colors
+        # self.model.shared.emission_colors.add(
+        #   m[].get_shader_parameter("emission").as_color
+        # )
+        self.model.shared.materials.add(m)
+
+    for i, material in self.model.shared.materials:
+      self.set_material(i, material)
+
+proc draw(self: BuildNode, location: Vector3, color: Color) =
+  let voxel_tool = self.get_voxel_tool()
+  if not voxel_tool.is_nil:
+    voxel_tool[].set_voxel(vector3i(location.x.int32, location.y.int32, location.z.int32), 
+                          ord(color.action_index).uint64)
+
+proc draw_block(self: BuildNode, voxels: Chunk) =
+  for loc, info in voxels:
+    self.draw(loc, info.color)
+
+proc set_glow(self: BuildNode, glow: float) =
+  # TODO: Implement glow setting for Godot 4
+  discard
+
+proc set_highlight(self: BuildNode) =
+  # TODO: Implement highlighting for Godot 4
+  discard
+
+proc track_chunk(self: BuildNode, chunk_id: Vector3) =
+  if ?self.model and chunk_id in self.model.chunks:
+    self.draw_block(self.model.chunks[chunk_id])
+    self.active_chunks[chunk_id] = self.model.chunks[chunk_id].watch:
+      # `and not modified` isn't required, but the block will be
+      # replaced on the next iteration anyway.
+      if removed and not modified:
+        self.draw(change.item.key, action_colors[Eraser])
+      elif added:
+        self.draw(change.item.key, change.item.value.color)
+    self.draw_block(self.model.chunks[chunk_id])
+  else:
+    self.active_chunks[chunk_id] = empty_zid
+
+method on_block_loaded(self: BuildNode, chunk_id: Vector3) {.gdsync.} =
+  if ?self.model:
+    self.track_chunk(chunk_id)
+
+method on_block_unloaded(self: BuildNode, chunk_id: Vector3) {.gdsync.} =
+  if ?self.model:
+    let zid = self.active_chunks.get_or_default(chunk_id, empty_zid)
+    if zid != empty_zid:
+      self.model.chunks[chunk_id].untrack(zid)
+    self.active_chunks.del(chunk_id)
+
+proc set_visibility(self: BuildNode) =
+  if ?self.model:
+    if Visible in self.model.global_flags:
+      self.visible = true
+      # TODO: Set normal shader
+    elif Visible notin self.model.global_flags and God in state.local_flags:
+      self.visible = true
+      # TODO: Set hidden shader
+    else:
+      self.visible = false
+
+proc track_chunks(self: BuildNode) =
+  if ?self.model:
+    self.chunks_zid = self.model.chunks.watch:
+      let id = change.item.key
+      if id in self.active_chunks:
+        if added:
+          self.track_chunk(change.item.key)
+        elif removed:
+          self.active_chunks[id] = empty_zid
+
+proc untrack_chunks(self: BuildNode) =
+  Zen.thread_ctx.untrack(self.chunks_zid)
+  for chunk_id, zid in self.active_chunks:
+    Zen.thread_ctx.untrack(zid)
+    self.active_chunks[chunk_id] = empty_zid
+
+proc track_changes(self: BuildNode) =
+  if not ?self.model:
+    return
+
+  self.model.glow_value.watch:
+    if added:
+      self.set_glow(change.item)
+
+  self.set_bounds(self.model.bounds)
+  self.model.bounds_value.watch:
+    if added:
+      debug "changing bounds", new = change.item
+      self.set_bounds(change.item)
+
+  self.track_chunks()
+
+  self.model.global_flags.watch:
+    if (
+      change.item == Visible and
+      ScriptInitializing notin self.model.global_flags
+    ) or ScriptInitializing.removed:
+      self.set_visibility()
+    elif Resetting.added:
+      self.untrack_chunks()
+      # Reset VoxelTerrain
+      self.set_generator(gdref VoxelGenerator(nil))
+      self.set_stream(gdref VoxelStream(nil))
+    elif Resetting.removed:
+      let generator = gdnew[VoxelGeneratorFlat]()
+      self.set_generator(generator)
+      self.track_chunks()
+    elif HighlightError.added:
+      self.toggle_error_highlight_at = get_mono_time() + error_flash_time
+      self.error_highlight_on = true
+      self.set_highlight()
+    elif HighlightError.removed:
+      self.toggle_error_highlight_at = MonoTime.high
+      self.error_highlight_on = false
+      self.set_highlight()
+
+  self.model.local_flags.watch:
+    if change.item == Highlight:
+      self.set_highlight()
+
+  state.local_flags.watch:
+    if change.item == God:
+      self.set_visibility()
+
+  self.model.scale_value.watch:
+    if added:
+      let scale = change.item
+      self.set_scale(vector3(scale, scale, scale))
+      self.model.transform_value.pause self.transform_zid:
+        self.model.transform = self.get_transform()
+      self.set_max_view_distance(int32(self.default_view_distance.float / scale))
+
+  self.transform_zid = self.model.transform_value.watch:
+    if added:
+      self.set_transform(change.item)
+
+  # TODO: Implement sight queries for Godot 4
+  # self.model.sight_query_value.watch:
+  #   if added:
+  #     var query = change.item
+  #     let collision_layer = self.get_collision_layer()
+  #     self.set_collision_layer(0)
+  #     query.run(self.model)
+  #     self.set_collision_layer(collision_layer)
+  #     self.model.sight_query = query
+
+proc setup*(self: BuildNode) =
+  let was_skipping_join = dont_join
+  dont_join = true
+
+  self.track_changes()
+
+  dont_join = was_skipping_join
+  if ?self.model and not self.model.bot_collisions:
+    var layer = 0'u32
+    layer.set_bit(2)
+    self.set_collision_layer(layer)
+
+  # TODO: Set up sight ray for Godot 4
+  # self.model.sight_ray = self.get_node("SightRay").as(RayCast3D)
+  self.prepare_materials()
 
 proc create_test_voxels*(self: BuildNode) {.gdsync.} =
   ## Create some test voxels using real VoxelTerrain functionality
@@ -46,19 +243,32 @@ proc create_test_voxels*(self: BuildNode) {.gdsync.} =
         let voxel_type = (x + y + z) mod 6 + 1
         voxel_tool[].set_voxel(pos, 1.uint64)
 
-
   print("[VOXEL] Test voxels created - 3x3x3 cube with mixed colors")
 
 method process*(self: BuildNode, delta: float) {.gdsync.} =
-  if self.update_at < get_mono_time():
-    # Only run once by setting to a far future time
-    self.update_at = get_mono_time() + init_duration(seconds = 3600)
-    self.create_test_voxels()
+  if ?self.model:
+    if self.model.code.owner == state.worker_ctx_name:
+      self.model.transform_value.pause self.transform_zid:
+        self.model.transform = self.get_transform()
 
+    if get_mono_time() > self.toggle_error_highlight_at:
+      self.error_highlight_on = not self.error_highlight_on
+      self.toggle_error_highlight_at = get_mono_time() + error_flash_time
+      self.set_highlight()
+
+  # Test voxel creation (temporary)
+  if self.update_at < get_mono_time() and self.update_at != MonoTime.high:
+    # Only run once by setting to a far future time
+    self.update_at = MonoTime.high
+    self.create_test_voxels()
 
 method ready*(self: BuildNode) {.gdsync.} =
   print("[VOXEL] BuildNode ready - checking VoxelTerrain configuration from .tscn...")
   self.update_at = get_mono_time() + init_duration(seconds = 2)  # Give terrain time to initialize
+  self.toggle_error_highlight_at = MonoTime.high
+  
+  # Initialize based on on_init equivalent
+  self.default_view_distance = self.get_max_view_distance().int
 
   # Debug: Check if components from .tscn are properly loaded
   print("[VOXEL] Stream: ", self.get_stream())
@@ -68,5 +278,10 @@ method ready*(self: BuildNode) {.gdsync.} =
   print("[VOXEL] VoxelTerrain initialized - waiting 2 seconds for area loading...")
 
 proc init*(_: type BuildNode): BuildNode =
-  let scene = cast[gdref PackedScene](ResourceLoader.load("res://components/Build.tscn"))
-  result = BuildNode(scene[].instantiate)
+  if build_scene.is_nil:
+    build_scene = ResourceLoader.load("res://components/BuildNode.tscn").as(gdref PackedScene)
+    # TODO: Load shaders for Godot 4
+    # shader = ResourceLoader.load("res://shaders/terrain_voxel.shader").as(gdref Shader)
+    # hidden_shader = ResourceLoader.load("res://shaders/terrain_voxel_hidden.shader").as(gdref Shader)
+  
+  result = build_scene[].instantiate().as(BuildNode)
