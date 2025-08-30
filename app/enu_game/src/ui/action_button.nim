@@ -55,6 +55,10 @@ method ready*(self: ActionButton) {.gdsync.} =
   # Set up initial size
   self.update_size(global_toolbar_size)
   
+  # Connect signals using the working Godot 4 signal system
+  self.bind_signals(self, "pressed")
+  self.bind_signals(self.get_viewport(), "size_changed")
+  
   # TODO: Connect to config changes when state system is available
   # state.config_value.changes:
   #   if state.config.toolbar_size != change.item.toolbar_size:
@@ -64,5 +68,6 @@ method pressed*(self: ActionButton) {.gdsync.} =
   print("[UI] ActionButton pressed: " & $self.get_name())
   self.trigger_action_changed()
 
-# TODO: Handle viewport resize for responsive design
-# This will need to be connected via signals when we have proper scene structure
+method on_size_changed*(self: ActionButton) {.gdsync.} =
+  print("[UI] ActionButton size changed: " & $self.get_name())
+  self.update_size(global_toolbar_size)

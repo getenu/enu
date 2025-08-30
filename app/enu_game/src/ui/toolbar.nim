@@ -30,6 +30,9 @@ method onInit*(self: Toolbar) =
 method ready*(self: Toolbar) {.gdsync.} =
   print("[UI] Toolbar ready")
   
+  # Connect to action_changed signals from ActionButton components
+  self.bind_signals(self, "action_changed")
+  
   # Initialize tool lists for preview generation (simplified for now)
   self.blocks = @["green", "red", "blue", "black", "white", "brown"] 
   self.objects = @["bot"]
@@ -48,6 +51,10 @@ method ready*(self: Toolbar) {.gdsync.} =
   current_tool = BlueBlock
   
   print("[UI] Toolbar initialized with " & $self.get_child_count() & " buttons")
+
+method on_action_changed*(self: Toolbar) {.gdsync.} =
+  print("[UI] Toolbar action_changed signal received")
+  # TODO: Implement tool selection logic when full game state is available
 
 method process*(self: Toolbar; delta: float) {.gdsync.} =
   # Handle preview generation and other toolbar updates
