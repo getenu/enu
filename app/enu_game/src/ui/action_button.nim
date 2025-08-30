@@ -32,18 +32,17 @@ proc update_size(self: ActionButton, size: float) =
   #   flat_style.setCornerRadiusAll(corner_radius)
 
 proc trigger_action_changed(self: ActionButton) =
-  ## Trigger action_changed signal on parent (Toolbar)
-  let parent = self.get_parent()
-  if not parent.is_nil():
-    let button_name = $self.get_name()
-    print("[TOOLBAR] Action changed: " & button_name)
-    
-    # For now, we'll use a global approach to communicate with toolbar
-    # This will be replaced with proper state management later
-    if button_name.len > 7 and button_name.startsWith("Button-"):
-      let tool_name = button_name[7..^1] # Skip "Button-" prefix
-      print("[TOOLBAR] Tool selected: " & tool_name)
-      # The toolbar will handle tool changes in its own process method
+  ## Trigger action_changed signal to notify Toolbar of tool selection
+  let button_name = $self.get_name()
+  print("[UI] ActionButton trigger_action_changed: " & button_name)
+  
+  # Emit signal to the game node which will route it to Toolbar
+  let game_node = state.nodes.game
+  if not game_node.is_nil():
+    # Create and emit the action_changed signal with the button name
+    game_node.trigger("action_changed", button_name)
+  else:
+    print("[UI] ERROR: game node not available for signal routing")
 
 method onInit*(self: ActionButton) =
   # Constructor-like initialization
