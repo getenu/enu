@@ -31,10 +31,8 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
           0.0
 
       ctx.last_ran = now
-      if ctx.callback == nil or (;
-        task_state = ctx.callback(delta, timeout)
-        task_state in {Done, NextTask}
-      ):
+      if ctx.callback == nil or
+          (task_state = ctx.callback(delta, timeout); task_state in {Done, NextTask}):
         ctx.timer = MonoTime.high
         ctx.action_running = false
         self.active_unit = unit
@@ -116,17 +114,14 @@ proc watch_code(self: Worker, unit: Unit) =
     unit.errors.changes:
       if unit.code.owner == Zen.thread_ctx.id:
         if added and change.item.log:
-          state.err(
-            \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
-          )
+          state.err(\"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]")
           state.push_flags ConsoleVisible
 
         if removed:
           state.pop_flags ConsoleVisible
 
   if unit.script_ctx.is_nil:
-    unit.script_ctx =
-      ScriptCtx.init(owner = unit, interpreter = self.interpreter)
+    unit.script_ctx = ScriptCtx.init(owner = unit, interpreter = self.interpreter)
 
     unit.script_ctx.script = script_file_for unit
 
@@ -134,9 +129,7 @@ proc watch_units(
     self: Worker,
     units: ZenSeq[Unit],
     parent: Unit,
-    body: proc(unit: Unit, change: Change[Unit], added: bool, removed: bool) {.
-      gcsafe
-    .},
+    body: proc(unit: Unit, change: Change[Unit], added: bool, removed: bool) {.gcsafe.},
 ) {.gcsafe.} =
   units.track proc(changes: seq[Change[Unit]]) {.gcsafe.} =
     for change in changes:
@@ -155,9 +148,7 @@ proc watch_units(
 template for_all_units(self: Worker, body: untyped) {.dirty.} =
   self.watch_units state.units,
     parent = nil,
-    proc(
-        unit: Unit, change: Change[Unit], added: bool, removed: bool
-    ) {.gcsafe.} =
+    proc(unit: Unit, change: Change[Unit], added: bool, removed: bool) {.gcsafe.} =
       body
 
 proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
@@ -330,6 +321,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       let wait_until = frame_start + min_time
 
       Zen.thread_ctx.boop
+      echo "booped worker"
       run_deferred()
 
       inc state.frame_count

@@ -3,12 +3,13 @@ import core, models/units
 import pkg/gdext
 
 proc init*(_: type Player): Player =
+  let zero = vector3(0, 0, 0)
   let self = Player(
     id: \"player-{Zen.thread_ctx.id}",
     rotation_value: ~0.0,
     start_transform: Transform3D.init(origin = vector3(0, 1, 0)),
-    input_direction_value: ZenValue[Vector3].init,
-    cursor_position_value: ~((0, 0)),
+    input_direction_value: ~vector3(0, 0, 0),
+    cursor_position_value: ~((line: 0, col: 0)),
   )
   self.init_unit(shared = false)
   self.global_flags += Global

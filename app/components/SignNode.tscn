@@ -1,92 +1,39 @@
-[gd_scene load_steps=11 format=2]
+[gd_scene load_steps=4 format=3 uid="uid://c6xbmhm5o1tys"]
 
-[ext_resource path="res://themes/mono.otf" type="DynamicFontData" id=1]
-[ext_resource path="res://components/MarkdownLabel.tscn" type="PackedScene" id=5]
+[ext_resource type="PackedScene" path="res://components/MarkdownLabel.tscn" id="5"]
 
-[sub_resource type="DynamicFont" id=19]
-size = 72
-font_data = ExtResource( 1 )
-
-[sub_resource type="StyleBoxFlat" id=20]
-bg_color = Color( 0, 0, 0, 0 )
-border_color = Color( 1, 0.45098, 0.992157, 1 )
-
-[sub_resource type="StyleBoxFlat" id=21]
-bg_color = Color( 0, 0, 0, 0.839216 )
-border_color = Color( 1, 0.45098, 0.992157, 1 )
-
-[sub_resource type="QuadMesh" id=18]
+[sub_resource type="QuadMesh" id="18"]
 resource_local_to_scene = true
 
-[sub_resource type="ViewportTexture" id=16]
-flags = 64
-viewport_path = NodePath("Viewport")
-
-[sub_resource type="SpatialMaterial" id=17]
+[sub_resource type="ConcavePolygonShape3D" id="15"]
 resource_local_to_scene = true
-flags_albedo_tex_force_srgb = true
-params_cull_mode = 2
-albedo_color = Color( 0.478431, 0.478431, 0.478431, 1 )
-albedo_texture = SubResource( 16 )
-metallic_specular = 0.0
-roughness = 0.0
-emission_enabled = true
-emission = Color( 0.137255, 0.137255, 0.137255, 1 )
-emission_energy = 0.0
-emission_operator = 0
-emission_on_uv2 = false
+data = PackedVector3Array(-0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 0, 0.5, 0.5, 0, 0.5, -0.5, 0)
 
-[sub_resource type="ConcavePolygonShape" id=15]
-resource_local_to_scene = true
-data = PoolVector3Array( -0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 0, 0.5, 0.5, 0, 0.5, -0.5, 0 )
+[node name="SignNode" type="SignNode"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -1.99)
 
-[node name="SignNode" type="Spatial"]
-transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -1.99 )
-
-[node name="Viewport" type="Viewport" parent="."]
-size = Vector2( 1200, 1200 )
-hdr = false
-usage = 0
-render_target_v_flip = true
+[node name="Viewport" type="SubViewport" parent="."]
+size = Vector2i(1200, 1200)
 render_target_update_mode = 3
 
-[node name="MarkdownLabel" parent="Viewport" instance=ExtResource( 5 )]
-rect_min_size = Vector2( 1200, 1200 )
+[node name="MarkdownLabel" parent="Viewport" instance=ExtResource("5")]
+anchors_preset = 15
 size_flags_horizontal = 1
 size_flags_vertical = 1
-scroll_horizontal_enabled = false
-scroll_vertical_enabled = false
 
 [node name="TextEdit" type="TextEdit" parent="Viewport"]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-margin_bottom = 2.0
-custom_colors/selection_color = Color( 0.207843, 0, 0.321569, 1 )
-custom_colors/executing_line_color = Color( 0.0392157, 0, 0.168627, 1 )
-custom_colors/font_color_readonly = Color( 0.878431, 0.878431, 0.878431, 1 )
-custom_fonts/font = SubResource( 19 )
-custom_styles/read_only = SubResource( 20 )
-custom_styles/normal = SubResource( 21 )
-always_draw_caret = true
-indent_size = 2
-readonly = true
-syntax_highlighting = true
-show_line_numbers = true
-smooth_scrolling = true
 caret_blink = true
-caret_moving_by_right_click = false
-__meta__ = {
-"_edit_use_anchors_": false
-}
 
-[node name="MeshInstance" type="MeshInstance" parent="."]
-transform = Transform( -1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 0, 0 )
-mesh = SubResource( 18 )
-material/0 = SubResource( 17 )
+[node name="MeshInstance" type="MeshInstance3D" parent="."]
+transform = Transform3D(-1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 0, 0)
+mesh = SubResource("18")
 
-[node name="SignBody" type="StaticBody" parent="MeshInstance"]
+[node name="SignBody" type="StaticBody3D" parent="MeshInstance"]
 collision_layer = 16
 collision_mask = 0
 
-[node name="CollisionShape" type="CollisionShape" parent="MeshInstance/SignBody"]
-shape = SubResource( 15 )
+[node name="CollisionShape" type="CollisionShape3D" parent="MeshInstance/SignBody"]
+shape = SubResource("15")

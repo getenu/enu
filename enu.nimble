@@ -32,19 +32,16 @@ src_dir = "src"
 bin = @["enu" & lib_ext]
 
 requires "nim == 2.2.4",
-  "https://github.com/getenu/model_citizen 0.19.3",
-  "https://github.com/dsrw/nanoid.nim 0.2.1",
-  "https://github.com/godot-nim/gdext-nim",
+  "https://github.com/getenu/model_citizen 0.19.5",
+  "https://github.com/dsrw/nanoid.nim 0.2.1", "https://github.com/godot-nim/gdext-nim",
   "https://github.com/godot-nim/gdext-nim?subdir=coronation",
-  "https://github.com/treeform/pretty",
-  "cligen", "chroma", "markdown", "chronicles",
+  "https://github.com/treeform/pretty", "cligen", "chroma", "markdown", "chronicles",
   "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
 proc godot_bin(target = target): string =
-  result =
-    this_dir() & &"/vendor/godot/bin/godot.{target}.editor.{cpu}{exe_ext}"
+  result = this_dir() & &"/vendor/godot/bin/godot.{target}.editor.{cpu}{exe_ext}"
   if target == "server":
     result = result.replace("godot.server", "godot_server.x11")
 
@@ -78,8 +75,7 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
-    let str =
-      &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts}"
+    let str = &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts}"
     echo "building: ", str
     exec str
 
@@ -186,8 +182,7 @@ proc mingw_path(): string =
   let shim_help = gorge_ex("gcc --shimgen-help")
   # chocolatey uses shim exes, so we need to parse shimgen-help to find the real
   # gcc path
-  if shim_help.exit_code < 1 and
-      shim_help.output.scanf("$+Target: '$+'", pre, match):
+  if shim_help.exit_code < 1 and shim_help.output.scanf("$+Target: '$+'", pre, match):
     match.parent_dir
   else:
     find_exe("gcc").parent_dir
@@ -266,9 +261,9 @@ task generate_bindings, "Generate Godot extension API bindings":
   exec &"nimbledeps/bin/coronation --apisource:{generated_dir}/{extension_api_json} --outdir:{generated_dir}"
 
 task start_headless, "Run Enu":
-    build_extension_task()
-    cd "app"
-    exec godot_bin() & " --headless --quit-after 1 --verbose scenes/game.tscn"
+  build_extension_task()
+  cd "app"
+  exec godot_bin() & " --headless --quit-after 1 --verbose scenes/game.tscn"
 
 proc code_sign(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"

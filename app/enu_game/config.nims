@@ -1,5 +1,7 @@
---path: "src"
---path: "../../generated"
+--path:
+  "src"
+--path:
+  "../../generated"
 
 --threads:
   on
@@ -42,7 +44,8 @@ if host_os == "windows":
   "chronicles_sinks=textlines[dynamic]"
 
 # GD4: remove me
---threadAnalysis:off
+--threadAnalysis:
+  off
 
 if defined(release):
   --define:
@@ -57,8 +60,6 @@ if defined(release):
 import gdext/buildconf
 import std/strutils
 
-let setting = BuildSettings(
-  name: "EnuGame"
-)
+let setting = BuildSettings(name: "EnuGame")
 
 configure(setting)

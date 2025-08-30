@@ -65,6 +65,7 @@ proc rescale*(self: Game) =
 
 method process*(self: Game, delta: float) {.gdsync.} =
   Zen.thread_ctx.boop
+  echo "booped game"
   inc state.frame_count
   let time = get_mono_time()
   when defined(metrics):

@@ -2,8 +2,9 @@ import gdext
 import gdext/classes/[gdnode3d, gdpackedscene, gdresourceloader]
 import core, gdutils
 
-type SignNode* {.gdsync.} = ptr object of Node3D
-  model*: Sign
+type SignNode* {.gdsync.} =
+  ptr object of Node3D
+    model*: Sign
 
 method ready*(self: SignNode) {.gdsync.} =
   # GD4: SignNode implementation needs significant rework
@@ -11,5 +12,6 @@ method ready*(self: SignNode) {.gdsync.} =
   discard
 
 proc init*(_: type SignNode): SignNode =
-  let scene = cast[gdref PackedScene](ResourceLoader.load("res://components/Sign.tscn"))
+  let scene =
+    cast[gdref PackedScene](ResourceLoader.load("res://components/SignNode.tscn"))
   result = SignNode(scene[].instantiate)

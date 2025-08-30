@@ -42,9 +42,7 @@ proc from_json_hook(self: var Vector3, json: JsonNode) =
   self[1] = json[1].get_float
   self[2] = json[2].get_float
 
-proc from_json_hook(
-    self: var ZenTable[Vector3, VoxelInfo], json: JsonNode
-) {.gcsafe.} =
+proc from_json_hook(self: var ZenTable[Vector3, VoxelInfo], json: JsonNode) {.gcsafe.} =
   assert load_chunks
   self = ~Table[Vector3, VoxelInfo]
   for chunks in json:
@@ -127,7 +125,11 @@ proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
-  let elements = [$self.start_transform.basis.x, $self.start_transform.basis.y, $self.start_transform.basis.z].join(",\n")
+  let elements = [
+    $self.start_transform.basis.x,
+    $self.start_transform.basis.y,
+    $self.start_transform.basis.z,
+  ].join(",\n")
   let edits = $self.shared.edits
   result =
     \"""
@@ -178,8 +180,8 @@ proc backup_level*(level_dir: string) =
     create_dir backup_dir
 
     let backup_file =
-      backup_dir / state.config.level & "_" &
-      times.now().format("yyyy-MM-dd-HH-mm-ss") & ".zip"
+      backup_dir / state.config.level & "_" & times.now().format("yyyy-MM-dd-HH-mm-ss") &
+      ".zip"
 
     let backups = walk_files(
       backup_dir / state.config.level & "_????-??-??-??-??-??.zip"
@@ -308,7 +310,7 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   dont_join = true
   worker.retry_failures = true
-  load_units(nil)
+  #load_units(nil)
   worker.retry_failed_scripts()
   worker.retry_failures = false
   dont_join = false

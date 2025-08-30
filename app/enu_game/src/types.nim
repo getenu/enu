@@ -9,7 +9,9 @@ import models/colors, libs/[eval]
 
 #from pkg/godot import NimGodotObject
 
-#export Vector3, Transform, vector3, basis, AABB, aabb
+# Re-export Vector3 from gdext to ensure type consistency
+from gdext/builtinindex import Vector3
+export Vector3
 #export godotbase except print
 export Interpreter
 export lineinfos.`==`
@@ -326,11 +328,11 @@ type
     error_message*: string
 
 # GD4: we probably need these
-proc from_flatty*[N: ptr object](s: string, i: var int, n: N) =
-  discard
+# proc from_flatty*[N: NimGodotObject](s: string, i: var int, n: N) =
+#   discard
 
-proc to_flatty*[N: ptr object](s: var string, n: N) =
-  discard
+# proc to_flatty*[N: NimGodotObject](s: var string, n: N) =
+#   discard
 
 proc from_flatty*(s: string, i: var int, n: var ScriptCtx) =
   discard
