@@ -10,14 +10,18 @@ proc bind_signal*(
     signal: tuple[name: string, meth: string],
     binds: varargs[Variant] = @[],
 ) =
-  # GD4: Signal binding needs proper Callable implementation - commented out for now
-  # if not sender.has_signal(signal.name):
-  #   sender.add_user_signal(signal.name)
-  # var method_name = signal.meth
-  # if not signal.meth.starts_with("_"):
-  #   method_name = "_on_" & method_name
-  # discard sender.connect(signal.name, callable_to_create)
-  discard
+  # Create user signal if it doesn't exist
+  if not sender.has_signal(signal.name):
+    sender.add_user_signal(signal.name)
+  
+  # Convert method name to proper format
+  var method_name = signal.meth
+  if not signal.meth.starts_with("_"):
+    method_name = "_on_" & method_name
+  
+  # Create Callable and connect signal
+  let callable_obj = callable(receiver, newStringName(method_name))
+  discard sender.connect(newStringName(signal.name), callable_obj)
 
 proc bind_signal*(
     receiver: Object,
@@ -41,8 +45,8 @@ proc trigger*(
 ) =
   if not node.has_user_signal(signal):
     node.add_user_signal(signal)
-  # GD4: emit_signal API changed
-  discard node.emit_signal(signal)
+  # Emit signal with arguments
+  discard node.emit_signal(newStringName(signal), args)
 
 proc `opacity=`*(node: CanvasItem, value: float) =
   node.modulate = color(1.0, 1.0, 1.0, value)
@@ -85,7 +89,7 @@ proc unghost*(self: Control) =
 
 proc select*(self: OptionButton, text: string): int {.discardable.} =
   for i in 0 ..< self.get_item_count():
-    if self.get_item_text(i) == text:
+    if $self.get_item_text(i) == text:
       self.select(i)
       return i
   result = -1
@@ -99,4 +103,5 @@ proc ignore_touches*(self: Control, event: InputEvent) =
         touch_event.position.y >= self.global_position.y and
         touch_event.position.y <= self.global_position.y + self.size.y:
       state.ignored_touches.incl byte(touch_event.index)
-      self.get_tree().set_input_as_handled()
+      # GD4: set_input_as_handled method API needs investigation
+      # self.get_tree().set_input_as_handled()
