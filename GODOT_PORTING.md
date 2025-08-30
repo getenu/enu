@@ -1,51 +1,149 @@
-e# Godot 4 Migration Guide
+# Godot 3 to 4 Migration Status
 
-This document captures key findings and patterns from migrating Enu from Godot 3.5 to Godot 4.
+This document tracks the progress of porting Enu from Godot 3 to Godot 4. The migration involves updating from the nim-godot bindings to gdext, along with adapting to Godot 4's API changes.
 
-## Major API Changes
+## Overview
 
-### Type System Changes
-- `Transform` → `Transform3D`
-- `Spatial` → `Node3D`
-- All related imports must be updated accordingly
+- **Godot 3 source**: `./src/` (42 files)
+- **Godot 4 source**: `./app/enu_game/src/` (42 files)
+- **Entry point**: `bootstrap.nim` (new for Godot 4)
+- **Build command**: `./build_and_start.sh`
+
+## Migration Progress: ~60% Complete
+
+### ✅ **FULLY MIGRATED** (Core Systems Working)
+
+**Main Systems:**
+- **`game.nim`**: 638→675 lines - Core game loop fully updated for Godot 4 APIs
+- **`types.nim`**: 343→348 lines - Type definitions updated for gdext
+- **`toolbar.nim`**: 78→150 lines - **Significantly expanded** with new interactive tool selection
+- **`action_button.nim`**: 35→71 lines - **Doubled in size**, fully implemented for Godot 4
+- **`bootstrap.nim`**: New entry point for Godot 4 extension system
+
+**Supporting Systems:**
+- **All controller files**: Basic conversion completed with minor API updates
+- **All model files**: Import updates and minor API changes completed
+- **Core utilities**: `core.nim`, `gdutils.nim` updated for gdext
+
+### ⚠️ **PARTIALLY MIGRATED** (Working but Incomplete)
+
+**Node Systems:**
+- **`player_node.nim`**: 437→191 lines - Basic structure in place, missing advanced features
+- **`build_node.nim`**: 241→72 lines - **PRIORITY** - Core voxel functionality missing
+- **`bot_node.nim`**: 183→14 lines - Minimal stub, needs full implementation
+
+**UI Systems:**
+- **`editor.nim`**: 402→50 lines - Basic structure started, needs completion
+
+### 🔴 **STUB FILES** (Need Complete Implementation)
+
+**Critical UI Components:**
+- **`console.nim`**: 99→9 lines - **HIGH PRIORITY** - Debugging/scripting interface
+- **`gui.nim`**: 260→9 lines - **HIGH PRIORITY** - Main UI coordination
+- **`settings.nim`**: 494→9 lines - Configuration management
+- **`editor.nim`**: 402→50 lines - Code editing interface
+
+**Secondary UI Components:**
+- **`markdown_label.nim`**: 230→9 lines - Documentation display
+- **`preview_maker.nim`**: 54→9 lines - Block preview generation
+- **`right_panel.nim`**: 123→9 lines - Documentation panel
+- **`virtual_joystick.nim`**: 155→9 lines - Mobile controls
+- **`floating_button.nim`**: 7→9 lines - Minor UI component
+
+**Node Components:**
+- **`aim_target.nim`**: 104→9 lines - Targeting system
+- **`sign_node.nim`**: 171→17 lines - In-world text displays
+- **`ground_node.nim`**: 10→9 lines - Terrain rendering
+- **`selection_area.nim`**: 9→9 lines - Selection highlighting
+- **`queries.nim`**: 20→6 lines - Spatial queries
+- **`helpers.nim`**: 16→6 lines - Node utilities
+
+## Current State
+
+### What's Working
+- Application launches and immediately quits (expected behavior)
+- Extension system loads successfully
+- Basic scene structure and toolbar are functional
+- Tool selection system is implemented and working
+- Core game initialization sequence completes
+
+### What's Missing
+- **Voxel system**: `build_node.nim` needs VoxelTerrain integration
+- **User interface**: Most UI components are stubs
+- **Player interactions**: Limited player node functionality
+- **Content creation**: Editor and console for scripting
+
+## Key Migration Patterns
 
 ### Import Changes
 ```nim
-# Old (Godot 3)
-import pkg/godot
-import godotapi/spatial
+# Godot 3
+import godotapi/[node, control, button]
 
-# New (Godot 4)
-import gdext/classes/gdnode3d
+# Godot 4
+import gdext/classes/[gdnode, gdcontrol, gdbutton]
 ```
 
-### Core Type Exports
-Add these exports to core.nim for Godot 4 compatibility:
+### Object Definitions
 ```nim
-export Transform3D, Vector3, Vector2, Basis, AABB
+# Godot 3
+gdobj MyClass of Node:
+
+# Godot 4
+type MyClass* {.gdsync.} = ptr object of Node
 ```
 
-## Voxel Terrain Specific Issues
-
-### Area Editability Problem
-**Issue**: `is_area_editable()` returns false, preventing voxel terrain editing.
-
-**Root Cause**: VoxelTerrain streaming system needs time to load areas before they become editable.
-
-**Solution**: Add a 2-second delay after VoxelTerrain initialization before testing editability:
+### Method Signatures
 ```nim
-method ready*(self: BuildNode) {.gdsync.} =
-  print("[VOXEL] BuildNode ready - checking VoxelTerrain configuration...")
-  self.update_at = get_mono_time() + init_duration(seconds = 2)
+# Godot 3
+method ready*() =
+
+# Godot 4
+method ready*(self: MyClass) {.gdsync.} =
 ```
 
-**Technical Details**:
-- `is_area_editable()` depends on `_terrain->get_storage().is_area_loaded(box)`
-- The streaming system loads areas asynchronously
-- Only LOD 0 areas are editable for LOD terrain
-- Found in `vendor/godot/modules/voxel/edition/voxel_tool_terrain.cpp`
+## Priority Tasks
 
-## Migration Patterns
+### **IMMEDIATE (Week 1)**
+1. **Complete `build_node.nim`** - Core voxel functionality for world building
+2. **Implement `console.nim`** - Essential for debugging and testing
+3. **Complete `gui.nim`** - Main UI coordination
+
+### **HIGH PRIORITY (Week 2-3)**
+4. **Complete `player_node.nim`** - Player movement and interactions
+5. **Implement `editor.nim`** - Code editing interface
+6. **Complete `settings.nim`** - Configuration management
+
+### **MEDIUM PRIORITY (Month 1)**
+7. **Complete remaining UI components** - markdown_label, preview_maker, etc.
+8. **Implement remaining node systems** - signs, bots, targeting
+9. **Polish and optimization**
+
+## Testing Strategy
+
+- Use `./build_and_start.sh` for regular builds
+- Test after each major component implementation
+- Verify core systems before moving to UI components
+- Maintain build stability throughout development
+
+## Technical Notes
+
+### Godot 4 Extension System
+- Uses `{.gdsync.}` pragma for Godot lifecycle methods
+- Exports types and public APIs with `*` symbol
+- Maintains snake_case conventions despite gdext camelCase bindings
+
+### VoxelTerrain Integration Issues (From Previous Attempts)
+- **Area Editability Problem**: `is_area_editable()` returns false
+- **Root Cause**: VoxelTerrain streaming system needs time to load areas
+- **Solution**: Add 2-second delay after VoxelTerrain initialization
+- **Technical Details**: Found in `vendor/godot/modules/voxel/edition/voxel_tool_terrain.cpp`
+
+### Build Commands
+- `nimble build_extension` - Build the Enu extension
+- `nimble generate_bindings` - Generate Nim bindings for custom Godot build
+- `nimble build_godot` - Build Godot with voxel module
+- `./build_and_start.sh` - Build and launch for testing
 
 ### Naming Conventions
 - Always use `snake_case` for variables and function names
@@ -53,62 +151,7 @@ method ready*(self: BuildNode) {.gdsync.} =
 - Use `to_flatty()` instead of `toFlatty()`
 - Use `join_path()` instead of `joinPath()`
 
-### Unresolved Migration Issues
-For functions that need complex migration work, use this pattern:
-```nim
-proc init*(_: type Transform3D, origin = vector3()): Transform3D =
-  discard
-  # GD4: need to figure out how to create Transform3D with origin
-```
+---
 
-### gcsafe Issues
-Some transform methods like `rotated` are no longer gcsafe. Address these case-by-case.
-
-## Build System
-
-### Key Build Commands
-- `nimble build_extension` - Build the Enu extension
-- `nimble generate_bindings` - Generate Nim bindings for custom Godot build
-- `nimble build_godot` - Build Godot with voxel module
-
-### Extension Configuration
-- Main extension file: `src/EnuGame.gdextension`
-- Entry point: `bootstrap.nim`
-
-## File Migration Progress
-
-### Completed ✅
-- **Non-Godot files migrated**: `types.nim`, `core.nim`, `models.nim`, `controllers.nim`
-- **Supporting directories**: `controllers/`, `libs/`, `models/`
-- **Compilation fixes**: All core data model files now compile successfully
-- **Import updates**: Updated all imports from Godot 3 to Godot 4 patterns
-
-### Next Steps 🔄
-1. **Mechanically translate Godot files**: `gdutils`, `ui/*`, `nodes/*`
-2. **Update bootstrap.nim**: Import everything like the original `enu.nim`
-3. **Test complete build**: Verify `nimble build_extension` compiles everything
-
-### Migration Strategy
-1. Copy non-Godot files first (data models, core utilities)
-2. Fix compilation errors with new type system
-3. Systematically migrate Godot-specific files
-4. Update bootstrap to wire everything together
-5. Test full build pipeline
-
-## Key Learnings
-
-### Timing Issues
-- VoxelTerrain requires initialization time before areas become editable
-- 2-second delay resolves the editability issue
-
-### Import Strategy
-- Start with core.nim exports to establish type availability
-- Update imports file-by-file following the dependency chain
-- Use gdext classes instead of old godotapi imports
-
-### Error Patterns
-- Most errors relate to type name changes (Transform → Transform3D)
-- Import path changes are systematic and predictable
-- Some gcsafe issues require individual attention
-
-This migration follows a systematic approach: establish core types, fix data models, then progressively migrate UI and node components.
+**Last Updated**: Current migration analysis
+**Next Focus**: Complete build_node.nim implementation
