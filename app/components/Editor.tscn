@@ -6,12 +6,7 @@
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="ScrollContainer" type="ScrollContainer" parent="."]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="TextEdit" type="TextEdit" parent="ScrollContainer"]
+[node name="CodeEdit" type="CodeEdit" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -19,6 +14,13 @@ mouse_filter = 1
 theme = ExtResource("2")
 drag_and_drop_selection_enabled = false
 caret_blink = true
+syntax_highlighter = null
+line_folding = true
+line_numbers = true
+draw_control_chars = false
+draw_tabs = false
+draw_spaces = false
+delimiter_strings = []
 
 [node name="GridContainer" type="GridContainer" parent="."]
 layout_mode = 2
