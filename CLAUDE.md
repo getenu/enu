@@ -208,5 +208,8 @@ This mode:
 - Always ensure tests pass before committing changes
 - Use verification mode to validate core system functionality
 
+### Build Validation
+**CRITICAL**: No coding task is complete until `./build.sh` exits with code 0. Always verify that the build succeeds before considering any coding task finished. This is the primary success criterion for all code changes.
+
 - Always use snake_case for variables and function names. Types and constants use UpperCamelCase
 - ALWAYS USE snake_case FOR VARIABLES AND FUNCTIONS!!!

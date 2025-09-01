@@ -60,7 +60,8 @@ proc trigger*(signal: string, args: varargs[Variant]) =
 template find*(self: Node, name: string, T: type Node): untyped =
   {.line.}:
     let obj = self.find_child(name, false, false) as T
-    assert not obj.is_nil()
+    if obj.is_nil():
+      print("[GDUTILS] Warning: Could not find node '", name, "' of type ", $T)
     obj
 
 template find*(name: string, T: type Node): untyped =

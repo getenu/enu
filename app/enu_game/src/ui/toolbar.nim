@@ -2,6 +2,7 @@ import std/[options, strutils, sequtils]
 import gdext
 # Use custom Godot bindings for consistency with other classes
 import gdext/classes/[gdhboxcontainer, gdbutton, gdnode]
+import gdutils
 
 # Tool types - simplified version of original game tools
 type ToolType* = enum
@@ -52,17 +53,6 @@ method ready*(self: Toolbar) {.gdsync.} =
   
   print("[UI] Toolbar initialized with " & $self.get_child_count() & " buttons")
 
-method on_action_changed*(self: Toolbar) {.gdsync.} =
-  print("[UI] Toolbar action_changed signal received")
-  
-  # Find which button was pressed by checking all children
-  for child in self.get_children():
-    let button = child as Button
-    if not button.is_nil() and button.is_pressed():
-      let button_name = $button.get_name()
-      self.handle_tool_selection(button_name)
-      break
-
 proc handle_tool_selection(self: Toolbar, button_name: string) =
   print("[UI] Toolbar handling tool selection: " & button_name)
   
@@ -86,6 +76,17 @@ proc handle_tool_selection(self: Toolbar, button_name: string) =
     
     # TODO: Update visual feedback and connect to game state
     # state.tool = new_tool
+
+proc on_action_changed*(self: Toolbar) {.gdsync.} =
+  print("[UI] Toolbar action_changed signal received")
+  
+  # Find which button was pressed by checking all children
+  for child in self.get_children():
+    let button = child as Button
+    if not button.is_nil() and button.is_pressed():
+      let button_name = $button.get_name()
+      self.handle_tool_selection(button_name)
+      break
 
 method process*(self: Toolbar; delta: float) {.gdsync.} =
   # Handle preview generation and other toolbar updates

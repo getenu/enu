@@ -2,6 +2,7 @@ import std/[options, strutils]
 import gdext
 # Use custom Godot bindings for consistency with Game and BuildNode
 import gdext/classes/[gdbutton, gdviewport, gdstyleboxflat, gdinputevent]
+import core, gdutils, types, models/states
 
 # Simple state management for the UI components
 # This will eventually connect to the full game state system
@@ -40,7 +41,7 @@ proc trigger_action_changed(self: ActionButton) =
   let game_node = state.nodes.game
   if not game_node.is_nil():
     # Create and emit the action_changed signal with the button name
-    game_node.trigger("action_changed", button_name)
+    game_node.trigger("action_changed", variant(button_name))
   else:
     print("[UI] ERROR: game node not available for signal routing")
 
@@ -67,6 +68,6 @@ method pressed*(self: ActionButton) {.gdsync.} =
   print("[UI] ActionButton pressed: " & $self.get_name())
   self.trigger_action_changed()
 
-method on_size_changed*(self: ActionButton) {.gdsync.} =
+proc on_size_changed*(self: ActionButton) {.gdsync.} =
   print("[UI] ActionButton size changed: " & $self.get_name())
   self.update_size(global_toolbar_size)

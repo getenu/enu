@@ -28,14 +28,15 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 **Node Systems:**
 - **`build_node.nim`**: 241→290 lines - **✅ COMPLETED** - Full VoxelTerrain integration with model binding, chunk tracking, material management, and voxel drawing system
 
+**UI Systems:**
+- **`editor.nim`**: 402→228 lines - **✅ COMPLETED** - Full code editing with syntax highlighting, smart indentation, state management, and CodeEdit integration
+
 ### ⚠️ **PARTIALLY MIGRATED** (Working but Incomplete)
 
 **Node Systems:**
 - **`player_node.nim`**: 437→191 lines - Basic structure in place, missing advanced features
 - **`bot_node.nim`**: 183→14 lines - Minimal stub, needs full implementation
 
-**UI Systems:**
-- **`editor.nim`**: 402→50 lines - Basic structure started, needs completion
 
 ### 🔴 **STUB FILES** (Need Complete Implementation)
 
@@ -43,7 +44,6 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **`console.nim`**: 99→9 lines - **HIGH PRIORITY** - Debugging/scripting interface
 - **`gui.nim`**: 260→9 lines - **HIGH PRIORITY** - Main UI coordination
 - **`settings.nim`**: 494→9 lines - Configuration management
-- **`editor.nim`**: 402→50 lines - Code editing interface
 
 **Secondary UI Components:**
 - **`markdown_label.nim`**: 230→9 lines - Documentation display
