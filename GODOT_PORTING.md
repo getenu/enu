@@ -33,9 +33,11 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **`console.nim`**: 99→139 lines - **✅ COMPLETED** - Full debugging/scripting interface with animations and state watching
 - **`gui.nim`**: 260→163 lines - **✅ COMPLETED** - Main UI coordination with input handling and touch controls
 - **`markdown_label.nim`**: 230→209 lines - **✅ COMPLETED** - Full markdown rendering with RichTextLabel, code blocks, headers, and font management
+- **`preview_maker.nim`**: 54→99 lines - **✅ COMPLETED** - Viewport-based preview generation for blocks and objects with image extraction
 
 **Node Systems:**
 - **`player_node.nim`**: 437→461 lines - **✅ COMPLETED** - Full player movement, input handling, flying toggle, collision detection, touch controls, and raycast system
+- **`sign_node.nim`**: 171→180 lines - **✅ COMPLETED** - Full 3D sign rendering with MarkdownLabel integration, billboarding, visibility management, and collision detection
 
 ### ⚠️ **PARTIALLY MIGRATED** (Working but Incomplete)
 
@@ -49,14 +51,12 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **`settings.nim`**: 494→9 lines - Configuration management
 
 **Secondary UI Components:**
-- **`preview_maker.nim`**: 54→9 lines - Block preview generation
 - **`right_panel.nim`**: 123→9 lines - Documentation panel
 - **`virtual_joystick.nim`**: 155→9 lines - Mobile controls
 - **`floating_button.nim`**: 7→9 lines - Minor UI component
 
 **Node Components:**
 - **`aim_target.nim`**: 104→9 lines - Targeting system
-- **`sign_node.nim`**: 171→17 lines - In-world text displays
 - **`ground_node.nim`**: 10→9 lines - Terrain rendering
 - **`selection_area.nim`**: 9→9 lines - Selection highlighting
 - **`queries.nim`**: 20→6 lines - Spatial queries
@@ -69,14 +69,15 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - ✅ **Player Movement**: Complete WASD movement, mouse look, flying toggle, touch controls
 - ✅ **UI Framework**: Console, Editor, GUI, and Toolbar fully functional  
 - ✅ **Voxel System**: BuildNode with VoxelTerrain integration working
+- ✅ **Sign System**: Complete 3D text displays with MarkdownLabel integration
 - ✅ **Input Handling**: Keyboard, mouse, gamepad, and touch input systems
 - ✅ **Tool Selection**: Interactive toolbar with proper state management
 
 ### What's Missing
 - **Settings Panel**: Configuration management interface
 - **Bot System**: AI entity implementation and scripting
-- **Secondary UI**: Preview generation, right panel, virtual joystick
-- **Sign System**: In-world text displays and targeting
+- **Secondary UI**: Right panel, virtual joystick, floating button
+- **Targeting System**: Aim target and spatial queries
 
 ## Key Migration Patterns
 
@@ -120,8 +121,8 @@ method ready*(self: MyClass) {.gdsync.} =
 6. **Complete `settings.nim`** - Configuration management
 
 ### **MEDIUM PRIORITY (Month 1)**
-7. **Complete remaining UI components** - markdown_label, preview_maker, etc.
-8. **Implement remaining node systems** - signs, bots, targeting
+7. **Complete remaining UI components** - right_panel, virtual_joystick, floating_button
+8. **Implement remaining node systems** - bots, targeting, ground_node
 9. **Polish and optimization**
 
 ## Testing Strategy
@@ -158,22 +159,31 @@ method ready*(self: MyClass) {.gdsync.} =
 
 ## Recent Completions
 
-### MarkdownLabel Implementation ✅ (Just Completed)
+### PreviewMaker Implementation ✅ (Just Completed)
 - **From**: 10-line stub placeholder
-- **To**: 209-line full implementation with:
-  - Complete RichTextLabel integration for formatted text
-  - TextEdit code blocks with syntax highlighting support
-  - Header parsing with bold formatting
-  - Font size management that scales with UI
-  - Theme integration for consistent styling
-  - Plain text fallback renderer while markdown package is pending
-  - Proper memory management with node cleanup
-  - Full integration with existing SignNode system
+- **To**: 99-line full implementation with:
+  - Complete viewport-based preview generation system
+  - Camera3D, MeshInstance3D, and Node3D scene management 
+  - Material loading and surface override functionality
+  - Image extraction from ViewportTexture for preview thumbnails
+  - Block and object preview generation with different camera settings
+  - Callback-based asynchronous preview delivery
+  - Proper gdref handling for Image and ViewportTexture types
 
-- **Migration Quality**: Adapts Godot 3 functionality to Godot 4 API patterns
-- **Build Status**: ✅ Compiles successfully, ready for SignNode integration
+- **Migration Quality**: Full conversion from Godot 3 Viewport to Godot 4 patterns
+- **Build Status**: ✅ Compiles successfully, ready for preview generation use
+
+### SignNode Implementation ✅ (Recently Completed)
+- **From**: 17-line stub placeholder  
+- **To**: 180-line full implementation with complete 3D billboard rendering, MarkdownLabel integration, and material management
+- **Build Status**: ✅ Compiles successfully with MarkdownLabel integration
+
+### MarkdownLabel Implementation ✅ (Recently Completed)
+- **From**: 10-line stub placeholder
+- **To**: 209-line full implementation with RichTextLabel integration and font management
+- **Build Status**: ✅ Compiles successfully, integrated with SignNode and PreviewMaker
 
 ---
 
-**Last Updated**: MarkdownLabel migration completed  
-**Next Focus**: SignNode implementation or Settings panel
+**Last Updated**: PreviewMaker migration completed  
+**Next Focus**: Settings panel, bot system, or secondary UI components
