@@ -32,7 +32,7 @@ src_dir = "src"
 bin = @["enu" & lib_ext]
 
 requires "nim == 2.2.4",
-  "https://github.com/getenu/model_citizen 0.19.5",
+  "https://github.com/getenu/model_citizen 0.19.6",
   "https://github.com/dsrw/nanoid.nim 0.2.1", "https://github.com/godot-nim/gdext-nim",
   "https://github.com/godot-nim/gdext-nim?subdir=coronation",
   "https://github.com/treeform/pretty", "cligen", "chroma", "markdown", "chronicles",

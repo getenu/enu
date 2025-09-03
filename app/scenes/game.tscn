@@ -1,15 +1,14 @@
 [gd_scene load_steps=3 format=3 uid="uid://cg8j1x6x8mhgb"]
 
 [ext_resource type="PackedScene" uid="uid://bxvxbxj8j8x8x" path="res://scenes/world.tscn" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/GUI.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://dwdwrpr24c21" path="res://scenes/GUI.tscn" id="3"]
 
 [node name="Game" type="Game"]
+process_priority = 0
 
 [node name="Level" parent="." instance=ExtResource("1")]
 
 [node name="GUI" parent="." instance=ExtResource("3")]
-layout_mode = 3
-anchors_preset = 15
 grow_horizontal = 2
 grow_vertical = 2
 

@@ -99,6 +99,7 @@ gdobj MarkdownLabel of ScrollContainer:
       result.add_stylebox_override("read_only", stylebox)
 
   method ready() =
+    print("[UI] MarkdownLabel ready")
     self.bind_signals(self, "resized")
     self.container = self.get_node("VBoxContainer")
     self.og_text_edit = self.container.get_node("TextEdit") as TextEdit

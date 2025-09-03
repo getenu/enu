@@ -45,3 +45,4 @@ nimbledeps/
 .submodules.tmp
 
 *.previous
+*.log

@@ -1,53 +1,37 @@
-[gd_scene load_steps=4 format=2]
+[gd_scene load_steps=3 format=3 uid="uid://qka7r0t7by65"]
 
-[ext_resource path="res://joystick/textures/joystick_base_outline.png" type="Texture" id=1]
-[ext_resource path="res://joystick/textures/joystick_tip_arrows.png" type="Texture" id=2]
+[ext_resource type="Texture2D" uid="uid://b22500bs1ftg5" path="res://joystick/textures/joystick_base_outline.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://bq1p5767onrjn" path="res://joystick/textures/joystick_tip_arrows.png" id="2"]
 
-[node name="Virtual joystick" type="Control"]
-modulate = Color( 1, 1, 1, 0.509804 )
+[node name="Virtual joystick" type="VirtualJoystick"]
+modulate = Color(1, 1, 1, 0.509804)
+anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-margin_left = 50.0
-margin_top = -250.0
-margin_right = 250.0
-margin_bottom = -50.0
-joystick_mode = 1
-visibility_mode = 1
-action_left = "move_left"
-action_right = "move_right"
-action_up = "move_front"
-action_down = "move_back"
+grow_vertical = 0
 
 [node name="Base" type="TextureRect" parent="."]
+layout_mode = 0
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-margin_left = -100.0
-margin_top = -100.0
-margin_right = 100.0
-margin_bottom = 100.0
 grow_horizontal = 2
 grow_vertical = 2
-rect_pivot_offset = Vector2( 100, 100 )
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture = ExtResource( 1 )
+texture = ExtResource("1")
 stretch_mode = 6
 
 [node name="Tip" type="TextureRect" parent="Base"]
+layout_mode = 0
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-margin_left = -50.0
-margin_top = -50.0
-margin_right = 50.0
-margin_bottom = 50.0
 grow_horizontal = 2
 grow_vertical = 2
-rect_pivot_offset = Vector2( 50, 50 )
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture = ExtResource( 2 )
+texture = ExtResource("2")
 stretch_mode = 6

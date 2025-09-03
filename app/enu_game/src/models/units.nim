@@ -30,7 +30,7 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     global_flags = ~set[GlobalModelFlags]
     local_flags = ~(set[LocalModelFlags], flags = {SyncLocal})
     code_value = ~Code
-    # velocity_value = ~Vector3
+    velocity_value = ~Vector3
     scale_value = ~1.0
     glow_value = ~float
     color_value = ~self.start_color

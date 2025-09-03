@@ -94,12 +94,17 @@ proc add_text_edit(self: MarkdownLabel): TextEdit =
   # TODO: Implement syntax highlighting for TextEdit in Godot 4
   if self.current_label.is_nil():
     # Don't add borders if the only thing in our doc is code
-    let stylebox = result.get_theme_stylebox("normal", "TextEdit")
-    if not stylebox.is_nil():
-      let new_style = stylebox.duplicate().as(StyleBoxFlat)
-      new_style.set_border_color(new_style.get_bg_color())
-      result.add_theme_stylebox_override("normal", new_style)
-      result.add_theme_stylebox_override("read_only", new_style)
+    # TODO: Fix StyleBox theming for Godot 4
+    # let stylebox = result.get_theme_stylebox("normal", "TextEdit")
+    # if ?stylebox:
+    #   let new_style = stylebox[].duplicate().as(gdref StyleBoxFlat)
+    #   new_style[].set_border_color(new_style[].get_bg_color())
+    #   result.add_theme_stylebox_override("normal", new_style)
+    #   result.add_theme_stylebox_override("read_only", new_style)
+    discard
+
+# Forward declaration
+proc update*(self: MarkdownLabel)
 
 method ready*(self: MarkdownLabel) {.gdsync.} =
   print("[UI] MarkdownLabel ready - initializing Godot 4 markdown renderer")
@@ -129,10 +134,11 @@ method ready*(self: MarkdownLabel) {.gdsync.} =
   self.update()
   print("[UI] MarkdownLabel initialized")
 
-method on_resized*(self: MarkdownLabel) {.gdsync.} =
-  if not self.resized:
-    self.set_font_sizes()
-    self.resized = true
+# TODO: Fix signal connection for resized in Godot 4
+# method on_resized*(self: MarkdownLabel) {.gdsync.} =
+#   if not self.resized:
+#     self.set_font_sizes()
+#     self.resized = true
 
 proc render_plain_text(self: MarkdownLabel, text: string) =
   # Fallback renderer when markdown package isn't available
@@ -187,11 +193,6 @@ proc render_plain_text(self: MarkdownLabel, text: string) =
 # proc render_markdown(self: MarkdownLabel, token: Token, list_position = 0, inline_blocks = false) =
 #   # Full markdown implementation will go here
 
-method notification*(self: MarkdownLabel, what: int32) {.gdsync.} =
-  if what == Node_NotificationPredelete:
-    if self.zid != ZID(0):
-      state.config_value.untrack(self.zid)
-
 proc update*(self: MarkdownLabel) =
   self.resized = false
   if self.markdown != self.old_markdown:
@@ -209,3 +210,9 @@ proc update*(self: MarkdownLabel) =
     # For now, use plain text renderer
     self.render_plain_text(self.markdown)
     self.set_font_sizes()
+
+# TODO: Fix notification method for Godot 4
+# method notification*(self: MarkdownLabel, what: int32) {.gdsync.} =
+#   if what == Node_NotificationPredelete:
+#     if self.zid != ZID(0):
+#       state.config_value.untrack(self.zid)

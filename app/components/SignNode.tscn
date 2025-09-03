@@ -1,9 +1,12 @@
-[gd_scene load_steps=4 format=3 uid="uid://c6xbmhm5o1tys"]
+[gd_scene load_steps=5 format=3 uid="uid://c6xbmhm5o1tys"]
 
-[ext_resource type="PackedScene" path="res://components/MarkdownLabel.tscn" id="5"]
+[ext_resource type="PackedScene" uid="uid://dhqbo5qugujff" path="res://components/MarkdownLabel.tscn" id="5"]
 
 [sub_resource type="QuadMesh" id="18"]
 resource_local_to_scene = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vqa23"]
+albedo_color = Color(0, 0, 0, 1)
 
 [sub_resource type="ConcavePolygonShape3D" id="15"]
 resource_local_to_scene = true
@@ -17,7 +20,6 @@ size = Vector2i(1200, 1200)
 render_target_update_mode = 3
 
 [node name="MarkdownLabel" parent="Viewport" instance=ExtResource("5")]
-anchors_preset = 15
 size_flags_horizontal = 1
 size_flags_vertical = 1
 
@@ -30,6 +32,7 @@ caret_blink = true
 [node name="MeshInstance" type="MeshInstance3D" parent="."]
 transform = Transform3D(-1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 0, 0)
 mesh = SubResource("18")
+surface_material_override/0 = SubResource("StandardMaterial3D_vqa23")
 
 [node name="SignBody" type="StaticBody3D" parent="MeshInstance"]
 collision_layer = 16

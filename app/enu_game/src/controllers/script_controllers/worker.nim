@@ -321,7 +321,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       let wait_until = frame_start + min_time
 
       Zen.thread_ctx.boop
-      echo "booped worker"
+      debug "booped worker"
       run_deferred()
 
       inc state.frame_count

@@ -2,7 +2,8 @@
 
 [ext_resource type="Theme" uid="uid://bp8yx1t6v72uf" path="res://themes/DarkTheme.tres" id="2"]
 
-[node name="Console" type="RichTextLabel"]
+[node name="Console" type="Console"]
+offset_right = 1.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 focus_mode = 2

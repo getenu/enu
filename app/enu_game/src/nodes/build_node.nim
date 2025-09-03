@@ -49,12 +49,12 @@ proc prepare_materials(self: BuildNode) =
             if ?m:
               let m_copy = m[].duplicate().as(gdref ShaderMaterial)
               m_copy[].set_shader_parameter("emission_energy", variant(default_glow))
-              # TODO: Get emission colors  
-              # self.model.shared.emission_colors.add(
-              #   m_copy[].get_shader_parameter("emission").as_color
-              # )
+              # GD4: Get emission colors - using default color for now
+              # TODO: Fix Variant to Color conversion when gdext API is clearer
+              self.model.shared.emission_colors.add(gdext.color(0.0, 0.0, 0.0, 1.0))
               
-              # TODO: Fix material type mismatch - GdRef vs ShaderMaterial
+              # GD4: Fix material type mismatch - GdRef vs ShaderMaterial
+              # TODO: Fix materials type - may need to change seq type to handle gdref
               # self.model.shared.materials.add(m_copy)
 
     # Note: In Godot 4, VoxelTerrain only has set_material_override for entire terrain
@@ -73,11 +73,13 @@ proc draw_block(self: BuildNode, voxels: Chunk) =
     self.draw(loc, info.color)
 
 proc set_glow(self: BuildNode, glow: float) =
-  # TODO: Implement glow setting for Godot 4
+  # GD4: Implement glow setting for Godot 4 - simplified for now
+  # TODO: Re-implement when VoxelTerrain API is better understood
   discard
 
 proc set_highlight(self: BuildNode) =
-  # TODO: Implement highlighting for Godot 4
+  # GD4: Implement highlighting for Godot 4 - simplified for now
+  # TODO: Re-implement when VoxelTerrain API is better understood
   discard
 
 proc track_chunk(self: BuildNode, chunk_id: Vector3) =
@@ -94,7 +96,8 @@ proc track_chunk(self: BuildNode, chunk_id: Vector3) =
   else:
     self.active_chunks[chunk_id] = empty_zid
 
-# TODO: Re-enable VoxelTerrain block signals for Godot 4
+# GD4: VoxelTerrain block signals don't exist in Godot 4 - API changed
+# TODO: Find alternative approach for chunk tracking in Godot 4 VoxelTerrain
 # method on_block_loaded(self: BuildNode, chunk_id: Vector3) {.gdsync.} =
 #   if ?self.model:
 #     self.track_chunk(chunk_id)
@@ -106,14 +109,21 @@ proc track_chunk(self: BuildNode, chunk_id: Vector3) =
 #       self.model.chunks[chunk_id].untrack(zid)
 #     self.active_chunks.del(chunk_id)
 
+proc set_shader_type(self: BuildNode, normal: bool) =
+  # GD4: Set shader type (normal or hidden) on materials - simplified for now
+  # TODO: Re-implement when VoxelTerrain API is better understood
+  discard
+
 proc set_visibility(self: BuildNode) =
   if ?self.model:
     if Visible in self.model.global_flags:
       self.visible = true
-      # TODO: Set normal shader
+      # GD4: Set normal shader
+      self.set_shader_type(normal = true)
     elif Visible notin self.model.global_flags and God in state.local_flags:
       self.visible = true
-      # TODO: Set hidden shader
+      # GD4: Set hidden shader
+      self.set_shader_type(normal = false)
     else:
       self.visible = false
 
@@ -157,9 +167,10 @@ proc track_changes(self: BuildNode) =
       self.set_visibility()
     elif Resetting.added:
       self.untrack_chunks()
-      # TODO: Reset VoxelTerrain - fix gdref nil reference
-      # self.set_generator(gdref[VoxelGenerator](nil))
-      # self.set_stream(gdref[VoxelStream](nil))
+      # GD4: Reset VoxelTerrain - fix gdref nil reference
+      # TODO: Fix gdref nil construction syntax for VoxelTerrain reset
+      # self.set_generator(gdref VoxelGenerator())
+      # self.set_stream(gdref VoxelStream())
     elif Resetting.removed:
       let generator = instantiate(VoxelGeneratorFlat)
       self.set_generator(generator.as(gdref VoxelGenerator))
@@ -193,15 +204,16 @@ proc track_changes(self: BuildNode) =
     if added:
       self.set_transform(change.item)
 
-  # TODO: Implement sight queries for Godot 4
-  # self.model.sight_query_value.watch:
-  #   if added:
-  #     var query = change.item
-  #     let collision_layer = self.get_collision_layer()
-  #     self.set_collision_layer(0)
-  #     query.run(self.model)
-  #     self.set_collision_layer(collision_layer)
-  #     self.model.sight_query = query
+  # GD4: Implement sight queries for Godot 4
+  self.model.sight_query_value.watch:
+    if added:
+      var query = change.item
+      # Disable collisions during query so ray doesn't collide with us
+      let collision_layer = self.get_collision_layer()
+      self.set_collision_layer(0)
+      query.run(self.model)
+      self.set_collision_layer(collision_layer)
+      self.model.sight_query = query
 
 proc setup*(self: BuildNode) =
   let was_skipping_join = dont_join
@@ -215,8 +227,10 @@ proc setup*(self: BuildNode) =
     layer.set_bit(2)
     self.set_collision_layer(layer.int32)
 
-  # TODO: Set up sight ray for Godot 4
-  # self.model.sight_ray = self.get_node("SightRay").as(RayCast3D)
+  # GD4: Set up sight ray for Godot 4
+  let sight_ray = self.find_child("SightRay", false, false) as RayCast3D
+  if not sight_ray.is_nil():
+    self.model.sight_ray = sight_ray
   self.prepare_materials()
 
 proc create_test_voxels*(self: BuildNode) {.gdsync.} =
@@ -290,8 +304,8 @@ method ready*(self: BuildNode) {.gdsync.} =
 proc init*(_: type BuildNode): BuildNode =
   if not ?build_scene:
     build_scene = ResourceLoader.load("res://components/BuildNode.tscn").as(gdref PackedScene)
-    # TODO: Load shaders for Godot 4
-    # shader = ResourceLoader.load("res://shaders/terrain_voxel.shader").as(gdref Shader)
-    # hidden_shader = ResourceLoader.load("res://shaders/terrain_voxel_hidden.shader").as(gdref Shader)
+    # GD4: Load shaders for Godot 4
+    shader = ResourceLoader.load("res://shaders/terrain_voxel.gdshader").as(gdref Shader)
+    hidden_shader = ResourceLoader.load("res://shaders/terrain_voxel_hidden.gdshader").as(gdref Shader)
   
   result = build_scene[].instantiate().as(BuildNode)

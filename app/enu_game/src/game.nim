@@ -65,7 +65,7 @@ proc rescale*(self: Game) =
 
 method process*(self: Game, delta: float) {.gdsync.} =
   Zen.thread_ctx.boop
-  echo "booped game"
+  debug "booped game"
   inc state.frame_count
   let time = get_mono_time()
   when defined(metrics):
@@ -200,15 +200,6 @@ method onInit*(self: Game) {.gdsync.} =
   if ?saved_state.connect_address:
     connect_address = saved_state.connect_address
 
-  # GD4: TODO - Fix global menu for Godot 4
-  # if host_os == "macosx" and not saved_state.restarting:
-  #   global_menu_add_item("Help", "Documentation", "help".to_variant, "".to_variant)
-  #   global_menu_add_item("Help", "Web Site", "site".to_variant, "".to_variant)
-  #   if connect_address == "":
-  #     global_menu_add_separator("Help")
-  #     global_menu_add_item(
-  #       "Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant
-  #     )
 
   when host_os == "ios":
     state.push_flag TouchControls
@@ -328,24 +319,24 @@ proc set_font_size(self: Game, size: int) =
 
   set_panel_width(self)
 
-# GD4: TODO - Fix GUI input handling for Godot 4
-# method on_gui_input*(self: Game, event: InputEvent, name: string) {.gdsync.} =
-#   if event of InputEventMouseButton:
-#     case name
-#     of "Editor":
-#       debug "pushing EditorFocused", topics = "state"
-#       state.push_flag EditorFocused
-#     of "Console":
-#       debug "pushing ConsoleFocused", topics = "state"
-#       state.push_flag ConsoleFocused
-#     of "Settings":
-#       debug "pushing SettingsFocused", topics = "state"
-#       state.push_flag SettingsFocused
-#     of "RightPanel":
-#       debug "pushing DocsFocused", topics = "state"
-#       state.push_flag DocsFocused
-#     else:
-#       warn "Couldn't focus control", name
+# GD4: Fixed GUI input handling for Godot 4
+proc handle_gui_input*(self: Game, event: InputEvent, name: string) =
+  if event of InputEventMouseButton:
+    case name
+    of "Editor":
+      debug "pushing EditorFocused", topics = "state"
+      state.push_flag EditorFocused
+    of "Console":
+      debug "pushing ConsoleFocused", topics = "state"
+      state.push_flag ConsoleFocused
+    of "Settings":
+      debug "pushing SettingsFocused", topics = "state"
+      state.push_flag SettingsFocused
+    of "RightPanel":
+      debug "pushing DocsFocused", topics = "state"
+      state.push_flag DocsFocused
+    else:
+      warn "Couldn't focus control", name
 
 proc load_environment(self: Game, environment: string) =
   let env =
@@ -404,19 +395,12 @@ proc run_verification*(self: Game) =
   state.push_flag(Quitting)
 
 method ready*(self: Game) {.gdsync.} =
-  echo ?state
-  echo ?state.nodes
-  echo not state.nodes.data.is_nil
-  echo not state.nodes.game.find_child("Level").is_nil
-  echo not state.nodes.game.find_child("Level").get_node("data").is_nil
-
   state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
   assert not state.nodes.data.is_nil
   # GD4: fix scaled_viewport
   # self.scaled_viewport = self.get_node("ViewportContainer/Viewport") as Viewport
 
   self.bind_signals(self.get_viewport(), "size_changed")
-  self.bind_signals(self.get_tree(), "global_menu_action")
   # assert not self.scaled_viewport.is_nil
   self.get_tree().auto_accept_quit = false
   self.set_font_size(state.config.font_size)
@@ -530,23 +514,6 @@ proc on_size_changed(self: Game) {.gdsync.} =
   self.rescale_at = get_mono_time()
   self.set_panel_width()
 
-proc on_global_menu_action(self: Game, action: string, id: string) {.gdsync.} =
-  if action == "help":
-    discard OS.shell_open("http://getenu.com/docs/intro.html")
-  elif action == "site":
-    discard OS.shell_open("http://getenu.com")
-  elif action == "settings":
-    state.push_flag SettingsVisible
-  elif action == "openurl":
-    logger("info", "Open URL: {id}")
-  elif action == "tutorial":
-    state.config_value.value:
-      level_dir = ""
-    state.player.transform = Transform3D.init(origin = vector3(0, 2, 0))
-    state.player.rotation = 0
-    change_loaded_level("tutorial-1", "tutorial")
-  else:
-    warn "Unknown action", action, id
 
 proc switch_world(self: Game, diff: int) =
   var config = state.config

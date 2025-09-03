@@ -13,12 +13,12 @@ proc bind_signal*(
   # Create user signal if it doesn't exist
   if not sender.has_signal(signal.name):
     sender.add_user_signal(signal.name)
-  
+
   # Convert method name to proper format
   var method_name = signal.meth
   if not signal.meth.starts_with("_"):
     method_name = "_on_" & method_name
-  
+
   # Create Callable and connect signal
   let callable_obj = callable(receiver, newStringName(method_name))
   discard sender.connect(newStringName(signal.name), callable_obj)
@@ -59,10 +59,13 @@ proc trigger*(signal: string, args: varargs[Variant]) =
 
 template find*(self: Node, name: string, T: type Node): untyped =
   {.line.}:
-    let obj = self.find_child(name, false, false) as T
-    if obj.is_nil():
+    let obj1 = self.find_child(name)
+    let obj2 = obj1 as T
+    if obj1.is_nil():
       print("[GDUTILS] Warning: Could not find node '", name, "' of type ", $T)
-    obj
+    elif obj2.is_nil:
+      print("[GDUTILS] Warning: Could convert node '", name, "' to type ", $T)
+    obj2
 
 template find*(name: string, T: type Node): untyped =
   self.find(name, T)
@@ -78,7 +81,7 @@ const solid_alpha* = color(1.0, 1.0, 1.0, 1.0)
 const dimmed_alpha* = color(1.0, 1.0, 1.0, 0.4)
 
 proc ghost*(self: Control) =
-  # GD4: Mouse filter constants need to be investigated 
+  # GD4: Mouse filter constants need to be investigated
   # self.set_mouse_filter_recursive(Control.MOUSE_FILTER_IGNORE.int)
   self.modulate = dimmed_alpha
 

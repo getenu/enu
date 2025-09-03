@@ -1,347 +1,399 @@
-[gd_scene load_steps=24 format=2]
+[gd_scene load_steps=10 format=3 uid="uid://dwdwrpr24c21"]
 
-[ext_resource path="res://components/Editor.tscn" type="PackedScene" id=1]
-[ext_resource path="res://components/Console.tscn" type="PackedScene" id=2]
-[ext_resource path="res://components/ActionButton.tscn" type="PackedScene" id=3]
-[ext_resource path="res://components/MarkdownLabel.tscn" type="PackedScene" id=4]
-[ext_resource path="res://textures/reticle.png" type="Texture" id=5]
-[ext_resource path="res://themes/DarkTheme.tres" type="Theme" id=6]
-[ext_resource path="res://themes/mono-bold.otf" type="DynamicFontData" id=8]
-[ext_resource path="res://scenes/PreviewWorld.tscn" type="PackedScene" id=9]
-[ext_resource path="res://components/Settings.tscn" type="PackedScene" id=12]
-[ext_resource path="res://joystick/virtual_joystick.tscn" type="PackedScene" id=13]
-[ext_resource path="res://themes/icons.otf" type="DynamicFontData" id=17]
+[ext_resource type="PackedScene" uid="uid://b7niuv3040wa1" path="res://components/Editor.tscn" id="1"]
+[ext_resource type="PackedScene" uid="uid://bann7wwh06wvt" path="res://components/Console.tscn" id="2"]
+[ext_resource type="PackedScene" uid="uid://cifpbok7djiji" path="res://components/ActionButton.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://dhqbo5qugujff" path="res://components/MarkdownLabel.tscn" id="4"]
+[ext_resource type="Texture2D" uid="uid://dknaxicuuv61p" path="res://textures/reticle.png" id="5"]
+[ext_resource type="Theme" uid="uid://bp8yx1t6v72uf" path="res://themes/DarkTheme.tres" id="6"]
+[ext_resource type="PackedScene" uid="uid://b4j5nvqrpgurp" path="res://scenes/PreviewWorld.tscn" id="9"]
+[ext_resource type="PackedScene" uid="uid://b61cmxchjiwua" path="res://components/Settings.tscn" id="12"]
+[ext_resource type="PackedScene" uid="uid://qka7r0t7by65" path="res://joystick/virtual_joystick.tscn" id="13"]
 
-[sub_resource type="ButtonGroup" id=1]
-
-[sub_resource type="DynamicFont" id=9]
-size = 76
-font_data = ExtResource( 17 )
-
-[sub_resource type="StyleBoxEmpty" id=12]
-
-[sub_resource type="StyleBoxEmpty" id=13]
-
-[sub_resource type="StyleBoxFlat" id=14]
-
-[sub_resource type="StyleBoxEmpty" id=15]
-
-[sub_resource type="StyleBoxFlat" id=8]
-bg_color = Color( 0.6, 0.6, 0.6, 0 )
-draw_center = false
-border_width_left = 2
-
-[sub_resource type="DynamicFont" id=4]
-size = 20
-font_data = ExtResource( 8 )
-
-[node name="GUI" type="Control"]
+[node name="GUI" type="GUI"]
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 focus_mode = 2
 mouse_filter = 1
 
 [node name="Toolbar" type="Toolbar" parent="."]
+layout_mode = 0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-margin_bottom = -5.0
 grow_horizontal = 2
 grow_vertical = 0
 alignment = 1
 
-[node name="Button-code" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 746.0
-margin_right = 796.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-code" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 
-[node name="Button-blue" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 800.0
-margin_right = 850.0
-margin_bottom = 50.0
-pressed = true
-group = SubResource( 1 )
+[node name="Button-blue" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
-[node name="Button-red" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 854.0
-margin_right = 904.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-red" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
-[node name="Button-green" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 908.0
-margin_right = 958.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-green" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
-[node name="Button-black" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 962.0
-margin_right = 1012.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-black" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
-[node name="Button-white" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 1016.0
-margin_right = 1066.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-white" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
-[node name="Button-brown" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 1070.0
-margin_right = 1120.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-brown" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
-[node name="Button-bot" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 1124.0
-margin_right = 1174.0
-margin_bottom = 50.0
-group = SubResource( 1 )
+[node name="Button-bot" parent="Toolbar" instance=ExtResource("3")]
+layout_mode = 2
 icon = null
 
 [node name="HBoxContainer" type="HBoxContainer" parent="."]
+layout_mode = 0
 anchor_right = 1.0
-theme = ExtResource( 6 )
+theme = ExtResource("6")
 alignment = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="HBoxContainer"]
-margin_left = 1844.0
-margin_right = 1920.0
-margin_bottom = 62.0
-custom_constants/margin_right = 30
-custom_constants/margin_top = 25
+layout_mode = 2
 
 [node name="Label" type="Label" parent="HBoxContainer/MarginContainer"]
-margin_top = 25.0
-margin_right = 46.0
-margin_bottom = 62.0
+layout_mode = 2
 text = " "
 
 [node name="OpenSettings" type="Button" parent="HBoxContainer/MarginContainer"]
-margin_top = 25.0
-margin_right = 46.0
-margin_bottom = 62.0
+layout_mode = 2
 focus_mode = 0
 mouse_default_cursor_shape = 2
-theme_type_variation = "IconButton"
-enabled_focus_mode = 0
+theme_type_variation = &"IconButton"
 text = "  "
 
 [node name="HBoxContainer2" type="VBoxContainer" parent="."]
-modulate = Color( 1, 1, 1, 0.509804 )
+modulate = Color(1, 1, 1, 0.509804)
+layout_mode = 0
 anchor_left = 0.85
 anchor_top = 0.5
 anchor_right = 0.85
 anchor_bottom = 0.5
-margin_left = -4.57764e-05
-margin_right = 78.0
-margin_bottom = 122.0
 size_flags_horizontal = 0
 size_flags_vertical = 0
-theme = ExtResource( 6 )
-custom_constants/separation = 20
+theme = ExtResource("6")
 
 [node name="Up" type="Button" parent="HBoxContainer2"]
-margin_right = 78.0
-margin_bottom = 77.0
+layout_mode = 2
 focus_mode = 0
 mouse_default_cursor_shape = 2
-custom_fonts/font = SubResource( 9 )
-custom_styles/hover = SubResource( 12 )
-custom_styles/normal = SubResource( 13 )
 action_mode = 0
 text = ""
 
 [node name="Down" type="Button" parent="HBoxContainer2"]
-margin_top = 97.0
-margin_right = 78.0
-margin_bottom = 174.0
+layout_mode = 2
 focus_mode = 0
 mouse_default_cursor_shape = 2
-custom_fonts/font = SubResource( 9 )
-custom_styles/focus = SubResource( 14 )
-custom_styles/normal = SubResource( 15 )
 action_mode = 0
 text = ""
 
 [node name="Panels" type="Control" parent="."]
+anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
 [node name="LeftPanel" type="MarginContainer" parent="Panels"]
+layout_mode = 0
 anchor_right = 0.5
 anchor_bottom = 1.0
-margin_right = -1.0
-mouse_filter = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme = ExtResource( 6 )
-custom_constants/margin_right = -2
+mouse_filter = 2
+theme = ExtResource("6")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="Panels/LeftPanel"]
-margin_right = 961.0
-margin_bottom = 1080.0
-mouse_filter = 2
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-custom_constants/separation = 2
+mouse_filter = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="Panels/LeftPanel/VBoxContainer"]
-margin_right = 961.0
-margin_bottom = 1080.0
-mouse_filter = 2
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 size_flags_stretch_ratio = 2.0
+mouse_filter = 2
 
-[node name="Editor" parent="Panels/LeftPanel/VBoxContainer/MarginContainer" instance=ExtResource( 1 )]
+[node name="Editor" parent="Panels/LeftPanel/VBoxContainer/MarginContainer" instance=ExtResource("1")]
 visible = false
-margin_right = 961.0
-margin_bottom = 1080.0
-mouse_filter = 1
+layout_mode = 2
 
-[node name="Console" parent="Panels/LeftPanel/VBoxContainer" instance=ExtResource( 2 )]
+[node name="Console" parent="Panels/LeftPanel/VBoxContainer" instance=ExtResource("2")]
 visible = false
-margin_top = 680.0
-margin_right = 961.0
-margin_bottom = 1080.0
+layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 1
 
 [node name="RightPanel" type="MarginContainer" parent="Panels"]
 visible = false
+layout_mode = 0
 anchor_left = 0.5
 anchor_right = 1.0
 anchor_bottom = 1.0
-margin_left = 1.0
 mouse_filter = 2
-custom_constants/margin_left = -2
 
-[node name="MarkdownLabel" parent="Panels/RightPanel" instance=ExtResource( 4 )]
-anchor_right = 0.0
-anchor_bottom = 0.0
-margin_left = -2.0
-margin_right = 959.0
-margin_bottom = 1080.0
+[node name="MarkdownLabel" parent="Panels/RightPanel" instance=ExtResource("4")]
+layout_mode = 2
 focus_mode = 2
-custom_styles/bg = SubResource( 8 )
 
 [node name="Overlay" type="GridContainer" parent="Panels/RightPanel"]
-margin_left = -2.0
-margin_right = 959.0
-margin_bottom = 1080.0
+layout_mode = 2
 mouse_filter = 2
-theme = ExtResource( 6 )
+theme = ExtResource("6")
 columns = 2
 
 [node name="Label" type="Label" parent="Panels/RightPanel/Overlay"]
-margin_right = 883.0
-margin_bottom = 53.0
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 1
 
 [node name="MarginContainer" type="MarginContainer" parent="Panels/RightPanel/Overlay"]
-margin_left = 887.0
-margin_right = 962.0
-margin_bottom = 53.0
+layout_mode = 2
 mouse_filter = 2
-custom_constants/margin_right = 35
-custom_constants/margin_top = 25
 
 [node name="GridContainer" type="GridContainer" parent="Panels/RightPanel/Overlay/MarginContainer"]
-margin_top = 25.0
-margin_right = 40.0
-margin_bottom = 53.0
-rect_pivot_offset = Vector2( -911, -78 )
+layout_mode = 2
 mouse_filter = 2
-custom_constants/vseparation = 30
 
 [node name="Close" type="Button" parent="Panels/RightPanel/Overlay/MarginContainer/GridContainer"]
-margin_right = 40.0
-margin_bottom = 28.0
+layout_mode = 2
 mouse_default_cursor_shape = 2
-theme_type_variation = "IconButton"
+theme_type_variation = &"IconButton"
 text = "  "
 
 [node name="GridContainer" type="GridContainer" parent="."]
+layout_mode = 0
 anchor_right = 1.0
-margin_bottom = 516.0
 mouse_filter = 2
 columns = 2
 
 [node name="Label" type="Label" parent="GridContainer"]
-margin_right = 1054.0
-margin_bottom = 516.0
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 1
 
-[node name="Settings" parent="GridContainer" instance=ExtResource( 12 )]
-margin_left = 1058.0
-margin_top = 0.0
-margin_right = 1920.0
-margin_bottom = 516.0
+[node name="Settings" parent="GridContainer" instance=ExtResource("12")]
+layout_mode = 2
+
+[node name="Window" parent="GridContainer/Settings" index="0"]
+layout_mode = 2
+
+[node name="MainContainer" parent="GridContainer/Settings/Window" index="0"]
+layout_mode = 2
+
+[node name="RowContainer" parent="GridContainer/Settings/Window/MainContainer" index="0"]
+layout_mode = 2
+
+[node name="VFlowContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="0"]
+layout_mode = 2
+
+[node name="Close" parent="GridContainer/Settings/Window/MainContainer/RowContainer/VFlowContainer" index="0"]
+layout_mode = 2
+theme_type_variation = &"IconButton"
+
+[node name="NewLevelContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="1"]
+layout_mode = 2
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer" index="0"]
+layout_mode = 2
+
+[node name="Label" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer" index="0"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="LevelName" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer" index="1"]
+layout_mode = 2
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer" index="2"]
+layout_mode = 2
+
+[node name="Save" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer/HBoxContainer" index="0"]
+layout_mode = 2
+
+[node name="Cancel" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer/HBoxContainer" index="1"]
+layout_mode = 2
+
+[node name="Label" parent="GridContainer/Settings/Window/MainContainer/RowContainer/NewLevelContainer" index="1"]
+layout_mode = 2
+
+[node name="SettingsContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="2"]
+layout_mode = 2
+
+[node name="LevelLabel" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="0"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="Levels" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="1"]
+layout_mode = 2
+
+[node name="Label8" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="2"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="PlayerColors" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="3"]
+layout_mode = 2
+
+[node name="Label4" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="4"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="Environments" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="5"]
+layout_mode = 2
+
+[node name="Label3" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="6"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="7"]
+layout_mode = 2
+
+[node name="Megapixels" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer" index="0"]
+layout_mode = 2
+
+[node name="MegapixelsUp" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer" index="1"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="MegapixelsDown" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer" index="2"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="Label9" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="8"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="HBoxContainer3" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="9"]
+layout_mode = 2
+
+[node name="FontSize" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3" index="0"]
+layout_mode = 2
+
+[node name="FontSizeUp" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3" index="1"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="FontSizeDown" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3" index="2"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="Label2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="10"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="HBoxContainer2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="11"]
+layout_mode = 2
+
+[node name="ToolbarSize" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2" index="0"]
+layout_mode = 2
+
+[node name="ToolbarSizeUp" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2" index="1"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="ToolbarSizeDown" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2" index="2"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="FullScreenLabel" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="12"]
+layout_mode = 2
+horizontal_alignment = 2
+
+[node name="FullScreen" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="13"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="Label6" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="14"]
+layout_mode = 2
+
+[node name="RunServer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="15"]
+layout_mode = 2
+theme_type_variation = &"MonoButton"
+
+[node name="RemoteContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="3"]
+layout_mode = 2
+
+[node name="VBoxContainer2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer" index="0"]
+layout_mode = 2
+
+[node name="Label11" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2" index="0"]
+layout_mode = 2
+horizontal_alignment = 1
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2" index="1"]
+layout_mode = 2
+
+[node name="LeftSeparator" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="0"]
+layout_mode = 2
+
+[node name="ServerAddress" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="1"]
+layout_mode = 2
+
+[node name="Connect" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="2"]
+layout_mode = 2
+
+[node name="RightSeparator" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="3"]
+layout_mode = 2
+
+[node name="Tween" parent="GridContainer/Settings/Window" index="1"]
+_import_path = NodePath("")
+unique_name_in_owner = false
+process_mode = 0
+process_priority = 0
+process_physics_priority = 0
+process_thread_group = 0
+physics_interpolation_mode = 0
+auto_translate_mode = 0
+editor_description = ""
+script = null
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
+anchors_preset = 0
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-margin_right = 40.0
-margin_bottom = 40.0
 mouse_filter = 2
-__meta__ = {
-"_edit_use_anchors_": false
-}
 
-[node name="ReticleSprite" type="Sprite" parent="Reticle"]
-modulate = Color( 0, 0, 0, 1 )
-scale = Vector2( 0.14, 0.14 )
-texture = ExtResource( 5 )
+[node name="ReticleSprite" type="Sprite2D" parent="Reticle"]
+modulate = Color(0, 0, 0, 1)
+scale = Vector2(0.14, 0.14)
+texture = ExtResource("5")
 
-[node name="PreviewMaker" type="Viewport" parent="."]
-size = Vector2( 512, 512 )
-own_world = true
+[node name="PreviewMaker" type="SubViewport" parent="."]
 transparent_bg = true
-msaa = 3
-render_target_v_flip = true
 render_target_update_mode = 0
 
-[node name="PreviewWorld" parent="PreviewMaker" instance=ExtResource( 9 )]
+[node name="PreviewWorld" parent="PreviewMaker" instance=ExtResource("9")]
 
 [node name="stats" type="Label" parent="."]
 visible = false
+layout_mode = 0
 anchor_left = 1.0
 anchor_right = 1.0
-margin_left = -614.0
-margin_top = 5.0
-margin_right = -5.0
-margin_bottom = 628.0
-custom_fonts/font = SubResource( 4 )
 text = "0"
-autowrap = true
-__meta__ = {
-"_edit_use_anchors_": false
-}
 
-[node name="LeftStick" parent="." instance=ExtResource( 13 )]
+[node name="LeftStick" parent="." instance=ExtResource("13")]
+anchors_preset = 0
 anchor_left = 0.1
 anchor_top = 0.5
 anchor_right = 0.1
 anchor_bottom = 0.6
-margin_left = 0.0
-margin_top = 0.0
-margin_right = 0.0
-margin_bottom = 0.0
-rect_min_size = Vector2( 200, 200 )
-visibility_mode = 0
 
 [editable path="GridContainer/Settings"]

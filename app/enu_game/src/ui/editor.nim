@@ -6,7 +6,7 @@ import gdext/classes/[gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventk
 import core, gdutils, types, models/[states, units]
 # import nim_highlighter  # GD4: Re-enable when CodeHighlighter API is fixed
 
-type Editor* {.gdsync.} = ptr object of MarginContainer
+type EnuEditor* {.gdsync.} = ptr object of MarginContainer
   code_edit*: CodeEdit
   scroll_container: ScrollContainer
   left_panel: Control
@@ -15,7 +15,7 @@ type Editor* {.gdsync.} = ptr object of MarginContainer
   selection_color: Color
   caret_color: Color
 
-proc configure_highlighting*(self: Editor) =
+proc configure_highlighting*(self: EnuEditor) =
   # Configure syntax highlighting for Nim - Godot 4 version
   let code_edit = self.code_edit
 
@@ -38,7 +38,7 @@ proc configure_highlighting*(self: Editor) =
   # Enable line folding
   code_edit.set_line_folding_enabled(true)
   code_edit.set_draw_fold_gutter(true)
-  
+
   # Enable gutters for debugging features
   code_edit.set_draw_bookmarks_gutter(true)  # For error highlighting
   code_edit.set_draw_executing_lines_gutter(true)  # For execution tracking
@@ -51,47 +51,47 @@ proc configure_highlighting*(self: Editor) =
   code_edit.add_comment_delimiter("#", "", true)  # Line comments
   code_edit.add_comment_delimiter("#[", "]#", false)  # Block comments
 
-proc get_text*(self: Editor): string =
+proc get_text*(self: EnuEditor): string =
   return $self.code_edit.get_text()
 
-proc set_text*(self: Editor, text: string) =
+proc set_text*(self: EnuEditor, text: string) =
   self.code_edit.set_text(text)
 
-proc clear_errors(self: Editor) =
+proc clear_errors(self: EnuEditor) =
   # Clear all bookmarked lines (used for error marking)
   for i in 0 ..< self.code_edit.get_line_count():
     if self.code_edit.is_line_bookmarked(int32(i)):
       self.code_edit.set_line_as_bookmarked(int32(i), false)
 
-proc highlight_errors(self: Editor) =
+proc highlight_errors(self: EnuEditor) =
   # Use bookmarks to mark error lines
   if ?state.open_unit:
     for err in state.open_unit.errors:
       self.code_edit.set_line_as_bookmarked(int32(err.info.line - 1), true)
       print("[UI] Editor marked error line: ", err.info.line - 1)
 
-proc set_executing_line(self: Editor, line: int) =
+proc set_executing_line(self: EnuEditor, line: int) =
   # Clear all executing lines first
   self.code_edit.clear_executing_lines()
-  
+
   # Set the new executing line if valid
   if self.code_edit.get_line_count() >= line and line >= 0:
     self.code_edit.set_line_as_executing(int32(line), true)
     print("[UI] Editor executing line set to: ", line)
 
-proc open_editor(self: Editor) =
+proc open_editor(self: EnuEditor) =
   print("[UI] Editor opening...")
   self.visible = true
   # TODO: Add animation with Tween when available
 
-proc close_editor(self: Editor) =
+proc close_editor(self: EnuEditor) =
   print("[UI] Editor closing...")
   if not self.code_edit.is_nil:
     self.code_edit.release_focus()
   # TODO: Add animation with Tween when available
   self.visible = false
 
-proc watch_open_unit(self: Editor) =
+proc watch_open_unit(self: EnuEditor) =
   var line_zid: ZID
   state.open_unit_value.changes:
     if removed:
@@ -123,7 +123,7 @@ proc watch_open_unit(self: Editor) =
         let line = unit.current_line - 1
         self.set_executing_line(line)
 
-proc watch_local_flags(self: Editor) =
+proc watch_local_flags(self: EnuEditor) =
   state.local_flags.changes:
     if EditorFocused.added:
       if not self.code_edit.is_nil:
@@ -139,11 +139,11 @@ proc watch_local_flags(self: Editor) =
         if not self.code_edit.is_nil:
           self.code_edit.grab_focus()
 
-proc watch_states(self: Editor) =
+proc watch_states(self: EnuEditor) =
   self.watch_open_unit()
   self.watch_local_flags()
 
-method ready*(self: Editor) {.gdsync.} =
+method ready*(self: EnuEditor) {.gdsync.} =
   print("[UI] Editor ready - using Godot 4 CodeEdit")
 
   # Find the CodeEdit node - this should always succeed if scene is properly set up
@@ -172,21 +172,23 @@ method ready*(self: Editor) {.gdsync.} =
   for name in ["Close", "Run"]:
     let control = self.find(name, Control)
     if not control.is_nil():
-      self.bind_signal(control, ("pressed", name.to_lower))
+      self.bind_signal(control, ("pressed", "on_" & name.to_lower))
     else:
       print("[UI] Warning: Button '", name, "' not found in Editor scene")
+
+  # GD4: Re-enabled GUI input focus management - handled in gui_input method
 
   # Start watching state changes
   self.watch_states()
 
   print("[UI] Editor configured with CodeEdit")
 
-proc on_text_changed(self: Editor) =
+proc on_text_changed(self: EnuEditor) =
   # Handle text changes for auto-save, validation, etc.
   print("[UI] Editor text changed")
   # TODO: Connect to script compilation/validation system
 
-proc on_caret_changed(self: Editor) =
+proc on_caret_changed(self: EnuEditor) =
   # Handle caret position changes for status display
   let line = self.code_edit.get_caret_line()
   let column = self.code_edit.get_caret_column()
@@ -196,14 +198,14 @@ proc on_caret_changed(self: Editor) =
   # if ?state.player:
   #   state.player.cursor_position = (int(line), int(column))
 
-proc on_close(self: Editor) =
+proc on_close(self: EnuEditor) =
   # Save code and close editor
   if ?state.open_unit:
     # TODO: Fix Code.init with proper string conversion
     state.open_unit.code = Code.init($self.code_edit.get_text())
     state.open_unit = nil
 
-proc on_run(self: Editor) =
+proc on_run(self: EnuEditor) =
   # Run the current code
   if ?state.open_unit:
     # TODO: Fix Code.init with proper string conversion
@@ -211,12 +213,12 @@ proc on_run(self: Editor) =
     # TODO: Force code execution when Code.init is fixed
     # state.open_unit.code = Code.init(self.code_edit.get_text())
 
-proc indent_new_line*(self: Editor) =
+proc indent_new_line*(self: EnuEditor) =
   # Smart indentation for new lines - simplified for compilation
   # TODO: Implement proper indentation when string conversion is fixed
   self.code_edit.insert_text_at_caret("\n")
 
-method unhandled_input*(self: Editor, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: EnuEditor, event: InputEvent) {.gdsync.} =
   # Handle editor-specific input events
   if EditorFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
     # Escape key - save and close editor
@@ -226,7 +228,12 @@ method unhandled_input*(self: Editor, event: InputEvent) {.gdsync.} =
       state.open_unit = nil
     self.get_viewport().set_input_as_handled()
 
-method gui_input*(self: Editor, event: InputEvent) {.gdsync.} =
+method gui_input*(self: EnuEditor, event: InputEvent) {.gdsync.} =
+  # Handle GUI input for focus management first
+  if event of InputEventMouseButton:
+    debug "pushing EditorFocused", topics = "state"
+    state.push_flag EditorFocused
+
   # Handle GUI input for the editor
   if event of InputEventKey and EditorFocused in state.local_flags:
     let key_event = event.as(InputEventKey)

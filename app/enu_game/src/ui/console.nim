@@ -1,14 +1,16 @@
 import gdext
 import gdext/classes/[gdrichtextlabel, gdcontrol, gdnode, 
-                     gdinputevent, gdinputeventjoypadbutton, gdvscrollbar]
-# TODO: Fix SceneTreeTween import - gdscene_tree_tween not found
+                     gdinputevent, gdinputeventjoypadbutton, gdvscrollbar,
+                     gdtween, gdviewport]
+# GD4: Fixed Tween import (was SceneTreeTween in Godot 3)
 import core, gdutils, types, models/states
 import std/strutils
 
 type Console* {.gdsync.} = ptr object of RichTextLabel
   default_mouse_filter: int64
-  # TODO: Re-enable when SceneTreeTween import is fixed
-  # tween: SceneTreeTween
+  tween: gdref Tween  # GD4: Re-enabled with correct import (was SceneTreeTween)
+
+proc watch_states(self: Console)
 
 proc offset_x*(self: Console, offset: float) =
   let width = self.get_size().x
@@ -21,54 +23,48 @@ proc show_console(self: Console) =
   else:
     self.set_modulate(color(1.0, 1.0, 1.0, 1.0))
   
-  # TODO: Re-enable when SceneTreeTween is available
+  # GD4: Re-enabled SceneTreeTween animations
   # Kill existing tween
-  # if ?self.tween:
-  #   self.tween.kill()
-  # 
-  # self.tween = self.get_tree().create_tween()
-  self.set_visible(true)
-  # 
-  # # Animate sliding in from right
-  # discard self.tween.tween_method(
-  #   callable(self, "offset_x"), variant(-1.0), variant(0.0), animation_duration
-  # )
-  # self.tween.set_trans(Tween_TransitionType.TRANS_EXPO)
-  # self.tween.set_ease(Tween_EaseType.EASE_IN_OUT)
+  if ?self.tween:
+    self.tween[].kill()
   
-  # For now, just show directly without animation
-  self.offset_x(0.0)
+  self.tween = self.create_tween()
+  self.set_visible(true)
+  
+  # Animate sliding in from right
+  discard self.tween[].tween_method(
+    callable(self, "offset_x"), variant(-1.0), variant(0.0), animation_duration
+  )
+  discard self.tween[].set_trans(transExpo)
+  discard self.tween[].set_ease(easeInOut)
 
 proc hide_console(self: Console) =
-  # TODO: Re-enable when SceneTreeTween is available
+  # GD4: Re-enabled SceneTreeTween animations
   # Kill existing tween
-  # if ?self.tween:
-  #   self.tween.kill()
-  # 
-  # self.tween = self.get_tree().create_tween()
-  # self.set_position(vector2(0.0, self.get_position().y))
-  # 
-  # # Animate sliding out to right
-  # discard self.tween.tween_method(
-  #   callable(self, "offset_x"), variant(0.0), variant(-1.0), animation_duration
-  # )
-  # self.tween.set_trans(Tween_TransitionType.TRANS_EXPO)
-  # self.tween.set_ease(Tween_EaseType.EASE_IN_OUT)
-  # 
-  # # Hide when animation complete
-  # discard self.tween.tween_callback(callable(self, "set_visible").bind(false))
+  if ?self.tween:
+    self.tween[].kill()
   
-  # For now, just hide directly without animation
-  self.set_visible(false)
+  self.tween = self.create_tween()
+  self.set_position(vector2(0.0, self.get_position().y))
+  
+  # Animate sliding out to right
+  discard self.tween[].tween_method(
+    callable(self, "offset_x"), variant(0.0), variant(-1.0), animation_duration
+  )
+  discard self.tween[].set_trans(transExpo)
+  discard self.tween[].set_ease(easeInOut)
+  
+  # Hide when animation complete
+  discard self.tween[].tween_callback(callable(self, "set_visible").bind(false))
 
 method ready*(self: Console) {.gdsync.} =
-  print("[UI] Console ready - implementing log display and animations")
+  print("[UI] Console ready - Godot 4 migration complete with animations and state watching")
   
   # Store default mouse filter
   self.default_mouse_filter = int64(self.get_mouse_filter())
   
-  # Watch for state flag changes - TODO: Re-enable after fixing method
-  # self.watch_states()
+  # GD4: Re-enabled state watching
+  self.watch_states()
   
   # Set initial visibility
   if ConsoleVisible notin state.local_flags:
@@ -85,9 +81,12 @@ method ready*(self: Console) {.gdsync.} =
   # Connect close button
   let close_button = self.find("Close", Control)
   if not close_button.is_nil():
-    self.bind_signal(close_button, ("pressed", "close"))
+    self.bind_signal(close_button, ("pressed", "on_close"))
   
-  print("[UI] Console configured with state watching and animations")
+  # GD4: Re-enabled GUI input signal binding for focus management
+  # Note: This will be handled in the gui_input method below
+  
+  print("[UI] Console initialization complete - Tween animations enabled, state flags watched")
 
 proc watch_states(self: Console) =
   # Watch for local flag changes
@@ -102,9 +101,8 @@ proc watch_states(self: Console) =
       self.unghost()
     
     if MouseCaptured.added:
-      # TODO: Fix enum name for Godot 4 - MOUSE_FILTER_IGNORE doesn't exist
-      # self.set_mouse_filter(Control.MouseFilterIgnore)  
-      self.set_mouse_filter(Control_MouseFilter(2)) # Temporary: IGNORE = 2
+      # GD4: Fixed mouse filter enum
+      self.set_mouse_filter(mouseFilterIgnore)
     elif MouseCaptured.removed:
       self.set_mouse_filter(Control_MouseFilter(self.default_mouse_filter))
   
@@ -125,11 +123,17 @@ proc on_close(self: Console) =
   # Close console and remove focus
   state.pop_flags(ConsoleVisible, ConsoleFocused)
 
+method gui_input*(self: Console, event: InputEvent) {.gdsync.} =
+  # Handle GUI input for focus management
+  if event of InputEventMouseButton:
+    debug "pushing ConsoleFocused", topics = "state"
+    state.push_flag ConsoleFocused
+
 method unhandled_input*(self: Console, event: InputEvent) {.gdsync.} =
   # Handle escape key to close console
   if ConsoleFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
     # Don't handle joypad input if in command mode
     if not (event of InputEventJoypadButton) or CommandMode notin state.local_flags:
       state.pop_flags(ConsoleVisible, ConsoleFocused)
-      # TODO: Fix for Godot 4 - set_input_as_handled method name changed
-      # self.getViewport().set_input_as_handled()
+      # GD4: Fixed input handling method
+      self.get_viewport().setInputAsHandled()

@@ -15,6 +15,6 @@ visible = false
 collision_mask = 524309
 collide_with_areas = true
 
-[node name="AimTarget" type="Sprite3D" parent="."]
+[node name="AimTarget" type="AimTarget" parent="."]
 pixel_size = 0.002
 texture = ExtResource("5")

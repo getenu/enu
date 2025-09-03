@@ -143,6 +143,17 @@ proc find_nested_changes(parent: Change[Unit]) =
           parent.item.set_global(false)
 
 proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
+  # Debug: Check unit validity before setting up tracking
+  if unit.is_nil() or unit.id == "":
+    print("[DEBUG] watch_units: unit is nil or has empty ID, skipping tracking setup")
+    return
+
+  if not unit.units.valid:
+    print("[DEBUG] watch_units: unit.units is not valid, skipping tracking setup. Unit ID: ", unit.id)
+    return
+
+  print("[DEBUG] watch_units: setting up tracking for unit ", unit.id)
+
   unit.units.watch(unit):
     if added:
       change.item.fix_parents(unit)
@@ -161,9 +172,12 @@ proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
 proc watch*(self: NodeController, state: GameState) =
   state.units.changes:
     if added:
+      let unit_valid = not change.item.is_nil() and change.item.id != ""
+      print("[DEBUG] Adding unit to scene: ", change.item.id, " valid: ", unit_valid)
       change.item.add_to_scene()
       self.watch_units(change.item)
     elif removed:
+      print("[DEBUG] Removing unit from scene: ", change.item.id)
       change.item.remove_from_scene()
       let unit = change.item
       Zen.thread_ctx.queue_free(unit)

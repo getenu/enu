@@ -289,8 +289,8 @@
       }
     },
     "model_citizen": {
-      "version": "0.19.5",
-      "vcsRevision": "f57b68885071df324b9ae98d699019150d87fa01",
+      "version": "0.19.6",
+      "vcsRevision": "11390435bdcc2d461c90fd60ba2b4b385cabec71",
       "url": "https://github.com/getenu/model_citizen",
       "downloadMethod": "git",
       "dependencies": [
@@ -304,7 +304,7 @@
         "metrics"
       ],
       "checksums": {
-        "sha1": "ff0f10d817b10b29b0ffd792eeaff46d50ec2595"
+        "sha1": "38138100d3d3dc0aabd4be02e023a85ab9000c23"
       }
     },
     "mustache": {
