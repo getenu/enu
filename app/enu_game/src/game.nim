@@ -121,19 +121,9 @@ method process*(self: Game, delta: float) {.gdsync.} =
 
 # GD4: TODO - Fix platform-specific input actions for Godot 4
 proc add_platform_input_actions(self: Game) =
-  discard
-  # let suffix = "." & host_os
-  # for action in InputMap.get_actions():
-  #   let action = action.as_string()
-  #   if suffix in action:
-  #     let name = action.replace(suffix, "")
-  #     if InputMap.has_action(name):
-  #       InputMap.erase_action(name)
-  #     InputMap.add_action(name)
-  #     for event in InputMap.get_action_list(action):
-  #       let event = event.as_object(InputEvent)
-  #       InputMap.action_add_event(name, event)
-  #     InputMap.erase_action(action)
+  print("[INPUT] Input actions setup - using project.godot definitions")
+  # For now, rely on project.godot input map configuration
+  # TODO: Add runtime key binding setup once gdext Key constants are resolved
 
 method onInit*(self: Game) {.gdsync.} =
   # Basic field initialization
