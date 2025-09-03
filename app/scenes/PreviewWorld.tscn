@@ -16,7 +16,7 @@ models = Array[VoxelBlockyModel]([SubResource("VoxelBlockyModelCube_air"), SubRe
 [sub_resource type="VoxelMesherBlocky" id="5"]
 library = SubResource("4")
 
-[node name="PreviewWorld" type="Node3D"]
+[node name="PreviewWorld" type="PreviewMaker"]
 
 [node name="Cube" type="MeshInstance3D" parent="."]
 mesh = SubResource("1")
@@ -24,6 +24,7 @@ surface_material_override/0 = ExtResource("1")
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(0.970296, -0.056886, 0.235139, 0, 0.971961, 0.235142, -0.241922, -0.228157, 0.94309, 25, 25, 100)
+current = true
 fov = 1.0
 far = 200.0
 
