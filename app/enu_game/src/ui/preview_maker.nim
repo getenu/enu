@@ -19,17 +19,17 @@ method ready*(self: PreviewMaker) {.gdsync.} =
   self.cube = self.find_child("Cube", false, false).as(MeshInstance3D)
   self.bot = self.find_child("bot", false, false).as(Node3D)
 
-  if self.camera.is_nil():
+  if not ?self.camera:
     print("[UI] ✗ Camera3D not found in PreviewMaker scene")
-  if self.cube.is_nil():
+  if not ?self.cube:
     print("[UI] ✗ Cube MeshInstance3D not found in PreviewMaker scene")
-  if self.bot.is_nil():
+  if not ?self.bot:
     print("[UI] ✗ bot Node3D not found in PreviewMaker scene")
 
   print("[UI] PreviewMaker initialized")
 
 method process*(self: PreviewMaker, delta: float) {.gdsync.} =
-  if not self.skip_next and not self.callback.is_nil():
+  if not self.skip_next and ?self.callback:
     # GD4: Get viewport texture and extract image data
     let texture = self.get_texture().as(gdref ViewportTexture)
     if ?texture:
@@ -67,7 +67,7 @@ proc generate_block_preview*(
   # In Godot 4, this may be handled differently through the SubViewport or RenderingServer
 
   # Configure camera for block preview
-  if not self.camera.is_nil():
+  if ?self.camera:
     self.camera.set_fov(1.0)
     # GD4: look_at syntax changed
     self.camera.look_at(vector3(0, 0, 0), vector3(0, 1, 0))
@@ -90,7 +90,7 @@ proc generate_object_preview*(
   # In Godot 4, this may be handled differently through the SubViewport or RenderingServer
 
   # Configure camera for object preview
-  if not self.camera.is_nil():
+  if ?self.camera:
     self.camera.set_fov(1.2)
     # GD4: look_at syntax changed
     self.camera.look_at(vector3(0, 0, 0), vector3(0, 1, 0))

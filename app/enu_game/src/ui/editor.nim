@@ -10,7 +10,7 @@ type EnuEditor* {.gdsync.} = ptr object of MarginContainer
   code_edit*: CodeEdit
   scroll_container: ScrollContainer
   left_panel: Control
-  tween: Tween
+  tween: gdref Tween
   og_bg_color: Color
   selection_color: Color
   caret_color: Color
@@ -81,15 +81,46 @@ proc set_executing_line(self: EnuEditor, line: int) =
 
 proc open_editor(self: EnuEditor) =
   print("[UI] Editor opening...")
-  self.visible = true
-  # TODO: Add animation with Tween when available
+  
+  # Start with transparent editor
+  self.set_visible(true)
+  self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+  
+  # Smooth fade-in animation
+  if ?self.tween:
+    discard self.tween[].tween_property(
+      self,
+      newNodePath("modulate"),
+      variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
+      0.25  # duration in seconds
+    )
+    print("[UI] Editor opened with smooth fade-in")
+  else:
+    # Fallback to instant appearance
+    self.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
+    print("[UI] Editor opened instantly")
 
 proc close_editor(self: EnuEditor) =
   print("[UI] Editor closing...")
   if not self.code_edit.is_nil:
     self.code_edit.release_focus()
-  # TODO: Add animation with Tween when available
-  self.visible = false
+  
+  # Smooth fade-out animation
+  if ?self.tween:
+    discard self.tween[].tween_property(
+      self,
+      newNodePath("modulate"),
+      variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
+      0.25  # duration in seconds
+    )
+    
+    # Hide editor after animation completes
+    discard self.tween[].tween_callback(callable(self, newStringName("set_visible")).bind(false))
+    print("[UI] Editor closed with smooth fade-out")
+  else:
+    # Fallback to instant hide
+    self.set_visible(false)
+    print("[UI] Editor closed instantly")
 
 proc watch_open_unit(self: EnuEditor) =
   var line_zid: ZID
@@ -148,7 +179,7 @@ method ready*(self: EnuEditor) {.gdsync.} =
 
   # Find the CodeEdit node - this should always succeed if scene is properly set up
   self.code_edit = self.find("CodeEdit", CodeEdit)
-  assert not self.code_edit.is_nil(), "CodeEdit node not found in Editor scene"
+  assert ?self.code_edit, "CodeEdit node not found in Editor scene"
 
   # Find other UI elements - some may not exist in current scene
   self.scroll_container = self.find("ScrollContainer", ScrollContainer)
@@ -156,6 +187,11 @@ method ready*(self: EnuEditor) {.gdsync.} =
     self.left_panel = state.nodes.game.find("LeftPanel", Control)
   else:
     print("[UI] Warning: state.nodes.game is nil, cannot find LeftPanel")
+
+  # Initialize tween for smooth animations
+  # Create a new tween for smooth animations (Tween is RefCounted, not a Node)
+  self.tween = instantiate(Tween).as(gdref Tween)
+  print("[UI] Created new Tween for Editor animations")
 
   # Get colors for UI state management
   self.selection_color = self.code_edit.get_theme_color("selection_color", "TextEdit")
@@ -171,7 +207,7 @@ method ready*(self: EnuEditor) {.gdsync.} =
   # Connect button signals
   for name in ["Close", "Run"]:
     let control = self.find(name, Control)
-    if not control.is_nil():
+    if ?control:
       self.bind_signal(control, ("pressed", "on_" & name.to_lower))
     else:
       print("[UI] Warning: Button '", name, "' not found in Editor scene")

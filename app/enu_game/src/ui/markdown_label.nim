@@ -92,7 +92,7 @@ proc set_font_sizes(self: MarkdownLabel) =
 proc add_text_edit(self: MarkdownLabel): TextEdit =
   result = self.og_text_edit.duplicate().as(TextEdit)
   # TODO: Implement syntax highlighting for TextEdit in Godot 4
-  if self.current_label.is_nil():
+  if not ?self.current_label:
     # Don't add borders if the only thing in our doc is code
     # TODO: Fix StyleBox theming for Godot 4
     # let stylebox = result.get_theme_stylebox("normal", "TextEdit")
@@ -142,7 +142,7 @@ method ready*(self: MarkdownLabel) {.gdsync.} =
 
 proc render_plain_text(self: MarkdownLabel, text: string) =
   # Fallback renderer when markdown package isn't available
-  if self.current_label.is_nil():
+  if not ?self.current_label:
     self.add_label()
   
   let label = self.current_label

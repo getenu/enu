@@ -80,7 +80,7 @@ method ready*(self: Console) {.gdsync.} =
   
   # Connect close button
   let close_button = self.find("Close", Control)
-  if not close_button.is_nil():
+  if ?close_button:
     self.bind_signal(close_button, ("pressed", "on_close"))
   
   # GD4: Re-enabled GUI input signal binding for focus management

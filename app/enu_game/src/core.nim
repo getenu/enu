@@ -70,6 +70,15 @@ proc optional_get*[T](self: var HashSet[T], key: T): Option[T] =
 import gdext, math
 export Transform3D, Vector3, Vector2, Basis, AABB, print, vector3, vector2
 
+# GdRef presence check operator
+template `?`*[T](gdref: GdRef[T]): bool = not gdref.handle.is_nil()
+
+# gdext pointer types presence check operator
+template `?`*(obj: ptr): bool = not obj.is_nil()
+
+# Proc/closure presence check operator
+template `?`*[T: proc](p: T): bool = not p.is_nil()
+
 const
   UP* = vector3(0, 1, 0)
   DOWN* = vector3(0, -1, 0)

@@ -55,8 +55,8 @@ proc setup*(self: SignNode) =
 
   var mesh = self.get_node("MeshInstance").as(MeshInstance3D)
   self.viewport = self.get_node("Viewport").as(SubViewport)
-  assert not self.viewport.is_nil
-  assert not self.viewport.get_node("MarkdownLabel").is_nil
+  assert ?self.viewport
+  assert ?self.viewport.get_node("MarkdownLabel")
 
   self.label = self.viewport.get_node("MarkdownLabel").as(MarkdownLabel)
   self.shape = mesh.get_node("SignBody/CollisionShape").as(CollisionShape3D)
@@ -65,7 +65,7 @@ proc setup*(self: SignNode) =
   var text_edit = self.viewport.get_node("TextEdit").as(TextEdit)
 
   self.material = mesh.get_active_material(0)[].as(StandardMaterial3D)
-  echo "Material? ", self.material.is_nil
+  echo "Material? ", not ?self.material
   # TODO: Configure highlighting for TextEdit in Godot 4
   # text_edit.configure_highlighting()
 
@@ -166,7 +166,7 @@ method process*(self: SignNode, delta: float64) {.gdsync.} =
   # with the billboard 100%, but it's pretty close.
   if ?self.model and self.model.billboard:
     let camera = self.get_viewport().get_camera_3d()
-    if not camera.is_nil():
+    if ?camera:
       let camera_origin = camera.get_global_transform().origin
       let cross = UP.cross(self.get_global_transform().origin - camera_origin)
 

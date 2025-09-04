@@ -2,7 +2,7 @@ import std/[options, strutils, sequtils]
 import gdext
 # Use custom Godot bindings for consistency with other classes
 import gdext/classes/[gdhboxcontainer, gdbutton, gdnode]
-import gdutils
+import core, gdutils
 
 # Tool types - simplified version of original game tools
 type ToolType* = enum
@@ -83,7 +83,7 @@ proc on_action_changed*(self: Toolbar) {.gdsync.} =
   # Find which button was pressed by checking all children
   for child in self.get_children():
     let button = child as Button
-    if not button.is_nil() and button.is_pressed():
+    if ?button and button.is_pressed():
       let button_name = $button.get_name()
       self.handle_tool_selection(button_name)
       break
@@ -118,9 +118,9 @@ proc set_tool(self: Toolbar, tool: ToolType) =
   if tool_name.len > 0:
     let button_name = "Button-" & tool_name
     let button_node = self.get_node(NodePath(button_name))
-    if not button_node.is_nil():
+    if ?button_node:
       let button = button_node as Button
-      if not button.is_nil():
+      if ?button:
         button.set_pressed(true)
         print("[TOOLBAR] Tool set to: " & tool_name)
 

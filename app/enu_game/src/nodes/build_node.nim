@@ -229,7 +229,7 @@ proc setup*(self: BuildNode) =
 
   # GD4: Set up sight ray for Godot 4
   let sight_ray = self.find_child("SightRay", false, false) as RayCast3D
-  if not sight_ray.is_nil():
+  if ?sight_ray:
     self.model.sight_ray = sight_ray
   self.prepare_materials()
 

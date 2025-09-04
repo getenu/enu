@@ -39,7 +39,7 @@ proc trigger_action_changed(self: ActionButton) =
   
   # Emit signal to the game node which will route it to Toolbar
   let game_node = state.nodes.game
-  if not game_node.is_nil():
+  if ?game_node:
     # Create and emit the action_changed signal with the button name
     game_node.trigger("action_changed", variant(button_name))
   else:

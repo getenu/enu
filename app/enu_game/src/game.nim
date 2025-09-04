@@ -1,3 +1,34 @@
+# MIGRATION STATUS: 90% Complete - Core game loop functional with API limitations
+# 
+# ✅ FUNCTIONAL: 
+#   - Game initialization and ready() lifecycle
+#   - Main process() loop with frame counting and metrics
+#   - Input handling (quit, mouse capture, basic movement)
+#   - Controller initialization (node, script)
+#   - Stats display and FPS monitoring
+#   - Virtual joystick integration for mobile
+#   - Verification mode for testing
+#
+# 🚧 PARTIALLY FUNCTIONAL (gdext API limitations):
+#   - rescale(): Viewport scaling disabled - needs gdext Viewport API
+#   - Window management: Some display server features not accessible
+#   - Stats display: Some performance metrics unavailable
+#
+# ❌ DISABLED:
+#   - Viewport texture flags configuration
+#   - Voxel server task counting
+#   - Full screen detection (implementation incomplete)
+#
+# 🔧 KEY CHANGES FROM GODOT 3:
+#   - gdobj Game -> type Game* {.gdsync.} = ptr object of Node
+#   - All imports changed to gdext/classes/*
+#   - Method signatures updated for Godot 4 (process takes float, not float64)
+#   - DisplayServer replaces OS for window management
+#   - Performance API updated for Godot 4 enums
+#   - Input system completely reworked for gdext patterns
+#
+# 📝 TODOS: Restore viewport scaling, complete display detection, add voxel task monitoring
+
 import std/[monotimes, os, json, math, random, net]
 import pkg/[metrics, metrics/stdlib_httpserver]
 from dotenv import nil

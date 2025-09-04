@@ -61,9 +61,9 @@ template find*(self: Node, name: string, T: type Node): untyped =
   {.line.}:
     let obj1 = self.find_child(name)
     let obj2 = obj1 as T
-    if obj1.is_nil():
+    if not ?obj1:
       print("[GDUTILS] Warning: Could not find node '", name, "' of type ", $T)
-    elif obj2.is_nil:
+    elif not ?obj2:
       print("[GDUTILS] Warning: Could convert node '", name, "' to type ", $T)
     obj2
 
@@ -74,7 +74,7 @@ proc set_mouse_filter_recursive*(control: Control, mouse_filter: int) =
   control.mouse_filter = mouse_filter.Control_MouseFilter
   for child in control.get_children():
     let child_control = child as Control
-    if not child_control.is_nil():
+    if ?child_control:
       child_control.set_mouse_filter_recursive(mouse_filter)
 
 const solid_alpha* = color(1.0, 1.0, 1.0, 1.0)

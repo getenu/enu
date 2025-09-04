@@ -144,7 +144,7 @@ proc find_nested_changes(parent: Change[Unit]) =
 
 proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
   # Debug: Check unit validity before setting up tracking
-  if unit.is_nil() or unit.id == "":
+  if not ?unit or unit.id == "":
     print("[DEBUG] watch_units: unit is nil or has empty ID, skipping tracking setup")
     return
 
@@ -172,7 +172,7 @@ proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
 proc watch*(self: NodeController, state: GameState) =
   state.units.changes:
     if added:
-      let unit_valid = not change.item.is_nil() and change.item.id != ""
+      let unit_valid = ?change.item and change.item.id != ""
       print("[DEBUG] Adding unit to scene: ", change.item.id, " valid: ", unit_valid)
       change.item.add_to_scene()
       self.watch_units(change.item)
