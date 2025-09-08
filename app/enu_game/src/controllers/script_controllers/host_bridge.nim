@@ -1,9 +1,9 @@
 import std/[os, macros, math, asyncfutures, hashes]
 import locks except Lock
-import pkg/compiler/vm except get_int
-from pkg/compiler/vm {.all.} import stack_trace_aux
-import pkg/compiler/ast except new_node
-import pkg/compiler/[vmdef, renderer, msgs]
+import "$nim"/compiler/vm except get_int
+from "$nim"/compiler/vm {.all.} import stack_trace_aux
+import "$nim"/compiler/ast except new_node
+import "$nim"/compiler/[vmdef, renderer, msgs]
 
 import gdext except Color, size
 import gdext/[math]

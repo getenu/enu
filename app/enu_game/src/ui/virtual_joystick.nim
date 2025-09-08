@@ -111,12 +111,12 @@ method ready*(self: VirtualJoystick) {.gdsync.} =
     self.set_visible(false)
     print("[UI] VirtualJoystick hidden - no touchscreen detected")
 
-method gui_input*(self: VirtualJoystick, event: InputEvent) {.gdsync.} =
+method gui_input*(self: VirtualJoystick, event: gdref InputEvent) {.gdsync.} =
   # TODO: Handle touch input for joystick control when gdext InputEvent API is stable
   # For now, just log touch events
-  if event.is_class("InputEventScreenTouch"):
+  if event[].is_class("InputEventScreenTouch"):
     print("[UI] VirtualJoystick touch event detected")
-  elif event.is_class("InputEventScreenDrag"):
+  elif event[].is_class("InputEventScreenDrag"):
     print("[UI] VirtualJoystick drag event detected")
 
 proc move_base*(self: VirtualJoystick, new_position: Vector2) =

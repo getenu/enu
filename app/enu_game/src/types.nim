@@ -3,7 +3,7 @@ import gdext except Color
 import gdext/classes/[gdnode3d, gdraycast3d]
 # import pkg/core/godotcoretypes except Color
 #import pkg/core/[vector3, basis, aabb, godotbase]
-import pkg/compiler/[ast, lineinfos, semdata]
+import "$nim"/compiler/[ast, lineinfos, semdata]
 import pkg/[model_citizen]
 import models/colors, libs/[eval]
 

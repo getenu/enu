@@ -142,7 +142,7 @@ proc calculate_velocity(self: PlayerNode, move_direction: Vector3, delta: float)
 proc update_raycast*(self: PlayerNode)
 proc has_active_input(self: PlayerNode, device: int32): bool
 
-method physics_process*(self: PlayerNode, delta: float) {.gdsync.} =
+method physics_process*(self: PlayerNode, delta: float64) {.gdsync.} =
   # Handle command mode timeout
   if CommandMode in state.local_flags and self.command_timer > 0:
     self.command_timer -= delta
@@ -210,7 +210,7 @@ method physics_process*(self: PlayerNode, delta: float) {.gdsync.} =
     if self.global_position.y < -10:
       self.global_position = vector3(0, 100, 0)
 
-method process*(self: PlayerNode, delta: float) {.gdsync.} =
+method process*(self: PlayerNode, delta: float64) {.gdsync.} =
   # Update model velocity if watching
   if not self.model.is_nil:
     self.model.velocity_value.pause(self.velocity_zid):
@@ -243,8 +243,9 @@ method process*(self: PlayerNode, delta: float) {.gdsync.} =
   if LoadingLevel notin state.global_flags:
     self.update_raycast()
 
-method unhandled_input*(self: PlayerNode, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: PlayerNode, event: gdref InputEvent) {.gdsync.} =
   let time = get_mono_time()
+  let event = event[]
 
   # Handle mouse movement for look
   if event.is_class("InputEventMouseMotion") and MouseCaptured in state.local_flags and TouchControls notin state.local_flags:

@@ -81,8 +81,9 @@ proc handle_basic_input(self: GUI, event: InputEvent) =
       self.pan_delta = 0
       # state.cycle_tool(-1) - TODO: Add when tool cycling is available
 
-method unhandled_input*(self: GUI, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
   # Handle global input events and UI navigation
+  let event = event[]
   if CommandMode notin state.local_flags and event.is_action_pressed("ui_cancel") and ViewportFocused in state.local_flags:
     let flags = state.try_pop(ViewportFocused)
     
@@ -98,10 +99,10 @@ method unhandled_input*(self: GUI, event: InputEvent) {.gdsync.} =
      event.is_class("InputEventJoypadButton") or event.is_class("InputEventPanGesture"):
     self.handle_basic_input(event)
 
-method gui_input*(self: GUI, event: InputEvent) {.gdsync.} =
+method gui_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
   # Handle direct GUI input events, especially for touch controls
-  if event.is_class("InputEventScreenTouch"):
-    let touch_event = event.as(InputEventScreenTouch)
+  if event[].is_class("InputEventScreenTouch"):
+    let touch_event = event[].as(InputEventScreenTouch)
     let index = byte(touch_event.get_index())
     
     if TouchControls in state.local_flags and index notin state.ignored_touches:
@@ -121,8 +122,8 @@ method gui_input*(self: GUI, event: InputEvent) {.gdsync.} =
       state.ignored_touches.excl(index)
       self.get_viewport().set_input_as_handled()
       
-  elif event.is_class("InputEventScreenDrag"):
-    let drag_event = event.as(InputEventScreenDrag) 
+  elif event[].is_class("InputEventScreenDrag"):
+    let drag_event = event[].as(InputEventScreenDrag) 
     let index = byte(drag_event.get_index())
     
     if TouchControls in state.local_flags and index notin state.ignored_touches:
@@ -134,16 +135,16 @@ method gui_input*(self: GUI, event: InputEvent) {.gdsync.} =
         if not self.deleting:
           self.delete_timer = MonoTime.high
           
-  elif event.is_class("InputEventMouseMotion"):
+  elif event[].is_class("InputEventMouseMotion"):
     # Handle mouse motion for camera control
     if MouseCaptured in state.local_flags and TouchControls notin state.local_flags:
-      let mouse_event = event.as(InputEventMouseMotion)
+      let mouse_event = event[].as(InputEventMouseMotion)
       self.input_relative += mouse_event.get_relative()
       
-  elif event.is_class("InputEventMouseButton"):
-    self.handle_basic_input(event)
+  elif event[].is_class("InputEventMouseButton"):
+    self.handle_basic_input(event[])
 
-method process*(self: GUI, delta: float) {.gdsync.} =
+method process*(self: GUI, delta: float64) {.gdsync.} =
   # Update GUI state each frame
   if self.command_timer > 0:
     self.command_timer -= delta

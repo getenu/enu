@@ -123,17 +123,17 @@ proc on_close(self: Console) =
   # Close console and remove focus
   state.pop_flags(ConsoleVisible, ConsoleFocused)
 
-method gui_input*(self: Console, event: InputEvent) {.gdsync.} =
+method gui_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
   # Handle GUI input for focus management
-  if event of InputEventMouseButton:
+  if event[] of InputEventMouseButton:
     debug "pushing ConsoleFocused", topics = "state"
     state.push_flag ConsoleFocused
 
-method unhandled_input*(self: Console, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
   # Handle escape key to close console
-  if ConsoleFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
+  if ConsoleFocused in state.local_flags and event[].is_action_pressed("ui_cancel"):
     # Don't handle joypad input if in command mode
-    if not (event of InputEventJoypadButton) or CommandMode notin state.local_flags:
+    if not (event[] of InputEventJoypadButton) or CommandMode notin state.local_flags:
       state.pop_flags(ConsoleVisible, ConsoleFocused)
       # GD4: Fixed input handling method
       self.get_viewport().setInputAsHandled()

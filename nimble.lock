@@ -195,13 +195,13 @@
       }
     },
     "gdext": {
-      "version": "0.13.1",
-      "vcsRevision": "1b29ff650ff96128d1772bf275bb94b2cedf6ae2",
-      "url": "https://github.com/godot-nim/gdext-nim",
+      "version": "0.14.0",
+      "vcsRevision": "823ae276a1a269138d4a984678f4ef707b560c8e",
+      "url": "https://github.com/dsrw/gdext-nim",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "e87eacb118cf7a6256811807423e81b8fa87de05"
+        "sha1": "eb6aff9fb3747db3701ed62f53c75d71e4142f1d"
       }
     },
     "jsony": {
@@ -248,12 +248,12 @@
     },
     "threading": {
       "version": "0.2.1",
-      "vcsRevision": "ee77a27eca7042a2b68061d0bcee691e5b56aa10",
+      "vcsRevision": "c5a39a039f24d48ba9503dcb9a0aee68a0fbb36d",
       "url": "https://github.com/nim-lang/threading",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "594ec27a467847166ef78767ff60e1c87d0f743f"
+        "sha1": "6904743cf079e9715f15a1e9e84c8187113ce1f4"
       }
     },
     "netty": {
@@ -324,7 +324,7 @@
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "bd4a70c2783ac88cd25d8098d13742e3b674dc7d"
+        "sha1": "cede6129d8c2d23731ec4325a818efe8636f2167"
       }
     },
     "parsetoml": {

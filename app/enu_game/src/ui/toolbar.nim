@@ -88,7 +88,7 @@ proc on_action_changed*(self: Toolbar) {.gdsync.} =
       self.handle_tool_selection(button_name)
       break
 
-method process*(self: Toolbar; delta: float) {.gdsync.} =
+method process*(self: Toolbar; delta: float64) {.gdsync.} =
   # Handle preview generation and other toolbar updates
   # This is simplified - the original had complex preview generation
   

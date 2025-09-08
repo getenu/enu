@@ -21,6 +21,6 @@ import core, gdutils
 
 type FloatingButton* {.gdsync.} = ptr object of Button
 
-method gui_input*(self: FloatingButton, event: InputEvent) {.gdsync.} =
+method gui_input*(self: FloatingButton, event: gdref InputEvent) {.gdsync.} =
   # Accept all input events to prevent them from propagating
   self.accept_event()

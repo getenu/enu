@@ -37,19 +37,23 @@ type SelectionArea* {.gdsync.} = ptr object of Area3D
 method ready*(self: SelectionArea) {.gdsync.} =
   print("[SELECTION] SelectionArea initializing")
   
-  # TODO: Set up area monitoring when gdext Area3D API is stable
-  # Original implementation monitored body_entered and body_exited signals
-  # for collision detection with other game objects
+  # Enable area monitoring for collision detection
+  self.set_monitoring(true)
   
-  print("[SELECTION] ⚠️ Area3D signal monitoring temporarily disabled - needs gdext signal API")
+  # Connect signals for area and body detection
+  self.bind_signals("body_entered", "body_exited", "area_entered", "area_exited")
+  
+  print("[SELECTION] Area3D monitoring enabled and signals connected")
   print("[SELECTION] SelectionArea ready")
 
-# TODO: Signal handling methods will be added when gdext signal system is available
-# proc handle_area_entered(self: SelectionArea, area: Area3D) =
-#   print("[SELECTION] Area entered: ", area.get_class())
-# 
-# proc handle_area_exited(self: SelectionArea, area: Area3D) =
-#   print("[SELECTION] Area exited: ", area.get_class())
+# Signal handling methods for collision detection
+# TODO: Signal handler implementation needs investigation of character encoding issue
+# The following handlers are ready to implement once character issue is resolved:
+# - body_entered signal handling
+# - body_exited signal handling 
+# - area_entered signal handling
+# - area_exited signal handling
+print("[SELECTION] Signal handlers ready for implementation")
 
 var selection_scene {.threadvar.}: gdref PackedScene
 

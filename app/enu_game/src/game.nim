@@ -1,6 +1,6 @@
 # MIGRATION STATUS: 90% Complete - Core game loop functional with API limitations
-# 
-# ✅ FUNCTIONAL: 
+#
+# ✅ FUNCTIONAL:
 #   - Game initialization and ready() lifecycle
 #   - Main process() loop with frame counting and metrics
 #   - Input handling (quit, mouse capture, basic movement)
@@ -94,10 +94,14 @@ proc rescale*(self: Game) =
 
   #info "Rescaled viewport", size = self.scaled_viewport.size
 
-method process*(self: Game, delta: float) {.gdsync.} =
+method process*(self: Game, delta: float64) {.gdsync.} =
   Zen.thread_ctx.boop
   debug "booped game"
   inc state.frame_count
+
+  # Debug: Print every 300 frames to check if process is working
+  if state.frame_count mod 300 == 0:
+    print("[DEBUG] Process running - frame: ", state.frame_count)
   let time = get_mono_time()
   when defined(metrics):
     if self.update_metrics_at < time:
@@ -137,18 +141,24 @@ method process*(self: Game, delta: float) {.gdsync.} =
     rescale(self)
 
   if time > self.force_quit_at:
+    print("[QUIT] Force quit timeout reached - removing Quitting flag")
     state.pop_flag Quitting
 
   if SceneReady notin state.local_flags:
     state.push_flag SceneReady
 
-# GD4
-# method notification*(self: Game, what: int) {.gdsync.} =
-#   if what == main_loop.NOTIFICATION_WM_QUIT_REQUEST:
-#     state.push_flag Quitting
+# GD4 - notification method not supported in gdext yet
+# Need to handle window close through other means
+# TODO: Investigate gdext support for notification virtual method
+method notification*(self: Game, what: int32) =
+  let what = int what
+  if what == NotificationWmCloseRequest:
+    print("[QUIT] Window close request received")
+    state.push_flag Quitting
 
-#   if what == main_loop.NOTIFICATION_WM_ABOUT:
-#     alert "Enu {enu_version}\n\n© 2025 Scott Wadden", "Enu"
+  if what == gdmainloop.NotificationWmAbout:
+    print("Enu {enu_version}\n\n© 2025 Scott Wadden")
+    # TODO: Show about dialog when gdext dialog API is available
 
 # GD4: TODO - Fix platform-specific input actions for Godot 4
 proc add_platform_input_actions(self: Game) =
@@ -416,6 +426,20 @@ proc run_verification*(self: Game) =
   state.push_flag(Quitting)
 
 method ready*(self: Game) {.gdsync.} =
+  print("[DEBUG] Game.ready() called")
+
+  # Enable unhandled input processing for this node
+  self.set_process_unhandled_input(true)
+  print("[DEBUG] Enabled unhandled input processing")
+
+  # Try to connect to window close_requested signal
+  let main_window = self.get_window()
+  if ?main_window:
+    print("[DEBUG] Found main window, attempting to bind close_requested signal")
+    self.bind_signals(main_window, "close_requested")
+  else:
+    print("[DEBUG] Could not find main window")
+
   state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
   assert not state.nodes.data.is_nil
   # GD4: fix scaled_viewport
@@ -469,12 +493,14 @@ method ready*(self: Game) {.gdsync.} =
 
   state.local_flags.changes(false):
     if Quitting.added:
+      print("[QUIT] Quitting flag added - waiting for worker thread ack")
       # We don't quit until the worker thread acks by popping the `Quitting`
       # flag, giving it a chance to save and cleanup. If the worker thread is
       # stuck, killed, or hasn't fully started because it's trying to connect
       # to a server, it won't pop the flag, so we force it after a timeout.
       self.force_quit_at = get_mono_time() + 2.seconds
     elif Quitting.removed:
+      print("[QUIT] Quitting flag removed - calling tree.quit()")
       self.get_tree().quit()
 
     if NeedsRestart.removed:
@@ -531,6 +557,10 @@ method ready*(self: Game) {.gdsync.} =
   if self.verify_mode:
     self.run_verification()
 
+proc on_close_requested(self: Game) {.gdsync.} =
+  print("[QUIT] Window close_requested signal received")
+  state.push_flag Quitting
+
 proc on_size_changed(self: Game) {.gdsync.} =
   self.rescale_at = get_mono_time()
   self.set_panel_width()
@@ -551,7 +581,15 @@ proc switch_world(self: Game, diff: int) =
     state.config_value.value:
       level_dir = current_level
 
-method unhandled_input*(self: Game, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
+  let event = event[]
+
+  # Debug: Check if we're getting key events at all
+  if event of InputEventKey:
+    let key_event = InputEventKey(event)
+    if key_event.is_pressed():
+      print("[INPUT] Key pressed - keycode: ", key_event.get_keycode(), " meta: ", key_event.is_meta_pressed())
+
   if event of InputEventKey:
     let event = InputEventKey(event)
     # GD4: TODO - Fix alt key detection (raw_code was enu-specific Godot 3 addition)
@@ -610,8 +648,8 @@ method unhandled_input*(self: Game, event: InputEvent) {.gdsync.} =
     else:
       state.push_flags ConsoleVisible, ConsoleFocused
   elif event.is_action_pressed("quit"):
-    if host_os != "macosx":
-      state.push_flag Quitting
+    print("[QUIT] Quit action pressed")
+    state.push_flag Quitting
   elif event.is_action_pressed("change_mode"):
     var mode = state.config.environment
     let keys = environments.keys.to_seq

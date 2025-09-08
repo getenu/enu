@@ -269,7 +269,7 @@ proc create_test_voxels*(self: BuildNode) {.gdsync.} =
 
   print("[VOXEL] Test voxels created - 3x3x3 cube with mixed colors")
 
-method process*(self: BuildNode, delta: float) {.gdsync.} =
+method process*(self: BuildNode, delta: float64) {.gdsync.} =
   if ?self.model:
     if self.model.code.owner == state.worker_ctx_name:
       self.model.transform_value.pause self.transform_zid:

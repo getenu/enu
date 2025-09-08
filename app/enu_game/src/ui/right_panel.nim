@@ -102,11 +102,11 @@ method ready*(self: RightPanel) {.gdsync.} =
 
   print("[UI] RightPanel initialized")
 
-method unhandled_input*(self: RightPanel, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: RightPanel, event: gdref InputEvent) {.gdsync.} =
   # Handle input for closing docs panel
   if DocsFocused in state.local_flags:
-    if event.is_action_pressed("ui_cancel"):
-      if not event.is_class("InputEventJoypadButton") or CommandMode notin state.local_flags:
+    if event[].is_action_pressed("ui_cancel"):
+      if not event[].is_class("InputEventJoypadButton") or CommandMode notin state.local_flags:
         # Close the documentation panel
         state.pop_flags DocsFocused, DocsVisible
         # TODO: Set input as handled when gdext SceneTree API is available

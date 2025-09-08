@@ -30,7 +30,7 @@
 # 📝 TODOS: Restore Sprite3D configuration, player camera integration, ray casting
 
 import gdext
-import gdext/classes/[gdsprite3d, gdpackedscene, gdresourceloader, gdtexture2d]
+import gdext/classes/[gdsprite3d, gdpackedscene, gdresourceloader, gdtexture2d, gdbasematerial3d]
 import core, gdutils, models
 
 type AimTarget* {.gdsync.} = ptr object of Sprite3D
@@ -42,14 +42,21 @@ method ready*(self: AimTarget) {.gdsync.} =
   print("[AIM] AimTarget initializing aiming reticle")
   
   # Configure sprite properties
-  # TODO: Set texture when gdext Sprite3D texture API is stable
-  # TODO: Set billboard mode when gdext Sprite3D API is stable
-  # TODO: Set transparency when gdext material API is stable
+  # Load a default crosshair texture (this assumes there's a crosshair texture in the project)
+  let crosshair_texture = ResourceLoader.load("res://textures/crosshair.png")
+  if ?crosshair_texture:
+    self.set_texture(crosshair_texture.as(gdref Texture2D))
+    print("[AIM] Crosshair texture loaded and applied")
+  else:
+    print("[AIM] ⚠️ Default crosshair texture not found - using default sprite")
+  
+  # Enable billboard mode so the crosshair always faces the camera
+  self.set_billboard_mode(BaseMaterial3D_BillboardMode.billboardEnabled)
   
   # Set up basic properties
   self.set_visible(false)  # Start hidden
   
-  print("[AIM] ⚠️ Sprite3D texture and billboard configuration temporarily disabled - needs gdext API")
+  print("[AIM] Sprite3D configured with texture and billboard mode")
   print("[AIM] AimTarget ready")
 
 method process*(self: AimTarget, delta: float64) {.gdsync.} =
@@ -80,11 +87,29 @@ proc update_target*(self: AimTarget, position: Vector3, valid: bool) =
   # Update target position and validity
   self.set_position(position)
   
-  # TODO: Change color/material based on validity when Material API is available
-  if valid:
-    print("[AIM] Target updated - valid target at position")
+  # Change color based on validity
+  let material = self.get_material_override()
+  if ?material:
+    let std_material = material.as(gdref StandardMaterial3D)
+    if ?std_material:
+      let color = if valid: gdext.color(0.0, 1.0, 0.0, 0.8)  # Green for valid
+                  else: gdext.color(1.0, 0.0, 0.0, 0.8)      # Red for invalid
+      std_material[].set_albedo(color)
+      print("[AIM] Target color updated - ", if valid: "valid (green)" else: "invalid (red)")
+    else:
+      print("[AIM] ✗ Could not cast material to StandardMaterial3D")
   else:
-    print("[AIM] Target updated - invalid target at position")
+    # Create a new material if none exists
+    let new_material = instantiate(StandardMaterial3D).as(gdref StandardMaterial3D)
+    if ?new_material:
+      let color = if valid: gdext.color(0.0, 1.0, 0.0, 0.8)  # Green for valid
+                  else: gdext.color(1.0, 0.0, 0.0, 0.8)      # Red for invalid
+      new_material[].set_albedo(color)
+      new_material[].set_transparency(BaseMaterial3D_Transparency.transparencyAlpha)
+      self.set_material_override(new_material.as(gdref Material))
+      print("[AIM] New target material created - ", if valid: "valid (green)" else: "invalid (red)")
+    else:
+      print("[AIM] ✗ Could not create new material for target validity")
 
 var aim_scene {.threadvar.}: gdref PackedScene
 

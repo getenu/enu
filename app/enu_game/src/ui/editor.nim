@@ -254,9 +254,9 @@ proc indent_new_line*(self: EnuEditor) =
   # TODO: Implement proper indentation when string conversion is fixed
   self.code_edit.insert_text_at_caret("\n")
 
-method unhandled_input*(self: EnuEditor, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
   # Handle editor-specific input events
-  if EditorFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
+  if EditorFocused in state.local_flags and event[].is_action_pressed("ui_cancel"):
     # Escape key - save and close editor
     if ?state.open_unit:
       # TODO: Fix Code.init with proper string conversion
@@ -264,15 +264,15 @@ method unhandled_input*(self: EnuEditor, event: InputEvent) {.gdsync.} =
       state.open_unit = nil
     self.get_viewport().set_input_as_handled()
 
-method gui_input*(self: EnuEditor, event: InputEvent) {.gdsync.} =
+method gui_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
   # Handle GUI input for focus management first
-  if event of InputEventMouseButton:
+  if event[] of InputEventMouseButton:
     debug "pushing EditorFocused", topics = "state"
     state.push_flag EditorFocused
 
   # Handle GUI input for the editor
-  if event of InputEventKey and EditorFocused in state.local_flags:
-    let key_event = event.as(InputEventKey)
+  if event[] of InputEventKey and EditorFocused in state.local_flags:
+    let key_event = event[].as(InputEventKey)
     if not key_event.is_pressed():
       return
 

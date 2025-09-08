@@ -94,9 +94,21 @@ method ready*(self: BotNode) {.gdsync.} =
   print("[BOT] BotNode ready")
 
 proc set_color(self: BotNode, color: chroma.Color) =
-  # TODO: Implement color adjustment logic when gdext Material API is available
-  print("[BOT] Color would be set to: ", color)
-  # Note: Original had complex color adjustment logic for different action colors
+  if ?self.mesh and ?self.material:
+    # Get the material (create a copy if needed to avoid modifying shared materials)
+    let material = self.material[].duplicate().as(gdref StandardMaterial3D)
+    if ?material:
+      # Convert chroma Color to Godot Color
+      let godot_color = gdext.color(color.r, color.g, color.b, 1.0)
+      material[].set_albedo(godot_color)
+      
+      # Apply the modified material
+      self.mesh.set_surface_override_material(0, material.as(gdref Material))
+      print("[BOT] Color set to: (", color.r, ", ", color.g, ", ", color.b, ")")
+    else:
+      print("[BOT] ✗ Could not cast material to StandardMaterial3D")
+  else:
+    print("[BOT] ✗ Cannot set color - missing mesh or material")
 
 proc set_visibility(self: BotNode) =
   if ?self.model:
@@ -108,8 +120,20 @@ proc set_visibility(self: BotNode) =
       self.set_color(self.model.color)
     elif not visible_flag and god_mode:
       self.set_visible(true)
-      # TODO: Set transparent color when Material API allows
-      print("[BOT] God mode transparency would be applied")
+      # Set transparent color for god mode
+      if ?self.mesh and ?self.material:
+        let material = self.material[].duplicate().as(gdref StandardMaterial3D)
+        if ?material:
+          # Make material semi-transparent
+          material[].set_transparency(BaseMaterial3D_Transparency.transparencyAlpha)
+          let transparent_color = gdext.color(self.model.color.r, self.model.color.g, self.model.color.b, 0.3)
+          material[].set_albedo(transparent_color)
+          self.mesh.set_surface_override_material(0, material.as(gdref Material))
+          print("[BOT] God mode transparency applied")
+        else:
+          print("[BOT] ✗ Could not create transparent material for god mode")
+      else:
+        print("[BOT] ✗ Cannot apply transparency - missing mesh or material")
     else:
       self.set_visible(false)
     

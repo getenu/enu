@@ -1,6 +1,6 @@
 import std/[os, strformat, importutils]
-import pkg/compiler/ast except new_node
-import pkg/compiler/[vm, vmdef]
+import "$nim"/compiler/ast except new_node
+import "$nim"/compiler/[vm, vmdef]
 import core, eval
 
 export Interpreter, VmArgs, set_result

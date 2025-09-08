@@ -28,7 +28,7 @@ method ready*(self: PreviewMaker) {.gdsync.} =
 
   print("[UI] PreviewMaker initialized")
 
-method process*(self: PreviewMaker, delta: float) {.gdsync.} =
+method process*(self: PreviewMaker, delta: float64) {.gdsync.} =
   if not self.skip_next and ?self.callback:
     # GD4: Get viewport texture and extract image data
     let texture = self.get_texture().as(gdref ViewportTexture)

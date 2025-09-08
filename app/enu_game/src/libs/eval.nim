@@ -1,10 +1,10 @@
 import std/options
 import pkg/pretty
-import compiler/[syntaxes, reorder, vmdef, msgs]
-import compiler/passes {.all.}
+import "$nim"/compiler/[syntaxes, reorder, vmdef, msgs]
+import "$nim"/compiler/passes {.all.}
 
 {.warning[UnusedImport]: off.}
-include compiler/[nimeval, pipelines]
+include "$nim"/compiler/[nimeval, pipelines]
 
 export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 

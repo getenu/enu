@@ -1,9 +1,9 @@
 import std/[os, re, posix]
 
 import gdext
-import pkg/compiler/ast except new_node
-import pkg/compiler/[lineinfos, renderer, msgs, vmdef]
-from pkg/compiler/vm {.all.} import stack_trace_aux
+import "$nim"/compiler/ast except new_node
+import "$nim"/compiler/[lineinfos, renderer, msgs, vmdef]
+from "$nim"/compiler/vm {.all.} import stack_trace_aux
 import gdext/classes/[gdnode3d, gdraycast3d, gdvoxelterrain]
 import core, models/[states, bots, builds, units, signs, players]
 import libs/[interpreters, eval]
