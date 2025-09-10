@@ -225,5 +225,6 @@ anchor_left = 0.1
 anchor_top = 0.5
 anchor_right = 0.1
 anchor_bottom = 0.6
+grow_vertical = 1
 
 [editable path="GridContainer/Settings"]

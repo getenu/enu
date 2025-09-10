@@ -1,4 +1,4 @@
-import std/[json, jsonutils, sugar, tables, strutils, os, times, algorithm]
+import std/[json, jsonutils, sugar, tables, strutils, os, times, algorithm, strformat]
 import pkg/zippy/ziparchives_v1
 import core except to_json
 import models
@@ -35,12 +35,17 @@ proc from_json_hook(self: var VoxelInfo, json: JsonNode) =
   self.color = json[1].json_to(Color)
 
 proc to_json_hook(self: Vector3): JsonNode =
-  %[self.x, self.y, self.z]
+  %[self[0], self[1], self[2]]
 
 proc from_json_hook(self: var Vector3, json: JsonNode) =
-  self.x = json[0].get_float
-  self.y = json[1].get_float
-  self.z = json[2].get_float
+  self[0] = json[0].get_float
+  self[1] = json[1].get_float
+  self[2] = json[2].get_float
+
+proc from_json_hook(self: var Basis, json: JsonNode) =
+  self.x = json[0].json_to(Vector3)
+  self.y = json[1].json_to(Vector3)
+  self.z = json[2].json_to(Vector3)
 
 proc from_json_hook(
     self: var ZenTable[Vector3, VoxelInfo], json: JsonNode
@@ -67,22 +72,15 @@ proc from_json_hook(
       locations[location] = info
       self[id] = locations
 
-proc from_json_hook(self: var Transform, json: JsonNode) =
-  self = Transform.init(origin = json["origin"].json_to(Vector3))
-  let elements =
-    if json["basis"].kind == JObject:
-      # old way
-      json["basis"]["elements"]
-    else:
-      # new way
-      json["basis"]
-  self.basis.elements.from_json(elements)
+proc from_json_hook(self: var Transform3D, json: JsonNode) =
+  self = Transform3D.init(origin = json["origin"].json_to(Vector3))
+  self.basis = json["basis"].json_to(Basis)
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
   self = Build.init(
     id = json["id"].json_to(string),
-    transform = json["start_transform"].json_to(Transform),
+    transform = json["start_transform"].json_to(Transform3D),
     color = color,
   )
 
@@ -96,7 +94,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
 proc from_json_hook(self: var Bot, json: JsonNode) =
   self = Bot.init(
     id = json["id"].json_to(string),
-    transform = json["start_transform"].json_to(Transform),
+    transform = json["start_transform"].json_to(Transform3D),
   )
 
   if not load_chunks:
@@ -109,10 +107,11 @@ proc `$`(self: VoxelInfo): string =
   \"[{self.kind.ord}, \"{self.color}\"]"
 
 proc `$`(self: Vector3): string =
-  \"[{self.x}, {self.y}, {self.z}]"
+  \"[{self[0]}, {self[1]}, {self[2]}]"
 
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
-  \"[{self.voxel}, [{int self.info.kind}, {self.info.color}]]"
+  # ???: `$self.voxel` formats as an array, but `&"{self.voxel}"` is a tuple.
+  \"[{$self.voxel}, [{int self.info.kind}, {self.info.color}]]"
 
 proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   let edits = collect:
@@ -126,7 +125,11 @@ proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
-  let elements = self.start_transform.basis.elements.map_it($it).join(",\n")
+  let elements = [
+    $self.start_transform.basis.x,
+    $self.start_transform.basis.y,
+    $self.start_transform.basis.z,
+  ].join(",\n")
   let edits = $self.shared.edits
   result =
     \"""
@@ -224,7 +227,7 @@ proc load_units(parent: Unit) =
       else:
         unit.global_flags -= ScriptInitializing
     except Exception as e:
-      error "Failed to load unit", unit_id, error = e[]
+      error "Failed to load unit", unit_id, error = e
 
 proc load_user_config*(dir = ""): UserConfig =
   var work_dir = dir

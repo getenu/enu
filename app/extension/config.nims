@@ -1,7 +1,9 @@
 --path:
-  "src"
+  "../../src"
 --path:
   "../../generated"
+--path:
+  "../../vmlib/enu"
 
 --threads:
   on
@@ -41,7 +43,7 @@ if host_os == "windows":
 --define:
   "chronicles_log_level=INFO"
 --define:
-  "chronicles_sinks=textlines[dynamic]"
+  "chronicles_sinks=textlines"
 
 # GD4: remove me
 --threadAnalysis:

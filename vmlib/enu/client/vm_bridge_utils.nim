@@ -1,5 +1,5 @@
 import std/[macros, strutils]
-import shared/errors
+import ../shared/errors
 
 proc get_last_error_impl(): ErrorData =
   raise_assert "get_last_error_impl must be implemented by host"

@@ -1,5 +1,5 @@
 import std/[math, sugar, monotimes, base64]
-import godotapi/spatial
+import gdext
 import core, models/[states, units, colors]
 include "bot_code_template.nim.nimf"
 
@@ -22,9 +22,9 @@ method on_begin_move*(
   result = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
     if duration >= finish_time:
-      self.velocity_value.touch(vec3())
+      self.velocity_value.touch(vector3())
       self.transform_value.origin =
-        self.transform.origin.snapped(vec3(0.1, 0.1, 0.1))
+        self.transform.origin.snapped(vector3(0.1, 0.1, 0.1))
       return Done
     else:
       self.velocity_value.touch(moving * self.speed)
@@ -32,7 +32,7 @@ method on_begin_move*(
 
 method on_begin_turn*(
     self: Bot, axis: Vector3, degrees: float, lean: bool, move_mode: int
-): Callback =
+): Callback {.gcsafe.} =
   # move mode param is ignored
   let degrees = degrees * -axis.x
   var duration = 0.0
@@ -62,7 +62,7 @@ method reset*(self: Bot) =
   self.color = self.start_color
   self.animation_value.touch "auto"
   self.global_flags += Visible
-  self.velocity = vec3()
+  self.velocity = vector3()
   self.units.clear()
 
 method destroy*(self: Bot) =
@@ -71,7 +71,7 @@ method destroy*(self: Bot) =
 proc init*(
     _: type Bot,
     id = "bot_" & generate_id(),
-    transform = Transform.init,
+    transform = Transform3D.init,
     clone_of: Bot = nil,
     global = true,
     parent: Unit = nil,
@@ -82,7 +82,7 @@ proc init*(
     animation_value: ~"auto",
     speed: 1.0,
     clone_of: clone_of,
-    start_color: action_colors[Black],
+    start_color: action_colors[Colors.Black],
     parent: parent,
   )
 
@@ -115,10 +115,10 @@ method worker_thread_joined*(self: Bot) =
       zen_id = self.local_flags.id
 
     if Hover in self.local_flags:
-      if PrimaryDown.added and state.tool == CodeMode:
+      if PrimaryDown.added and state.current_tool == CodeMode:
         let root = self.find_root(true)
         state.open_unit = root
-      if SecondaryDown.added and state.tool == PlaceBot:
+      if SecondaryDown.added and state.current_tool == PlaceBot:
         # :(
         for unit in self.units:
           if unit of Sign:
@@ -141,7 +141,7 @@ method worker_thread_joined*(self: Bot) =
 
     if Hover.added:
       state.push_flag ReticleVisible
-      if state.tool in {CodeMode, PlaceBot}:
+      if state.current_tool in {CodeMode, PlaceBot}:
         let root = self.find_root(true)
         root.walk_tree proc(unit: Unit) =
           unit.local_flags += Highlight

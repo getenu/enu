@@ -1,13 +1,13 @@
-import pkg/core/godotcoretypes as godot except Color
+import gdext
 import pkg/chroma
 
 export chroma
 
-converter to_chroma_color*(self: godot.Color): chroma.Color =
+converter to_chroma_color*(self: gdext.Color): chroma.Color =
   cast[chroma.Color](self)
 
-converter to_godot_color*(self: chroma.Color): godot.Color =
-  cast[godot.Color](self)
+converter to_godot_color*(self: chroma.Color): gdext.Color =
+  cast[gdext.Color](self)
 
 proc col*(hex: string): chroma.Color =
   hex.parse_hex
@@ -48,7 +48,7 @@ const ir_black* = [
   Text: col"A8FF60",
   Number: col"FF73FD",
   Variable: col"C6C5FE",
-  Invalid: col"FD5FF1"
+  Invalid: col"FD5FF1",
 ]
 
 const action_colors* = [
@@ -58,10 +58,10 @@ const action_colors* = [
   Green: col"14f707",
   Black: col"000000",
   White: col"d9eed8",
-  Brown: col"3f302b"
+  Brown: col"3f302b",
 ]
 
-proc action_index*(self: Color): Colors =
+proc action_index*(self: chroma.Color): Colors =
   for key, value in action_colors:
     if value == self:
       return key

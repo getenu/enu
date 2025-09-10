@@ -3,21 +3,21 @@ import
     tables, sets, options, sequtils, math, wrapnils, monotimes, sugar, deques,
     macros, base64,
   ]
-import godotapi/spatial
+import gdext/math
 import core, models/[states, bots, colors, units]
-const ChunkSize = vec3(16, 16, 16)
+const ChunkSize = vector3(16, 16, 16)
 
 include "build_code_template.nim.nimf"
 
-const default_color = action_colors[Blue]
+const default_color = action_colors[Colors.Blue]
 
 var
   current_build* {.threadvar.}: Build
   previous_build* {.threadvar.}: Build
   dont_join*: bool
-  skip_point = vec3()
+  skip_point = vector3(0, 0, 0)
   last_point: Vector3
-  draw_normal = vec3()
+  draw_normal = vector3(0, 0, 0)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
 
@@ -50,7 +50,7 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
   for unit in units:
     if unit of Build:
       let unit = Build(unit)
-      let offset = vec3().global_from(unit)
+      let offset = vector3(0, 0, 0).global_from(unit)
       for position in positions:
         var loc = position - offset
         if loc in unit:
@@ -106,15 +106,16 @@ proc maybe_join_previous_build(
 
 proc expand_bounds_to_chunk(self: Build, chunk_id: Vector3) =
   let range = chunk_id * ChunkSize
-  let min = range - ChunkSize - vec3(1, 1, 1)
+  let min = range - ChunkSize - vector3(1, 1, 1)
   let max = range + ChunkSize
-  if max notin self.bounds:
-    self.bounds = self.bounds.expand(max)
-  if min notin self.bounds:
-    self.bounds = self.bounds.expand(min)
+  # GD4: fixme
+  # if max notin self.bounds:
+  #   self.bounds = self.bounds.expand(max)
+  # if min notin self.bounds:
+  #   self.bounds = self.bounds.expand(min)
 
 proc reset_bounds*(self: Build) =
-  self.bounds = init_aabb(vec3(), vec3(-1, -1, -1))
+  self.bounds = aabb(vector3(0, 0, 0), vector3(-1, -1, -1))
 
   for chunk_id, chunk in self.chunks:
     self.expand_bounds_to_chunk(chunk_id)
@@ -193,7 +194,7 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
       else:
         self.del_voxel(position)
 
-  if position == vec3(0, 0, 0) and voxel.kind != Computed:
+  if position == vector3(0, 0, 0) and voxel.kind != Computed:
     self.start_color = voxel.color
 
   if not dont_join and voxel.kind == Manual:
@@ -201,18 +202,18 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
 
 proc drop_block(self: Build) =
   if self.drawing:
-    var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
+    var p = self.draw_transform.origin.snapped(vector3(1, 1, 1))
     self.draw(p, (Computed, self.color))
 
 proc remove(self: Build) =
-  if state.tool notin {CodeMode, PlaceBot}:
+  if state.current_tool notin {CodeMode, PlaceBot}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point =
       self.target_point - self.target_normal -
       (self.target_normal.inverse_normalized * 0.5)
 
-    skip_point = vec3()
+    skip_point = vector3(0, 0, 0)
     last_point = self.target_point
     self.draw(point, (Hole, action_colors[Eraser]))
 
@@ -227,18 +228,18 @@ proc remove(self: Build) =
 
 proc fire(self: Build) =
   let global_point = self.target_point.global_from(self)
-  if state.tool notin {Disabled, CodeMode, PlaceBot}:
+  if state.current_tool notin {Disabled, CodeMode, PlaceBot}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point = (self.target_point + (self.target_normal * 0.5)).floor
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
     self.draw(point, (Manual, state.selected_color))
-  elif state.tool == PlaceBot and BlockTargetVisible in state.local_flags and
+  elif state.current_tool == PlaceBot and BlockTargetVisible in state.local_flags and
       state.bot_at(global_point).is_nil:
-    let transform = Transform.init(origin = global_point)
+    let transform = Transform3D.init(origin = global_point)
     state.units += Bot.init(transform = transform)
-  elif state.tool == CodeMode:
+  elif state.current_tool == CodeMode:
     let root = self.find_root
     state.open_unit = root
 
@@ -264,21 +265,23 @@ method on_begin_move*(
   if move:
     let steps = steps.float
     var duration = 0.0
-    let
-      moving = self.transform.basis.xform(direction) / self.scale
-      finish = self.transform.origin + moving * steps
-      finish_time = 1.0 / self.speed * steps
+    # GD4: fixme
+    # let
+    #   moving = self.transform.basis.xform(direction) / self.scale
+    #   finish = self.transform.origin + moving * steps
+    #   finish_time = 1.0 / self.speed * steps
 
     result = proc(delta: float, _: MonoTime): TaskStates =
-      duration += delta
-      if duration >= finish_time:
-        self.transform_value.origin = finish
-        return Done
-      else:
-        self.transform_value.origin =
-          self.transform.origin + (moving * self.speed * delta)
+      discard
+    #   duration += delta
+    #   if duration >= finish_time:
+    #     self.transform_value.origin = finish
+    #     return Done
+    #   else:
+    #     self.transform_value.origin =
+    #       self.transform.origin + (moving * self.speed * delta)
 
-        return Running
+    #     return Running
   else:
     if self.speed == 0:
       self.voxels_per_frame = float.high
@@ -288,44 +291,60 @@ method on_begin_move*(
     var count = 0
 
     result = proc(delta: float, timeout: MonoTime): TaskStates =
-      while count.float < steps and self.voxels_remaining_this_frame >= 1 and
-          get_mono_time() < timeout:
-        if steps < 1:
-          self.draw_transform =
-            self.draw_transform.translated(direction * steps)
-        else:
-          self.draw_transform = self.draw_transform.translated(direction)
-        inc count
-        self.voxels_remaining_this_frame -= 1
-        self.drop_block()
+      discard
+      # GD4: fixme
+      # while count.float < steps and self.voxels_remaining_this_frame >= 1 and
+      #     get_mono_time() < timeout:
+      #   if steps < 1:
+      #     self.draw_transform =
+      #       self.draw_transform.translated(direction * steps)
+      #   else:
+      #     self.draw_transform = self.draw_transform.translated(direction)
+      #   inc count
+      #   self.voxels_remaining_this_frame -= 1
+      #   self.drop_block()
 
-      if count.float >= steps: NextTask else: Running
+      # if count.float >= steps: NextTask else: Running
 
 method on_begin_turn*(
     self: Build, axis: Vector3, degrees: float, lean: bool, move_mode: int
-): Callback =
+): Callback {.gcsafe.} =
   let map =
     if lean:
-      {LEFT: BACK, RIGHT: FORWARD, BACK: RIGHT, FORWARD: LEFT}.to_table
+      {
+        core.LEFT: core.BACK,
+        core.RIGHT: core.FORWARD,
+        core.BACK: core.RIGHT,
+        core.FORWARD: core.LEFT,
+      }.to_table
     else:
-      {LEFT: UP, RIGHT: DOWN, UP: RIGHT, DOWN: LEFT}.to_table
+      {
+        core.LEFT: core.UP,
+        core.RIGHT: core.DOWN,
+        core.UP: core.RIGHT,
+        core.DOWN: core.LEFT,
+      }.to_table
   let axis = map[axis]
   let move = self.is_moving(move_mode)
   if move:
     self.voxels_per_frame = 0
     var duration = 0.0
-    let axis = self.transform.basis.orthonormalized.xform(axis)
+    # GD4: fixme
+    # let axis = self.transform.basis.orthonormalized.xform(axis)
+    let axis = vector3(0, 0, 0)
     let scale = self.scale
     var final_transform = self.transform
-    final_transform.basis = final_transform.basis
-      .rotated(axis, deg_to_rad(degrees)).orthonormalized
-      .scaled(vec3(scale, scale, scale))
+    # GD4: fixme
+    # final_transform.basis = final_transform.basis
+    #   .rotated(axis, deg_to_rad(degrees)).orthonormalized
+    #   .scaled(Vector3(scale, scale, scale))
 
     result = proc(delta: float, _: MonoTime): TaskStates =
       duration += delta
-      self.transform_value.basis = self.transform.basis.rotated(
-        axis, deg_to_rad(degrees * delta * self.speed)
-      )
+      # GD4: fixme
+      # self.transform_value.basis = self.transform.basis.rotated(
+      #   axis, deg_to_rad(degrees * delta * self.speed)
+      # )
 
       if duration <= 1.0 / self.speed:
         Running
@@ -333,15 +352,17 @@ method on_begin_turn*(
         self.transform = final_transform
         Done
   else:
-    let axis = self.draw_transform.basis.xform(axis)
-    self.draw_transform_value.basis =
-      self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
+    discard
+    # GD4: fixme
+    # let axis = self.draw_transform.basis.xform(axis)
+    # self.draw_transform_value.basis =
+    #   self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
 
-    self.draw_transform = self.draw_transform.orthonormalized()
+    # self.draw_transform = self.draw_transform.orthonormalized()
 
 proc reset_state*(self: Build) =
   self.init_shared
-  self.draw_transform = Transform.init
+  self.draw_transform = Transform3D.init
   self.transform = self.start_transform
 
 method reset*(self: Build) =
@@ -363,7 +384,7 @@ method reset*(self: Build) =
   self.units.clear()
   self.global_flags -= Resetting
   self.restore_edits
-  self.draw(vec3(), (Computed, self.start_color))
+  self.draw(vector3(0, 0, 0), (Computed, self.start_color))
 
 method ensure_visible*(self: Build) =
   # It's possible for a build to have no blocks of its own if has children with
@@ -377,10 +398,10 @@ method ensure_visible*(self: Build) =
       ):
     let color =
       if self.start_color == action_colors[Eraser]:
-        action_colors[Blue]
+        action_colors[Colors.Blue]
       else:
         self.start_color
-    self.draw(vec3(), (Computed, color))
+    self.draw(vector3(0, 0, 0), (Computed, color))
 
 method destroy*(self: Build) =
   self.destroy_impl
@@ -388,7 +409,7 @@ method destroy*(self: Build) =
 proc init*(
     _: type Build,
     id = "build_" & generate_id(),
-    transform = Transform.init,
+    transform = Transform3D.init,
     color = default_color,
     clone_of: Unit = nil,
     global = true,
@@ -399,10 +420,11 @@ proc init*(
     id: id,
     chunks: ~(Table[Vector3, Chunk], {SyncLocal, SyncRemote}),
     start_transform: transform,
-    draw_transform_value: ~(Transform.init, flags = {}),
+    draw_transform_value: ~(Transform3D.init, flags = {}),
     start_color: color,
     drawing: true,
-    bounds_value: ~init_aabb(vec3(), vec3(-1, -1, -1)),
+    # GD4: fixme
+    bounds_value: ~aabb(vector3(0, 0, 0), vector3(-1, -1, -1)),
     speed: 1.0,
     clone_of: clone_of,
     bot_collisions: bot_collisions,
@@ -420,7 +442,7 @@ method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))
 
   self.local_flags.watch:
-    if Hover.added and state.tool == CodeMode:
+    if Hover.added and state.current_tool == CodeMode:
       if Playing notin state.local_flags and
           TouchControls notin state.local_flags:
         let root = self.find_root(true)
@@ -446,7 +468,7 @@ method main_thread_joined*(self: Build) =
         elif PrimaryDown in state.local_flags:
           self.fire
 
-    if change.item in {TargetMoved, Hover} and state.tool == PlaceBot:
+    if change.item in {TargetMoved, Hover} and state.current_tool == PlaceBot:
       if self.target_normal == UP:
         state.push_flag BlockTargetVisible
       else:
@@ -471,7 +493,7 @@ method main_thread_joined*(self: Build) =
         self.remove
     if PrimaryDown.removed or SecondaryDown.removed:
       state.draw_unit_id = ""
-      last_point = vec3()
+      last_point = vector3(0, 0, 0)
     if Playing.added:
       self.local_flags -= Highlight
     elif Playing.removed:
@@ -487,7 +509,7 @@ method off_collision*(self: Unit, partner: Model) =
       if collision.id == partner.id:
         self.collisions -= collision
 
-method clone*(self: Build, clone_to: Unit, id: string): Unit =
+method clone*(self: Build, clone_to: Unit, id: string): Unit {.gcsafe.} =
   var transform = clone_to.transform
   var global = true
   if clone_to of Build:
@@ -520,12 +542,12 @@ when is_main_module:
 
   var b = Build.init
 
-  b.draw vec3(1, 1, 1), (Computed, Color())
-  assert vec3(1, 1, 1) in b.chunks[vec3(0, 0, 0)]
-  b.draw vec3(17, 17, 17), (Computed, Color())
-  assert vec3(17, 17, 17) in b.chunks[vec3(1, 1, 1)]
-  var c = Build.init(transform = Transform(origin: vec3(5, 5, 5)))
+  b.draw vector3(1, 1, 1), (Computed, Color())
+  assert vector3(1, 1, 1) in b.chunks[vector3(0, 0, 0)]
+  b.draw vector3(17, 17, 17), (Computed, Color())
+  assert vector3(17, 17, 17) in b.chunks[vector3(1, 1, 1)]
+  var c = Build.init(transform = Transform3D(origin: vector3(5, 5, 5)))
   c.parent = b
 
-  c.draw vec3(14, 14, 14), (Manual, Color())
+  c.draw vector3(14, 14, 14), (Manual, Color())
   c.flags += Hover

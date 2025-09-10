@@ -246,8 +246,8 @@ task build_extension, "Build the gdextension":
     of "windows": "lib/libEnugame.windows.debug.dll"
     of "macosx": "lib/libEnugame.macos.debug.dylib"
     else: "lib/libEnugame.linux.debug.so"
-  with_dir "app/enu_game":
-    exec &"nim c --app:lib --out:{output_lib} bootstrap.nim"
+  with_dir "app/extension":
+    exec &"nim c --app:lib --out:{output_lib} enu.nim"
 
 task generate_bindings, "Generate Godot extension API bindings":
   p "Generating Godot extension API bindings..."

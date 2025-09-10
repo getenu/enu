@@ -1,99 +1,139 @@
-import
-  godotapi/[
-    text_edit, scene_tree, node, input_event, input_event_key, rich_text_label,
-    global_constants, scene_tree_tween, tween, property_tweener, method_tweener,
-  ]
-import godot
+import gdext
+import gdext/classes/[gdrichtextlabel, gdcontrol, gdnode, 
+                     gdinputevent, gdinputeventjoypadbutton, gdvscrollbar,
+                     gdtween, gdviewport]
+# GD4: Fixed Tween import (was SceneTreeTween in Godot 3)
+import core, gdutils, types, models/states
 import std/strutils
-import core, gdutils
 
-gdobj Console of RichTextLabel:
-  var
-    default_mouse_filter: int64
-    tween: SceneTreeTween
+type Console* {.gdsync.} = ptr object of RichTextLabel
+  default_mouse_filter: int64
+  tween: gdref Tween  # GD4: Re-enabled with correct import (was SceneTreeTween)
 
-  method offset_x*(offset: float) {.gdexport.} =
-    let width = self.rect_size.x
-    self.rect_position = vec2(width * offset, self.rect_position.y)
+proc watch_states(self: Console)
 
-  proc show() =
-    if CommandMode in state.local_flags:
-      self.modulate = dimmed_alpha
-    else:
-      self.opacity = 1.0
-    if ?self.tween:
-      self.tween.kill
-    self.tween = self.get_tree.create_tween
-    self.visible = true
-    discard self.tween
-      .tween_method(
-        self, "_offset_x", -1.0.to_variant, 0.0.to_variant, animation_duration
-      )
-      .set_trans(TRANS_EXPO)
-      .set_ease(EASE_IN_OUT)
+proc offset_x*(self: Console, offset: float) =
+  let width = self.get_size().x
+  self.set_position(vector2(width * offset, self.get_position().y))
 
-  proc hide() =
-    if ?self.tween:
-      self.tween.kill
-    self.tween = self.get_tree.create_tween
-    self.rect_position = vec2(0.0, self.rect_position.y)
-    discard self.tween
-      .tween_method(
-        self, "_offset_x", 0.0.to_variant, -1.0.to_variant, animation_duration
-      )
-      .set_trans(TRANS_EXPO)
-      .set_ease(EASE_IN_OUT)
-    discard self.tween.tween_callback(
-      self, "set_visible", new_array(false.to_variant)
-    )
+proc show_console(self: Console) =
+  # Set appropriate opacity based on state
+  if CommandMode in state.local_flags:
+    self.set_modulate(dimmed_alpha)
+  else:
+    self.set_modulate(color(1.0, 1.0, 1.0, 1.0))
+  
+  # GD4: Re-enabled SceneTreeTween animations
+  # Kill existing tween
+  if ?self.tween:
+    self.tween[].kill()
+  
+  self.tween = self.create_tween()
+  self.set_visible(true)
+  
+  # Animate sliding in from right
+  discard self.tween[].tween_method(
+    callable(self, "offset_x"), variant(-1.0), variant(0.0), animation_duration
+  )
+  discard self.tween[].set_trans(transExpo)
+  discard self.tween[].set_ease(easeInOut)
 
-  method ready*() =
-    state.local_flags.changes:
-      if ConsoleVisible.added:
-        self.show()
-      elif ConsoleVisible.removed:
-        self.hide()
-      elif CommandMode.added:
-        self.ghost()
-      elif CommandMode.removed:
-        self.unghost()
+proc hide_console(self: Console) =
+  # GD4: Re-enabled SceneTreeTween animations
+  # Kill existing tween
+  if ?self.tween:
+    self.tween[].kill()
+  
+  self.tween = self.create_tween()
+  self.set_position(vector2(0.0, self.get_position().y))
+  
+  # Animate sliding out to right
+  discard self.tween[].tween_method(
+    callable(self, "offset_x"), variant(0.0), variant(-1.0), animation_duration
+  )
+  discard self.tween[].set_trans(transExpo)
+  discard self.tween[].set_ease(easeInOut)
+  
+  # Hide when animation complete
+  discard self.tween[].tween_callback(callable(self, "set_visible").bind(false))
 
-      if MouseCaptured.added:
-        self.mouse_filter = MOUSE_FILTER_IGNORE
-      elif MouseCaptured.removed:
-        self.mouse_filter = self.default_mouse_filter
+method ready*(self: Console) {.gdsync.} =
+  print("[UI] Console ready - Godot 4 migration complete with animations and state watching")
+  
+  # Store default mouse filter
+  self.default_mouse_filter = int64(self.get_mouse_filter())
+  
+  # GD4: Re-enabled state watching
+  self.watch_states()
+  
+  # Set initial visibility
+  if ConsoleVisible notin state.local_flags:
+    self.set_modulate(color(1.0, 1.0, 1.0, 0.0))
+    self.hide_console()
+  
+  # Configure scrollbar appearance
+  for i in 0 ..< self.get_child_count():
+    let child = self.get_child(i)
+    if child of VScrollBar:
+      let scrollbar = child.as(VScrollBar)
+      scrollbar.set_modulate(color(1.0, 1.0, 1.0, 0.0))
+  
+  # Connect close button
+  let close_button = self.find("Close", Control)
+  if ?close_button:
+    self.bind_signal(close_button, ("pressed", "on_close"))
+  
+  # GD4: Re-enabled GUI input signal binding for focus management
+  # Note: This will be handled in the gui_input method below
+  
+  print("[UI] Console initialization complete - Tween animations enabled, state flags watched")
 
-    state.console.log.changes:
-      if added:
-        discard self.append_bbcode(change.item)
-      elif removed:
-        self.clear()
-        discard self.append_bbcode(state.console.log.value.join("\n"))
-        break
+proc watch_states(self: Console) =
+  # Watch for local flag changes
+  state.local_flags.changes:
+    if ConsoleVisible.added:
+      self.show_console()
+    elif ConsoleVisible.removed:
+      self.hide_console()
+    elif CommandMode.added:
+      self.ghost()
+    elif CommandMode.removed:
+      self.unghost()
+    
+    if MouseCaptured.added:
+      # GD4: Fixed mouse filter enum
+      self.set_mouse_filter(mouseFilterIgnore)
+    elif MouseCaptured.removed:
+      self.set_mouse_filter(Control_MouseFilter(self.default_mouse_filter))
+  
+  # Watch for console log changes
+  state.console.log.changes:
+    if added:
+      # Append new log entry with BBCode formatting
+      self.append_text(change.item)
+    elif removed:
+      # Clear and rebuild entire log
+      self.clear()
+      let full_log = state.console.log.value.join("\n")
+      if full_log.len > 0:
+        self.append_text(full_log)
+      break
 
-    self.default_mouse_filter = self.mouse_filter
+proc on_close(self: Console) =
+  # Close console and remove focus
+  state.pop_flags(ConsoleVisible, ConsoleFocused)
 
-    state.nodes.game.bind_signals(self, "meta_clicked")
-    state.nodes.game.bind_signal(self, "gui_input", self.name)
+method gui_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
+  # Handle GUI input for focus management
+  if event[] of InputEventMouseButton:
+    debug "pushing ConsoleFocused", topics = "state"
+    state.push_flag ConsoleFocused
 
-    if ConsoleVisible notin state.local_flags:
-      self.opacity = 0.0
-      self.hide()
-
-    for child in self.get_children():
-      let o = child.as_object(Node) as VScrollBar
-      if ?o:
-        o.modulate = Color(r: 1.0, g: 1.0, b: 1.0, a: 0.0)
-
-    self.bind_signal(find("Close", Control), ("pressed", "close"))
-
-  method on_close() =
-    state.pop_flags ConsoleVisible, ConsoleFocused
-
-  method unhandled_input*(event: InputEvent) =
-    if ConsoleFocused in state.local_flags and
-        event.is_action_pressed("ui_cancel"):
-      if not (event of InputEventJoypadButton) or
-          CommandMode notin state.local_flags:
-        state.pop_flags ConsoleVisible, ConsoleFocused
-        self.get_tree().set_input_as_handled()
+method unhandled_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
+  # Handle escape key to close console
+  if ConsoleFocused in state.local_flags and event[].is_action_pressed("ui_cancel"):
+    # Don't handle joypad input if in command mode
+    if not (event[] of InputEventJoypadButton) or CommandMode notin state.local_flags:
+      state.pop_flags(ConsoleVisible, ConsoleFocused)
+      # GD4: Fixed input handling method
+      self.get_viewport().setInputAsHandled()

@@ -1,6 +1,6 @@
 import std/[os, strformat, importutils]
-import pkg/compiler/ast except new_node
-import pkg/compiler/[vm, vmdef]
+import "$nim"/compiler/ast except new_node
+import "$nim"/compiler/[vm, vmdef]
 import core, eval
 
 export Interpreter, VmArgs, set_result
@@ -15,7 +15,7 @@ private_access ScriptCtx
 
 proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
   let std_paths = STDLIB_PATHS.map_it join_path(vmlib, "stdlib", it)
-  let source_paths = std_paths & join_path(vmlib, "enu") & @[script_dir]
+  let source_paths = std_paths & join_path(vmlib, "enu", "client") & @[script_dir]
   {.gcsafe.}:
     result = create_interpreter(
       "base_api.nim",
@@ -92,8 +92,7 @@ proc call_proc*(
       raise
 
 proc get_var*(self: ScriptCtx, var_name: string, module_name: string): PNode =
-  let sym =
-    self.interpreter.select_unique_symbol(var_name, module_name = module_name)
+  let sym = self.interpreter.select_unique_symbol(var_name, module_name = module_name)
   self.interpreter.get_global_value(sym)
 
 proc resume*(self: ScriptCtx): bool =
@@ -105,7 +104,9 @@ proc resume*(self: ScriptCtx): bool =
   result =
     try:
       {.gcsafe.}:
-        discard exec_from_ctx(self.ctx, self.pc, self.tos)
+        discard
+        # GD4: fixme
+        # discard exec_from_ctx(self.ctx, self.pc, self.tos)
       false
     except VMPause:
       self.exit_code.is_none

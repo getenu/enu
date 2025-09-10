@@ -1,12 +1,14 @@
 import std/[os, macros, math, asyncfutures, hashes]
 import locks except Lock
-import pkg/godot except print
-import pkg/compiler/vm except get_int
-from pkg/compiler/vm {.all.} import stack_trace_aux
-import pkg/compiler/ast except new_node
-import pkg/compiler/[vmdef, renderer, msgs]
+import "$nim"/compiler/vm except get_int
+from "$nim"/compiler/vm {.all.} import stack_trace_aux
+import "$nim"/compiler/ast except new_node
+import "$nim"/compiler/[vmdef, renderer, msgs]
 
-import godotapi/[spatial, ray_cast]
+import gdext except Color, size
+import gdext/[math]
+import gdext/classes/gdnode3d except position
+import gdext/classes/gdraycast3d except position
 import core, models/[states, bots, builds, units, colors, signs, serializers]
 import libs/[interpreters, eval]
 import shared/errors
@@ -376,7 +378,7 @@ proc rotation(self: Unit): float =
       return f
 
   proc nm(v: Vector3): Vector3 =
-    vec3(v.x.nm, v.y.nm, v.z.nm)
+    vector3(v[0].nm, v[1].nm, v[2].nm)
 
   if self of Player:
     result = Player(self).rotation
@@ -384,19 +386,19 @@ proc rotation(self: Unit): float =
     let e = self.transform.basis.orthonormalized.get_euler
 
     let n = e.nm
-    let v = vec3(nm(n.x).rad_to_deg, nm(n.y).rad_to_deg, nm(n.z).rad_to_deg)
+    let v = vector3(nm(n.x).rad_to_deg, nm(n.y).rad_to_deg, nm(n.z).rad_to_deg)
     let m = if v.z > 0: 1.0 else: -1.0
     result = (v.x - v.y) * m
 
 proc `rotation=`(self: Unit, degrees: float) =
-  var t = Transform.init
+  var t = Transform3D.init
   if self of Player:
     Player(self).rotation_value.touch degrees
     t.origin = self.transform.origin
   else:
-    t = Transform.init
+    t = Transform3D.init
     var s = self.scale
-    t = t.rotated(UP, deg_to_rad(degrees)).scaled(vec3(s, s, s))
+    t = t.rotated(UP, deg_to_rad(degrees)).scaled(vector3(s, s, s))
     t.origin = self.transform.origin
   self.transform = t
 
@@ -433,12 +435,12 @@ proc frame_count(): int =
 proc frame_created(unit: Unit): int =
   unit.frame_created
 
-proc drop_transform(unit: Unit): Transform =
+proc drop_transform(unit: Unit): Transform3D =
   if unit of Bot:
-    result = Transform.init
+    result = Transform3D.init
   elif unit of Build:
     result = Build(unit).draw_transform
-    result.origin = result.origin.snapped(vec3(1, 1, 1))
+    result.origin = result.origin.snapped(vector3(1, 1, 1))
     result = result.translated(FORWARD * 0.51)
     result.origin = result.origin - (FORWARD + LEFT + DOWN) * 0.5
   else:
@@ -516,11 +518,11 @@ proc running(self: Unit): bool =
 proc `running=`*(self: Unit, value: bool) =
   state.set_flag AltWalkSpeed, value
 
-proc tool(self: Unit): int =
-  int(state.tool)
+proc current_tool(self: Unit): int =
+  int(state.current_tool)
 
-proc `tool=`(self: Unit, value: int) =
-  state.tool = Tools(value)
+proc `current_tool=`(self: Unit, value: int) =
+  state.current_tool = Tools(value)
 
 proc open_sign(self: Unit): Sign =
   state.open_sign
@@ -659,8 +661,9 @@ proc bridge_to_vm*(worker: Worker) =
     size, `size=`, open, `open=`, billboard, `billboard=`
 
   result.bridged_from_vm "players",
-    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`, coding,
-    `coding=`, running, `running=`, open_sign, `open_sign=`
+    playing, `playing=`, god, `god=`, flying, `flying=`, current_tool,
+    `current_tool=`, coding, `coding=`, running, `running=`, open_sign,
+    `open_sign=`
 
   result.bridged_from_vm "worlds",
     environment, `environment=`, megapixels, `megapixels=`

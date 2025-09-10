@@ -1,14 +1,15 @@
 import std/[math]
-import godotapi/spatial
 import core, models/units
+import pkg/gdext
 
 proc init*(_: type Player): Player =
+  let zero = vector3(0, 0, 0)
   let self = Player(
     id: \"player-{Zen.thread_ctx.id}",
     rotation_value: ~0.0,
-    start_transform: Transform.init(origin = vec3(0, 1, 0)),
-    input_direction_value: ~Vector3,
-    cursor_position_value: ~((0, 0)),
+    start_transform: Transform3D.init(origin = vector3(0, 1, 0)),
+    input_direction_value: ~vector3(0, 0, 0),
+    cursor_position_value: ~((line: 0, col: 0)),
   )
   self.init_unit(shared = false)
   self.global_flags += Global
@@ -28,7 +29,7 @@ method on_begin_turn*(
     else:
       degrees
   self.rotation_value.touch rotation - degrees
-  self.transform = Transform.init(origin = self.transform.origin)
+  self.transform = Transform3D.init(origin = self.transform.origin)
 
 method collect_garbage*(self: Player) =
   discard

@@ -1,15 +1,18 @@
 import std/[tables, monotimes, sets, options, macros]
-import godotapi/[spatial, ray_cast]
-import pkg/core/godotcoretypes except Color
-import pkg/core/[vector3, basis, aabb, godotbase]
-import pkg/compiler/[ast, lineinfos, semdata]
+import gdext except Color
+import gdext/classes/[gdnode3d, gdraycast3d]
+# import pkg/core/godotcoretypes except Color
+#import pkg/core/[vector3, basis, aabb, godotbase]
+import "$nim"/compiler/[ast, lineinfos, semdata]
 import pkg/[model_citizen]
 import models/colors, libs/[eval]
 
-from pkg/godot import NimGodotObject
+#from pkg/godot import NimGodotObject
 
-export Vector3, Transform, vector3, basis, AABB, aabb
-export godotbase except print
+# Re-export Vector3 from gdext to ensure type consistency
+from gdext/builtinindex import Vector3
+export Vector3
+#export godotbase except print
 export Interpreter
 export lineinfos.`==`
 
@@ -92,7 +95,7 @@ type
     global_flags*: ZenSet[GlobalStateFlags]
     config_value*: ZenValue[Config]
     open_unit_value*: ZenValue[Unit]
-    tool_value*: ZenValue[Tools]
+    current_tool_value*: ZenValue[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
     player_value*: ZenValue[Player]
@@ -112,6 +115,7 @@ type
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
+    verify_mode*: bool
 
   Model* = ref object of RootObj
     id*: string
@@ -119,14 +123,14 @@ type
     target_normal*: Vector3
     local_flags*: ZenSet[LocalModelFlags]
     global_flags*: ZenSet[GlobalModelFlags]
-    node*: Spatial
+    node*: Node3D
 
   Ground* = ref object of Model
 
   Shared* = ref object of RootObj
     id*: string
     materials*: seq[ShaderMaterial]
-    emission_colors*: seq[godot.Color]
+    emission_colors*: seq[gdext.Color]
     edits*: ZenTable[string, ZenTable[Vector3, VoxelInfo]]
 
   ScriptErrors* =
@@ -140,7 +144,7 @@ type
   Unit* = ref object of Model
     parent*: Unit
     units*: ZenSeq[Unit]
-    start_transform*: Transform
+    start_transform*: Transform3D
     scale_value*: ZenValue[float]
     glow_value*: ZenValue[float]
     speed*: float
@@ -148,13 +152,13 @@ type
     script_ctx*: ScriptCtx
     disabled*: bool
     velocity_value*: ZenValue[Vector3]
-    transform_value*: ZenValue[Transform]
+    transform_value*: ZenValue[Transform3D]
     clone_of*: Unit
     collisions*: ZenSeq[tuple[id: string, normal: Vector3]]
     shared_value*: ZenValue[Shared]
     start_color*: Color
     color_value*: ZenValue[Color]
-    sight_ray*: RayCast
+    sight_ray*: RayCast3D
     frame_created*: int
     zids* {.zen_ignore.}: seq[ZID]
     errors*: ScriptErrors
@@ -190,12 +194,12 @@ type
 
   Build* = ref object of Unit
     chunks*: ZenTable[Vector3, Chunk]
-    draw_transform_value*: ZenValue[Transform]
+    draw_transform_value*: ZenValue[Transform3D]
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
     drawing*: bool
     save_points*:
-      Table[string, tuple[position: Transform, color: Color, drawing: bool]]
+      Table[string, tuple[position: Transform3D, color: Color, drawing: bool]]
     bounds_value*: ZenValue[AABB]
     bot_collisions*: bool
     batching*: bool
@@ -316,18 +320,19 @@ type
   NodeController* = ref object
 
   SavedState* = object
-    transform*: Transform
+    transform*: Transform3D
     rotation*: float
     flags*: set[LocalStateFlags]
     restarting*: bool
     connect_address*: string
     error_message*: string
 
-proc from_flatty*[N: NimGodotObject](s: string, i: var int, n: N) =
-  discard
+# GD4: we probably need these
+# proc from_flatty*[N: NimGodotObject](s: string, i: var int, n: N) =
+#   discard
 
-proc to_flatty*[N: NimGodotObject](s: var string, n: N) =
-  discard
+# proc to_flatty*[N: NimGodotObject](s: var string, n: N) =
+#   discard
 
 proc from_flatty*(s: string, i: var int, n: var ScriptCtx) =
   discard

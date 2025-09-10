@@ -1,231 +1,218 @@
-import std/[lists, algorithm, tables]
-import pkg/[godot, markdown]
-import
-  godotapi/[
-    rich_text_label, scroll_container, text_edit, theme, dynamic_font,
-    dynamic_font_data, style_box_flat, main_loop
-  ]
-import core, gdutils, ui/editor
-import models/colors except Color
+import std/[tables, strutils, re, sequtils]
+import gdext
+import gdext/classes/[
+  gdrichtextlabel, gdscrollcontainer, gdtextedit, gdtheme, gdfont, 
+  gdstyleboxflat, gdnode, gdvboxcontainer, gdcontrol
+]
+import core, gdutils, types, models/colors
+# TODO: Add markdown package when available
+# import pkg/markdown
 
-export scroll_container
+export gdscrollcontainer
 
-const comment_color = col"808080"
 
-log_scope:
-  topics = "signs"
+type MarkdownLabel* {.gdsync.} = ptr object of ScrollContainer
+  markdown*: string
+  old_markdown: string
+  default_font*: gdref Font
+  italic_font*: gdref Font 
+  bold_font*: gdref Font
+  bold_italic_font*: gdref Font
+  header_font*: gdref Font
+  mono_font*: gdref Font
+  size*: int
+  current_label: RichTextLabel
+  container: VBoxContainer
+  og_text_edit: TextEdit
+  og_label*: RichTextLabel
+  needs_margin: bool
+  resized: bool
+  local_default_font: gdref Font
+  local_italic_font: gdref Font
+  local_bold_font: gdref Font
+  local_bold_italic_font: gdref Font
+  local_header_font: gdref Font
+  local_mono_font: gdref Font
+  zid: ZID
 
-proc stylebox(self: Control): StyleBoxFlat =
-  self.get_stylebox("normal").as(StyleBoxFlat)
-
-gdobj MarkdownLabel of ScrollContainer:
-  var
-    markdown* {.gd_export, hint: MultilineText.}: string
-    old_markdown: string
-    default_font* {.gd_export.}: DynamicFont
-    italic_font* {.gd_export.}: DynamicFont
-    bold_font* {.gd_export.}: DynamicFont
-    bold_italic_font* {.gd_export.}: DynamicFont
-    header_font* {.gd_export.}: DynamicFont
-    mono_font* {.gd_export.}: DynamicFont
-    size* {.gd_export.} = 0
-    current_label: RichTextLabel
-    container: Node
-    og_text_edit: TextEdit
-    og_label*: RichTextLabel
-    needs_margin = false
-    resized = false
-    local_default_font: DynamicFont
-    local_italic_font: DynamicFont
-    local_bold_font: DynamicFont
-    local_bold_italic_font: DynamicFont
-    local_header_font: DynamicFont
-    local_mono_font: DynamicFont
-    zid: ZID
-
-  proc add_label() =
-    self.current_label = self.og_label.duplicate as RichTextLabel
-    self.container.add_child(self.current_label)
-    self.current_label.visible = true
+proc add_label(self: MarkdownLabel) =
+  self.current_label = self.og_label.duplicate().as(RichTextLabel)
+  self.container.add_child(self.current_label)
+  self.current_label.set_visible(true)
+  if not state.nodes.game.is_nil:
     state.nodes.game.bind_signals(self.current_label, "meta_clicked")
 
-  proc set_font_sizes() =
-    var size =
-      if self.size > 0:
-        self.size
-      else:
-        int(float(state.config.font_size.float) * state.config.screen_scale)
+proc set_font_sizes(self: MarkdownLabel) =
+  let size = 
+    if self.size > 0:
+      self.size
+    else:
+      int(float(state.config.font_size) * state.config.screen_scale)
 
-    self.local_default_font.size = size
-    self.local_italic_font.size = size
-    self.local_bold_font.size = size
-    self.local_bold_italic_font.size = size
-    self.local_mono_font.size = size
-    self.local_header_font.size = size * 2
+  # TODO: Implement font size setting for Godot 4 Font system
+  # In Godot 4, fonts work differently - need to use FontFile or SystemFont
+  # self.local_default_font[].set_size(size)
+  # self.local_italic_font[].set_size(size)
+  # etc.
 
-    for i, child in self.container.get_children:
-      var child = child.as_object(Node)
+  let child_count = self.container.get_child_count()
+  for i in 0 ..< child_count:
+    let child = self.container.get_child(i)
+    
+    if child.is_class("TextEdit"):
+      let child_edit = child.as(TextEdit)
+      let line_count = child_edit.get_line_count()
+      let line_height = 20 # TODO: Get actual line height from theme
+      let height = line_count * line_height + 24
+      let text_lines = ($child_edit.get_text()).split('\n')
+      
+      var size = child_edit.get_custom_minimum_size()
+      size.y = float(height)
+      if text_lines.len > 0:
+        # TODO: Calculate proper width based on longest line
+        var max_len = 0
+        for line in text_lines:
+          max_len = max(max_len, line.len)
+        # Approximate character width calculation
+        size.x = float(max_len * 8) # 8px per character estimate
+      child_edit.set_custom_minimum_size(size)
+      child_edit.set_size(size)
+      
+    elif child.is_class("RichTextLabel"):
+      # TODO: Handle RichTextLabel styling for Godot 4
+      let child_label = child.as(RichTextLabel)
+      if i > 0:
+        # Add top margin
+        child_label.add_theme_constant_override("margin_top", int32(size + 4))
+      if i == child_count - 1:
+        # TODO: Fix size flags for Godot 4
+        # child_label.set_v_size_flags(Control.SIZE_EXPAND_FILL)
+        discard
 
-      if child of TextEdit:
-        var child = TextEdit(child)
-        var height = child.get_line_count * child.get_line_height + 24
-        let lines = dup child.text.split_lines.sorted_by_it(it.len)
+proc add_text_edit(self: MarkdownLabel): TextEdit =
+  result = self.og_text_edit.duplicate().as(TextEdit)
+  # TODO: Implement syntax highlighting for TextEdit in Godot 4
+  if not ?self.current_label:
+    # Don't add borders if the only thing in our doc is code
+    # TODO: Fix StyleBox theming for Godot 4
+    # let stylebox = result.get_theme_stylebox("normal", "TextEdit")
+    # if ?stylebox:
+    #   let new_style = stylebox[].duplicate().as(gdref StyleBoxFlat)
+    #   new_style[].set_border_color(new_style[].get_bg_color())
+    #   result.add_theme_stylebox_override("normal", new_style)
+    #   result.add_theme_stylebox_override("read_only", new_style)
+    discard
 
-        var size = child.rect_min_size
-        size.y = float height
-        if lines.len > 0:
-          let str_size =
-            self.local_mono_font.get_string_size(" ".repeat(lines.len + 2))
-          size.x = str_size.x
-        child.rect_min_size = size
-        child.rect_size = size
-      elif child of RichTextLabel:
-        var stylebox = self.current_label.stylebox
-        stylebox.content_margin_bottom = 0
+# Forward declaration
+proc update*(self: MarkdownLabel)
 
-        if i > 0:
-          stylebox.content_margin_top = float(size + 4)
-        if i == self.container.get_children.len - 1:
-          RichTextLabel(child).size_flags_vertical = SIZE_EXPAND_FILL
+method ready*(self: MarkdownLabel) {.gdsync.} =
+  print("[UI] MarkdownLabel ready - initializing Godot 4 markdown renderer")
+  
+  self.bind_signals(self, "resized")
+  self.container = self.get_node("VBoxContainer").as(VBoxContainer)
+  self.og_text_edit = self.container.get_node("TextEdit").as(TextEdit)
+  self.og_label = self.container.get_node("RichTextLabel").as(RichTextLabel)
+  
+  self.container.remove_child(self.og_text_edit)
+  self.container.remove_child(self.og_label)
 
-  proc add_text_edit(): TextEdit =
-    result = self.og_text_edit.duplicate as TextEdit
-    result.configure_highlighting
-    if not ?self.current_label:
-      # Don't add borders if the only thing in our doc is code
-      var stylebox = result.get_stylebox("normal").duplicate.as(StyleBoxFlat)
-      stylebox.border_color = stylebox.bg_color
-      result.add_stylebox_override("normal", stylebox)
-      result.add_stylebox_override("read_only", stylebox)
+  # Clone fonts so they can be resized without impacting other labels
+  # TODO: Implement proper font cloning for Godot 4
+  # self.local_default_font = self.default_font[].duplicate().as(Font)
+  # etc.
 
-  method ready() =
-    print("[UI] MarkdownLabel ready")
-    self.bind_signals(self, "resized")
-    self.container = self.get_node("VBoxContainer")
-    self.og_text_edit = self.container.get_node("TextEdit") as TextEdit
-    self.og_label = self.container.get_node("RichTextLabel") as RichTextLabel
-    self.container.remove_child self.og_text_edit
-    self.container.remove_child self.og_label
+  # TODO: Set fonts on controls
+  # self.og_text_edit[].add_theme_font_override("font", self.local_mono_font)
+  # self.og_label[].add_theme_font_override("normal_font", self.local_default_font)
 
-    # clone fonts so they can be resized without impacting other labels
-
-    self.local_default_font = self.default_font.duplicate as DynamicFont
-    self.local_italic_font = self.italic_font.duplicate as DynamicFont
-    self.local_bold_font = self.bold_font.duplicate as DynamicFont
-    self.local_bold_italic_font = self.bold_italic_font.duplicate as DynamicFont
-    self.local_header_font = self.header_font.duplicate as DynamicFont
-    self.local_mono_font = self.mono_font.duplicate as DynamicFont
-
-    self.og_text_edit.add_font_override("font", self.local_mono_font)
-    self.og_label.add_font_override("normal_font", self.local_default_font)
-
-    self.zid = state.config_value.changes:
-      if added:
-        self.set_font_sizes()
-
-    self.update
-
-  method on_resized() =
-    if not self.resized:
+  # Set up config watching
+  self.zid = state.config_value.changes:
+    if added:
       self.set_font_sizes()
-      self.resized = true
 
-  proc render_markdown(token: Token, list_position = 0, inline_blocks = false) =
-    var list_position = list_position
-    for t in token.children:
-      # debug "rendering markdown token", token = t, type = t.base_type
-      if not ?self.current_label and not (t of CodeBlock):
-        self.add_label
+  self.update()
+  print("[UI] MarkdownLabel initialized")
 
-      var label = self.current_label
-      if self.needs_margin and not (t of CodeBlock):
-        label.newline
-        self.needs_margin = false
+# TODO: Fix signal connection for resized in Godot 4
+# method on_resized*(self: MarkdownLabel) {.gdsync.} =
+#   if not self.resized:
+#     self.set_font_sizes()
+#     self.resized = true
 
-      if t of Heading:
-        label.with(
-          push_font self.local_header_font, push_color ir_black[Keyword]
-        )
-        self.render_markdown t
-        label.with(pop, pop, newline)
-        self.needs_margin = true
-      elif t of Em:
-        label.push_font self.local_italic_font
-        self.render_markdown t
-        label.pop
-      elif t of Strong:
-        label.push_font self.local_bold_font
-        self.render_markdown t
-        label.pop
-      elif t of CodeSpan:
-        label.with(
-          push_font self.local_mono_font,
-          push_color ir_black[Number],
-          add_text t.doc,
-        )
-        self.render_markdown t
-        label.with(pop, pop)
-      elif t of CodeBlock:
-        self.needs_margin = false
-
-        var editor = self.add_text_edit()
-        editor.text = t.doc[0 ..^ 2]
-        editor.visible = true
-        self.container.add_child editor
+proc render_plain_text(self: MarkdownLabel, text: string) =
+  # Fallback renderer when markdown package isn't available
+  if not ?self.current_label:
+    self.add_label()
+  
+  let label = self.current_label
+  label.clear()
+  
+  # Split text into paragraphs and code blocks
+  let lines = text.split('\n')
+  var i = 0
+  while i < lines.len:
+    let line = lines[i].strip()
+    
+    if line.startsWith("```"):
+      # Code block
+      var code_lines: seq[string]
+      inc i
+      while i < lines.len and not lines[i].strip().startsWith("```"):
+        code_lines.add(lines[i])
+        inc i
+      
+      if code_lines.len > 0:
+        let editor = self.add_text_edit()
+        editor.set_text(code_lines.join("\n"))
+        editor.set_visible(true)
+        self.container.add_child(editor)
         self.add_label()
-      elif t of Paragraph:
-        self.render_markdown(t, inline_blocks = inline_blocks)
-        if not inline_blocks:
-          label.newline
-        self.needs_margin = true
-      elif t of OL:
-        self.render_markdown(t, 1)
-      elif t of UL:
-        self.render_markdown(t)
-      elif t of LI:
-        label.with(push_table 2, push_cell, push_font self.local_mono_font)
+      inc i
+    elif line.startsWith("#"):
+      # Header
+      let header_text = line.replace(re"^#+\s*", "")
+      # TODO: Implement header styling when fonts are available
+      # label.push_font(self.local_header_font, 1)
+      # label.push_color(ir_black[Keyword])
+      self.current_label.append_text("[b]" & header_text & "[/b]")
+      # label.pop_all()
+      self.current_label.newline()
+      inc i
+    elif line.len > 0:
+      # Regular text
+      self.current_label.append_text(line)
+      self.current_label.newline()
+      inc i
+    else:
+      # Empty line
+      self.current_label.newline()
+      inc i
 
-        if list_position > 0:
-          label.add_text LI(t).marker & ". "
-          inc list_position
-        else:
-          label.add_text "• "
-        label.with(pop, pop, push_cell)
-        self.render_markdown(t, inline_blocks = true)
-        label.with(pop, pop, newline)
-      elif t of Link:
-        let t = Link(t)
-        label.push_color(ir_black[Variable])
-        label.push_font self.local_bold_font
-        label.push_meta(t.url.to_variant)
-        label.add_text t.title
-        self.render_markdown(t)
-        label.pop
-        label.pop
-        label.pop
-      elif t of Text:
-        label.add_text(t.doc.replace("\n", " "))
-      elif t of SoftBreak:
-        label.add_text " "
-      else:
-        self.render_markdown(t)
+# TODO: Implement full markdown rendering when markdown package is available
+# proc render_markdown(self: MarkdownLabel, token: Token, list_position = 0, inline_blocks = false) =
+#   # Full markdown implementation will go here
 
-  method notification*(what: int) =
-    if what == main_loop.NOTIFICATION_PREDELETE:
-      state.config_value.untrack(self.zid)
+proc update*(self: MarkdownLabel) =
+  self.resized = false
+  if self.markdown != self.old_markdown:
+    # Clear existing content
+    let child_count = self.container.get_child_count()
+    for i in 0 ..< child_count:
+      let child = self.container.get_child(0) # Always remove first child
+      self.container.remove_child(child)
+      child.queue_free()
 
-  proc update*() =
-    self.resized = false
-    if self.markdown != self.old_markdown:
-      for child in self.container.get_children:
-        var child = child.as_object(Node)
-        self.container.remove_child(child)
-        child.queue_free
+    self.current_label = nil
+    self.old_markdown = self.markdown
+    
+    # TODO: Use full markdown parser when available
+    # For now, use plain text renderer
+    self.render_plain_text(self.markdown)
+    self.set_font_sizes()
 
-      self.current_label = nil
-      self.old_markdown = self.markdown
-      var root = Document()
-      discard markdown(self.markdown.dedent, root = root)
-      self.needs_margin = false
-      self.render_markdown(root)
-      self.set_font_sizes()
+# TODO: Fix notification method for Godot 4
+# method notification*(self: MarkdownLabel, what: int32) {.gdsync.} =
+#   if what == Node_NotificationPredelete:
+#     if self.zid != ZID(0):
+#       state.config_value.untrack(self.zid)

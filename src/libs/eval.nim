@@ -1,10 +1,10 @@
 import std/options
 import pkg/pretty
-import compiler/[syntaxes, reorder, vmdef, msgs]
-import compiler/passes {.all.}
+import "$nim"/compiler/[syntaxes, reorder, vmdef, msgs]
+import "$nim"/compiler/passes {.all.}
 
 {.warning[UnusedImport]: off.}
-include compiler/[nimeval, pipelines]
+include "$nim"/compiler/[nimeval, pipelines]
 
 export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 
@@ -245,13 +245,17 @@ proc config*(i: Interpreter): ConfigRef =
 proc `exit_hook=`*(
     i: Interpreter, hook: proc(c: PCtx, pc: int, tos: PStackFrame)
 ) =
-  (PCtx i.graph.vm).exitHook = hook
+  discard
+  # GD4: fixme
+  # (PCtx i.graph.vm).exitHook = hook
 
 proc `enter_hook=`*(
     i: Interpreter,
     hook: proc(c: PCtx, pc: int, tos: PStackFrame, instr: TInstr),
 ) =
-  (PCtx i.graph.vm).enterHook = hook
+  discard
+  # GD4: fixme
+  # (PCtx i.graph.vm).enterHook = hook
 
 proc `error_hook=`*(
     i: Interpreter,

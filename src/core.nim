@@ -67,30 +67,25 @@ proc optional_get*[T](self: var HashSet[T], key: T): Option[T] =
 
 ### Vector3 ###
 
-import core/godotcoretypes, core/vector3, core/vector2, math
+import gdext, math
+export Transform3D, Vector3, Vector2, Basis, AABB, print, vector3, vector2
 
 const
-  UP* = vec3(0, 1, 0)
-  DOWN* = vec3(0, -1, 0)
-  BACK* = vec3(0, 0, 1)
-  FORWARD* = vec3(0, 0, -1)
-  RIGHT* = vec3(1, 0, 0)
-  LEFT* = vec3(-1, 0, 0)
+  UP* = vector3(0, 1, 0)
+  DOWN* = vector3(0, -1, 0)
+  BACK* = vector3(0, 0, 1)
+  FORWARD* = vector3(0, 0, -1)
+  RIGHT* = vector3(1, 0, 0)
+  LEFT* = vector3(-1, 0, 0)
 
-proc vec3*(x, y, z: int): Vector3 {.inline.} =
-  vec3(x.float, y.float, z.float)
-
-proc vec3*(x: int | float): Vector3 {.inline.} =
-  vec3(x, x, x)
-
-proc vec2*(x: int | float): Vector2 {.inline.} =
-  vec2(x, x)
+proc vector3(x, y, z: int): Vector3 {.inline.} =
+  vector3(x.float, y.float, z.float)
 
 proc trunc*(self: Vector3): Vector3 {.inline.} =
-  vec3(trunc(self.x), trunc(self.y), trunc(self.z))
+  vector3(trunc(self.x), trunc(self.y), trunc(self.z))
 
 proc inverse_normalized*(self: Vector3): Vector3 {.inline.} =
-  (self - vec3(self.length, self.length, self.length)) * -1
+  (self - vector3(self.length, self.length, self.length)) * -1
 
 proc first*[T](arr: open_array[T], test: proc(x: T): bool): Option[T] =
   for item in arr:
@@ -98,7 +93,7 @@ proc first*[T](arr: open_array[T], test: proc(x: T): bool): Option[T] =
       return some(item)
 
 proc round*(v: Vector3): Vector3 {.inline.} =
-  vec3(v.x.round(), v.y.round(), v.z.round())
+  vector3(v.x.round(), v.y.round(), v.z.round())
 
 proc is_axis_aligned*(v: Vector3): bool {.inline.} =
   v in [UP, DOWN, LEFT, RIGHT, FORWARD, BACK]
@@ -111,7 +106,7 @@ proc limit_length*(self: Vector2, length: float): Vector2 =
     result *= length
 
 proc within*(
-    self: Vector2, position: Vector2, size: Vector2, scale = vec2(1.0, 1.0)
+    self: Vector2, position: Vector2, size: Vector2, scale = vector2(1.0, 1.0)
 ): bool =
   let x = self.x >= position.x and self.x <= position.x + (size.x * scale.x)
   let y = self.y >= position.y and self.y <= position.y + (size.y * scale.y)
@@ -119,27 +114,28 @@ proc within*(
 
 # Basis
 
-proc `x=`*(self: var Basis, value: Vector3) {.inline.} =
-  self.elements[0].x = value.x
-  self.elements[1].x = value.y
-  self.elements[2].x = value.z
+# Column accessor methods that extract axis vectors from row-stored data
+# In gdext-nim, basis.x/y/z and basis[0/1/2] return rows, not columns
+# These methods provide the expected axis vectors (columns)
 
-proc `y=`*(self: var Basis, value: Vector3) {.inline.} =
-  self.elements[0].y = value.x
-  self.elements[1].y = value.y
-  self.elements[2].y = value.z
+proc get_column_x*(self: Basis): Vector3 {.inline.} =
+  ## Returns the right vector (first column)
+  vector3(self.x.x, self.y.x, self.z.x)
 
-proc `z=`*(self: var Basis, value: Vector3) {.inline.} =
-  self.elements[0].z = value.x
-  self.elements[1].z = value.y
-  self.elements[2].z = value.z
+proc get_column_y*(self: Basis): Vector3 {.inline.} =
+  ## Returns the up vector (second column)
+  vector3(self.x.y, self.y.y, self.z.y)
+
+proc get_column_z*(self: Basis): Vector3 {.inline.} =
+  ## Returns the forward vector (third column, -Z in Godot's coordinate system)
+  vector3(self.x.z, self.y.z, self.z.z)
 
 proc surrounding*(point: Vector3): seq[Vector3] =
   collect(new_seq):
     for x in 0 .. 2:
       for y in 0 .. 2:
         for z in 0 .. 2:
-          point + vec3(x - 1, y - 1, z - 1)
+          point + vector3(x - 1, y - 1, z - 1)
 
 # math
 
@@ -174,28 +170,26 @@ proc info*(self: GameState, args: varargs[string, `$`]) =
 proc err*(self: GameState, args: varargs[string, `$`]) =
   logger("err", \"[color=#FF0000]{args.join}[/color]")
 
-when not defined(no_godot):
-  import pkg/godot
+# when not defined(no_godot):
+#   when default_chronicles_stream.outputs.tuple_len > 0:
+#     default_chronicles_stream.outputs[0].writer = proc(
+#         log_level: LogLevel, msg: LogOutputStr
+#     ) {.gcsafe.} =
+#       try:
+#         # when defined(release):
+#         # GD4: print msg - not GC-safe, need alternative approach
+#         if log_level >= ERROR and not state.logger.is_nil:
+#           state.err(msg)
+#         # else:
+#         #   if log_level >= INFO:
+#         #     echo msg
+#       except Exception as e:
+#         error "Error in logging", error = e.msg
 
-  when default_chronicles_stream.outputs.tuple_len > 0:
-    default_chronicles_stream.outputs[0].writer = proc(
-        log_level: LogLevel, msg: LogOutputStr
-    ) {.gcsafe.} =
-      try:
-        # when defined(release):
-        godot.print msg
-        if log_level >= ERROR and not state.logger.is_nil:
-          state.err(msg)
-        # else:
-        #   if log_level >= INFO:
-        #     echo msg
-      except Exception as e:
-        error "Error in logging", error = e.msg
-
-  when default_chronicles_stream.outputs.tuple_len > 1:
-    discard default_chronicles_stream.outputs[1].open(
-      \"logs/enu-{times.now().format(\"yyyyMMdd-HHmmss\")}.log", fm_append
-    )
+#   when default_chronicles_stream.outputs.tuple_len > 1:
+#     discard default_chronicles_stream.outputs[1].open(
+#       \"logs/enu-{times.now().format(\"yyyyMMdd-HHmmss\")}.log", fm_append
+#     )
 
 # misc
 
@@ -222,10 +216,10 @@ proc resolve_level_name*(world, level: string, diff: int): string =
 proc init*(_: type Future, T: type, proc_name = ""): Future[T] =
   return new_future[T](proc_name)
 
-import pkg/core/transforms
-export transforms
+#import pkg/core/transforms
+#export transforms
 
-import pkg/godot
+#import pkg/godot
 
 import pkg/model_citizen
 export model_citizen
@@ -247,40 +241,39 @@ proc local_to*(self: Vector3, unit: Unit): Vector3 =
 proc `+=`*(self: ZenValue[string], str: string) =
   self.value = self.value & str
 
-proc origin*(self: ZenValue[Transform]): Vector3 =
+proc origin*(self: ZenValue[Transform3D]): Vector3 =
   self.value.origin
 
-proc `origin=`*(self: ZenValue[Transform], value: Vector3) =
+proc `origin=`*(self: ZenValue[Transform3D], value: Vector3) =
   var transform = self.value
   transform.origin = value
   self.value = transform
 
-proc basis*(self: ZenValue[Transform]): Basis =
+proc basis*(self: ZenValue[Transform3D]): Basis =
   self.value.basis
 
-proc `basis=`*(self: ZenValue[Transform], value: Basis) =
+proc `basis=`*(self: ZenValue[Transform3D], value: Basis) =
   var transform = self.value
   transform.basis = value
   self.value = transform
 
 proc init*(_: type Basis): Basis =
-  init_basis()
+  basis()
 
-proc init*(_: type Transform, origin = vec3()): Transform =
-  result = init_transform()
-  result.origin = origin
+proc init*(_: type Transform3D, origin = vector3()): Transform3D =
+  Transform3D(basis: basis(), origin: origin)
 
 proc init*(_: type Code, nim: string): Code =
   Code(owner: state.worker_ctx_name, nim: nim)
 
 proc update_action_index*(state: GameState, change: int) =
-  var index = int(state.tool) + change
+  var index = int(state.current_tool) + change
   if index < 0:
     index = int Tools.high
   elif index > int Tools.high:
     index = int Tools.low
 
-  state.tool = Tools(index)
+  state.current_tool = Tools(index)
 
 template watch*[T, O](zen: Zen[T, O], unit: untyped, body: untyped) =
   when unit is Unit:
@@ -365,6 +358,15 @@ template `?`*(self: tuple): bool =
 
 template `?`*(self: bool): bool =
   self
+
+template `?`*[T](gdref: GdRef[T]): bool =
+  not gdref.handle.is_nil()
+
+template `?`*(obj: ptr): bool =
+  not obj.is_nil()
+
+template `?`*[T: proc](p: T): bool =
+  not p.is_nil()
 
 proc first_key*[K, V](self: Table[K, V]): K =
   for key in self.keys:
