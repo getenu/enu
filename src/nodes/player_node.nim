@@ -234,6 +234,8 @@ method process*(self: PlayerNode, delta: float64) {.gdsync.} =
 
   if LoadingLevel notin state.global_flags:
     self.update_raycast()
+  else:
+    print("[PLAYER] Skipping raycast update - LoadingLevel flag is set")
 
 method unhandled_input*(self: PlayerNode, event: gdref InputEvent) {.gdsync.} =
   let time = get_mono_time()
@@ -437,30 +439,33 @@ proc has_active_input(self: PlayerNode, device: int32): bool =
       return true
 
 proc update_raycast*(self: PlayerNode) =
+  
   let ray_length =
     if state.current_tool_value.value == CodeMode: 200.0 else: 100.0
 
   if MouseCaptured notin state.local_flags:
-    let mouse_pos =
-      self.get_viewport().get_mouse_position() * float(state.scale_factor)
+    # Mouse is free - cast ray from camera through mouse position
+    let mouse_pos = self.get_viewport().get_mouse_position()
     let cast_from = self.camera.project_ray_origin(mouse_pos)
     let cast_to =
-      self.aim_ray.position +
+      cast_from +
       self.camera.project_ray_normal(mouse_pos) * ray_length
-
+    
     if not self.world_ray.is_nil:
-      self.world_ray.target_position =
-        if ViewportFocused in state.local_flags: cast_to else: cast_from
+      self.world_ray.target_position = cast_to  
       self.world_ray.position = cast_from
-
-    # GD4: Implement aim_target.update() when AimTarget is available
-    # if not self.aim_target.is_nil:
-    #   self.aim_target.update(self.world_ray)
+      self.world_ray.set_enabled(true)
+      
+      # Update aim target with world ray (matches Godot 3)
+      if not self.aim_target.is_nil:
+        self.aim_target.update(self.world_ray)
   else:
+    # Mouse is captured - cast ray from camera center
     self.aim_ray.target_position = vector3(0, 0, -ray_length)
-    # GD4: Implement aim_target.update() when AimTarget is available
-    # if not self.aim_target.is_nil:
-    #   self.aim_target.update(self.aim_ray)
+    
+    # Update aim target with aim ray (matches Godot 3)
+    if not self.aim_target.is_nil:
+      self.aim_target.update(self.aim_ray)
 
 proc get_player*(): PlayerNode =
   PlayerNode(state.nodes.player)

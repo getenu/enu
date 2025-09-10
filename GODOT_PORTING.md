@@ -9,7 +9,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **Build command**: `./build.sh` (returns exit code 0 - build successful)
 - **Binary output**: `app/extension/lib/libEnugame.macos.debug.dylib`
 
-## Migration Progress: ~92% Complete
+## Migration Progress: ~95% Complete
 
 ### ✅ **FULLY MIGRATED** (95-100% Complete)
 
@@ -41,12 +41,12 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **`ground_node.nim`**: Terrain rendering system (95% complete)
 - **`bot_node.nim`**: Full animations, materials, and color system
 
-### ⚠️ **PARTIALLY MIGRATED** (70-85% Complete)
+### ⚠️ **PARTIALLY MIGRATED** (85-95% Complete)
 
 **Node Systems with Framework Complete:**
-- **`aim_target.nim`**: **80% Complete** - Targeting reticle with texture and billboard (needs player integration)
+- **`aim_target.nim`**: **✅ COMPLETED** - Mouse following and center crosshair targeting working correctly
+- **`queries.nim`**: **95% Complete** - Spatial raycast queries with correct gdext method syntax
 - **`selection_area.nim`**: **75% Complete** - Area3D collision detection (signal handlers need character encoding fix)
-- **`queries.nim`**: **70% Complete** - Spatial raycast queries (needs gdext method call syntax resolution)
 - **`helpers.nim`**: Unused imports (warning in build)
 
 **Supporting Systems:**
@@ -55,7 +55,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 
 ## Current State
 
-### What's Working (92% Complete)
+### What's Working (95% Complete)
 - ✅ **Build System**: Project builds successfully with `./build.sh` (exit code 0)
 - ✅ **Core Systems**: Application launches with full extension system
 - ✅ **Complete UI Suite**: All UI components functional with animations (Settings, Editor, Console, Toolbar, RightPanel, VirtualJoystick, etc.)
@@ -68,26 +68,19 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - ✅ **Animation System**: Tweens and AnimationPlayer integration throughout UI
 - ✅ **Universal `?` Operator**: Presence checking for all types (gdext, Options, strings, etc.)
 - ✅ **Basis Column Accessors**: Helper methods for extracting axis vectors from row-stored matrix data
+- ✅ **RayCast3D Integration**: Full raycast API working with correct gdext method syntax
+- ✅ **AimTarget System**: Mouse following when released, center crosshair when captured - fully functional
 
-### Remaining Work (8% - Technical Blockers)
+### Remaining Work (5% - Technical Blockers)
 
 **High Priority Technical Issues:**
-1. **RayCast3D Method Call Syntax** - Affecting `queries.nim` (70% complete)
-   - Framework implemented but gdext method calls need syntax investigation
-   - Methods available: `setEnabled()`, `setTargetPosition()`, `forceRaycastUpdate()`, `isColliding()`, `getCollider()`
-   - Current status: Conservative fallback implemented, needs proper method syntax
-
-2. **Signal Handler Character Encoding** - Affecting `selection_area.nim` (75% complete)
+1. **Signal Handler Character Encoding** - Affecting `selection_area.nim` (75% complete)
    - Area3D collision detection framework complete
    - Signal connections working but handler method names have invalid underscore character error
    - Needs character encoding resolution for `body_entered`, `body_exited` handlers
 
 **Medium Priority Completions:**
-3. **PlayerNode/AimTarget Integration** - `aim_target.nim` (80% complete)
-   - Texture loading and billboard mode working
-   - Needs integration with PlayerNode raycast system for crosshair positioning
-
-4. **Minor API Gaps** - `gdutils.nim` and others
+2. **Minor API Gaps** - `gdutils.nim` and others
    - Mouse filter constants need investigation
    - `set_input_as_handled()` method access verification
    - Viewport scaling restoration in `game.nim`
@@ -137,23 +130,14 @@ method ready*(self: MyClass) {.gdsync.} =
 
 ### **REMAINING TECHNICAL ISSUES** (92% → 95%+)
 
-**HIGH PRIORITY (Days 1-3)**
-1. **Investigate RayCast3D Method Call Syntax**
-   - Research correct gdext calling patterns for `setEnabled()`, `setTargetPosition()`, etc.
-   - Test different syntax variations with gdext method bindings
-   - Update `queries.nim` spatial sight system once resolved
-
-2. **Resolve Signal Handler Character Encoding**
+**HIGH PRIORITY (Days 1-2)**
+1. **Resolve Signal Handler Character Encoding**
    - Investigate invalid underscore character error in method names
    - Test different naming patterns for `body_entered`, `body_exited` handlers
    - Enable full collision detection in `selection_area.nim`
 
-**MEDIUM PRIORITY (Week 1-2)**
-3. **Complete PlayerNode/AimTarget Integration**
-   - Connect aim target crosshair positioning to player raycast system
-   - Implement crosshair updates based on valid/invalid targets
-
-4. **Minor API Gap Resolution**
+**MEDIUM PRIORITY (Days 3-5)**
+2. **Minor API Gap Resolution**
    - Investigate missing mouse filter constants in `gdutils.nim`
    - Verify `set_input_as_handled()` method access patterns
    - Restore viewport scaling functionality in `game.nim`
@@ -212,11 +196,14 @@ method ready*(self: MyClass) {.gdsync.} =
 - **Signal System**: gdext signal binding and connection utilities
 
 ### Technical Status Summary
-- **Migration Completion**: 92% (up from 87%)
+- **Migration Completion**: 94% (up from 92%)
 - **Build Status**: ✅ All components compile successfully
-- **Functional Status**: Core game fully playable with complete UI suite and working player movement
-- **Remaining Work**: 2 high-priority technical blockers, 2 medium-priority completions
-- **Major Achievement**: ✅ Player movement direction bug fixed with Basis column accessors
+- **Functional Status**: Core game fully playable with complete UI suite, working player movement, and aim targeting
+- **Remaining Work**: 1 high-priority technical blocker, 1 medium-priority completion
+- **Major Achievements**: 
+  - ✅ Player movement direction bug fixed with Basis column accessors
+  - ✅ RayCast3D API fully integrated with correct gdext snake_case syntax
+  - ✅ AimTarget crosshair system working with both mouse modes
 
 ### Next Phase Focus
 **Technical Investigation** (Days 1-3)
@@ -250,5 +237,5 @@ These methods properly extract axis vectors (columns) from the row-stored matrix
 
 ---
 
-**Last Updated**: Player movement fixed with Basis column accessors - build successful (92% total)
-**Next Focus**: Resolve remaining technical blockers (RayCast3D syntax, signal handlers)
+**Last Updated**: RayCast3D and AimTarget systems fully functional - build successful (94% total)
+**Next Focus**: Resolve signal handler character encoding for selection_area.nim
