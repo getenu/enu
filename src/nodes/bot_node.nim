@@ -38,7 +38,7 @@ import
   gdext/classes/[
     gdcharacterbody3d, gdpackedscene, gdresourceloader, gdnode3d,
     gdmeshinstance3d, gdmaterial, gdanimationplayer, gdstandardmaterial3d,
-    gdtextedit, gdraycast3d,
+    gdtextedit, gdraycast3d, gdanimationtree,
   ]
 import core, gdutils, models/colors, ui/markdown_label
 import queries
@@ -52,6 +52,7 @@ type BotNode* {.gdsync.} =
     skin: Node3D
     mesh: MeshInstance3D
     animation_player: AnimationPlayer
+    animation_tree: AnimationTree
     transform_zid: ZID
 
 proc update_material*(self: BotNode, value: gdref Material) =
@@ -76,6 +77,8 @@ method ready*(self: BotNode) {.gdsync.} =
     self.mesh = self.skin.find_child("body001", false, false).as(MeshInstance3D)
     self.animation_player =
       self.skin.find_child("AnimationPlayer", false, false).as(AnimationPlayer)
+    self.animation_tree =
+      self.skin.find_child("AnimationTree", false, false).as(AnimationTree)
 
     if ?self.mesh:
       self.set_default_material()
@@ -88,10 +91,19 @@ method ready*(self: BotNode) {.gdsync.} =
     else:
       print("[BOT] ✗ AnimationPlayer not found")
 
-    # Adjust player model position
+    if ?self.animation_tree:
+      # Disable AnimationTree so we can use AnimationPlayer directly like Godot 3
+      self.animation_tree.set_active(false)
+      print("[BOT] AnimationTree found and disabled")
+    else:
+      print("[BOT] ⚠️ AnimationTree not found")
+
+    # Adjust player model position  
     if ?self.model and self.model of Player:
-      # TODO: Translate when gdext Node3D transform API is available
-      print("[BOT] Player model position adjustment needed")
+      # hack so player model doesn't hover
+      let current_pos = self.skin.get_position()
+      self.skin.set_position(current_pos + vector3(0, -0.8, 0))
+      print("[BOT] Player model position adjusted (moved down by 0.8)")
   else:
     print("[BOT] ✗ Skin model not found")
 
@@ -152,21 +164,22 @@ proc set_visibility(self: BotNode) =
 proc set_walk_animation(self: BotNode, velocity: float, backwards: bool) =
   if ?self.animation_player:
     if velocity <= 0.1:
-      # Play idle animation
+      # Play idle animation with slower speed
+      self.animation_player.set_speed_scale(0.5)
       self.animation_player.play(newStringName("idle"))
-      print("[BOT] Playing idle animation")
     elif velocity < 5:
-      # Play walk animation
-      let anim_name = if backwards: "walk_backwards" else: "walk"
-      self.animation_player.play(newStringName(anim_name))
-      print("[BOT] Playing walk animation, backwards: ", backwards)
+      # Play walk animation with speed based on velocity
+      self.animation_player.set_speed_scale(velocity / 2.0)
+      if backwards:
+        # TODO: Implement play_backwards when gdext supports it
+        self.animation_player.play(newStringName("walk"))
+      else:
+        self.animation_player.play(newStringName("walk"))
     else:
       # Play run animation
+      self.animation_player.set_speed_scale(velocity / 4.0)
       let anim_name = if backwards: "run_backwards" else: "run"
       self.animation_player.play(newStringName(anim_name))
-      print("[BOT] Playing run animation, backwards: ", backwards)
-  else:
-    print("[BOT] ✗ Cannot set animation - no AnimationPlayer")
 
 proc track_changes(self: BotNode) =
   if not ?self.model:
@@ -175,25 +188,64 @@ proc track_changes(self: BotNode) =
 
   print("[BOT] Setting up model change tracking")
 
-  # TODO: Implement model change tracking when model_citizen watch API is available
-  # This requires the full model system to be working
-  # Original implementation tracked:
-  # - glow_value changes for highlighting
-  # - global_flags changes for visibility
-  # - local_flags changes for highlighting
-  # - state.local_flags for god mode
-  # - velocity_value for walk animations
-  # - animation_value for custom animations
-  # - rotation_value for player orientation
-  # - cursor_position_value for text editing
-  # - scale_value for model scaling
-  # - color_value for material colors
-  # - transform_value for positioning
-  # - sight_query_value for AI sight queries
+  # Transform tracking - critical for bot movement
+  self.transform_zid = self.model.transform_value.watch:
+    if added:
+      self.set_transform(change.item)
+      # Debug output disabled - working correctly
+      # print("[BOT] Transform updated from model")
 
-  print(
-    "[BOT] ⚠️ Model change tracking temporarily disabled - needs model_citizen API"
-  )
+  # Visibility tracking - only update when not initializing to prevent flicker
+  self.model.global_flags.watch:
+    if (
+      change.item == Visible and
+      ScriptInitializing notin self.model.global_flags
+    ) or ScriptInitializing.removed:
+      self.set_visibility()
+
+  # Color tracking
+  self.model.color_value.watch:
+    if added:
+      self.set_color(change.item)
+
+  # Scale tracking
+  self.model.scale_value.watch:
+    if added:
+      let scale = change.item
+      self.set_scale(vector3(scale, scale, scale))
+      # Also update model transform to stay in sync
+      self.model.transform_value.pause(self.transform_zid):
+        self.model.transform = self.get_transform()
+
+  # Highlighting
+  self.model.local_flags.watch:
+    if Highlight.added:
+      self.highlight()
+    elif Highlight.removed:
+      self.set_default_material()
+
+  # God mode visibility
+  state.local_flags.watch:
+    if change.item == God:
+      self.set_visibility()
+
+  # Bot-specific tracking
+  if self.model of Bot:
+    let bot = Bot(self.model)
+    # Velocity tracking for walk animations
+    bot.velocity_value.watch:
+      if touched:
+        if bot.animation == "auto":
+          self.set_walk_animation(change.item.length, false)
+    
+    # Animation tracking
+    bot.animation_value.watch:
+      if added or (touched and change.item in ["", "auto"]):
+        self.animation_player.play(newStringName("idle"))
+      elif added:
+        self.animation_player.play(newStringName(change.item))
+
+  print("[BOT] Model change tracking active")
 
 proc setup*(self: BotNode) =
   print("[BOT] Setting up BotNode")
@@ -201,6 +253,8 @@ proc setup*(self: BotNode) =
   if ?self.model:
     self.set_color(self.model.color)
     self.track_changes()
+    # Initial visibility check
+    self.set_visibility()
 
     # Set up sight ray
     let sight_ray = self.find_child("SightRay", false, false).as(RayCast3D)
@@ -215,23 +269,20 @@ proc setup*(self: BotNode) =
 method physics_process*(self: BotNode, delta: float64) {.gdsync.} =
   # Godot 4 uses physics_process for CharacterBody3D movement
   if ?self.model:
-    # Update model transform from node transform
-    # TODO: Check model.code when model API is fully available
-    # TODO: Update model transform when model API is available
-    #print("[BOT] Physics processing, delta: ", delta)
+    # Bidirectional sync: update model transform from node transform if this thread owns the model
+    if self.model.code.owner == state.worker_ctx_name:
+      self.model.transform_value.pause(self.transform_zid):
+        self.model.transform = self.get_transform()
 
     # Handle bot movement
     if self.model of Bot:
-      discard
-      # TODO: Cast to Bot type when model hierarchy is available
-      # TODO: Use move_and_slide when gdext CharacterBody3D API is stable
-      #print("[BOT] Bot physics processing")
-
-    # Handle player-specific processing
-    if self.model of Player:
-      discard
-      # TODO: Handle player-specific updates when Player model is available
-      #print("[BOT] Player physics processing")
+      let bot = Bot(self.model)
+      if bot.velocity.length > 0:
+        # Use Godot 4 CharacterBody3D movement
+        self.set_velocity(bot.velocity)
+        discard self.move_and_slide()
+        # Debug output disabled - too spammy
+        # print("[BOT] Moving with velocity: ", bot.velocity)
 
 var bot_scene {.threadvar.}: gdref PackedScene
 

@@ -1,6 +1,6 @@
 import std/[os, strformat, importutils]
-import "$nim"/compiler/ast except new_node
-import "$nim"/compiler/[vm, vmdef]
+import pkg/compiler/ast except new_node
+import pkg/compiler/[vm, vmdef]
 import core, eval
 
 export Interpreter, VmArgs, set_result
@@ -15,7 +15,8 @@ private_access ScriptCtx
 
 proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
   let std_paths = STDLIB_PATHS.map_it join_path(vmlib, "stdlib", it)
-  let source_paths = std_paths & join_path(vmlib, "enu", "client") & @[script_dir]
+  let source_paths =
+    std_paths & join_path(vmlib, "enu", "client") & @[script_dir]
   {.gcsafe.}:
     result = create_interpreter(
       "base_api.nim",
@@ -40,13 +41,16 @@ proc run*(self: ScriptCtx): bool =
   self.exit_code = none(int)
 
   try:
+    info "VM: Loading module", file_name = self.file_name, code_length = self.code.len
     self.interpreter.load_module(self.file_name, self.code, self.pass_context)
+    info "VM: Module loaded successfully", file_name = self.file_name
 
     result = false
   except VMPause:
     private_access ScriptCtx
     result = self.exit_code.is_none
   except Exception as e:
+    info "VM: Exception during module loading", error = e.msg, file_name = self.file_name
     self.running = false
     self.exit_code = some(99)
     raise VMQuit.new_exception("Unhandled err", e)
@@ -92,7 +96,8 @@ proc call_proc*(
       raise
 
 proc get_var*(self: ScriptCtx, var_name: string, module_name: string): PNode =
-  let sym = self.interpreter.select_unique_symbol(var_name, module_name = module_name)
+  let sym =
+    self.interpreter.select_unique_symbol(var_name, module_name = module_name)
   self.interpreter.get_global_value(sym)
 
 proc resume*(self: ScriptCtx): bool =
@@ -104,9 +109,7 @@ proc resume*(self: ScriptCtx): bool =
   result =
     try:
       {.gcsafe.}:
-        discard
-        # GD4: fixme
-        # discard exec_from_ctx(self.ctx, self.pc, self.tos)
+        discard exec_from_ctx(self.ctx, self.pc, self.tos)
       false
     except VMPause:
       self.exit_code.is_none

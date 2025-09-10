@@ -9,7 +9,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **Build command**: `./build.sh` (returns exit code 0 - build successful)
 - **Binary output**: `app/extension/lib/libEnugame.macos.debug.dylib`
 
-## Migration Progress: ~95% Complete
+## Migration Progress: ~97% Complete
 
 ### ✅ **FULLY MIGRATED** (95-100% Complete)
 
@@ -39,7 +39,13 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **`player_node.nim`**: Complete player movement, input, collision detection, and raycast system
 - **`sign_node.nim`**: Full 3D sign rendering with MarkdownLabel integration
 - **`ground_node.nim`**: Terrain rendering system (95% complete)
-- **`bot_node.nim`**: Full animations, materials, and color system
+- **`bot_node.nim`**: **✅ COMPLETED** - Full model-node sync, movement, materials, scaling, and animation framework
+
+**Scripting System:**
+- **`worker.nim`**: **✅ COMPLETED** - Script loading, VM execution, and retry mechanism working
+- **`scripting.nim`**: **✅ COMPLETED** - Failed script retry system and timeout handling
+- **`host_bridge.nim`**: VM to host communication bridge
+- **Bot Movement API**: **✅ COMPLETED** - Bots can move and turn in squares using forward/turn commands
 
 ### ⚠️ **PARTIALLY MIGRATED** (85-95% Complete)
 

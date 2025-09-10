@@ -60,7 +60,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       self.active_unit = nil
 
 proc change_code(self: Worker, unit: Unit, code: Code) =
-  debug "code changing", unit = unit.id
+  info "Script: Code changing for unit", unit = unit.id, code_length = code.nim.len
   unit.errors.clear
   unit.global_flags -= HighlightError
   if ?unit.script_ctx and unit.script_ctx.running and not ?unit.clone_of:
@@ -81,7 +81,7 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
     self.module_names.excl unit.script_ctx.module_name
     remove_file unit.script_ctx.script
   elif code.nim.strip != "":
-    debug "loading unit", unit_id = unit.id
+    info "Script: Loading unit", unit_id = unit.id
     if LoadingScript notin state.local_flags and not self.retry_failures:
       write_file(unit.script_ctx.script, code.nim)
       if not self.interpreter.is_nil:
@@ -197,6 +197,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
   worker.for_all_units:
     if added:
+      info "Script: Unit added to worker", unit_id = unit.id, unit_type = $unit.type
       unit.worker_thread_joined
       worker.watch_code unit
 

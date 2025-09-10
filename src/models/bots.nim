@@ -16,7 +16,7 @@ method on_begin_move*(
   # move_mode param is ignored
   var duration = 0.0
   let
-    moving = -self.transform.basis.z
+    moving = -self.transform.basis.get_column_z()
     finish_time = 1.0 / self.speed * steps
 
   result = proc(delta: float, _: MonoTime): TaskStates =
