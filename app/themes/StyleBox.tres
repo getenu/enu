@@ -2,15 +2,16 @@
 
 [resource]
 resource_local_to_scene = true
-content_margin_left = 20.0
-content_margin_right = 20.0
-content_margin_top = 20.0
-content_margin_bottom = 20.0
+content_margin_left = 8.0
+content_margin_right = 8.0
+content_margin_top = 8.0
+content_margin_bottom = 8.0
 bg_color = Color( 0.0784314, 0.0117647, 0.113725, 1 )
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color( 0.3, 0.2, 0.4, 1 )
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10

@@ -62,7 +62,7 @@ type Settings* {.gdsync.} = ptr object of PanelContainer
   left_separator, right_separator: VSeparator
   repeat_timers: Table[string, MonoTime]
   size_timer: MonoTime
-  tween: Tween
+  tween: gdref Tween
   separation: int
   action_steps: seq[proc() {.gcsafe.}]
   state: WindowState
@@ -106,6 +106,53 @@ proc update_level_list(self: Settings) =
       if world != "backups":
         self.levels.add_item(world)
 
+# Window management methods - moved before ready() to avoid forward declaration issues
+
+proc open_window*(self: Settings) =
+  self.update_level_list()
+  self.update_values()
+  self.state = Opened
+  if ?self.window:
+    self.window.set_visible(true)
+    
+    # Start with transparent window
+    self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+    
+    # Smooth fade-in animation
+    if ?self.tween:
+      discard self.tween[].tween_property(
+        self.window,
+        newNodePath("modulate"),
+        variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
+        0.25  # duration in seconds
+      )
+    else:
+      # Fallback to instant appearance
+      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
+    
+    print("[UI] Settings window opened with smooth fade-in")
+
+proc close_window*(self: Settings) =
+  self.state = Closed
+  if ?self.window:
+    # Smooth fade-out animation
+    if ?self.tween:
+      discard self.tween[].tween_property(
+        self.window,
+        newNodePath("modulate"),
+        variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
+        0.25  # duration in seconds
+      )
+      
+      # Hide window after animation completes
+      discard self.tween[].tween_callback(callable(self.window, newStringName("set_visible")).bind(false))
+    else:
+      # Fallback to instant hide
+      self.window.set_visible(false)
+      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+    
+    print("[UI] Settings window closed with smooth fade-out")
+
 method ready*(self: Settings) {.gdsync.} =
   print("[UI] Settings ready - initializing configuration panel")
 
@@ -136,9 +183,13 @@ method ready*(self: Settings) {.gdsync.} =
   self.main_container = self.find_child("MainContainer", false, false).as(Container)
   self.new_level_container = self.find_child("NewLevelContainer", false, false).as(Container)
   self.row_container = self.find_child("RowContainer", false, false).as(Container)
-  self.settings_container = self.find_child("SettingsContainer", false, false).as(GridContainer)
+  # Find UI components
+  self.settings_container = self.find_child("SettingsContainer", true, false).as(GridContainer)
   self.window = self.find_child("Window", false, false).as(Container)
-  self.tween = self.find_child("Tween", false, false).as(Tween)
+  
+  # Create tween programmatically (required in Godot 4)
+  self.tween = self.create_tween()
+  print("[UI] Settings tween created programmatically")
   self.close = self.find_child("Close", false, false).as(Button)
   self.left_separator = self.find_child("LeftSeparator", false, false).as(VSeparator)
   self.right_separator = self.find_child("RightSeparator", false, false).as(VSeparator)
@@ -149,8 +200,7 @@ method ready*(self: Settings) {.gdsync.} =
     ("colors", ?self.colors),
     ("levels", ?self.levels),
     ("settings_container", ?self.settings_container),
-    ("window", ?self.window),
-    ("tween", ?self.tween)
+    ("window", ?self.window)
   ]
 
   for (name, exists) in components:
@@ -249,9 +299,19 @@ method ready*(self: Settings) {.gdsync.} =
   
   print("[UI] ✅ All Settings signal connections established")
   
-  # Set up state watching
-  # GD4: State change watching will be implemented with manual update calls
-  print("[UI] ✅ Settings state watching configured for manual updates")
+  # Add state watching for Settings visibility  
+  state.local_flags.changes:
+    if SettingsVisible.added:
+      self.open_window()
+    elif SettingsVisible.removed:
+      self.close_window()
+  
+  # Set up config value watching
+  state.config_value.changes:
+    if added:
+      self.update_values()
+  
+  print("[UI] ✅ Settings state watching configured for visibility and config changes")
 
   self.update_level_list()
   self.update_values()
@@ -472,49 +532,3 @@ proc handle_close_press*(self: Settings) =
 proc handle_cancel_press*(self: Settings) =
   state.pop_flag SettingsVisible
 
-# Window management methods
-
-proc open_window*(self: Settings) =
-  self.update_level_list()
-  self.update_values()
-  self.state = Opened
-  if ?self.window:
-    self.window.set_visible(true)
-    
-    # Start with transparent window
-    self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-    
-    # Smooth fade-in animation
-    if ?self.tween:
-      discard self.tween.tween_property(
-        self.window,
-        newNodePath("modulate"),
-        variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
-        0.25  # duration in seconds
-      )
-    else:
-      # Fallback to instant appearance
-      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
-    
-    print("[UI] Settings window opened with smooth fade-in")
-
-proc close_window*(self: Settings) =
-  self.state = Closed
-  if ?self.window:
-    # Smooth fade-out animation
-    if ?self.tween:
-      discard self.tween.tween_property(
-        self.window,
-        newNodePath("modulate"),
-        variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
-        0.25  # duration in seconds
-      )
-      
-      # Hide window after animation completes
-      discard self.tween.tween_callback(callable(self.window, newStringName("set_visible")).bind(false))
-    else:
-      # Fallback to instant hide
-      self.window.set_visible(false)
-      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-    
-    print("[UI] Settings window closed with smooth fade-out")

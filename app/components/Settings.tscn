@@ -108,16 +108,19 @@ horizontal_alignment = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="Megapixels" type="LineEdit" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
 editable = false
 context_menu_enabled = false
 caret_blink = true
 
 [node name="MegapixelsUp" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer"]
 layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = &"MonoButton"
@@ -125,6 +128,7 @@ text = " ↑ "
 
 [node name="MegapixelsDown" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer"]
 layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = &"MonoButton"
@@ -137,16 +141,19 @@ horizontal_alignment = 2
 
 [node name="HBoxContainer3" type="HBoxContainer" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="FontSize" type="LineEdit" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
 editable = false
 context_menu_enabled = false
 caret_blink = true
 
 [node name="FontSizeUp" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3"]
 layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = &"MonoButton"
@@ -154,6 +161,7 @@ text = " ↑ "
 
 [node name="FontSizeDown" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3"]
 layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = &"MonoButton"
@@ -166,16 +174,19 @@ horizontal_alignment = 2
 
 [node name="HBoxContainer2" type="HBoxContainer" parent="Window/MainContainer/RowContainer/SettingsContainer"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="ToolbarSize" type="LineEdit" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2"]
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
 editable = false
 context_menu_enabled = false
 caret_blink = true
 
 [node name="ToolbarSizeUp" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2"]
 layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = &"MonoButton"
@@ -183,6 +194,7 @@ text = " ↑ "
 
 [node name="ToolbarSizeDown" type="Button" parent="Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2"]
 layout_mode = 2
+custom_minimum_size = Vector2(24, 0)
 focus_mode = 0
 mouse_default_cursor_shape = 2
 theme_type_variation = &"MonoButton"
@@ -255,15 +267,3 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.5
 
-[node name="Tween" type="Tween" parent="Window"]
-_import_path = NodePath("")
-unique_name_in_owner = false
-process_mode = 0
-process_priority = 0
-process_physics_priority = 0
-process_thread_group = 0
-physics_interpolation_mode = 0
-auto_translate_mode = 0
-editor_description = ""
-playback_process_mode = 0
-script = null

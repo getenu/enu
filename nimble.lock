@@ -196,8 +196,8 @@
     },
     "gdext": {
       "version": "0.14.0",
-      "vcsRevision": "823ae276a1a269138d4a984678f4ef707b560c8e",
-      "url": "https://github.com/dsrw/gdext-nim",
+      "vcsRevision": "114b628d801fac00cd683794ecf78cbdb132fdcc",
+      "url": "https://github.com/godot-nim/gdext-nim",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {

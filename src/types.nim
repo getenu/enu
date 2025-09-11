@@ -3,7 +3,7 @@ import gdext except Color
 import gdext/classes/[gdnode3d, gdraycast3d]
 # import pkg/core/godotcoretypes except Color
 #import pkg/core/[vector3, basis, aabb, godotbase]
-import "$nim"/compiler/[ast, lineinfos, semdata]
+import pkg/compiler/[ast, lineinfos, semdata]
 import pkg/[model_citizen]
 import models/colors, libs/[eval]
 
@@ -116,6 +116,7 @@ type
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
     verify_mode*: bool
+    screenshot_mode*: bool
 
   Model* = ref object of RootObj
     id*: string

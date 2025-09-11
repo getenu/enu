@@ -32,40 +32,37 @@ import gdext/classes/[gdraycast3d, gdnode3d]
 import core, models/units
 
 proc run*(query: var SightQuery, source: Unit) =
-  print("[QUERY] Running sight query")
-  
   # Initialize query result as false
-  if query.answer.is_some():
-    print("[QUERY] Query already has answer, resetting")
-  
   query.answer = some(false)
 
   # Check if we have the required components
   if not ?source.sight_ray:
-    print("[QUERY] ✗ No sight ray available for source unit")
     return
     
   if not ?query.target:
-    print("[QUERY] ✗ No target specified for sight query")  
     return
 
   let ray = source.sight_ray
+  let target = query.target
   
-  # Raycast sight detection framework - ready for full implementation
-  print("[QUERY] Raycast sight system initialized and ready")
+  # Calculate direction from source to target
+  let source_pos = source.node.global_position
+  let target_pos = target.node.global_position
+  let direction = (target_pos - source_pos).normalized()
+  let distance = source_pos.distance_to(target_pos)
   
-  # TODO: Complete RayCast3D API integration when gdext method calls are working
-  # The following methods are available and tested:
-  # - ray[].setEnabled(bool) 
-  # - ray[].setTargetPosition(Vector3)
-  # - ray[].forceRaycastUpdate()
-  # - ray[].isColliding() -> bool
-  # - ray[].getCollider() -> Object
-  #
-  # Current blocker: gdext method call syntax needs investigation
-  # For now, return a placeholder result
+  # Set up raycast to point at target
+  ray.set_enabled(true)
+  ray.target_position = direction * distance
+  ray.force_raycast_update()
   
-  query.answer = some(false)  # Conservative default: no sight
-  print("[QUERY] ⚠️ Using conservative sight result - raycast integration needs gdext syntax fix")
-  
-  print("[QUERY] Sight query completed with result: ", query.answer)
+  # Check if ray hit the target
+  if ray.is_colliding():
+    let collider = ray.get_collider()
+    # Check if the collider is our target
+    if ?collider and collider == target.node:
+      query.answer = some(true)
+    else:
+      query.answer = some(false)
+  else:
+    query.answer = some(false)

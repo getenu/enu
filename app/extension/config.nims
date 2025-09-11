@@ -44,6 +44,8 @@ if host_os == "windows":
   "chronicles_log_level=INFO"
 --define:
   "chronicles_sinks=textlines"
+# --define:
+#   "chronicles_disabled_topics=verbose"
 
 # GD4: remove me
 --threadAnalysis:

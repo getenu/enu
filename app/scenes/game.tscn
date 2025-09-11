@@ -9,8 +9,6 @@ process_priority = 0
 [node name="Level" parent="." instance=ExtResource("1")]
 
 [node name="GUI" parent="." instance=ExtResource("3")]
-grow_horizontal = 2
-grow_vertical = 2
 
 [node name="WorldRay" type="RayCast3D" parent="."]
 visible = false

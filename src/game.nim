@@ -150,7 +150,7 @@ method process*(self: Game, delta: float64) {.gdsync.} =
   # Handle screenshot mode
   if self.screenshot_mode:
     self.screenshot_timer += delta
-    if self.screenshot_timer >= 5.0:  # Wait 5 seconds
+    if self.screenshot_timer >= 10.0:  # Wait 10 seconds for animations
       self.take_screenshot()
       print("[SCREENSHOT] Screenshot saved, quitting...")
       state.push_flag Quitting

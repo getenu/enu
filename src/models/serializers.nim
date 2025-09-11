@@ -194,8 +194,10 @@ proc backup_level*(level_dir: string) =
     create_zip_archive(level_dir, backup_file)
 
 proc load_units(parent: Unit) =
+  info "load_units called", parent_is_nil = parent.is_nil
   let opts = JOptions(allow_missing_keys: true)
   let path = if ?parent: parent.data_dir else: state.config.data_dir
+  info "Scanning for units in", path = path
   for dir in walk_dirs(path / "*"):
     let unit_id = dir.split_path.tail
     let file_name = dir / unit_id & ".json"
@@ -223,11 +225,14 @@ proc load_units(parent: Unit) =
         Build(unit).restore_edits
 
       if file_exists(unit.script_ctx.script):
+        info "Setting code for unit", unit_id = unit.id
         unit.code = Code.init(read_file(unit.script_ctx.script))
+        info "Code set for unit", unit_id = unit.id
       else:
         unit.global_flags -= ScriptInitializing
     except Exception as e:
       error "Failed to load unit", unit_id, error = e
+  info "load_units completed"
 
 proc load_user_config*(dir = ""): UserConfig =
   var work_dir = dir
@@ -299,7 +304,7 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   state.config = config
 
-  debug "loading ", level_file
+  info "loading ", level_file
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
@@ -310,11 +315,16 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   dont_join = true
   worker.retry_failures = true
+  info "Loading units..."
   load_units(nil)
+  info "Retrying failed scripts..."
   worker.retry_failed_scripts()
+  info "Script retry completed"
   worker.retry_failures = false
   dont_join = false
   for unit in state.units:
     unit.global_flags -= Dirty
   state.pop_flag LoadingScript
+  info "Clearing LoadingLevel flag"
   state.global_flags -= LoadingLevel
+  info "Level loading completed"

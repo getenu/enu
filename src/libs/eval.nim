@@ -1,10 +1,10 @@
 import std/options
 import pkg/pretty
-import "$nim"/compiler/[syntaxes, reorder, vmdef, msgs]
-import "$nim"/compiler/passes {.all.}
+import pkg/compiler/[syntaxes, reorder, vmdef, msgs]
+import pkg/compiler/passes {.all.}
 
 {.warning[UnusedImport]: off.}
-include "$nim"/compiler/[nimeval, pipelines]
+include pkg/compiler/[nimeval, pipelines]
 
 export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 
@@ -143,7 +143,7 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       iface.module.ast = nil
       break
 
-import std / posix
+import std/posix
 
 proc loadModule*(
     i: Interpreter, fileName, code: string, ctx: var PContext
@@ -245,17 +245,13 @@ proc config*(i: Interpreter): ConfigRef =
 proc `exit_hook=`*(
     i: Interpreter, hook: proc(c: PCtx, pc: int, tos: PStackFrame)
 ) =
-  discard
-  # GD4: fixme
-  # (PCtx i.graph.vm).exitHook = hook
+  (PCtx i.graph.vm).exitHook = hook
 
 proc `enter_hook=`*(
     i: Interpreter,
     hook: proc(c: PCtx, pc: int, tos: PStackFrame, instr: TInstr),
 ) =
-  discard
-  # GD4: fixme
-  # (PCtx i.graph.vm).enterHook = hook
+  (PCtx i.graph.vm).enterHook = hook
 
 proc `error_hook=`*(
     i: Interpreter,

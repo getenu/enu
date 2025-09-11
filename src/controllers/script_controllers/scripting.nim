@@ -1,9 +1,9 @@
 import std/[os, re, posix]
 
 import gdext
-import "$nim"/compiler/ast except new_node
-import "$nim"/compiler/[lineinfos, renderer, msgs, vmdef]
-from "$nim"/compiler/vm {.all.} import stack_trace_aux
+import pkg/compiler/ast except new_node
+import pkg/compiler/[lineinfos, renderer, msgs, vmdef]
+from pkg/compiler/vm {.all.} import stack_trace_aux
 import gdext/classes/[gdnode3d, gdraycast3d, gdvoxelterrain]
 import core, models/[states, bots, builds, units, signs, players]
 import libs/[interpreters, eval]
@@ -183,12 +183,22 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
 
 proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
   var prev_failed: self.failed.type = @[]
-  while prev_failed.len != self.failed.len:
+  var retry_count = 0
+  const max_retries = 3 # Prevent infinite loops when script loading is broken
+
+  while prev_failed.len != self.failed.len and retry_count < max_retries:
     prev_failed = self.failed
     self.failed = @[]
+    retry_count += 1
+    info "retry attempt", count = retry_count, failed_scripts = prev_failed.len
+
     for f in prev_failed:
-      debug "retrying", script = f.unit.script_ctx.script
+      info "retrying script for unit", unit_id = f.unit.id
       self.load_script(f.unit)
+
+  if retry_count >= max_retries:
+    warn "Script retry limit reached - stopping to prevent infinite loop",
+      failed_scripts = self.failed.len
 
   for f in prev_failed:
     self.script_error(f.unit, f.e)

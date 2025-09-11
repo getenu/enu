@@ -63,6 +63,14 @@ method ready*(self: Console) {.gdsync.} =
   # Store default mouse filter
   self.default_mouse_filter = int64(self.get_mouse_filter())
   
+  # Set console height to 1/3 of screen height
+  let viewport = self.get_viewport()
+  if ?viewport:
+    let screen_height = viewport.get_visible_rect().size.y
+    let console_height = screen_height / 3.0
+    self.set_custom_minimum_size(vector2(400, console_height))
+    print("[UI] Console height set to 1/3 screen height: " & $console_height)
+  
   # GD4: Re-enabled state watching
   self.watch_states()
   

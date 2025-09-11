@@ -14,6 +14,8 @@
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 focus_mode = 2
 mouse_filter = 1
 
@@ -22,9 +24,12 @@ layout_mode = 0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = -50.0
+offset_bottom = -5.0
 grow_horizontal = 2
 grow_vertical = 0
 alignment = 1
+z_index = 10
 
 [node name="Button-code" parent="Toolbar" instance=ExtResource("3")]
 layout_mode = 2
@@ -62,6 +67,7 @@ layout_mode = 0
 anchor_right = 1.0
 theme = ExtResource("6")
 alignment = 2
+z_index = 15
 
 [node name="MarginContainer" type="MarginContainer" parent="HBoxContainer"]
 layout_mode = 2
@@ -107,6 +113,7 @@ anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
+z_index = 5
 
 [node name="LeftPanel" type="MarginContainer" parent="Panels"]
 layout_mode = 0
@@ -179,9 +186,12 @@ text = "  "
 
 [node name="GridContainer" type="GridContainer" parent="."]
 layout_mode = 0
+anchors_preset = 15
 anchor_right = 1.0
+anchor_bottom = 1.0
 mouse_filter = 2
 columns = 2
+z_index = 20
 
 [node name="Label" type="Label" parent="GridContainer"]
 layout_mode = 2
@@ -225,6 +235,7 @@ anchor_left = 0.1
 anchor_top = 0.5
 anchor_right = 0.1
 anchor_bottom = 0.6
+offset_bottom = 64.8
 grow_vertical = 1
 
 [editable path="GridContainer/Settings"]
