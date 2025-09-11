@@ -1,4 +1,4 @@
-import std/[monotimes, os, json, math, random, net]
+import std/[monotimes, os, json, math, random, net, times, strformat]
 import pkg/[metrics, metrics/stdlib_httpserver]
 from dotenv import nil
 import gdext
@@ -8,7 +8,8 @@ import
     gdviewport, gdperformance, gdlabel, gdtheme, gdfont, gdresourceloader,
     gdprojectsettings, gdinputmap, gdinputeventaction, gdinputeventkey,
     gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
-    gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport,
+    gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
+    gdviewporttexture, gdtexture2d,
   ]
 
 import ui/virtual_joystick
@@ -45,8 +46,42 @@ type Game* {.gdsync.} =
     script_controller: ScriptController
     left_stick: VirtualJoystick
     verify_mode: bool
+    screenshot_mode: bool
+    screenshot_timer: float64
 
 # GD4: Basic initialization moved to main init_game function
+
+proc take_screenshot*(self: Game) =
+  # Get viewport image using Godot 4 API
+  let viewport = self.get_viewport()
+  
+  # Try to get the rendered image from viewport
+  let texture = viewport.get_texture()
+  if not ?texture:
+    warn "[SCREENSHOT] Viewport texture is null - cannot take screenshot"
+    state.push_flag Quitting
+    return
+    
+  let image = texture[].get_image()
+  if not ?image:
+    warn "[SCREENSHOT] Could not get image from texture"
+    state.push_flag Quitting
+    return
+  
+  # Generate filename with timestamp
+  let timestamp = format(times.now(), "yyyy-MM-dd'T'HH-mm-ss")
+  let filename = &"screenshot_{timestamp}.png"
+  let filepath = join_path(state.config.work_dir, filename)
+  
+  # Save the image
+  if image[].save_png(gdString(filepath)) == ok:
+    info "[SCREENSHOT] Screenshot saved", filepath = filepath
+  else:
+    warn "[SCREENSHOT] Failed to save screenshot", filepath = filepath
+  
+  # Quit after taking screenshot
+  print("[SCREENSHOT] Screenshot saved, quitting...")
+  state.push_flag Quitting
 
 proc rescale*(self: Game) =
   discard
@@ -112,6 +147,14 @@ method process*(self: Game, delta: float64) {.gdsync.} =
   if SceneReady notin state.local_flags:
     state.push_flag SceneReady
 
+  # Handle screenshot mode
+  if self.screenshot_mode:
+    self.screenshot_timer += delta
+    if self.screenshot_timer >= 5.0:  # Wait 5 seconds
+      self.take_screenshot()
+      print("[SCREENSHOT] Screenshot saved, quitting...")
+      state.push_flag Quitting
+
 # GD4 - notification method not supported in gdext yet
 # Need to handle window close through other means
 # TODO: Investigate gdext support for notification virtual method
@@ -165,6 +208,7 @@ method on_init*(self: Game) {.gdsync.} =
   var connect_address = ""
   var listen_address = ""
   var verify_mode = false
+  var screenshot_mode = false
 
   if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
     connect_address = args[i + 1]
@@ -179,8 +223,12 @@ method on_init*(self: Game) {.gdsync.} =
   if (let i = args.find("--verify"); i) > -1:
     verify_mode = true
     args.delete(i)
+  if (let i = args.find("--screenshot"); i) > -1:
+    screenshot_mode = true
+    args.delete(i)
   
   state.verify_mode = verify_mode
+  state.screenshot_mode = screenshot_mode
 
   if ?($OS.get_environment("ENU_LISTEN_ADDRESS")) and not ?listen_address:
     listen_address = $OS.get_environment("ENU_LISTEN_ADDRESS")
@@ -268,6 +316,7 @@ method on_init*(self: Game) {.gdsync.} =
         lib_dir = join_path(exe_dir.parent_dir, "lib", "vmlib")
 
   self.verify_mode = verify_mode
+  self.screenshot_mode = screenshot_mode
   self.node_controller = NodeController.init
   self.script_controller = ScriptController.init
 
@@ -454,7 +503,7 @@ method ready*(self: Game) {.gdsync.} =
       # flag, giving it a chance to save and cleanup. If the worker thread is
       # stuck, killed, or hasn't fully started because it's trying to connect
       # to a server, it won't pop the flag, so we force it after a timeout.
-      self.force_quit_at = get_mono_time() + 2.seconds
+      self.force_quit_at = get_mono_time() + init_duration(seconds = 2)
     elif Quitting.removed:
       self.get_tree().quit()
 

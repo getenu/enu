@@ -28,7 +28,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **`gui.nim`**: Main UI coordination with input handling and touch controls
 - **`markdown_label.nim`**: Full markdown rendering with RichTextLabel
 - **`preview_maker.nim`**: Viewport-based preview generation
-- **`settings.nim`**: Configuration management with fade animations and signal connections
+- **`settings.nim`**: ⚠️ **PARTIAL** - Signal connections working, but UI components missing (`settings_container`, `tween` not found)
 - **`right_panel.nim`**: Documentation panel with slide animations
 - **`virtual_joystick.nim`**: Mobile touch controls with visual feedback
 - **`floating_button.nim`**: UI component with proper initialization
