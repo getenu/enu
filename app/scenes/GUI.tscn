@@ -25,11 +25,11 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = -50.0
+offset_right = 92.0
 offset_bottom = -5.0
 grow_horizontal = 2
 grow_vertical = 0
 alignment = 1
-z_index = 10
 
 [node name="Button-code" parent="Toolbar" instance=ExtResource("3")]
 layout_mode = 2
@@ -63,11 +63,11 @@ layout_mode = 2
 icon = null
 
 [node name="HBoxContainer" type="HBoxContainer" parent="."]
+z_index = 15
 layout_mode = 0
 anchor_right = 1.0
 theme = ExtResource("6")
 alignment = 2
-z_index = 15
 
 [node name="MarginContainer" type="MarginContainer" parent="HBoxContainer"]
 layout_mode = 2
@@ -109,11 +109,11 @@ action_mode = 0
 text = ""
 
 [node name="Panels" type="Control" parent="."]
+z_index = 5
 anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-z_index = 5
 
 [node name="LeftPanel" type="MarginContainer" parent="Panels"]
 layout_mode = 0
@@ -185,13 +185,12 @@ theme_type_variation = &"IconButton"
 text = "  "
 
 [node name="GridContainer" type="GridContainer" parent="."]
+z_index = 20
 layout_mode = 0
-anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 columns = 2
-z_index = 20
 
 [node name="Label" type="Label" parent="GridContainer"]
 layout_mode = 2
@@ -200,6 +199,22 @@ size_flags_vertical = 1
 
 [node name="Settings" parent="GridContainer" instance=ExtResource("12")]
 layout_mode = 2
+
+[node name="SettingsContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="2"]
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 25
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="7"]
+theme_override_constants/separation = 20
+
+[node name="HBoxContainer3" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="9"]
+theme_override_constants/separation = 16
+
+[node name="HBoxContainer2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="11"]
+theme_override_constants/separation = 20
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2" index="1"]
+theme_override_constants/separation = 20
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
@@ -229,8 +244,8 @@ anchor_right = 1.0
 text = "0"
 
 [node name="LeftStick" parent="." instance=ExtResource("13")]
-layout_mode = 0
-anchors_preset = 0
+layout_mode = 1
+anchors_preset = -1
 anchor_left = 0.1
 anchor_top = 0.5
 anchor_right = 0.1

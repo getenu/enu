@@ -1,56 +1,27 @@
-# MIGRATION STATUS: 95% Complete - UI framework functional, gdext signal connections implemented
-#
-# ✅ FUNCTIONAL:
-#   - Settings UI initialization and ready() lifecycle  
-#   - Full gdext signal connection system with individual button handlers
-#   - Button press handlers for all major settings (MegapixelsUp/Down, FontSizeUp/Down, etc.)
-#   - Configuration value updates (megapixels, fonts, toolbar size, etc.)
-#   - Environment, color, and level selection with proper OptionButton handling
-#   - Keyboard navigation and focus management
-#   - Window size and fullscreen toggles
-#   - Show stats toggle
-#
-# 🚧 PARTIALLY FUNCTIONAL (gdext API limitations):
-#   - Text input validation: LineEdit.get_text() calls disabled - needs gdext LineEdit API
-#   - Focus management: Some focus control methods not available
-#   - Button handlers currently use placeholder logic - need full implementation
-#
-# 🔧 KEY CHANGES FROM GODOT 3:
-#   - 9 lines -> 375+ lines: Complete implementation from stub
-#   - gdobj Settings -> type Settings* {.gdsync.} = ptr object of PanelContainer
-#   - Implemented full gdext signal pattern: self.connect(), self.callable(), {.gdsync, name: "method_name".}
-#   - Individual signal handlers for each button to avoid sender identification issues
-#   - State updates use state.config_value.value: pattern instead of direct assignment
-#   - OptionButton selections use int32 type conversion for gdext compatibility
-#
-# ❌ DISABLED:
-#   - Text field validation (server address, etc.)
-#   - Some advanced focus navigation
-#
-# 📝 TODOS: Add text input validation, implement full button handler logic, complete focus management
-
 import std/[algorithm, math, os, monotimes, times, tables]
 import gdext
-import gdext/classes/[
-  gdpanelcontainer, gdoptionbutton, gdlineedit, gdmargincontainer, gdtween,
-  gdinputevent, gdscenetree, gdvseparator, gdviewport, gdgridcontainer,
-  gdbutton, gdlabel, gdcontainer, gdinputeventjoypadbutton, gdbasebutton
-]
+import
+  gdext/classes/[
+    gdpanelcontainer, gdoptionbutton, gdlineedit, gdmargincontainer, gdtween,
+    gdinputevent, gdscenetree, gdvseparator, gdviewport, gdgridcontainer,
+    gdbutton, gdlabel, gdcontainer, gdinputeventjoypadbutton, gdbasebutton,
+    gdinputeventjoypadmotion,
+  ]
 import core, gdutils, models/[colors, serializers]
 
-type
-  WindowState = enum
-    None
-    Closed
-    NewLevel
-    Opened
+type WindowState = enum
+  None
+  Closed
+  NewLevel
+  Opened
 
 const
-  transition = 3  # TRANS_EXPO equivalent for Godot 4 Tween
+  transition = 5 # TRANS_EXPO equivalent for Godot 4 (transExpo = 5)
+  ease_in_out = 2 # EASE_IN_OUT equivalent for Godot 4 (easeInOut = 2)
   check = " ✓ "
   blank = "   "
 
-type Settings* {.gdsync.} = ptr object of PanelContainer
+type Settings* {.gdsync.} = ptr object of Control
   environments, colors, levels: OptionButton
   megapixels, font_size, toolbar_size, server_address, level_name: LineEdit
   megapixels_up, megapixels_down, font_size_up, font_size_down,
@@ -62,13 +33,12 @@ type Settings* {.gdsync.} = ptr object of PanelContainer
   left_separator, right_separator: VSeparator
   repeat_timers: Table[string, MonoTime]
   size_timer: MonoTime
-  tween: gdref Tween
   separation: int
-  action_steps: seq[proc() {.gcsafe.}]
+  action_steps: seq[proc() {.gc_safe.}]
   state: WindowState
 
 proc update_values(self: Settings) =
-  let full_screen_label = self.find_child("FullScreenLabel", false, false).as(Label)
+  let full_screen_label = find("FullScreenLabel", Label)
   if ?full_screen_label:
     full_screen_label.set_visible(host_os != "ios")
   self.full_screen.set_visible(host_os != "ios")
@@ -78,16 +48,14 @@ proc update_values(self: Settings) =
   self.toolbar_size.set_text($int(state.config.toolbar_size))
   self.full_screen.set_text(if state.config.full_screen: check else: blank)
   self.environments.select(state.config.environment)
-
-  let level_label = self.find_child("LevelLabel", false, false).as(Label)
-  if ?level_label:
-    if ?state.config.connect_address:
-      level_label.add_theme_color_override("font_color", ir_black[Comment])
-      self.levels.set_disabled(true)
-    else:
-      level_label.add_theme_color_override("font_color", ir_black[Normal])
-      self.levels.set_disabled(false)
-      self.levels.select(state.config.level)
+  let level_label = find("LevelLabel", Label)
+  if ?state.config.connect_address:
+    level_label.add_theme_color_override("font_color", ir_black[Comment])
+    self.levels.set_disabled(true)
+  else:
+    level_label.add_theme_color_override("font_color", ir_black[Normal])
+    self.levels.set_disabled(false)
+    self.levels.select(state.config.level)
 
   if ?state.config.connect_address:
     self.server_address.set_text(state.config.connect_address)
@@ -106,338 +74,267 @@ proc update_level_list(self: Settings) =
       if world != "backups":
         self.levels.add_item(world)
 
-# Window management methods - moved before ready() to avoid forward declaration issues
+proc collapsed_margin(self: Settings): int =
+  -int(
+    self.settings_container.get_size().y + self.remote_container.get_size().y +
+      float(self.separation) * 2.0
+  ) + 5
 
-proc open_window*(self: Settings) =
+proc remote_opened_margin(self: Settings): int =
+  0
+
+proc remote_closed_margin(self: Settings): int =
+  -int(self.remote_container.get_size().y + float(self.separation)) + 15
+
+proc expanded_margin(self: Settings): int =
+  result =
+    if ?state.config.listen_address:
+      self.remote_closed_margin
+    else:
+      self.remote_opened_margin
+
+proc new_level_margin(self: Settings): int =
+  int(
+    self.remote_container.get_size().y + float(self.separation) +
+      self.new_level_container.get_size().y / 2.0 + 10
+  )
+
+proc collapsed_new_level_margin(self: Settings): int =
+  result =
+    int(float(self.collapsed_margin) - self.new_level_container.get_size().y) -
+    self.separation
+
+proc expanded_new_level_margin(self: Settings): int =
+  self.collapsed_new_level_margin +
+    int(self.new_level_container.get_size().y / 2.0) + self.separation + 10
+
+proc resize(self: Settings, start_margin, end_margin: float, node: Node, property: string) =
+  let tween = self.create_tween[]
+  # For Godot 4, set_trans and set_ease need proper enum types
+  # But for now we'll skip setting these and use defaults
+  # discard tween.set_trans(transition)
+  # discard tween.set_ease(ease_in_out)
+  discard tween.tween_property(
+    node, newNodePath(property),
+    variant(end_margin),
+    animation_duration
+  )
+
+proc resize(self: Settings, start_margin, end_margin: int, node: Node, property: string) =
+  self.main_container.add_theme_constant_override(property, start_margin.int32)
+  self.resize(float(start_margin), float(end_margin), node, property)
+
+proc margin_y(self: Settings): int =
+  self.main_container.get_theme_constant("margin_bottom")
+
+proc margin_x(self: Settings): int =
+  self.main_container.get_theme_constant("margin_left")
+
+proc resize_x(self: Settings, start_margin, end_margin: int) =
+  let start_margin = self.margin_x
+  self.resize(
+    start_margin,
+    end_margin,
+    node = self.main_container,
+    property = "theme_override_constants/margin_left",
+  )
+
+proc resize_y(self: Settings, start_margin, end_margin: int) =
+  let start_margin = self.margin_y
+  self.resize(
+    start_margin,
+    end_margin,
+    node = self.main_container,
+    property = "theme_override_constants/margin_bottom",
+  )
+
+proc resize_x(self: Settings, end_margin: int) =
+  self.resize_x(self.margin_x, end_margin)
+
+proc resize_y(self: Settings, end_margin: int) =
+  self.resize_y(self.margin_y, end_margin)
+
+proc open_window(self: Settings) =
   self.update_level_list()
   self.update_values()
   self.state = Opened
-  if ?self.window:
-    self.window.set_visible(true)
-    
-    # Start with transparent window
-    self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-    
-    # Smooth fade-in animation
-    if ?self.tween:
-      discard self.tween[].tween_property(
-        self.window,
-        newNodePath("modulate"),
-        variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
-        0.25  # duration in seconds
-      )
-    else:
-      # Fallback to instant appearance
-      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
-    
-    print("[UI] Settings window opened with smooth fade-in")
+  self.window.set_visible(true)
+  self.action_steps =
+    @[
+      proc() =
+        self.window.anchor_left = 1.0,
+      proc() =
+        self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
+        self.resize(1.0, 0.0, node = self.window, property = "anchor_right"),
+      proc() =
+        self.resize_y self.expanded_margin()
+      ,
+    ]
 
-proc close_window*(self: Settings) =
-  self.state = Closed
-  if ?self.window:
-    # Smooth fade-out animation
-    if ?self.tween:
-      discard self.tween[].tween_property(
-        self.window,
-        newNodePath("modulate"),
-        variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
-        0.25  # duration in seconds
-      )
-      
-      # Hide window after animation completes
-      discard self.tween[].tween_callback(callable(self.window, newStringName("set_visible")).bind(false))
+proc close_window(self: Settings) =
+  self.action_steps =
+    if self.state != NewLevel:
+      @[
+        proc() =
+          self.resize_y self.collapsed_margin()
+        ,
+        proc() =
+          self.resize(0.0, 1.0, node = self.window, property = "anchor_left"),
+        proc() =
+          self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+          self.window.set_visible(false),
+      ]
     else:
-      # Fallback to instant hide
-      self.window.set_visible(false)
-      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-    
-    print("[UI] Settings window closed with smooth fade-out")
+      @[
+        proc() =
+          self.resize_y(
+            self.expanded_new_level_margin, self.collapsed_new_level_margin
+          ),
+        proc() =
+          self.new_level_container.set_visible(false)
+          self.main_container.add_theme_constant_override(
+            "margin_bottom", self.collapsed_margin.int32
+          ),
+        proc() =
+          self.resize(0.0, 1.0, node = self.window, property = "anchor_left"),
+        proc() =
+          self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+          self.window.set_visible(false),
+      ]
+  self.state = Closed
+
+proc show_new_level(self: Settings) =
+  self.level_name.set_text("")
+  self.new_level_container.set_visible(false)
+  self.state = NewLevel
+  self.action_steps =
+    @[
+      proc() =
+        self.resize_y(self.expanded_margin, self.collapsed_margin),
+      proc() =
+        self.new_level_container.set_visible(true)
+        self.level_name.grab_focus()
+        self.main_container.add_theme_constant_override(
+          "margin_bottom", self.collapsed_new_level_margin.int32
+        ),
+      proc() =
+        self.resize_y(
+          self.collapsed_new_level_margin, self.expanded_new_level_margin
+        ),
+    ]
+
+proc approximate_full_width(self: Settings): float =
+  let width = self.settings_container.get_size().x
+  let columns = self.settings_container.get_columns()
+  let column_width = width / float(columns)
+  result =
+    (column_width * 4) + 80 - (9 * float self.settings_container.get_columns())
 
 method ready*(self: Settings) {.gdsync.} =
-  print("[UI] Settings ready - initializing configuration panel")
-
   self.size_timer = MonoTime.high
   self.state = None
 
-  # Initialize all UI components
-  self.environments = self.find_child("Environments").as(OptionButton)
-  self.colors = self.find_child("PlayerColors").as(OptionButton)
-  self.levels = self.find_child("Levels").as(OptionButton)
-  self.megapixels = self.find_child("Megapixels").as(LineEdit)
-  self.font_size = self.find_child("FontSize").as(LineEdit)
-  self.toolbar_size = self.find_child("ToolbarSize").as(LineEdit)
-  self.server_address = self.find_child("ServerAddress").as(LineEdit)
-  self.level_name = self.find_child("LevelName").as(LineEdit)
-  self.megapixels_up = self.find_child("MegapixelsUp").as(Button)
-  self.megapixels_down = self.find_child("MegapixelsDown").as(Button)
-  self.font_size_up = self.find_child("FontSizeUp").as(Button)
-  self.font_size_down = self.find_child("FontSizeDown").as(Button)
-  self.toolbar_size_up = self.find_child("ToolbarSizeUp").as(Button)
-  self.toolbar_size_down = self.find_child("ToolbarSizeDown").as(Button)
-  self.full_screen = self.find_child("FullScreen").as(Button)
-  self.run_server = self.find_child("RunServer").as(Button)
-  self.connect = self.find_child("Connect").as(Button)
-  self.save = self.find_child("Save").as(Button)
-  self.cancel = self.find_child("Cancel", false, false).as(Button)
-  self.remote_container = self.find_child("RemoteContainer", false, false).as(Container)
-  self.main_container = self.find_child("MainContainer", false, false).as(Container)
-  self.new_level_container = self.find_child("NewLevelContainer", false, false).as(Container)
-  self.row_container = self.find_child("RowContainer", false, false).as(Container)
-  # Find UI components
-  self.settings_container = self.find_child("SettingsContainer", true, false).as(GridContainer)
-  self.window = self.find_child("Window", false, false).as(Container)
-  
-  # Create tween programmatically (required in Godot 4)
-  self.tween = self.create_tween()
-  print("[UI] Settings tween created programmatically")
-  self.close = self.find_child("Close", false, false).as(Button)
-  self.left_separator = self.find_child("LeftSeparator", false, false).as(VSeparator)
-  self.right_separator = self.find_child("RightSeparator", false, false).as(VSeparator)
+  with self:
+    environments = find("Environments", OptionButton)
+    colors = find("PlayerColors", OptionButton)
+    levels = find("Levels", OptionButton)
+    megapixels = find("Megapixels", LineEdit)
+    font_size = find("FontSize", LineEdit)
+    toolbar_size = find("ToolbarSize", LineEdit)
+    server_address = find("ServerAddress", LineEdit)
+    level_name = find("LevelName", LineEdit)
+    megapixels_up = find("MegapixelsUp", Button)
+    megapixels_down = find("MegapixelsDown", Button)
+    font_size_up = find("FontSizeUp", Button)
+    font_size_down = find("FontSizeDown", Button)
+    toolbar_size_up = find("ToolbarSizeUp", Button)
+    toolbar_size_down = find("ToolbarSizeDown", Button)
+    full_screen = find("FullScreen", Button)
+    run_server = find("RunServer", Button)
+    connect = find("Connect", Button)
+    save = find("Save", Button)
+    cancel = find("Cancel", Button)
+    remote_container = find("RemoteContainer", Container)
+    main_container = find("MainContainer", Container)
+    new_level_container = find("NewLevelContainer", Container)
+    row_container = find("RowContainer", Container)
+    settings_container = find("SettingsContainer", GridContainer)
+    window = find("Window", Container)
+    close = find("Close", Button)
+    separation = 4 # Default separation, TODO: get from theme
+    left_separator = find("LeftSeparator", VSeparator)
+    right_separator = find("RightSeparator", VSeparator)
 
-  # Check for nil components
-  let components = [
-    ("environments", ?self.environments),
-    ("colors", ?self.colors),
-    ("levels", ?self.levels),
-    ("settings_container", ?self.settings_container),
-    ("window", ?self.window)
-  ]
+  self.environments.add_item("default")
+  for env in environments.keys.to_seq.sorted:
+    if env notin ["default", "none"]:
+      self.environments.add_item(env)
+  self.environments.add_item("none")
 
-  for (name, exists) in components:
-    if not exists:
-      print("[UI] ✗ Settings component not found: ", name)
+  var add_hex = true
+  for color in Colors:
+    if color != Eraser:
+      self.colors.add_item($color)
+      if state.config.player_color == action_colors[color]:
+        add_hex = false
+        self.colors.select(self.colors.get_item_count - 1)
+  if add_hex:
+    self.colors.add_item(state.config.player_color.to_html_hex)
+    self.colors.select(self.colors.get_item_count - 1)
 
-  if ?self.row_container:
-    # GD4: Get separation from theme instead of constants
-    self.separation = 4  # Default separation, TODO: get from theme
+  for button in [
+    self.megapixels_up, self.megapixels_down, self.font_size_up,
+    self.font_size_down, self.toolbar_size_up, self.toolbar_size_down,
+  ]:
+    self.bind_signal(button, "pressed", button.get_name())
+    self.bind_signal(button, "button_up", button.get_name())
+    self.bind_signal(button, "button_down", button.get_name())
 
-  # Populate environments dropdown
-  if ?self.environments:
-    self.environments.add_item("default")
-    for env in environments.keys.to_seq.sorted:
-      if env notin ["default", "none"]:
-        self.environments.add_item(env)
-    self.environments.add_item("none")
+  for option_button in [self.environments, self.colors, self.levels]:
+    self.bind_signal(option_button, "item_selected", option_button.get_name())
 
-  # Populate colors dropdown
-  if ?self.colors:
-    var add_hex = true
-    for color in Colors:
-      if color != Eraser:
-        self.colors.add_item($color)
-        if state.config.player_color == action_colors[color]:
-          add_hex = false
-          self.colors.select(self.colors.get_item_count() - 1)
-    if add_hex:
-      self.colors.add_item(state.config.player_color.to_html_hex)
-      self.colors.select(self.colors.get_item_count() - 1)
+  self.bind_signal(self.connect, "pressed", "Connect")
+  self.bind_signal(self.close, ("pressed", "closed"))
+  self.bind_signal(self.cancel, ("pressed", "cancelled"))
+  self.bind_signal(self.save, "pressed", self.save.get_name())
 
-  # Set up signal connections for Godot 4
-  print("[UI] Setting up gdext signal connections for Settings UI")
-  
-  # Connect button pressed signals with individual handlers
-  if ?self.megapixels_up:
-    discard self.megapixels_up.connect("pressed", self.callable("_on_megapixels_up_pressed"))
-    print("[UI] ✅ Connected MegapixelsUp button signal")
-    
-  if ?self.megapixels_down:
-    discard self.megapixels_down.connect("pressed", self.callable("_on_megapixels_down_pressed"))
-    print("[UI] ✅ Connected MegapixelsDown button signal")
-    
-  if ?self.font_size_up:
-    discard self.font_size_up.connect("pressed", self.callable("_on_font_size_up_pressed"))
-    print("[UI] ✅ Connected FontSizeUp button signal")
-    
-  if ?self.font_size_down:
-    discard self.font_size_down.connect("pressed", self.callable("_on_font_size_down_pressed"))
-    print("[UI] ✅ Connected FontSizeDown button signal")
-    
-  if ?self.toolbar_size_up:
-    discard self.toolbar_size_up.connect("pressed", self.callable("_on_toolbar_size_up_pressed"))
-    print("[UI] ✅ Connected ToolbarSizeUp button signal")
-    
-  if ?self.toolbar_size_down:
-    discard self.toolbar_size_down.connect("pressed", self.callable("_on_toolbar_size_down_pressed"))
-    print("[UI] ✅ Connected ToolbarSizeDown button signal")
-    
-  if ?self.full_screen:
-    discard self.full_screen.connect("pressed", self.callable("_on_full_screen_pressed"))
-    print("[UI] ✅ Connected FullScreen button signal")
-    
-  if ?self.run_server:
-    discard self.run_server.connect("pressed", self.callable("_on_run_server_pressed"))
-    print("[UI] ✅ Connected RunServer button signal")
-    
-  if ?self.connect:
-    discard self.connect.connect("pressed", self.callable("_on_connect_pressed"))
-    print("[UI] ✅ Connected Connect button signal")
-    
-  if ?self.save:
-    discard self.save.connect("pressed", self.callable("_on_save_pressed"))
-    print("[UI] ✅ Connected Save button signal")
-    
-  if ?self.cancel:
-    discard self.cancel.connect("pressed", self.callable("_on_cancel_pressed"))
-    print("[UI] ✅ Connected Cancel button signal")
-    
-  if ?self.close:
-    discard self.close.connect("pressed", self.callable("_on_close_pressed"))
-    print("[UI] ✅ Connected Close button signal")
-  
-  # Connect option button signals
-  if ?self.environments:
-    discard self.environments.connect("item_selected", self.callable("_on_environment_selected"))
-    print("[UI] ✅ Connected environment selection signal")
-    
-  if ?self.colors:
-    discard self.colors.connect("item_selected", self.callable("_on_color_selected"))
-    print("[UI] ✅ Connected color selection signal")
-    
-  if ?self.levels:
-    discard self.levels.connect("item_selected", self.callable("_on_level_selected"))
-    print("[UI] ✅ Connected level selection signal")
-  
-  print("[UI] ✅ All Settings signal connections established")
-  
-  # Add state watching for Settings visibility  
+  for button in [self.full_screen, self.run_server]:
+    self.bind_signal(button, ("pressed", "toggled"), button, button.get_text())
+
+  for line_edit in [self.level_name, self.server_address]:
+    self.bind_signal(line_edit, "text_submitted", line_edit.get_name())
+
+  state.nodes.game.bind_signal(self, "gui_input", self.get_name())
+
+  self.update_level_list()
+  self.update_values()
+
+  state.config_value.changes:
+    self.update_values()
+
   state.local_flags.changes:
     if SettingsVisible.added:
       self.open_window()
     elif SettingsVisible.removed:
       self.close_window()
-  
-  # Set up config value watching
-  state.config_value.changes:
-    if added:
-      self.update_values()
-  
-  print("[UI] ✅ Settings state watching configured for visibility and config changes")
-
-  self.update_level_list()
-  self.update_values()
+    elif CommandMode.added:
+      self.ghost()
+    elif CommandMode.removed:
+      self.unghost()
 
   if SettingsVisible notin state.local_flags:
-    if ?self.window:
-      self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))  # Transparent
-      # TODO: Implement window positioning
+    self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+    if SceneReady in state.local_flags:
+      self.close_window
+    else:
+      state.local_flags.changes:
+        if SceneReady.added:
+          self.close_window
 
-  print("[UI] Settings initialized - configuration panel ready")
+proc on_pressed(self: Settings, name: string) =
+  if find(name, Button).is_disabled():
+    return
 
-# Signal handlers for settings UI interactions
-
-proc handle_button_press(self: Settings, button_name: string) =
-  print("[UI] Handling button press: ", button_name)
-  # TODO: Implement specific button logic based on button_name
-  # This would dispatch to the appropriate configuration change
-  case button_name:
-  of "MegapixelsUp":
-    print("[UI] ⚠️ Megapixels up handler - needs implementation")
-  of "MegapixelsDown":
-    print("[UI] ⚠️ Megapixels down handler - needs implementation")
-  of "FontSizeUp":
-    print("[UI] ⚠️ Font size up handler - needs implementation")
-  of "FontSizeDown":
-    print("[UI] ⚠️ Font size down handler - needs implementation")
-  of "ToolbarSizeUp":
-    print("[UI] ⚠️ Toolbar size up handler - needs implementation")
-  of "ToolbarSizeDown":
-    print("[UI] ⚠️ Toolbar size down handler - needs implementation")
-  of "FullScreen":
-    print("[UI] ⚠️ Full screen toggle handler - needs implementation")
-  of "RunServer":
-    print("[UI] ⚠️ Run server handler - needs implementation")
-  of "Connect":
-    print("[UI] ⚠️ Connect handler - needs implementation")
-  of "Save":
-    print("[UI] ⚠️ Save handler - needs implementation")
-  of "Cancel":
-    print("[UI] ⚠️ Cancel handler - needs implementation")
-  else:
-    print("[UI] Unknown button: ", button_name)
-
-# Individual button signal handlers
-proc on_megapixels_up_pressed*(self: Settings) {.gdsync, name: "_on_megapixels_up_pressed".} =
-  print("[UI] MegapixelsUp button pressed")
-  self.handle_button_press("MegapixelsUp")
-  
-proc on_megapixels_down_pressed*(self: Settings) {.gdsync, name: "_on_megapixels_down_pressed".} =
-  print("[UI] MegapixelsDown button pressed")
-  self.handle_button_press("MegapixelsDown")
-  
-proc on_font_size_up_pressed*(self: Settings) {.gdsync, name: "_on_font_size_up_pressed".} =
-  print("[UI] FontSizeUp button pressed")
-  self.handle_button_press("FontSizeUp")
-  
-proc on_font_size_down_pressed*(self: Settings) {.gdsync, name: "_on_font_size_down_pressed".} =
-  print("[UI] FontSizeDown button pressed")
-  self.handle_button_press("FontSizeDown")
-  
-proc on_toolbar_size_up_pressed*(self: Settings) {.gdsync, name: "_on_toolbar_size_up_pressed".} =
-  print("[UI] ToolbarSizeUp button pressed")
-  self.handle_button_press("ToolbarSizeUp")
-  
-proc on_toolbar_size_down_pressed*(self: Settings) {.gdsync, name: "_on_toolbar_size_down_pressed".} =
-  print("[UI] ToolbarSizeDown button pressed") 
-  self.handle_button_press("ToolbarSizeDown")
-  
-proc on_full_screen_pressed*(self: Settings) {.gdsync, name: "_on_full_screen_pressed".} =
-  print("[UI] FullScreen button pressed")
-  self.handle_button_press("FullScreen")
-  
-proc on_run_server_pressed*(self: Settings) {.gdsync, name: "_on_run_server_pressed".} =
-  print("[UI] RunServer button pressed")
-  self.handle_button_press("RunServer")
-  
-proc on_connect_pressed*(self: Settings) {.gdsync, name: "_on_connect_pressed".} =
-  print("[UI] Connect button pressed")
-  self.handle_button_press("Connect")
-  
-proc on_save_pressed*(self: Settings) {.gdsync, name: "_on_save_pressed".} =
-  print("[UI] Save button pressed")
-  self.handle_button_press("Save")
-  
-proc on_cancel_pressed*(self: Settings) {.gdsync, name: "_on_cancel_pressed".} =
-  print("[UI] Cancel button pressed")
-  self.handle_button_press("Cancel")
-  
-proc on_close_pressed*(self: Settings) {.gdsync, name: "_on_close_pressed".} =
-  print("[UI] Close button pressed")
-  self.handle_button_press("Close")
-
-# Environment selection signal handler  
-proc on_environment_selected*(self: Settings, index: int) {.gdsync, name: "_on_environment_selected".} =
-  print("[UI] Environment selected: index ", index)
-  if index >= 0 and ?self.environments:
-    let env_name = self.environments.get_item_text(index.int32)
-    print("[UI] Setting environment to: ", env_name)
-    state.config_value.value:
-      environment = $env_name
-    self.update_values()
-
-# Color selection signal handler
-proc on_color_selected*(self: Settings, index: int) {.gdsync, name: "_on_color_selected".} =
-  print("[UI] Color selected: index ", index)
-  if index >= 0 and ?self.colors:
-    let color_name = self.colors.get_item_text(index.int32)
-    print("[UI] Setting player color to: ", color_name)
-    # TODO: Implement color parsing and assignment when color system is available
-
-# Level selection signal handler
-proc on_level_selected*(self: Settings, index: int) {.gdsync, name: "_on_level_selected".} =
-  print("[UI] Level selected: index ", index)
-  if index >= 0 and ?self.levels:
-    let level_name = self.levels.get_item_text(index.int32)
-    print("[UI] Setting level to: ", level_name)
-    state.config_value.value:
-      level = $level_name
-    self.update_values()
-
-# Signal handlers for settings UI interactions
-
-proc handle_button_press*(self: Settings, name: string) =
-  # Handle increment/decrement buttons and action buttons
-  let button_name = if name.starts_with("Button"): name[6..^1] else: name
-  
   const megapixel_steps = [
     (low: 0.01, high: 0.05, step: 0.01),
     (0.05, 0.4, 0.05),
@@ -445,90 +342,164 @@ proc handle_button_press*(self: Settings, name: string) =
     (1.0, 4.0, 0.5),
     (4.0, 10.0, 1.0),
   ]
-  
-  case button_name:
-  of "MegapixelsUp":
+  if name == "MegapixelsUp":
     let megapixels = state.config.megapixels
     for step in megapixel_steps:
       if megapixels < step.high:
         state.config_value.value:
           megapixels = round(megapixels + step.step, 2)
         break
-  of "MegapixelsDown":
+  elif name == "MegapixelsDown":
     let megapixels = state.config.megapixels
     for step in megapixel_steps.reversed:
       if megapixels > step.low:
         state.config_value.value:
           megapixels = round(megapixels - step.step, 2)
         break
-  of "FontSizeUp":
-    if state.config.font_size < 42:
-      state.config_value.value:
-        font_size = state.config.font_size + 1
-  of "FontSizeDown":
-    if state.config.font_size > 4:
-      state.config_value.value:
-        font_size = state.config.font_size - 1
-  of "ToolbarSizeUp":
-    if state.config.toolbar_size < 120:
-      state.config_value.value:
-        toolbar_size = state.config.toolbar_size + 5
-  of "ToolbarSizeDown":
-    if state.config.toolbar_size > 20:
-      state.config_value.value:
-        toolbar_size = state.config.toolbar_size - 5
-  of "Connect":
-    # TODO: Implement server connection once gdext LineEdit.getText is available
-    print("[UI] Settings: Connect functionality needs gdext LineEdit.getText fix")
-  of "Save":
-    # TODO: Implement level save once gdext LineEdit.getText is available  
-    print("[UI] Settings: Save functionality needs gdext LineEdit.getText fix")
-  
-  self.update_values()
 
-proc handle_option_select*(self: Settings, index: int, name: string) =
-  # Handle dropdown selections
-  case name:
-  of "Environments":
-    # TODO: Implement environment selection once gdext OptionButton.getItemText is available
-    print("[UI] Settings: Environment selection needs gdext OptionButton.getItemText fix")
-    # For now, temporarily disable environment selection
-  of "PlayerColors", "colors":
-    # TODO: Implement color selection once gdext OptionButton.getItemText is available
-    print("[UI] Settings: Color selection needs gdext OptionButton.getItemText fix")
-    # For now, temporarily disable color selection due to gdext API limitations
-  of "Levels":
-    # TODO: Implement level selection once gdext OptionButton.getItemText is available
-    print("[UI] Settings: Level selection needs gdext OptionButton.getItemText fix")
-    # For now, temporarily disable level selection
-  
-  self.update_values()
-
-proc handle_toggle_press*(self: Settings, name: string) =
-  # Handle toggle buttons
-  case name:
-  of "FullScreen":
+  if name == "FontSizeUp" and state.config.font_size < 42:
     state.config_value.value:
-      full_screen = not state.config.full_screen
-  of "RunServer":
-    # TODO: Implement server start/stop functionality
-    print("[UI] Settings: Server toggle functionality needs implementation")
-  
+      font_size = state.config.font_size + 1
+  elif name == "FontSizeDown" and state.config.font_size > 4:
+    state.config_value.value:
+      font_size = state.config.font_size - 1
+  elif name == "ToolbarSizeUp" and state.config.toolbar_size < 120:
+    state.config_value.value:
+      toolbar_size = state.config.toolbar_size + 5
+  elif name == "ToolbarSizeDown" and state.config.toolbar_size > 20:
+    state.config_value.value:
+      toolbar_size = state.config.toolbar_size - 5
+  elif name == "Connect" and not ?state.config.connect_address and
+      ?($self.server_address.get_text()):
+    state.config_value.value:
+      connect_address = $self.server_address.get_text()
+    state.pop_flags SettingsFocused, SettingsVisible
+    state.push_flag NeedsRestart
+  elif name == "Connect" and $self.connect.get_text() == "Disconnect":
+    state.config_value.value:
+      connect_address = ""
+    state.pop_flags SettingsFocused, SettingsVisible
+    state.push_flag NeedsRestart
+  elif name == "Save":
+    if is_valid_file_name($self.level_name.get_text()):
+      change_loaded_level($self.level_name.get_text(), state.config.world)
+      state.pop_flag SettingsVisible
+
   self.update_values()
 
-proc handle_text_entry*(self: Settings, text: string, name: string) =
-  # Handle text input
-  case name:
-  of "LevelName":
-    # Level name entered, ready to save
-    discard
-  of "ServerAddress":
-    # Server address updated
-    discard
-
-proc handle_close_press*(self: Settings) =
+proc on_closed(self: Settings) =
   state.pop_flag SettingsVisible
 
-proc handle_cancel_press*(self: Settings) =
-  state.pop_flag SettingsVisible
+proc on_cancelled(self: Settings) =
+  self.update_values()
+  self.state = Opened
+  self.action_steps =
+    @[
+      proc() =
+        self.resize_y(
+          self.expanded_new_level_margin, self.collapsed_new_level_margin
+        ),
+      proc() =
+        self.new_level_container.set_visible(false)
+        self.main_container.add_theme_constant_override(
+          "margin_bottom", self.collapsed_margin.int32.int32
+        ),
+      proc() =
+        self.resize_y(self.collapsed_margin, self.expanded_margin),
+    ]
 
+proc on_button_up(self: Settings, name: string) =
+  self.repeat_timers[name] = MonoTime.high
+
+proc on_button_down(self: Settings, name: string) =
+  self.repeat_timers[name] = get_mono_time() + 0.4.seconds
+
+proc on_toggled(self: Settings, button: Button, default: string) =
+  let current = $button.get_text() == check
+  let enable = not current
+  if not enable:
+    button.set_text(blank)
+  else:
+    button.set_text(check)
+
+  if $button.get_name() == "FullScreen":
+    state.config_value.value:
+      full_screen = enable
+  if $button.get_name() == "RunServer":
+    state.config_value.value:
+      run_server = enable
+    if enable:
+      self.action_steps.add proc() =
+        self.resize_y(self.remote_opened_margin, self.remote_closed_margin)
+    else:
+      self.action_steps.add proc() =
+        self.resize_y(self.remote_closed_margin, self.remote_opened_margin)
+
+  self.update_values()
+
+proc on_item_selected(self: Settings, index: int, name: string) =
+  if name == "Environments":
+    state.config_value.value:
+      environment = $self.environments.get_item_text(index.int32)
+      environment_override = ""
+  elif name == "Levels":
+    if $self.levels.get_text() == "New...":
+      self.show_new_level()
+    else:
+      change_loaded_level($self.levels.get_text(), state.config.world)
+      state.pop_flag SettingsVisible
+  elif name == "PlayerColors":
+    for color in Colors:
+      if $self.colors.get_text() == $color:
+        state.config_value.value:
+          player_color = action_colors[color]
+        return
+    state.config_value.value:
+      player_color = ($self.colors.get_text()).parse_html_hex
+
+proc on_text_submitted(self: Settings, text, name: string) =
+  if name == "LevelName":
+    self.on_pressed("Save")
+  elif name == "ServerAddress":
+    self.on_pressed("Connect")
+
+method process*(self: Settings, delta: float) {.gdsync.} =
+  let now = get_mono_time()
+  for name, time in self.repeat_timers.mpairs:
+    if now > time:
+      time = now + 0.14.seconds
+      self.on_pressed(name)
+
+  if self.action_steps.len > 0:
+    let step = self.action_steps[0]
+    self.action_steps.delete(0)
+    step()
+  elif self.action_steps.len == 0 and self.state == Opened and
+      self.margin_y != self.expanded_margin:
+    self.resize_y(self.expanded_margin)
+
+  if self.state == Opened:
+    let viewport = self.get_viewport()
+    let width = self.approximate_full_width
+    let viewport_rect = viewport.get_visible_rect()
+    let viewport_size = viewport_rect.size
+    if width > viewport_size.x and
+        (self.window.get_size().y * 1.2) < viewport_size.y:
+      self.settings_container.set_columns(2)
+      self.left_separator.set_stretch_ratio(0.0)
+      self.right_separator.set_stretch_ratio(0.0)
+    elif viewport_size.x > width + 10:
+      self.settings_container.set_columns(4)
+      self.left_separator.set_stretch_ratio(0.5)
+      self.right_separator.set_stretch_ratio(0.5)
+
+method unhandled_input*(self: Settings, event: InputEvent) {.gdsync.} =
+  if SettingsFocused in state.local_flags and
+      event.is_action_pressed("ui_cancel"):
+    if not (event of InputEventJoypadButton) or
+        CommandMode notin state.local_flags:
+      if self.state == NewLevel:
+        self.on_cancelled()
+      else:
+        state.pop_flag SettingsVisible
+      self.get_viewport().set_input_as_handled()

@@ -139,6 +139,7 @@ proc watch_open_unit(self: EnuEditor) =
         # if ?state.player:
         #   state.player.open_code = ""
       else:
+        print("[UI] Editor opening for unit: ", unit.id)
         self.open_editor()
         line_zid = unit.current_line_value.changes:
           if added:
@@ -185,6 +186,10 @@ method ready*(self: EnuEditor) {.gdsync.} =
   # Find the CodeEdit node - this should always succeed if scene is properly set up
   self.code_edit = self.find("CodeEdit", CodeEdit)
   assert ?self.code_edit, "CodeEdit node not found in Editor scene"
+  
+  # Start hidden until opened
+  self.set_visible(false)
+  print("[UI] Editor initialized (hidden by default)")
   # Find other UI elements - some may not exist in current scene
   # self.scroll_container = self.find("ScrollContainer", ScrollContainer)
   if not state.nodes.game.is_nil:
@@ -193,9 +198,12 @@ method ready*(self: EnuEditor) {.gdsync.} =
     print("[UI] Warning: state.nodes.game is nil, cannot find LeftPanel")
 
   # Initialize tween for smooth animations
-  # Create a new tween for smooth animations (Tween is RefCounted, not a Node)
-  self.tween = instantiate(Tween).as(gdref Tween)
-  print("[UI] Created new Tween for Editor animations")
+  # Create a new tween for smooth animations (must use create_tween in Godot 4)
+  self.tween = self.create_tween()
+  if ?self.tween:
+    print("[UI] Created new Tween for Editor animations")
+  else:
+    print("[UI] Warning: Failed to create Tween for Editor animations")
 
   # Get colors for UI state management
   self.selection_color =

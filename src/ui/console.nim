@@ -89,7 +89,8 @@ method ready*(self: Console) {.gdsync.} =
   # Connect close button
   let close_button = self.find("Close", Control)
   if ?close_button:
-    self.bind_signal(close_button, ("pressed", "on_close"))
+    discard close_button.connect("pressed", self.callable("_on_close"))
+    print("[UI] Console close button connected to signal handler")
   
   # GD4: Re-enabled GUI input signal binding for focus management
   # Note: This will be handled in the gui_input method below
@@ -127,8 +128,9 @@ proc watch_states(self: Console) =
         self.append_text(full_log)
       break
 
-proc on_close(self: Console) =
+proc on_close(self: Console) {.gdsync, name: "_on_close".} =
   # Close console and remove focus
+  print("[UI] Console close button pressed")
   state.pop_flags(ConsoleVisible, ConsoleFocused)
 
 method gui_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
