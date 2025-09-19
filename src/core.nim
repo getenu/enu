@@ -71,8 +71,11 @@ import gdext, math
 export Transform3D, Vector3, Vector2, Basis, AABB, print, vector3, vector2
 
 # String converters for Godot types
-converter to_gd_string*(s: string): String = newGdString(s)
-converter to_string_name*(s: string): StringName = newStringName(s)
+converter to_gd_string*(s: string): String =
+  new_gd_string(s)
+
+converter to_string_name*(s: string): StringName =
+  new_string_name(s)
 
 const
   UP* = vector3(0, 1, 0)

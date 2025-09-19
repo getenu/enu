@@ -299,12 +299,19 @@ method ready*(self: Settings) {.gdsync.} =
   discard self.toolbar_size_up.connect("pressed", self.callable("_on_toolbar_size_up_pressed"))
   discard self.toolbar_size_down.connect("pressed", self.callable("_on_toolbar_size_down_pressed"))
 
-  for button in [
-    self.megapixels_up, self.megapixels_down, self.font_size_up,
-    self.font_size_down, self.toolbar_size_up, self.toolbar_size_down,
-  ]:
-    discard button.connect("button_up", self.callable("_on_button_up"))
-    discard button.connect("button_down", self.callable("_on_button_down"))
+  # Connect button repeat signals
+  discard self.megapixels_up.connect("button_down", self.callable("_on_megapixels_up_button_down"))
+  discard self.megapixels_up.connect("button_up", self.callable("_on_megapixels_up_button_up"))
+  discard self.megapixels_down.connect("button_down", self.callable("_on_megapixels_down_button_down"))
+  discard self.megapixels_down.connect("button_up", self.callable("_on_megapixels_down_button_up"))
+  discard self.font_size_up.connect("button_down", self.callable("_on_font_size_up_button_down"))
+  discard self.font_size_up.connect("button_up", self.callable("_on_font_size_up_button_up"))
+  discard self.font_size_down.connect("button_down", self.callable("_on_font_size_down_button_down"))
+  discard self.font_size_down.connect("button_up", self.callable("_on_font_size_down_button_up"))
+  discard self.toolbar_size_up.connect("button_down", self.callable("_on_toolbar_size_up_button_down"))
+  discard self.toolbar_size_up.connect("button_up", self.callable("_on_toolbar_size_up_button_up"))
+  discard self.toolbar_size_down.connect("button_down", self.callable("_on_toolbar_size_down_button_down"))
+  discard self.toolbar_size_down.connect("button_up", self.callable("_on_toolbar_size_down_button_up"))
 
   # Connect option buttons
   discard self.environments.connect("item_selected", self.callable("_on_environments_selected"))
@@ -498,15 +505,42 @@ proc on_text_submitted(self: Settings, text, name: string) =
     self.on_pressed("Connect")
 
 # GDSync signal handlers (these call the internal handlers defined above)
-proc on_button_up(self: Settings) {.gdsync, name: "_on_button_up".} =
-  # Clear all repeat timers since we don't know which button
-  for name in self.repeat_timers.keys:
-    self.repeat_timers[name] = MonoTime.high
+# Button repeat signal handlers
+proc on_megapixels_up_button_down(self: Settings) {.gdsync, name: "_on_megapixels_up_button_down".} =
+  self.repeat_timers["MegapixelsUp"] = get_mono_time() + 0.4.seconds
 
-proc on_button_down(self: Settings) {.gdsync, name: "_on_button_down".} =
-  # Set timer for all up/down buttons
-  for name in ["MegapixelsUp", "MegapixelsDown", "FontSizeUp", "FontSizeDown", "ToolbarSizeUp", "ToolbarSizeDown"]:
-    self.repeat_timers[name] = get_mono_time() + 0.4.seconds
+proc on_megapixels_up_button_up(self: Settings) {.gdsync, name: "_on_megapixels_up_button_up".} =
+  self.repeat_timers["MegapixelsUp"] = MonoTime.high
+
+proc on_megapixels_down_button_down(self: Settings) {.gdsync, name: "_on_megapixels_down_button_down".} =
+  self.repeat_timers["MegapixelsDown"] = get_mono_time() + 0.4.seconds
+
+proc on_megapixels_down_button_up(self: Settings) {.gdsync, name: "_on_megapixels_down_button_up".} =
+  self.repeat_timers["MegapixelsDown"] = MonoTime.high
+
+proc on_font_size_up_button_down(self: Settings) {.gdsync, name: "_on_font_size_up_button_down".} =
+  self.repeat_timers["FontSizeUp"] = get_mono_time() + 0.4.seconds
+
+proc on_font_size_up_button_up(self: Settings) {.gdsync, name: "_on_font_size_up_button_up".} =
+  self.repeat_timers["FontSizeUp"] = MonoTime.high
+
+proc on_font_size_down_button_down(self: Settings) {.gdsync, name: "_on_font_size_down_button_down".} =
+  self.repeat_timers["FontSizeDown"] = get_mono_time() + 0.4.seconds
+
+proc on_font_size_down_button_up(self: Settings) {.gdsync, name: "_on_font_size_down_button_up".} =
+  self.repeat_timers["FontSizeDown"] = MonoTime.high
+
+proc on_toolbar_size_up_button_down(self: Settings) {.gdsync, name: "_on_toolbar_size_up_button_down".} =
+  self.repeat_timers["ToolbarSizeUp"] = get_mono_time() + 0.4.seconds
+
+proc on_toolbar_size_up_button_up(self: Settings) {.gdsync, name: "_on_toolbar_size_up_button_up".} =
+  self.repeat_timers["ToolbarSizeUp"] = MonoTime.high
+
+proc on_toolbar_size_down_button_down(self: Settings) {.gdsync, name: "_on_toolbar_size_down_button_down".} =
+  self.repeat_timers["ToolbarSizeDown"] = get_mono_time() + 0.4.seconds
+
+proc on_toolbar_size_down_button_up(self: Settings) {.gdsync, name: "_on_toolbar_size_down_button_up".} =
+  self.repeat_timers["ToolbarSizeDown"] = MonoTime.high
 
 proc on_full_screen_toggled(self: Settings) {.gdsync, name: "_on_full_screen_toggled".} =
   self.on_toggled(self.full_screen, "")
