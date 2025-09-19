@@ -530,7 +530,7 @@ method ready*(self: Game) {.gdsync.} =
     # Initial rescale to apply current megapixels setting
     self.rescale()
 
-  self.bind_signals(self.get_window(), "size_changed")
+  discard self.get_window().connect("size_changed", self.callable("_on_size_changed"))
   # assert not self.scaled_viewport.is_nil
   self.get_tree().auto_accept_quit = false
   self.set_font_size(state.config.font_size)
@@ -647,7 +647,7 @@ method ready*(self: Game) {.gdsync.} =
   if self.verify_mode:
     self.run_verification()
 
-proc on_size_changed(self: Game) {.gdsync.} =
+proc on_size_changed(self: Game) {.gdsync, name: "_on_size_changed".} =
   self.rescale_at = get_mono_time()
   self.set_panel_width()
 
