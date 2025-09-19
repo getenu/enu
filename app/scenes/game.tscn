@@ -4,7 +4,6 @@
 [ext_resource type="PackedScene" uid="uid://dwdwrpr24c21" path="res://scenes/GUI.tscn" id="3"]
 
 [node name="Game" type="Game"]
-process_priority = 0
 
 [node name="Level" parent="." instance=ExtResource("1")]
 
