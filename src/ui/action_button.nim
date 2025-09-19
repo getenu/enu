@@ -11,8 +11,8 @@ var global_screen_scale* = 1.0
 
 type ActionButton* {.gdsync.} = ptr object of Button
 
-proc update_size(self: ActionButton, size: float) =
-  var toolbar_size = global_toolbar_size * global_screen_scale
+proc update_size*(self: ActionButton, size: float) =
+  var toolbar_size = size * global_screen_scale
   let viewport_width = self.get_viewport().get_visible_rect().size.x
   
   # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit  

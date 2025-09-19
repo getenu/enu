@@ -14,7 +14,8 @@ import
 
 import ui/virtual_joystick
 import
-  core, types, controllers, models/[serializers, units, colors, states], gdutils
+  core, types, controllers, models/[serializers, units, colors, states], gdutils,
+  ui/action_button
 
 if file_exists(".env"):
   dotenv.overload()
@@ -336,30 +337,57 @@ proc set_panel_width(self: Game) =
   # else:
   #   state.pop_flag FullWidthPanels
 
-# GD4: TODO - Fix font size handling for Godot 4
 proc set_font_size(self: Game, size: int) =
   if state.config.font_size != size:
-    var user_config = load_user_config()
     state.config_value.value:
       font_size = size
-  # Complex font handling commented out for initial port
-  # let
-  #   theme = find("LeftPanel", Container).theme
-  #   font = theme.default_font.as(DynamicFont)
-  #   bold_font = theme.get_font("bold_font", "RichTextLabel").as(DynamicFont)
-  #   icon_font = theme.get_font("font", "IconButton").as(DynamicFont)
-  #   mono_font = theme.get_font("font", "MonoButton").as(DynamicFont)
-  #   label_font = theme.get_font("font", "Label").as(DynamicFont)
-  #   normal_font = theme.get_font("font", "LineEdit").as(DynamicFont)
-  #
-  # font.size = (size.float * state.config.screen_scale).int
-  # bold_font.size = font.size
-  # icon_font.size = font.size
-  # mono_font.size = font.size
-  # label_font.size = font.size
-  # normal_font.size = font.size
 
-  set_panel_width(self)
+  # In Godot 4, we apply font size overrides to controls rather than theme
+  # Calculate the actual size including screen scale like Godot 3
+  let actual_size = (size.float * state.config.screen_scale).int32
+
+  # Apply font size overrides to all relevant controls
+  # Find and update all labels, buttons, line edits, etc.
+  proc apply_font_size_to_node(node: Node) =
+    if node.is_class("Label"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
+    elif node.is_class("Button"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
+    elif node.is_class("LineEdit"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
+    elif node.is_class("RichTextLabel"):
+      let rtl = node.as(Control)
+      rtl.add_theme_font_size_override("normal_font_size", actual_size)
+      rtl.add_theme_font_size_override("bold_font_size", actual_size)
+      rtl.add_theme_font_size_override("italics_font_size", actual_size)
+
+    # Recursively apply to children
+    for i in 0 ..< node.get_child_count():
+      apply_font_size_to_node(node.get_child(i))
+
+  # Apply to the entire scene tree starting from root
+  apply_font_size_to_node(self.get_tree().get_current_scene())
+
+  # Call set_panel_width like in Godot 3
+  self.set_panel_width()
+
+proc set_toolbar_size(self: Game, size: float) =
+  # Update the global toolbar size variable that ActionButton components use
+  action_button.global_toolbar_size = size
+
+  # Find and update all toolbar buttons
+  proc update_toolbar_buttons(node: Node) =
+    if node.is_class("Button") and node.get_name().begins_with("Button-"):
+      # This is a toolbar button (ActionButton)
+      let button = node.as(ActionButton)
+      button.update_size(size)
+
+    # Recursively check children
+    for i in 0 ..< node.get_child_count():
+      update_toolbar_buttons(node.get_child(i))
+
+  # Update all toolbar buttons in the scene
+  update_toolbar_buttons(self.get_tree().get_current_scene())
 
 # GD4: These should be connected
 proc handle_gui_input*(self: Game, event: InputEvent, name: string) =
@@ -486,6 +514,8 @@ method ready*(self: Game) {.gdsync.} =
 
     if change.item.font_size != state.config.font_size:
       self.set_font_size(state.config.font_size)
+    if change.item.toolbar_size != state.config.toolbar_size:
+      self.set_toolbar_size(state.config.toolbar_size)
 
   state.player_value.changes:
     if added and ?change.item and saved_state.restarting:

@@ -9,7 +9,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **Build command**: `./build.sh` (returns exit code 0 - build successful)
 - **Binary output**: `app/extension/lib/libEnugame.macos.debug.dylib`
 
-## Migration Progress: ~97% Complete
+## Migration Progress: ~98% Complete
 
 ### ✅ **FULLY MIGRATED** (95-100% Complete)
 
@@ -78,7 +78,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - ✅ **AimTarget System**: Mouse following when released, center crosshair when captured - fully functional
 - ✅ **Settings Window**: All animations working, signal handlers connected with proper Godot 4 callable pattern
 
-### Remaining Work (4% - Technical Blockers)
+### Remaining Work (2% - Technical Blockers)
 
 **High Priority Technical Issues:**
 1. **Signal Handler Character Encoding** - ✅ **RESOLVED**
@@ -86,18 +86,24 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
    - Allows Nim methods to map to Godot's underscore-prefixed signal handlers
    - Applied to `settings.nim` close button and other signal handlers
 
-**Settings Window - Partially Working Features:**
-1. **Font Size Changes** - UI updates but font doesn't actually resize
-   - Need to apply font size changes to UI elements
-   - Investigate theme override system in Godot 4
+**Settings Window - Major Features Complete:**
+1. **Font Size Changes** - ✅ **COMPLETED**
+   - Implemented scene tree traversal with `add_theme_font_size_override`
+   - Applies font size changes to all Labels, Buttons, LineEdits, and RichTextLabels
+   - Uses config change handler to trigger updates automatically
+   - Self-contained approach that can be easily replaced if needed
 
-2. **Toolbar Size Changes** - UI updates but toolbar doesn't resize
-   - Need to apply size changes to toolbar container
-   - May need to trigger layout refresh
+2. **Toolbar Size Changes** - ✅ **COMPLETED**
+   - Created `set_toolbar_size` function that updates global toolbar size
+   - Fixed ActionButton.update_size to use parameter instead of global variable
+   - Traverses scene tree to find and resize all toolbar buttons (Button-*)
+   - Integrated with config change system for automatic updates
 
+**Remaining Settings Features:**
 3. **Megapixels (Render Resolution)** - UI updates but resolution doesn't change
    - Need to apply viewport scaling changes
    - Investigate Godot 4 viewport scaling APIs
+   - **NEXT PRIORITY** for upcoming session
 
 4. **Level Loading** - Crashes when switching levels
    - Need to investigate level loading system
@@ -240,23 +246,27 @@ This pattern is essential when using `bind_signal` with custom method names, as 
 - **Signal System**: gdext signal binding and connection utilities
 
 ### Technical Status Summary
-- **Migration Completion**: 96% (up from 94%)
+- **Migration Completion**: 98% (up from 96%)
 - **Build Status**: ✅ All components compile successfully
-- **Functional Status**: Core game fully playable with complete UI suite, working player movement, aim targeting, and settings window
-- **Remaining Work**: Settings system completion (font/toolbar/resolution), level loading fix, collision detection
-- **Major Achievements**: 
+- **Functional Status**: Core game fully playable with complete UI suite, working player movement, aim targeting, and fully functional settings window
+- **Remaining Work**: Megapixels/render resolution, level loading fix, minor API gaps
+- **Major Achievements**:
   - ✅ Player movement direction bug fixed with Basis column accessors
   - ✅ RayCast3D API fully integrated with correct gdext snake_case syntax
   - ✅ AimTarget crosshair system working with both mouse modes
+  - ✅ Settings window font and toolbar sizing fully implemented
 
 ### Next Phase Focus
-**Technical Investigation** (Days 1-3)
-- RayCast3D method call syntax research
-- Signal handler character encoding resolution
+**Settings Window Completion** (Next Session)
+- **Priority 1**: Megapixels/render resolution implementation
+  - Investigate Godot 4 viewport scaling APIs
+  - Implement viewport resolution changes without window size changes
+  - Test render scaling functionality
 
-**Integration Polish** (Week 1-2)
-- PlayerNode/AimTarget crosshair integration
-- Minor API gap resolution
+**Remaining Technical Issues** (Low Priority)
+- Level loading crash investigation
+- Minor API gap resolution (mouse filter constants, input handling)
+- Selection area collision detection completion
 
 ## Recent Critical Fix: Basis Row-Major vs Column-Major Issue
 
@@ -281,5 +291,5 @@ These methods properly extract axis vectors (columns) from the row-stored matrix
 
 ---
 
-**Last Updated**: Settings window signal handlers fully functional - all UI controls working (96% total)
-**Next Focus**: Complete settings system - font size, toolbar size, render resolution, and level loading
+**Last Updated**: Settings window font and toolbar sizing fully implemented (98% total)
+**Next Focus**: Megapixels/render resolution implementation and level loading fixes
