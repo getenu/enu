@@ -80,15 +80,19 @@ const solid_alpha* = color(1.0, 1.0, 1.0, 1.0)
 const dimmed_alpha* = color(1.0, 1.0, 1.0, 0.4)
 
 proc ghost*(self: Control) =
-  # GD4: Mouse filter constants need to be investigated
-  # self.set_mouse_filter_recursive(Control.MOUSE_FILTER_IGNORE.int)
-  self.modulate = dimmed_alpha
+  # Modulation disabled - no visual changes for command mode
+  # # GD4: Mouse filter constants need to be investigated
+  # # self.set_mouse_filter_recursive(Control.MOUSE_FILTER_IGNORE.int)
+  # self.modulate = dimmed_alpha
+  discard
 
 proc unghost*(self: Control) =
-  # GD4: Mouse filter constants need to be investigated
-  # self.set_mouse_filter_recursive(Control.MOUSE_FILTER_PASS.int)
-  # self.mouse_filter = Control.MOUSE_FILTER_STOP
-  self.modulate = solid_alpha
+  # Modulation disabled - no visual changes
+  # # GD4: Mouse filter constants need to be investigated
+  # # self.set_mouse_filter_recursive(Control.MOUSE_FILTER_PASS.int)
+  # # self.mouse_filter = Control.MOUSE_FILTER_STOP
+  # self.modulate = solid_alpha
+  discard
 
 proc select*(self: OptionButton, text: string): int {.discardable.} =
   for i in 0 ..< self.get_item_count():

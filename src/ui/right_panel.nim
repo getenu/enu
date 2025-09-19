@@ -58,9 +58,10 @@ type RightPanel* {.gdsync.} = ptr object of MarginContainer
   tween: gdref Tween
 
 proc offset_x*(self: RightPanel, offset: float) =
-  # Position panel horizontally based on offset
-  let width = self.get_size().x
-  self.set_position(vector2(width * offset + self.margin, self.get_position().y))
+  # Position override disabled - keeping for compatibility but not using
+  # let width = self.get_size().x
+  # self.set_position(vector2(width * offset + self.margin, self.get_position().y))
+  discard
 
 method ready*(self: RightPanel) {.gdsync.} =
   print("[UI] RightPanel initializing documentation panel")
@@ -69,8 +70,8 @@ method ready*(self: RightPanel) {.gdsync.} =
   self.margin = 3.0
   self.center = 1.0
   
-  # Create tween for smooth animations (Tween is RefCounted, not a Node)
-  self.tween = instantiate(Tween).as(gdref Tween)
+  # Animations disabled - no need for tween
+  # self.tween = instantiate(Tween).as(gdref Tween)
   
   # Find child nodes
   self.label = self.find_child("MarkdownLabel", false, false).as(MarkdownLabel)
@@ -98,7 +99,8 @@ method ready*(self: RightPanel) {.gdsync.} =
   # For now, initialize in a default state
   if DocsVisible notin state.local_flags:
     self.set_visible(false)
-    self.offset_x(2.0)  # Start off-screen
+    # Position override disabled
+    # self.offset_x(2.0)  # Start off-screen
 
   print("[UI] RightPanel initialized")
 
@@ -114,42 +116,44 @@ method unhandled_input*(self: RightPanel, event: gdref InputEvent) {.gdsync.} =
         print("[UI] RightPanel closed via input")
 
 proc show_panel*(self: RightPanel) =
-  # Animate panel sliding in from right
+  # Animation disabled - just show panel
   self.set_visible(true)
-  
-  # Start from off-screen position
-  self.offset_x(2.0)
-  
-  # Smooth tween animation to center position
-  if ?self.tween:
-    discard self.tween[].tween_method(
-      callable(self, newStringName("offset_x")),
-      variant(2.0),  # from off-screen
-      variant(self.center),  # to center
-      0.3  # duration in seconds
-    )
-  
-  print("[UI] RightPanel shown with smooth animation")
+
+  # # Start from off-screen position
+  # self.offset_x(2.0)
+  #
+  # # Smooth tween animation to center position
+  # if ?self.tween:
+  #   discard self.tween[].tween_method(
+  #     callable(self, newStringName("offset_x")),
+  #     variant(2.0),  # from off-screen
+  #     variant(self.center),  # to center
+  #     0.3  # duration in seconds
+  #   )
+
+  print("[UI] RightPanel shown")
 
 proc hide_panel*(self: RightPanel) =
-  # Animate panel sliding out to right
-  if ?self.tween:
-    # Smooth tween animation from current position to off-screen
-    discard self.tween[].tween_method(
-      callable(self, newStringName("offset_x")),
-      variant(self.center),  # from center
-      variant(2.0),  # to off-screen
-      0.3  # duration in seconds
-    )
-    
-    # Hide panel after animation completes
-    discard self.tween[].tween_callback(callable(self, newStringName("set_visible")).bind(false))
-  else:
-    # Fallback to instant hide
-    self.offset_x(2.0)
-    self.set_visible(false)
-  
-  print("[UI] RightPanel hidden with smooth animation")
+  # Animation disabled - just hide panel
+  # # Animate panel sliding out to right
+  # if ?self.tween:
+  #   # Smooth tween animation from current position to off-screen
+  #   discard self.tween[].tween_method(
+  #     callable(self, newStringName("offset_x")),
+  #     variant(self.center),  # from center
+  #     variant(2.0),  # to off-screen
+  #     0.3  # duration in seconds
+  #   )
+  #
+  #   # Hide panel after animation completes
+  #   discard self.tween[].tween_callback(callable(self, newStringName("set_visible")).bind(false))
+  # else:
+  #   # Fallback to instant hide
+  #   self.offset_x(2.0)
+  #   self.set_visible(false)
+
+  self.set_visible(false)
+  print("[UI] RightPanel hidden")
 
 proc update_content*(self: RightPanel, markdown: string, text_only: bool = false) =
   # Update the documentation content
@@ -194,25 +198,26 @@ proc unfocus_panel*(self: RightPanel) =
   print("[UI] RightPanel unfocused")
 
 proc ghost_panel*(self: RightPanel) =
-  # Make panel semi-transparent for command mode
-  self.set_modulate(dimmed_alpha)
-  print("[UI] RightPanel ghosted")
+  # Modulation disabled - no visual changes
+  # self.set_modulate(dimmed_alpha)
+  print("[UI] RightPanel ghost (modulation disabled)")
 
 proc unghost_panel*(self: RightPanel) =
-  # Restore full opacity
-  self.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
-  
+  # Modulation disabled - no visual changes
+  # # Restore full opacity
+  # self.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
+
   # Update mouse filters
   let overlay = self.find_child("Overlay", false, false).as(Control)
   if ?overlay:
     set_mouse_filter_recursive(overlay, 2)  # MOUSE_FILTER_IGNORE
-  
-  let close_button = self.find_child("Close", false, false).as(Control) 
+
+  let close_button = self.find_child("Close", false, false).as(Control)
   if ?close_button:
     # TODO: Set mouse filter when gdext Control API is stable
     print("[UI] RightPanel close button mouse filter set")
-    
-  print("[UI] RightPanel unghosted")
+
+  print("[UI] RightPanel unghost (modulation disabled)")
 
 proc close_panel*(self: RightPanel) =
   # Handle close button press

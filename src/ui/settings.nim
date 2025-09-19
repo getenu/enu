@@ -5,7 +5,7 @@ import
     gdpanelcontainer, gdoptionbutton, gdlineedit, gdmargincontainer, gdtween,
     gdinputevent, gdscenetree, gdvseparator, gdviewport, gdgridcontainer,
     gdbutton, gdlabel, gdcontainer, gdinputeventjoypadbutton, gdbasebutton,
-    gdinputeventjoypadmotion,
+    gdinputeventjoypadmotion, gdpropertytweener, gdcontrol, gdboxcontainer,
   ]
 import core, gdutils, models/[colors, serializers]
 
@@ -36,6 +36,7 @@ type Settings* {.gdsync.} = ptr object of Control
   separation: int
   action_steps: seq[proc() {.gc_safe.}]
   state: WindowState
+  tween: gdref Tween
 
 proc update_values(self: Settings) =
   let full_screen_label = find("FullScreenLabel", Label)
@@ -75,10 +76,18 @@ proc update_level_list(self: Settings) =
         self.levels.add_item(world)
 
 proc collapsed_margin(self: Settings): int =
-  -int(
+  # Calculate based on container sizes including padding between containers
+  # Get separation dynamically from RowContainer (which is actually a VBoxContainer)
+  let row_container = self.main_container.find_child("RowContainer", false, false).as(BoxContainer)
+  let separation = row_container.get_theme_constant("separation")
+
+  let row_padding = 2 * separation  # 2 rows with separation between them
+  let content_height = int(
     self.settings_container.get_size().y + self.remote_container.get_size().y +
-      float(self.separation) * 2.0
-  ) + 5
+    float(row_padding)
+  )
+  # Hide the entire content height - title bar space will be whatever's naturally left
+  -content_height
 
 proc remote_opened_margin(self: Settings): int =
   0
@@ -109,20 +118,30 @@ proc expanded_new_level_margin(self: Settings): int =
     int(self.new_level_container.get_size().y / 2.0) + self.separation + 10
 
 proc resize(self: Settings, start_margin, end_margin: float, node: Node, property: string) =
-  let tween = self.create_tween[]
-  # For Godot 4, set_trans and set_ease need proper enum types
-  # But for now we'll skip setting these and use defaults
-  # discard tween.set_trans(transition)
-  # discard tween.set_ease(ease_in_out)
-  discard tween.tween_property(
-    node, newNodePath(property),
+  # Ensure the property exists by setting it to the start value first
+  node.set(property, variant(start_margin))
+
+  self.tween = self.create_tween()
+  let tweener = self.tween[].tween_property(
+    node, new_node_path(property),
     variant(end_margin),
     animation_duration
   )
+  discard tweener[].set_trans(Tween_TransitionType(transition))
+  discard tweener[].set_ease(Tween_EaseType(ease_in_out))
 
 proc resize(self: Settings, start_margin, end_margin: int, node: Node, property: string) =
-  self.main_container.add_theme_constant_override(property, start_margin.int32)
-  self.resize(float(start_margin), float(end_margin), node, property)
+  # Ensure the property exists by setting it to the start value first
+  node.set(property, variant(start_margin))
+
+  self.tween = self.create_tween()
+  let tweener = self.tween[].tween_property(
+    node, new_node_path(property),
+    variant(end_margin.int32),
+    animation_duration
+  )
+  discard tweener[].set_trans(Tween_TransitionType(transition))
+  discard tweener[].set_ease(Tween_EaseType(ease_in_out))
 
 proc margin_y(self: Settings): int =
   self.main_container.get_theme_constant("margin_bottom")
@@ -159,69 +178,59 @@ proc open_window(self: Settings) =
   self.update_values()
   self.state = Opened
   self.window.set_visible(true)
-  self.action_steps =
-    @[
-      proc() =
-        self.window.anchor_left = 1.0,
-      proc() =
-        self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
-        self.resize(1.0, 0.0, node = self.window, property = "anchor_right"),
-      proc() =
-        self.resize_y self.expanded_margin()
-      ,
-    ]
+
+  # Start with window off-screen to the right and collapsed height (title bar only)
+  let window_width = self.window.get_size().x
+  self.window.set_offset(Side.side_right, window_width)
+
+  # Set initial collapsed margin (title bar only)
+  let collapsed_margin_value = self.collapsed_margin()
+  let expanded_margin_value = self.expanded_margin()
+
+  self.main_container.add_theme_constant_override(stringname("margin_bottom"), collapsed_margin_value.int32)
+  # Animate sliding in from right
+  self.action_steps = @[
+    proc() {.gc_safe.} =
+      self.resize(window_width, 0.0, self.window, "offset_right"),
+    proc() {.gc_safe.} =
+      # Then slide down (expand height)
+      self.resize_y self.expanded_margin()
+  ]
 
 proc close_window(self: Settings) =
-  self.action_steps =
-    if self.state != NewLevel:
-      @[
-        proc() =
-          self.resize_y self.collapsed_margin()
-        ,
-        proc() =
-          self.resize(0.0, 1.0, node = self.window, property = "anchor_left"),
-        proc() =
-          self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-          self.window.set_visible(false),
-      ]
-    else:
-      @[
-        proc() =
-          self.resize_y(
-            self.expanded_new_level_margin, self.collapsed_new_level_margin
-          ),
-        proc() =
-          self.new_level_container.set_visible(false)
-          self.main_container.add_theme_constant_override(
-            "margin_bottom", self.collapsed_margin.int32
-          ),
-        proc() =
-          self.resize(0.0, 1.0, node = self.window, property = "anchor_left"),
-        proc() =
-          self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-          self.window.set_visible(false),
-      ]
-  self.state = Closed
+  # Animate sliding out - up then to left
+  self.action_steps = @[
+    proc() {.gc_safe.} =
+      # First slide up
+      if self.state != NewLevel:
+        self.resize_y self.collapsed_margin()
+      else:
+        self.new_level_container.set_visible(false)
+        self.resize_y self.collapsed_margin()
+    ,  # Comma after the proc closure
+    proc() {.gc_safe.} =
+      # Then slide to right
+      let window_width = self.window.get_size().x
+      self.resize(0.0, window_width, self.window, "offset_right")
+    ,  # Comma after the proc closure
+    proc() {.gc_safe.} =
+      # Finally hide the window
+      self.window.set_visible(false)
+      self.state = Closed
+  ]
 
 proc show_new_level(self: Settings) =
   self.level_name.set_text("")
-  self.new_level_container.set_visible(false)
   self.state = NewLevel
-  self.action_steps =
-    @[
-      proc() =
-        self.resize_y(self.expanded_margin, self.collapsed_margin),
-      proc() =
-        self.new_level_container.set_visible(true)
-        self.level_name.grab_focus()
-        self.main_container.add_theme_constant_override(
-          "margin_bottom", self.collapsed_new_level_margin.int32
-        ),
-      proc() =
-        self.resize_y(
-          self.collapsed_new_level_margin, self.expanded_new_level_margin
-        ),
-    ]
+  # Animate to collapsed state, then show new level container
+  self.action_steps = @[
+    proc() {.gc_safe.} =
+      self.resize_y(self.collapsed_margin),
+    proc() {.gc_safe.} =
+      self.new_level_container.set_visible(true)
+      self.level_name.grab_focus()
+      self.resize_y(self.expanded_new_level_margin)
+  ]
 
 proc approximate_full_width(self: Settings): float =
   let width = self.settings_container.get_size().x
@@ -282,27 +291,39 @@ method ready*(self: Settings) {.gdsync.} =
     self.colors.add_item(state.config.player_color.to_html_hex)
     self.colors.select(self.colors.get_item_count - 1)
 
+  # Connect up/down buttons with direct connections
+  discard self.megapixels_up.connect("pressed", self.callable("_on_megapixels_up_pressed"))
+  discard self.megapixels_down.connect("pressed", self.callable("_on_megapixels_down_pressed"))
+  discard self.font_size_up.connect("pressed", self.callable("_on_font_size_up_pressed"))
+  discard self.font_size_down.connect("pressed", self.callable("_on_font_size_down_pressed"))
+  discard self.toolbar_size_up.connect("pressed", self.callable("_on_toolbar_size_up_pressed"))
+  discard self.toolbar_size_down.connect("pressed", self.callable("_on_toolbar_size_down_pressed"))
+
   for button in [
     self.megapixels_up, self.megapixels_down, self.font_size_up,
     self.font_size_down, self.toolbar_size_up, self.toolbar_size_down,
   ]:
-    self.bind_signal(button, "pressed", button.get_name())
-    self.bind_signal(button, "button_up", button.get_name())
-    self.bind_signal(button, "button_down", button.get_name())
+    discard button.connect("button_up", self.callable("_on_button_up"))
+    discard button.connect("button_down", self.callable("_on_button_down"))
 
-  for option_button in [self.environments, self.colors, self.levels]:
-    self.bind_signal(option_button, "item_selected", option_button.get_name())
+  # Connect option buttons
+  discard self.environments.connect("item_selected", self.callable("_on_environments_selected"))
+  discard self.colors.connect("item_selected", self.callable("_on_colors_selected"))
+  discard self.levels.connect("item_selected", self.callable("_on_levels_selected"))
 
-  self.bind_signal(self.connect, "pressed", "Connect")
-  self.bind_signal(self.close, ("pressed", "closed"))
-  self.bind_signal(self.cancel, ("pressed", "cancelled"))
-  self.bind_signal(self.save, "pressed", self.save.get_name())
+  # Connect other buttons
+  discard self.connect.connect("pressed", self.callable("_on_connect_pressed"))
+  discard self.close.connect("pressed", self.callable("_on_closed"))
+  discard self.cancel.connect("pressed", self.callable("_on_cancelled"))
+  discard self.save.connect("pressed", self.callable("_on_save_pressed"))
 
-  for button in [self.full_screen, self.run_server]:
-    self.bind_signal(button, ("pressed", "toggled"), button, button.get_text())
+  # Connect toggle buttons
+  discard self.full_screen.connect("pressed", self.callable("_on_full_screen_toggled"))
+  discard self.run_server.connect("pressed", self.callable("_on_run_server_toggled"))
 
-  for line_edit in [self.level_name, self.server_address]:
-    self.bind_signal(line_edit, "text_submitted", line_edit.get_name())
+  # Connect line edits
+  discard self.level_name.connect("text_submitted", self.callable("_on_level_name_submitted"))
+  discard self.server_address.connect("text_submitted", self.callable("_on_server_address_submitted"))
 
   state.nodes.game.bind_signal(self, "gui_input", self.get_name())
 
@@ -323,7 +344,8 @@ method ready*(self: Settings) {.gdsync.} =
       self.unghost()
 
   if SettingsVisible notin state.local_flags:
-    self.window.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+    # Start with window hidden
+    self.window.set_visible(false)
     if SceneReady in state.local_flags:
       self.close_window
     else:
@@ -331,6 +353,7 @@ method ready*(self: Settings) {.gdsync.} =
         if SceneReady.added:
           self.close_window
 
+# Internal handler that takes a name parameter
 proc on_pressed(self: Settings, name: string) =
   if find(name, Button).is_disabled():
     return
@@ -387,33 +410,45 @@ proc on_pressed(self: Settings, name: string) =
 
   self.update_values()
 
-proc on_closed(self: Settings) =
+# Individual button handlers
+proc on_megapixels_up_pressed(self: Settings) {.gdsync, name: "_on_megapixels_up_pressed".} =
+  self.on_pressed("MegapixelsUp")
+
+proc on_megapixels_down_pressed(self: Settings) {.gdsync, name: "_on_megapixels_down_pressed".} =
+  self.on_pressed("MegapixelsDown")
+
+proc on_font_size_up_pressed(self: Settings) {.gdsync, name: "_on_font_size_up_pressed".} =
+  self.on_pressed("FontSizeUp")
+
+proc on_font_size_down_pressed(self: Settings) {.gdsync, name: "_on_font_size_down_pressed".} =
+  self.on_pressed("FontSizeDown")
+
+proc on_toolbar_size_up_pressed(self: Settings) {.gdsync, name: "_on_toolbar_size_up_pressed".} =
+  self.on_pressed("ToolbarSizeUp")
+
+proc on_toolbar_size_down_pressed(self: Settings) {.gdsync, name: "_on_toolbar_size_down_pressed".} =
+  self.on_pressed("ToolbarSizeDown")
+
+proc on_connect_pressed(self: Settings) {.gdsync, name: "_on_connect_pressed".} =
+  self.on_pressed("Connect")
+
+proc on_save_pressed(self: Settings) {.gdsync, name: "_on_save_pressed".} =
+  self.on_pressed("Save")
+
+proc on_closed(self: Settings) {.gdsync, name: "_on_closed".} =
   state.pop_flag SettingsVisible
 
-proc on_cancelled(self: Settings) =
+proc on_cancelled(self: Settings) {.gdsync, name: "_on_cancelled".} =
   self.update_values()
   self.state = Opened
-  self.action_steps =
-    @[
-      proc() =
-        self.resize_y(
-          self.expanded_new_level_margin, self.collapsed_new_level_margin
-        ),
-      proc() =
-        self.new_level_container.set_visible(false)
-        self.main_container.add_theme_constant_override(
-          "margin_bottom", self.collapsed_margin.int32.int32
-        ),
-      proc() =
-        self.resize_y(self.collapsed_margin, self.expanded_margin),
-    ]
+  # Animate hiding new level container
+  self.action_steps = @[
+    proc() {.gc_safe.} =
+      self.new_level_container.set_visible(false)
+      self.resize_y(self.expanded_margin)
+  ]
 
-proc on_button_up(self: Settings, name: string) =
-  self.repeat_timers[name] = MonoTime.high
-
-proc on_button_down(self: Settings, name: string) =
-  self.repeat_timers[name] = get_mono_time() + 0.4.seconds
-
+# Internal handler functions (must be defined before gdsync handlers)
 proc on_toggled(self: Settings, button: Button, default: string) =
   let current = $button.get_text() == check
   let enable = not current
@@ -428,12 +463,11 @@ proc on_toggled(self: Settings, button: Button, default: string) =
   if $button.get_name() == "RunServer":
     state.config_value.value:
       run_server = enable
+    # Animate resize
     if enable:
-      self.action_steps.add proc() =
-        self.resize_y(self.remote_opened_margin, self.remote_closed_margin)
+      self.resize_y(self.remote_closed_margin)
     else:
-      self.action_steps.add proc() =
-        self.resize_y(self.remote_closed_margin, self.remote_opened_margin)
+      self.resize_y(self.remote_opened_margin)
 
   self.update_values()
 
@@ -463,6 +497,38 @@ proc on_text_submitted(self: Settings, text, name: string) =
   elif name == "ServerAddress":
     self.on_pressed("Connect")
 
+# GDSync signal handlers (these call the internal handlers defined above)
+proc on_button_up(self: Settings) {.gdsync, name: "_on_button_up".} =
+  # Clear all repeat timers since we don't know which button
+  for name in self.repeat_timers.keys:
+    self.repeat_timers[name] = MonoTime.high
+
+proc on_button_down(self: Settings) {.gdsync, name: "_on_button_down".} =
+  # Set timer for all up/down buttons
+  for name in ["MegapixelsUp", "MegapixelsDown", "FontSizeUp", "FontSizeDown", "ToolbarSizeUp", "ToolbarSizeDown"]:
+    self.repeat_timers[name] = get_mono_time() + 0.4.seconds
+
+proc on_full_screen_toggled(self: Settings) {.gdsync, name: "_on_full_screen_toggled".} =
+  self.on_toggled(self.full_screen, "")
+
+proc on_run_server_toggled(self: Settings) {.gdsync, name: "_on_run_server_toggled".} =
+  self.on_toggled(self.run_server, "")
+
+proc on_environments_selected(self: Settings, index: int) {.gdsync, name: "_on_environments_selected".} =
+  self.on_item_selected(index, "Environments")
+
+proc on_colors_selected(self: Settings, index: int) {.gdsync, name: "_on_colors_selected".} =
+  self.on_item_selected(index, "PlayerColors")
+
+proc on_levels_selected(self: Settings, index: int) {.gdsync, name: "_on_levels_selected".} =
+  self.on_item_selected(index, "Levels")
+
+proc on_level_name_submitted(self: Settings, text: string) {.gdsync, name: "_on_level_name_submitted".} =
+  self.on_text_submitted(text, "LevelName")
+
+proc on_server_address_submitted(self: Settings, text: string) {.gdsync, name: "_on_server_address_submitted".} =
+  self.on_text_submitted(text, "ServerAddress")
+
 method process*(self: Settings, delta: float) {.gdsync.} =
   let now = get_mono_time()
   for name, time in self.repeat_timers.mpairs:
@@ -470,13 +536,14 @@ method process*(self: Settings, delta: float) {.gdsync.} =
       time = now + 0.14.seconds
       self.on_pressed(name)
 
-  if self.action_steps.len > 0:
+  # Process animation steps - only execute next step when tween is not active
+  if self.action_steps.len > 0 and (not ?self.tween or not self.tween[].is_valid()):
     let step = self.action_steps[0]
     self.action_steps.delete(0)
     step()
-  elif self.action_steps.len == 0 and self.state == Opened and
-      self.margin_y != self.expanded_margin:
-    self.resize_y(self.expanded_margin)
+  # elif self.action_steps.len == 0 and self.state == Opened and
+  #     self.margin_y != self.expanded_margin:
+  #   self.resize_y(self.expanded_margin)
 
   if self.state == Opened:
     let viewport = self.get_viewport()

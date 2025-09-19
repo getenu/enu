@@ -13,49 +13,56 @@ type Console* {.gdsync.} = ptr object of RichTextLabel
 proc watch_states(self: Console)
 
 proc offset_x*(self: Console, offset: float) =
-  let width = self.get_size().x
-  self.set_position(vector2(width * offset, self.get_position().y))
+  # Position override disabled - keeping for compatibility but not using
+  # let width = self.get_size().x
+  # self.set_position(vector2(width * offset, self.get_position().y))
+  discard
 
 proc show_console(self: Console) =
-  # Set appropriate opacity based on state
-  if CommandMode in state.local_flags:
-    self.set_modulate(dimmed_alpha)
-  else:
-    self.set_modulate(color(1.0, 1.0, 1.0, 1.0))
-  
-  # GD4: Re-enabled SceneTreeTween animations
-  # Kill existing tween
-  if ?self.tween:
-    self.tween[].kill()
-  
-  self.tween = self.create_tween()
+  # Modulation and animations disabled - just set visibility
+  # # Set appropriate opacity based on state
+  # if CommandMode in state.local_flags:
+  #   self.set_modulate(dimmed_alpha)
+  # else:
+  #   self.set_modulate(color(1.0, 1.0, 1.0, 1.0))
+
+  # # GD4: Re-enabled SceneTreeTween animations
+  # # Kill existing tween
+  # if ?self.tween:
+  #   self.tween[].kill()
+  #
+  # self.tween = self.create_tween()
+  #
+  # # Animate sliding in from right
+  # discard self.tween[].tween_method(
+  #   callable(self, "offset_x"), variant(-1.0), variant(0.0), animation_duration
+  # )
+  # discard self.tween[].set_trans(transExpo)
+  # discard self.tween[].set_ease(easeInOut)
+
   self.set_visible(true)
-  
-  # Animate sliding in from right
-  discard self.tween[].tween_method(
-    callable(self, "offset_x"), variant(-1.0), variant(0.0), animation_duration
-  )
-  discard self.tween[].set_trans(transExpo)
-  discard self.tween[].set_ease(easeInOut)
 
 proc hide_console(self: Console) =
-  # GD4: Re-enabled SceneTreeTween animations
-  # Kill existing tween
-  if ?self.tween:
-    self.tween[].kill()
-  
-  self.tween = self.create_tween()
-  self.set_position(vector2(0.0, self.get_position().y))
-  
-  # Animate sliding out to right
-  discard self.tween[].tween_method(
-    callable(self, "offset_x"), variant(0.0), variant(-1.0), animation_duration
-  )
-  discard self.tween[].set_trans(transExpo)
-  discard self.tween[].set_ease(easeInOut)
-  
-  # Hide when animation complete
-  discard self.tween[].tween_callback(callable(self, "set_visible").bind(false))
+  # Animations disabled - just hide
+  # # GD4: Re-enabled SceneTreeTween animations
+  # # Kill existing tween
+  # if ?self.tween:
+  #   self.tween[].kill()
+  #
+  # self.tween = self.create_tween()
+  # self.set_position(vector2(0.0, self.get_position().y))
+  #
+  # # Animate sliding out to right
+  # discard self.tween[].tween_method(
+  #   callable(self, "offset_x"), variant(0.0), variant(-1.0), animation_duration
+  # )
+  # discard self.tween[].set_trans(transExpo)
+  # discard self.tween[].set_ease(easeInOut)
+  #
+  # # Hide when animation complete
+  # discard self.tween[].tween_callback(callable(self, "set_visible").bind(false))
+
+  self.set_visible(false)
 
 method ready*(self: Console) {.gdsync.} =
   print("[UI] Console ready - Godot 4 migration complete with animations and state watching")
@@ -76,15 +83,17 @@ method ready*(self: Console) {.gdsync.} =
   
   # Set initial visibility
   if ConsoleVisible notin state.local_flags:
-    self.set_modulate(color(1.0, 1.0, 1.0, 0.0))
+    # Modulation disabled - just hide
+    # self.set_modulate(color(1.0, 1.0, 1.0, 0.0))
     self.hide_console()
   
-  # Configure scrollbar appearance
-  for i in 0 ..< self.get_child_count():
-    let child = self.get_child(i)
-    if child of VScrollBar:
-      let scrollbar = child.as(VScrollBar)
-      scrollbar.set_modulate(color(1.0, 1.0, 1.0, 0.0))
+  # Modulation disabled - scrollbar remains visible
+  # # Configure scrollbar appearance
+  # for i in 0 ..< self.get_child_count():
+  #   let child = self.get_child(i)
+  #   if child of VScrollBar:
+  #     let scrollbar = child.as(VScrollBar)
+  #     scrollbar.set_modulate(color(1.0, 1.0, 1.0, 0.0))
   
   # Connect close button
   let close_button = self.find("Close", Control)
@@ -104,10 +113,11 @@ proc watch_states(self: Console) =
       self.show_console()
     elif ConsoleVisible.removed:
       self.hide_console()
-    elif CommandMode.added:
-      self.ghost()
-    elif CommandMode.removed:
-      self.unghost()
+    # Ghosting disabled - no visual changes for command mode
+    # elif CommandMode.added:
+    #   self.ghost()
+    # elif CommandMode.removed:
+    #   self.unghost()
     
     if MouseCaptured.added:
       # GD4: Fixed mouse filter enum

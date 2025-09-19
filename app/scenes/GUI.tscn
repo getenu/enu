@@ -67,10 +67,13 @@ z_index = 15
 layout_mode = 0
 anchor_right = 1.0
 theme = ExtResource("6")
+theme_override_constants/separation = 0
 alignment = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="HBoxContainer"]
 layout_mode = 2
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
 
 [node name="Label" type="Label" parent="HBoxContainer/MarginContainer"]
 layout_mode = 2
@@ -186,19 +189,22 @@ text = "  "
 
 [node name="GridContainer" type="GridContainer" parent="."]
 z_index = 20
-layout_mode = 0
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 columns = 2
 
-[node name="Label" type="Label" parent="GridContainer"]
+[node name="Panel" type="Panel" parent="GridContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 1
 
 [node name="Settings" parent="GridContainer" instance=ExtResource("12")]
 layout_mode = 2
+size_flags_horizontal = 1
 
 [node name="SettingsContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="2"]
 theme_override_constants/h_separation = 20

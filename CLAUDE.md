@@ -214,3 +214,4 @@ This mode:
 - Always use snake_case for variables and function names. Types and constants use UpperCamelCase
 - ALWAYS USE snake_case FOR VARIABLES AND FUNCTIONS!!!
 - When doing UI work, ALWAYS verify work by capturing a screenshot by passing `--screenshot` to enu.
+- The app can be launched in screenshot mode with ./screenshot.sh. Feel free to modify this command.

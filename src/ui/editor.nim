@@ -85,47 +85,54 @@ proc set_executing_line(self: EnuEditor, line: int) =
 proc open_editor(self: EnuEditor) =
   print("[UI] Editor opening...")
 
-  # Start with transparent editor
-  self.set_visible(true)
-  self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+  # Animation disabled - just show editor
+  # # Start with transparent editor
+  # self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+  #
+  # # Smooth fade-in animation
+  # if ?self.tween:
+  #   discard self.tween[].tween_property(
+  #     self,
+  #     newNodePath("modulate"),
+  #     variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
+  #     0.25, # duration in seconds
+  #   )
+  #   print("[UI] Editor opened with smooth fade-in")
+  # else:
+  #   # Fallback to instant appearance
+  #   self.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
+  #   print("[UI] Editor opened instantly")
 
-  # Smooth fade-in animation
-  if ?self.tween:
-    discard self.tween[].tween_property(
-      self,
-      newNodePath("modulate"),
-      variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
-      0.25, # duration in seconds
-    )
-    print("[UI] Editor opened with smooth fade-in")
-  else:
-    # Fallback to instant appearance
-    self.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
-    print("[UI] Editor opened instantly")
+  self.set_visible(true)
+  print("[UI] Editor opened")
 
 proc close_editor(self: EnuEditor) =
   print("[UI] Editor closing...")
   if not self.code_edit.is_nil:
     self.code_edit.release_focus()
 
-  # Smooth fade-out animation
-  if ?self.tween:
-    discard self.tween[].tween_property(
-      self,
-      newNodePath("modulate"),
-      variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
-      0.25, # duration in seconds
-    )
+  # Animation disabled - just hide editor
+  # # Smooth fade-out animation
+  # if ?self.tween:
+  #   discard self.tween[].tween_property(
+  #     self,
+  #     newNodePath("modulate"),
+  #     variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
+  #     0.25, # duration in seconds
+  #   )
+  #
+  #   # Hide editor after animation completes
+  #   discard self.tween[].tween_callback(
+  #     callable(self, newStringName("set_visible")).bind(false)
+  #   )
+  #   print("[UI] Editor closed with smooth fade-out")
+  # else:
+  #   # Fallback to instant hide
+  #   self.set_visible(false)
+  #   print("[UI] Editor closed instantly")
 
-    # Hide editor after animation completes
-    discard self.tween[].tween_callback(
-      callable(self, newStringName("set_visible")).bind(false)
-    )
-    print("[UI] Editor closed with smooth fade-out")
-  else:
-    # Fallback to instant hide
-    self.set_visible(false)
-    print("[UI] Editor closed instantly")
+  self.set_visible(false)
+  print("[UI] Editor closed")
 
 proc watch_open_unit(self: EnuEditor) =
   var line_zid: ZID
@@ -197,13 +204,14 @@ method ready*(self: EnuEditor) {.gdsync.} =
   else:
     print("[UI] Warning: state.nodes.game is nil, cannot find LeftPanel")
 
-  # Initialize tween for smooth animations
-  # Create a new tween for smooth animations (must use create_tween in Godot 4)
-  self.tween = self.create_tween()
-  if ?self.tween:
-    print("[UI] Created new Tween for Editor animations")
-  else:
-    print("[UI] Warning: Failed to create Tween for Editor animations")
+  # Animations disabled - no need for tween
+  # # Initialize tween for smooth animations
+  # # Create a new tween for smooth animations (must use create_tween in Godot 4)
+  # self.tween = self.create_tween()
+  # if ?self.tween:
+  #   print("[UI] Created new Tween for Editor animations")
+  # else:
+  #   print("[UI] Warning: Failed to create Tween for Editor animations")
 
   # Get colors for UI state management
   self.selection_color =

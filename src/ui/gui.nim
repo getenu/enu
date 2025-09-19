@@ -39,40 +39,43 @@ type GUI* {.gdsync.} = ptr object of Control
 
 # Forward declarations - all procedures must be defined before ready() method
 proc configure_mobile_layout(self: GUI) =
-  # Configure panels for mobile screens (full-width overlays)
-  if ?self.left_panel:
-    # Set left panel to fill entire width (0-1.0)
-    self.left_panel.set_anchor(sideLeft, 0.0)
-    self.left_panel.set_anchor(sideRight, 1.0)
-  if ?self.right_panel:
-    # Set right panel to fill entire width (0-1.0)
-    self.right_panel.set_anchor(sideLeft, 0.0)
-    self.right_panel.set_anchor(sideRight, 1.0)
-  print("[UI] Applied mobile layout (full-width panels)")
+  # Position overrides disabled - panels remain at their scene-defined positions
+  # # Configure panels for mobile screens (full-width overlays)
+  # if ?self.left_panel:
+  #   # Set left panel to fill entire width (0-1.0)
+  #   self.left_panel.set_anchor(sideLeft, 0.0)
+  #   self.left_panel.set_anchor(sideRight, 1.0)
+  # if ?self.right_panel:
+  #   # Set right panel to fill entire width (0-1.0)
+  #   self.right_panel.set_anchor(sideLeft, 0.0)
+  #   self.right_panel.set_anchor(sideRight, 1.0)
+  print("[UI] Mobile layout (position overrides disabled)")
 
 proc configure_narrow_layout(self: GUI) =
-  # Configure panels for narrow screens (reduced width)
-  if ?self.left_panel:
-    # Set left panel to 60% width (0-0.6)
-    self.left_panel.set_anchor(sideLeft, 0.0)
-    self.left_panel.set_anchor(sideRight, 0.6)
-  if ?self.right_panel:
-    # Set right panel to start at 40% and fill to right (0.4-1.0)
-    self.right_panel.set_anchor(sideLeft, 0.4)
-    self.right_panel.set_anchor(sideRight, 1.0)
-  print("[UI] Applied narrow screen layout (60/40 split)")
+  # Position overrides disabled - panels remain at their scene-defined positions
+  # # Configure panels for narrow screens (reduced width)
+  # if ?self.left_panel:
+  #   # Set left panel to 60% width (0-0.6)
+  #   self.left_panel.set_anchor(sideLeft, 0.0)
+  #   self.left_panel.set_anchor(sideRight, 0.6)
+  # if ?self.right_panel:
+  #   # Set right panel to start at 40% and fill to right (0.4-1.0)
+  #   self.right_panel.set_anchor(sideLeft, 0.4)
+  #   self.right_panel.set_anchor(sideRight, 1.0)
+  print("[UI] Narrow layout (position overrides disabled)")
 
 proc configure_standard_layout(self: GUI) =
-  # Configure panels for standard screens (normal 50/50 split)
-  if ?self.left_panel:
-    # Set left panel to 50% width (0-0.5)
-    self.left_panel.set_anchor(sideLeft, 0.0)
-    self.left_panel.set_anchor(sideRight, 0.5)
-  if ?self.right_panel:
-    # Set right panel to start at 50% and fill to right (0.5-1.0)
-    self.right_panel.set_anchor(sideLeft, 0.5)
-    self.right_panel.set_anchor(sideRight, 1.0)
-  print("[UI] Applied standard layout (50/50 split)")
+  # Position overrides disabled - panels remain at their scene-defined positions
+  # # Configure panels for standard screens (normal 50/50 split)
+  # if ?self.left_panel:
+  #   # Set left panel to 50% width (0-0.5)
+  #   self.left_panel.set_anchor(sideLeft, 0.0)
+  #   self.left_panel.set_anchor(sideRight, 0.5)
+  # if ?self.right_panel:
+  #   # Set right panel to start at 50% and fill to right (0.5-1.0)
+  #   self.right_panel.set_anchor(sideLeft, 0.5)
+  #   self.right_panel.set_anchor(sideRight, 1.0)
+  print("[UI] Standard layout (position overrides disabled)")
 
 proc apply_responsive_layout(self: GUI) =
   # Apply layout changes based on screen size
@@ -90,102 +93,47 @@ proc show_left_panel(self: GUI) =
   if not ?self.left_panel:
     return
 
-  # Kill existing tween
-  if ?self.left_tween:
-    self.left_tween[].kill()
-
-  self.left_tween = self.create_tween()
-  self.left_panel.set_visible(true)
-
-  # Start from off-screen left and animate to normal position
-  let panel_width = self.left_panel.get_size().x
-  self.left_panel.set_position(vector2(-panel_width, self.left_panel.get_position().y))
-
-  # Animate sliding in from left
-  discard self.left_tween[].tween_property(
-    self.left_panel,
-    "position:x",
-    variant(0.0),
-    animation_duration
-  )
-  discard self.left_tween[].set_trans(transExpo)
-  discard self.left_tween[].set_ease(easeOut)
-
-proc hide_left_panel(self: GUI) =
-  if not ?self.left_panel:
-    return
-
-  # TODO: Godot 4 panel animation API migration needed
+  # Animation disabled - show panel directly
   # # Kill existing tween
   # if ?self.left_tween:
   #   self.left_tween[].kill()
   #
   # self.left_tween = self.create_tween()
+  # # Start from off-screen left and animate to normal position
+  # let panel_width = self.left_panel.get_size().x
+  # self.left_panel.set_position(vector2(-panel_width, self.left_panel.get_position().y))
   #
-  # # Animate sliding out to left
-  # discard self.left_tween[].tween_method(
-  #   callable(self.left_panel, "set_offset_left"),
+  # # Animate sliding in from left
+  # discard self.left_tween[].tween_property(
+  #   self.left_panel,
+  #   "position:x",
   #   variant(0.0),
-  #   variant(-self.left_panel.get_size().x),
   #   animation_duration
   # )
   # discard self.left_tween[].set_trans(transExpo)
-  # discard self.left_tween[].set_ease(easeIn)
-  #
-  # # Hide when animation complete
-  # discard self.left_tween[].tween_callback(callable(self.left_panel, "set_visible").bind(false))
+  # discard self.left_tween[].set_ease(easeOut)
+
+  self.left_panel.set_visible(true)
+
+proc hide_left_panel(self: GUI) =
+  if not ?self.left_panel:
+    return
+
+  # Animation disabled - hide panel directly
   self.left_panel.set_visible(false)
 
 proc show_right_panel(self: GUI) =
   if not ?self.right_panel:
     return
 
-  # TODO: Godot 4 panel animation API migration needed
-  # # Kill existing tween
-  # if ?self.right_tween:
-  #   self.right_tween[].kill()
-  #
-  # self.right_tween = self.create_tween()
+  # Animation disabled - show panel directly
   self.right_panel.set_visible(true)
-
-  # # Start from off-screen right and animate to normal position
-  # let panel_width = self.right_panel.get_size().x
-  # self.right_panel.set_offset_left(panel_width)
-  #
-  # # Animate sliding in from right
-  # discard self.right_tween[].tween_method(
-  #   callable(self.right_panel, "set_offset_left"),
-  #   variant(panel_width),
-  #   variant(0.0),
-  #   animation_duration
-  # )
-  # discard self.right_tween[].set_trans(transExpo)
-  # discard self.right_tween[].set_ease(easeOut)
 
 proc hide_right_panel(self: GUI) =
   if not ?self.right_panel:
     return
 
-  # TODO: Godot 4 panel animation API migration needed
-  # # Kill existing tween
-  # if ?self.right_tween:
-  #   self.right_tween[].kill()
-  #
-  # self.right_tween = self.create_tween()
-  #
-  # # Animate sliding out to right
-  # let panel_width = self.right_panel.get_size().x
-  # discard self.right_tween[].tween_method(
-  #   callable(self.right_panel, "set_offset_left"),
-  #   variant(0.0),
-  #   variant(panel_width),
-  #   animation_duration
-  # )
-  # discard self.right_tween[].set_trans(transExpo)
-  # discard self.right_tween[].set_ease(easeIn)
-  #
-  # # Hide when animation complete
-  # discard self.right_tween[].tween_callback(callable(self.right_panel, "set_visible").bind(false))
+  # Animation disabled - hide panel directly
   self.right_panel.set_visible(false)
 
 proc watch_panel_states(self: GUI) =
