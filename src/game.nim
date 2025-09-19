@@ -9,7 +9,7 @@ import
     gdprojectsettings, gdinputmap, gdinputeventaction, gdinputeventkey,
     gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
     gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
-    gdviewporttexture, gdtexture2d,
+    gdviewporttexture, gdtexture2d, gdsubviewportcontainer,
   ]
 
 import ui/virtual_joystick
@@ -34,7 +34,8 @@ var environment_cache {.threadvar.}: Table[string, gdref Environment]
 type Game* {.gdsync.} =
   ptr object of Node
     reticle: Control
-    scaled_viewport: Viewport
+    scaled_viewport: SubViewport
+    viewport_container: SubViewportContainer
     triggered = false
     saved_mouse_captured_state = false
     stats: Label
@@ -75,7 +76,7 @@ proc take_screenshot*(self: Game) =
   let filepath = join_path(state.config.work_dir, filename)
   
   # Save the image
-  if image[].save_png(gdString(filepath)) == ok:
+  if image[].save_png(newGdString(filepath)) == ok:
     info "[SCREENSHOT] Screenshot saved", filepath = filepath
   else:
     warn "[SCREENSHOT] Failed to save screenshot", filepath = filepath
@@ -85,20 +86,61 @@ proc take_screenshot*(self: Game) =
   state.push_flag Quitting
 
 proc rescale*(self: Game) =
-  discard
-  # GD4: fixme
-  # let vp = self.get_viewport().size
-  # let megapixels =
-  #   if ?state.config.megapixels_override:
-  #     state.config.megapixels_override
-  #   else:
-  #     state.config.megapixels
-  # state.scale_factor = sqrt(megapixels * 1_000_000.0 / (vp.x * vp.y))
-
-  # self.scaled_viewport.size = vp * state.scale_factor
-  # self.scaled_viewport.get_texture.flags = if megapixels >= 1.0: FLAG_FILTER else: 0
-
-  #info "Rescaled viewport", size = self.scaled_viewport.size
+  # GD4: Hybrid scaling approach combining stretch_shrink and scaling_3d_scale
+  #
+  # Research findings on viewport scaling approaches in Godot 4:
+  # 1. size_2d_override: Has bugs when set in _ready(), doesn't work reliably
+  # 2. stretch_shrink: Only accepts integers >=1, good for pixel art but limited range  
+  # 3. scaling_3d_scale: Works well for upscaling but has 0.25 minimum limit
+  # 4. Window stretch: Affects entire UI, not suitable for independent 3D scaling
+  #
+  # Hybrid solution:
+  # - For megapixels >= 1.0: Use scaling_3d_scale (smooth, no minimum limit)
+  # - For megapixels < 1.0: Use stretch_shrink (pixel art effect, integer-only)
+  # This provides the best of both approaches while working around their limitations.
+  if self.scaled_viewport.is_nil:
+    # If scaled_viewport is not set up, skip rescaling
+    return
+    
+  let vp = self.get_viewport().get_visible_rect().size
+  let megapixels =
+    if ?state.config.megapixels_override:
+      state.config.megapixels_override
+    else:
+      state.config.megapixels
+  
+  # Calculate scale factor based on megapixels setting
+  state.scale_factor = sqrt(megapixels * 1_000_000.0 / (vp.x * vp.y))
+  
+  if megapixels >= 1.0:
+    # For high megapixels (>=1.0): Use scaling_3d_scale and set stretch_shrink to 1
+    let stretch_shrink_value = int32(1)
+    let scaling_3d_value = state.scale_factor
+    
+    self.viewport_container.set_stretch_shrink(stretch_shrink_value)
+    self.scaled_viewport.set_scaling_3d_scale(scaling_3d_value)
+    
+    info "High quality mode - using scaling_3d_scale",
+      stretch_shrink = stretch_shrink_value,
+      scaling_3d_scale = scaling_3d_value,
+      scale_factor = state.scale_factor,
+      megapixels = megapixels
+  
+  else:
+    # For low megapixels (<1.0): Use stretch_shrink and set scaling_3d_scale to 1
+    # Calculate appropriate stretch_shrink value (integer >= 1)
+    # Since stretch_shrink = 1/scale_factor, we need to invert and round up
+    let stretch_shrink_value = max(1, int32(ceil(1.0 / state.scale_factor)))
+    let scaling_3d_value = 1.0
+    
+    self.viewport_container.set_stretch_shrink(stretch_shrink_value)
+    self.scaled_viewport.set_scaling_3d_scale(scaling_3d_value)
+    
+    info "Low quality mode - using stretch_shrink",
+      stretch_shrink = stretch_shrink_value,
+      scaling_3d_scale = scaling_3d_value,
+      scale_factor = state.scale_factor,
+      megapixels = megapixels
 
 method process*(self: Game, delta: float64) {.gdsync.} =
   Zen.thread_ctx.boop
@@ -473,8 +515,20 @@ method ready*(self: Game) {.gdsync.} =
   self.set_process_unhandled_input(true)
   state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
   assert not state.nodes.data.is_nil
-  # GD4: fix scaled_viewport
-  # self.scaled_viewport = self.get_node("ViewportContainer/Viewport") as Viewport
+  
+  # GD4: Set up scaled viewport for megapixels functionality
+  # In Godot 4, we use SubViewportContainer/SubViewport structure like Godot 3's ViewportContainer/Viewport
+  self.scaled_viewport = self.get_node("ViewportContainer/Viewport").as(SubViewport)
+  self.viewport_container = self.get_node("ViewportContainer").as(SubViewportContainer)
+  
+  if self.scaled_viewport.is_nil:
+    warn "Could not find scaled viewport for megapixels functionality"
+  elif self.viewport_container.is_nil:
+    warn "Could not find SubViewportContainer for texture filtering control"
+  else:
+    info "Found scaled viewport and container for megapixels functionality"
+    # Initial rescale to apply current megapixels setting
+    self.rescale()
 
   self.bind_signals(self.get_viewport(), "size_changed")
   # assert not self.scaled_viewport.is_nil

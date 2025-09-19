@@ -1,11 +1,17 @@
-[gd_resource type="Environment" load_steps=2 format=3 uid="uid://dpg7oejg7j7j7"]
+[gd_resource type="Environment" load_steps=4 format=3 uid="uid://dpg7oejg7j7j7"]
 
-[sub_resource type="Sky" id="Sky_1"]
+[ext_resource type="Texture2D" uid="uid://b40l64r5sqjb2" path="res://textures/planet_sky.png" id="1_vxf3i"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_vxf3i"]
+panorama = ExtResource("1_vxf3i")
+
+[sub_resource type="Sky" id="Sky_sjrnr"]
+sky_material = SubResource("PanoramaSkyMaterial_vxf3i")
 
 [resource]
 background_mode = 2
 background_energy_multiplier = 0.5
-sky = SubResource("Sky_1")
+sky = SubResource("Sky_sjrnr")
 ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 1.5
@@ -13,5 +19,5 @@ tonemap_mode = 3
 tonemap_white = 0.13
 glow_enabled = true
 glow_normalized = true
-fog_enabled = true
 fog_light_color = Color(0.211765, 0.211765, 0.211765, 1)
+volumetric_fog_density = 0.0

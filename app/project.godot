@@ -23,7 +23,6 @@ config/windows_native_icon="res://media/enu_icon.ico"
 
 [display]
 
-window/stretch/aspect="expand"
 window/handheld/orientation="sensor"
 window/size/width=1920
 window/size/height=1080
@@ -314,6 +313,9 @@ file_logging/max_log_files=20
 
 [rendering]
 
+textures/canvas_textures/default_texture_filter=0
+textures/default_filters/use_nearest_mipmap_filter=true
+textures/default_filters/anisotropic_filtering_level=0
 quality/depth_prepass/enable=false
 batching/options/use_batching=false
 batching/options/use_batching_in_editor=false

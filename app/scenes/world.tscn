@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://bxvxbxj8j8x8x"]
+[gd_scene load_steps=5 format=3 uid="uid://bxvxbxj8j8x8x"]
 
 [ext_resource type="Environment" uid="uid://dpg7oejg7j7j7" path="res://environments/default.tres" id="2"]
 [ext_resource type="Material" uid="uid://ck8k8k8k8k8k8" path="res://materials/default_ground.tres" id="3"]

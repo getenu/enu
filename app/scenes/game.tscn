@@ -4,8 +4,23 @@
 [ext_resource type="PackedScene" uid="uid://dwdwrpr24c21" path="res://scenes/GUI.tscn" id="3"]
 
 [node name="Game" type="Game"]
+process_priority = 0
 
-[node name="Level" parent="." instance=ExtResource("1")]
+[node name="ViewportContainer" type="SubViewportContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+stretch = true
+
+[node name="Viewport" type="SubViewport" parent="ViewportContainer"]
+handle_input_locally = false
+size = Vector2i(1152, 648)
+render_target_update_mode = 4
+
+[node name="Level" parent="ViewportContainer/Viewport" instance=ExtResource("1")]
 
 [node name="GUI" parent="." instance=ExtResource("3")]
 
