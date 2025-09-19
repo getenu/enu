@@ -9,7 +9,7 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
 - **Build command**: `./build.sh` (returns exit code 0 - build successful)
 - **Binary output**: `app/extension/lib/libEnugame.macos.debug.dylib`
 
-## Migration Progress: ~98% Complete
+## Migration Progress: ~99% Complete
 
 ### ✅ **FULLY MIGRATED** (95-100% Complete)
 
@@ -246,27 +246,30 @@ This pattern is essential when using `bind_signal` with custom method names, as 
 - **Signal System**: gdext signal binding and connection utilities
 
 ### Technical Status Summary
-- **Migration Completion**: 98% (up from 96%)
+- **Migration Completion**: 99% (up from 98%)
 - **Build Status**: ✅ All components compile successfully
 - **Functional Status**: Core game fully playable with complete UI suite, working player movement, aim targeting, and fully functional settings window
-- **Remaining Work**: Megapixels/render resolution, level loading fix, minor API gaps
+- **Remaining Work**: Snake_case cleanup, level loading fix, minor API gaps
 - **Major Achievements**:
   - ✅ Player movement direction bug fixed with Basis column accessors
   - ✅ RayCast3D API fully integrated with correct gdext snake_case syntax
   - ✅ AimTarget crosshair system working with both mouse modes
   - ✅ Settings window font and toolbar sizing fully implemented
+  - ✅ Megapixels/render resolution hybrid scaling working with pixel art effects
+  - ✅ Mouse input fixed - mouselook fully functional
+  - ✅ Window resize and fullscreen toggle render resolution recalculation
+  - ✅ String converters added for cleaner GdString/StringName usage
 
 ### Next Phase Focus
-**Settings Window Completion** (Next Session)
-- **Priority 1**: Megapixels/render resolution implementation
-  - Investigate Godot 4 viewport scaling APIs
-  - Implement viewport resolution changes without window size changes
-  - Test render scaling functionality
+**Final Migration Cleanup** (Next Session)
+- **Priority 1**: Snake_case cleanup throughout codebase (excluding eval.nim and nimpcre.nim)
+  - Systematic conversion of camelCase to snake_case following project conventions
+  - Ensure consistency with model_citizen library naming patterns
 
 **Remaining Technical Issues** (Low Priority)
-- Level loading crash investigation
-- Minor API gap resolution (mouse filter constants, input handling)
+- Level loading crash investigation  
 - Selection area collision detection completion
+- Minor API gap resolution
 
 ## Recent Critical Fix: Basis Row-Major vs Column-Major Issue
 
@@ -291,5 +294,5 @@ These methods properly extract axis vectors (columns) from the row-stored matrix
 
 ---
 
-**Last Updated**: Settings window font and toolbar sizing fully implemented (98% total)
-**Next Focus**: Megapixels/render resolution implementation and level loading fixes
+**Last Updated**: Megapixels/render resolution, mouse input, and window resize handling all completed (99% total)
+**Next Focus**: Snake_case cleanup and final migration polish

@@ -70,6 +70,10 @@ proc optional_get*[T](self: var HashSet[T], key: T): Option[T] =
 import gdext, math
 export Transform3D, Vector3, Vector2, Basis, AABB, print, vector3, vector2
 
+# String converters for Godot types
+converter to_gd_string*(s: string): String = newGdString(s)
+converter to_string_name*(s: string): StringName = newStringName(s)
+
 const
   UP* = vector3(0, 1, 0)
   DOWN* = vector3(0, -1, 0)

@@ -549,6 +549,8 @@ method ready*(self: Game) {.gdsync.} =
         else:
           window_mode_windowed
       )
+      # Trigger rescale when fullscreen mode changes to recalculate render resolution
+      self.rescale_at = get_mono_time()
     if change.item.environment != state.config.environment or
         change.item.environment_override != state.config.environment_override:
       let env =
