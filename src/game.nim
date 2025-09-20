@@ -218,11 +218,59 @@ method notification*(self: Game, what: int32) =
     print("Enu {enu_version}\n\n© 2025 Scott Wadden")
     # TODO: Show about dialog when gdext dialog API is available
 
-# GD4: TODO - Fix platform-specific input actions for Godot 4
 proc add_platform_input_actions(self: Game) =
-  print("[INPUT] Input actions setup - using project.godot definitions")
-  # For now, rely on project.godot input map configuration
-  # TODO: Add runtime key binding setup once gdext Key constants are resolved
+  print("[INPUT] Setting up platform-specific input actions")
+
+  # Get the OS suffix for platform-specific input actions
+  let suffix = "." & host_os
+  print "[INPUT] Platform suffix: ", suffix
+  print "[INPUT] host_os: ", host_os
+
+  # Get all actions from the input map
+  let all_actions = InputMap.get_actions()
+  print "[INPUT] Found ", all_actions.size(), " total actions"
+
+  var platform_actions: seq[string] = @[]
+  var base_actions: seq[string] = @[]
+
+  # Separate platform-specific actions from base actions
+  for i in 0..<all_actions.size():
+    let action = $all_actions[i]
+    if suffix in action:
+      platform_actions.add(action)
+    else:
+      base_actions.add(action)
+
+  print "[INPUT] Platform-specific actions: ", platform_actions.len
+  print "[INPUT] Base actions: ", base_actions.len
+
+  # Process platform-specific actions
+  for action in platform_actions:
+    let base_name = action.replace(suffix, "")
+    print "[INPUT] Processing platform action: ", action, " -> ", base_name
+
+    # Remove existing base action if it exists
+    if InputMap.has_action(base_name.to_string_name):
+      print "[INPUT] Removing existing action: ", base_name
+      InputMap.erase_action(base_name.to_string_name)
+
+    # Add new base action
+    print "[INPUT] Adding new action: ", base_name
+    InputMap.add_action(base_name.to_string_name)
+
+    # Copy all events from platform action to base action
+    let events = InputMap.action_get_events(action.to_string_name)
+    print "[INPUT] Copying ", events.size(), " events from ", action, " to ", base_name
+
+    for j in 0..<events.size():
+      let event = events[j]
+      InputMap.action_add_event(base_name.to_string_name, event)
+
+    # Remove the platform-specific action
+    print "[INPUT] Removing platform action: ", action
+    InputMap.erase_action(action.to_string_name)
+
+  print "[INPUT] Platform input actions setup complete"
 
 method on_init*(self: Game) {.gdsync.} =
   # Basic field initialization
