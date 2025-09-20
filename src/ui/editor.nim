@@ -2,11 +2,12 @@ import std/[strutils, tables, monotimes]
 import gdext
 import
   gdext/classes/[
-    gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventkey, gdcontrol,
-    gdnode, gdvscrollbar, gdtween, gdstyleboxflat, gdbutton, gdinput, gdviewport,
+    gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventkey,
+    gdinputeventmousebutton, gdcontrol, gdnode, gdvscrollbar, gdtween,
+    gdstyleboxflat, gdbutton, gdinput, gdviewport,
   ]
 import core, gdutils, types, models/[states, units]
-# import nim_highlighter  # GD4: Re-enable when CodeHighlighter API is fixed
+# import nim_highlighter  # GD4: Re-enable when CodeHighlighter API is fixedxx
 
 type EnuEditor* {.gdsync.} =
   ptr object of MarginContainer
@@ -193,7 +194,7 @@ method ready*(self: EnuEditor) {.gdsync.} =
   # Find the CodeEdit node - this should always succeed if scene is properly set up
   self.code_edit = self.find("CodeEdit", CodeEdit)
   assert ?self.code_edit, "CodeEdit node not found in Editor scene"
-  
+
   # Start hidden until opened
   self.set_visible(false)
   print("[UI] Editor initialized (hidden by default)")

@@ -1,6 +1,6 @@
 import std/[tables, monotimes, sets, options, macros]
 import gdext except Color
-import gdext/classes/[gdnode3d, gdraycast3d]
+import gdext/classes/[gdnode3d, gdraycast3d, gdshadermaterial]
 # import pkg/core/godotcoretypes except Color
 #import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]

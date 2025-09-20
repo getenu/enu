@@ -9,12 +9,16 @@ import
     gdprojectsettings, gdinputmap, gdinputeventaction, gdinputeventkey,
     gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
     gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
-    gdviewporttexture, gdtexture2d, gdsubviewportcontainer,
+    gdviewporttexture, gdtexture2d, gdsubviewportcontainer, gdengine,
   ]
 
 import ui/virtual_joystick
 import
-  core, types, controllers, models/[serializers, units, colors, states], gdutils,
+  core,
+  types,
+  controllers,
+  models/[serializers, units, colors, states],
+  gdutils,
   ui/action_button
 
 if file_exists(".env"):
@@ -56,31 +60,31 @@ type Game* {.gdsync.} =
 proc take_screenshot*(self: Game) =
   # Get viewport image using Godot 4 API
   let viewport = self.get_viewport()
-  
+
   # Try to get the rendered image from viewport
   let texture = viewport.get_texture()
   if not ?texture:
     warn "[SCREENSHOT] Viewport texture is null - cannot take screenshot"
     state.push_flag Quitting
     return
-    
+
   let image = texture[].get_image()
   if not ?image:
     warn "[SCREENSHOT] Could not get image from texture"
     state.push_flag Quitting
     return
-  
+
   # Generate filename with timestamp
   let timestamp = format(times.now(), "yyyy-MM-dd'T'HH-mm-ss")
   let filename = &"screenshot_{timestamp}.png"
   let filepath = join_path(state.config.work_dir, filename)
-  
+
   # Save the image
   if image[].save_png(newGdString(filepath)) == ok:
     info "[SCREENSHOT] Screenshot saved", filepath = filepath
   else:
     warn "[SCREENSHOT] Failed to save screenshot", filepath = filepath
-  
+
   # Quit after taking screenshot
   print("[SCREENSHOT] Screenshot saved, quitting...")
   state.push_flag Quitting
@@ -90,7 +94,7 @@ proc rescale*(self: Game) =
   #
   # Research findings on viewport scaling approaches in Godot 4:
   # 1. size_2d_override: Has bugs when set in _ready(), doesn't work reliably
-  # 2. stretch_shrink: Only accepts integers >=1, good for pixel art but limited range  
+  # 2. stretch_shrink: Only accepts integers >=1, good for pixel art but limited range
   # 3. scaling_3d_scale: Works well for upscaling but has 0.25 minimum limit
   # 4. Window stretch: Affects entire UI, not suitable for independent 3D scaling
   #
@@ -101,41 +105,40 @@ proc rescale*(self: Game) =
   if self.scaled_viewport.is_nil:
     # If scaled_viewport is not set up, skip rescaling
     return
-    
+
   let vp = self.get_viewport().get_visible_rect().size
   let megapixels =
     if ?state.config.megapixels_override:
       state.config.megapixels_override
     else:
       state.config.megapixels
-  
+
   # Calculate scale factor based on megapixels setting
   state.scale_factor = sqrt(megapixels * 1_000_000.0 / (vp.x * vp.y))
-  
+
   if megapixels >= 1.0:
     # For high megapixels (>=1.0): Use scaling_3d_scale and set stretch_shrink to 1
     let stretch_shrink_value = int32(1)
     let scaling_3d_value = state.scale_factor
-    
+
     self.viewport_container.set_stretch_shrink(stretch_shrink_value)
     self.scaled_viewport.set_scaling_3d_scale(scaling_3d_value)
-    
+
     info "High quality mode - using scaling_3d_scale",
       stretch_shrink = stretch_shrink_value,
       scaling_3d_scale = scaling_3d_value,
       scale_factor = state.scale_factor,
       megapixels = megapixels
-  
   else:
     # For low megapixels (<1.0): Use stretch_shrink and set scaling_3d_scale to 1
     # Calculate appropriate stretch_shrink value (integer >= 1)
     # Since stretch_shrink = 1/scale_factor, we need to invert and round up
     let stretch_shrink_value = max(1, int32(ceil(1.0 / state.scale_factor)))
     let scaling_3d_value = 1.0
-    
+
     self.viewport_container.set_stretch_shrink(stretch_shrink_value)
     self.scaled_viewport.set_scaling_3d_scale(scaling_3d_value)
-    
+
     info "Low quality mode - using stretch_shrink",
       stretch_shrink = stretch_shrink_value,
       scaling_3d_scale = scaling_3d_value,
@@ -143,6 +146,10 @@ proc rescale*(self: Game) =
       megapixels = megapixels
 
 method process*(self: Game, delta: float64) {.gdsync.} =
+  # Skip most processing if running in the editor
+  if Engine.is_editor_hint():
+    return
+
   Zen.thread_ctx.boop
   inc state.frame_count
   let time = get_mono_time()
@@ -193,7 +200,7 @@ method process*(self: Game, delta: float64) {.gdsync.} =
   # Handle screenshot mode
   if self.screenshot_mode:
     self.screenshot_timer += delta
-    if self.screenshot_timer >= 10.0:  # Wait 10 seconds for animations
+    if self.screenshot_timer >= 10.0: # Wait 10 seconds for animations
       self.take_screenshot()
       print("[SCREENSHOT] Screenshot saved, quitting...")
       state.push_flag Quitting
@@ -269,7 +276,7 @@ method on_init*(self: Game) {.gdsync.} =
   if (let i = args.find("--screenshot"); i) > -1:
     screenshot_mode = true
     args.delete(i)
-  
+
   state.verify_mode = verify_mode
   state.screenshot_mode = screenshot_mode
 
@@ -360,8 +367,11 @@ method on_init*(self: Game) {.gdsync.} =
 
   self.verify_mode = verify_mode
   self.screenshot_mode = screenshot_mode
-  self.node_controller = NodeController.init
-  self.script_controller = ScriptController.init
+
+  # Skip controller initialization if running in the editor
+  if not Engine.is_editor_hint():
+    self.node_controller = NodeController.init
+    self.script_controller = ScriptController.init
 
   save_user_config(uc)
 
@@ -511,16 +521,23 @@ proc run_verification*(self: Game) =
   #state.push_flag(Quitting)
 
 method ready*(self: Game) {.gdsync.} =
+  # Skip most initialization if running in the editor
+  if Engine.is_editor_hint():
+    info "Running in editor mode - skipping game initialization"
+    return
+
   # GD4: added by claude. Do we need this?
   self.set_process_unhandled_input(true)
   state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
   assert not state.nodes.data.is_nil
-  
+
   # GD4: Set up scaled viewport for megapixels functionality
   # In Godot 4, we use SubViewportContainer/SubViewport structure like Godot 3's ViewportContainer/Viewport
-  self.scaled_viewport = self.get_node("ViewportContainer/Viewport").as(SubViewport)
-  self.viewport_container = self.get_node("ViewportContainer").as(SubViewportContainer)
-  
+  self.scaled_viewport =
+    self.get_node("ViewportContainer/Viewport").as(SubViewport)
+  self.viewport_container =
+    self.get_node("ViewportContainer").as(SubViewportContainer)
+
   if self.scaled_viewport.is_nil:
     warn "Could not find scaled viewport for megapixels functionality"
   elif self.viewport_container.is_nil:
@@ -530,7 +547,8 @@ method ready*(self: Game) {.gdsync.} =
     # Initial rescale to apply current megapixels setting
     self.rescale()
 
-  discard self.get_window().connect("size_changed", self.callable("_on_size_changed"))
+  discard
+    self.get_window().connect("size_changed", self.callable("_on_size_changed"))
   # assert not self.scaled_viewport.is_nil
   self.get_tree().auto_accept_quit = false
   self.set_font_size(state.config.font_size)
@@ -667,6 +685,10 @@ proc switch_world(self: Game, diff: int) =
       level_dir = current_level
 
 method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
+  # Skip input handling if running in the editor
+  if Engine.is_editor_hint():
+    return
+
   let event = event[]
 
   if event of InputEventKey:

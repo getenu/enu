@@ -70,8 +70,8 @@
       }
     },
     "serialization": {
-      "version": "0.4.8",
-      "vcsRevision": "12ada99c0c88a7ed4b45c7af0aebcce3ef7f926a",
+      "version": "0.4.9",
+      "vcsRevision": "b5193007a49639b21b2b80cd8ef8cbe0df6b0e48",
       "url": "https://github.com/status-im/nim-serialization",
       "downloadMethod": "git",
       "dependencies": [
@@ -80,7 +80,7 @@
         "stew"
       ],
       "checksums": {
-        "sha1": "adad79a67a33803d2f71948764cb39b6839cf8e3"
+        "sha1": "ab0812a7e16ae39ee68f4a6b1938a1b83dee34be"
       }
     },
     "json_serialization": {
@@ -110,8 +110,8 @@
       }
     },
     "chronicles": {
-      "version": "0.12.1",
-      "vcsRevision": "54f5b726025e8c7385e3a6529d3aa27454c6e6ff",
+      "version": "0.12.2",
+      "vcsRevision": "27ec507429a4eb81edc20f28292ee8ec420be05b",
       "url": "https://github.com/status-im/nim-chronicles",
       "downloadMethod": "git",
       "dependencies": [
@@ -121,7 +121,7 @@
         "testutils"
       ],
       "checksums": {
-        "sha1": "f884ef7219ce7a8998d365efa97bfb78048db7ab"
+        "sha1": "02febb20d088120b2836d3306cfa21f434f88f65"
       }
     },
     "httputils": {
@@ -155,13 +155,13 @@
       }
     },
     "cligen": {
-      "version": "1.9.0",
-      "vcsRevision": "b75a4a04bc74e28c692ce3d3152013aef0ff3eb6",
+      "version": "1.9.2",
+      "vcsRevision": "c41e6e8af33d89d13ade880f65eda45f5be5595c",
       "url": "https://github.com/c-blake/cligen.git",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "b218a8e2e01121aa8087ef4080cf2e31d9f21409"
+        "sha1": "b1e805469f9b5f6055db1e712bb156817d1b3961"
       }
     },
     "dotenv": {
@@ -195,13 +195,13 @@
       }
     },
     "gdext": {
-      "version": "0.14.0",
-      "vcsRevision": "823ae276a1a269138d4a984678f4ef707b560c8e",
-      "url": "https://github.com/dsrw/gdext-nim",
+      "version": "0.15.0",
+      "vcsRevision": "941d09362c2ec4d382510419bbd5075360f0c2a1",
+      "url": "https://github.com/godot-nim/gdext-nim",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "eb6aff9fb3747db3701ed62f53c75d71e4142f1d"
+        "sha1": "8d3a0b86674bf6be732fcf22d6fb0ef0bacebe83"
       }
     },
     "jsony": {
@@ -319,12 +319,12 @@
     },
     "nim": {
       "version": "2.2.4",
-      "vcsRevision": "",
-      "url": "https://github.com/nim-lang/Nim.git",
+      "vcsRevision": "7483e78e43077d22d3d98974a36b28f8eb5b2e83",
+      "url": "https://github.com/dsrw/Nim",
       "downloadMethod": "git",
       "dependencies": [],
       "checksums": {
-        "sha1": "cede6129d8c2d23731ec4325a818efe8636f2167"
+        "sha1": "6e6fb49725f2f5cca259bd5a5ec5710449e1c3ea"
       }
     },
     "parsetoml": {

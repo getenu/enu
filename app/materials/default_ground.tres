@@ -1,6 +1,6 @@
 [gd_resource type="StandardMaterial3D" load_steps=2 format=3 uid="uid://ck8k8k8k8k8k8"]
 
-[ext_resource type="Texture2D" uid="uid://bqp7qp7q7q7q7" path="res://textures/tile_nrm.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://2bxq3wanrw3k" path="res://textures/tile_nrm.png" id="1"]
 
 [resource]
 albedo_color = Color(0.113725, 0, 0.180392, 1)

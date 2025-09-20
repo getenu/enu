@@ -1,8 +1,8 @@
 [configuration]
 
 entry_symbol = "init_library"
-compatibility_minimum = 4.4
-reloadable = true
+compatibility_minimum = 4.5
+reloadable = false
 
 [libraries]
 

@@ -1,16 +1,18 @@
 import gdext
-import gdext/classes/[
-  gdviewport, gdcamera3d, gdmeshinstance3d, gdmaterial, gdnode3d, gdimage,
-  gdresourceloader, gdviewporttexture
-]
+import
+  gdext/classes/[
+    gdviewport, gdsubviewport, gdcamera3d, gdmeshinstance3d, gdmaterial,
+    gdnode3d, gdimage, gdresourceloader, gdviewporttexture,
+  ]
 import core, gdutils
 
-type PreviewMaker* {.gdsync.} = ptr object of SubViewport
-  camera: Camera3D
-  cube: MeshInstance3D
-  bot: Node3D
-  callback: proc(img: gdref Image) {.gcsafe.}
-  skip_next: bool
+type PreviewMaker* {.gdsync.} =
+  ptr object of SubViewport
+    camera: Camera3D
+    cube: MeshInstance3D
+    bot: Node3D
+    callback: proc(img: gdref Image) {.gcsafe.}
+    skip_next: bool
 
 method ready*(self: PreviewMaker) {.gdsync.} =
   print("[UI] PreviewMaker ready - initializing preview generation system")
@@ -46,7 +48,7 @@ method process*(self: PreviewMaker, delta: float64) {.gdsync.} =
 proc generate_block_preview*(
     self: PreviewMaker,
     material_name: string,
-    callback: proc(preview: gdref Image) {.gcsafe.}
+    callback: proc(preview: gdref Image) {.gcsafe.},
 ) =
   print("[UI] Generating block preview for material: ", material_name)
 
@@ -78,7 +80,7 @@ proc generate_block_preview*(
 proc generate_object_preview*(
     self: PreviewMaker,
     object_name: string,
-    callback: proc(preview: gdref Image) {.gcsafe.}
+    callback: proc(preview: gdref Image) {.gcsafe.},
 ) =
   print("[UI] Generating object preview for: ", object_name)
 

@@ -34,8 +34,8 @@ bin = @["enu" & lib_ext]
 requires "https://github.com/dsrw/Nim#7483e78",
   "https://github.com/getenu/model_citizen 0.19.6",
   "https://github.com/dsrw/nanoid.nim 0.2.1",
-  "https://github.com/godot-nim/gdext-nim#114b628",
-  "https://github.com/godot-nim/gdext-nim?subdir=coronation#114b628",
+  "https://github.com/godot-nim/gdext-nim 0.15.0",
+  "https://github.com/godot-nim/gdext-nim?subdir=coronation 0.1.0",
   "https://github.com/treeform/pretty", "cligen", "chroma", "markdown",
   "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
@@ -222,12 +222,15 @@ task clean, "Remove files produced by build":
   rm_dir generated_dir
   rm_dir ".nimcache"
 
+task edit_then_quit, "Edit project in Godot":
+  exec godot_bin() & " --verbose --quit-after 500 app/project.godot &"
+
 task edit, "Edit project in Godot":
   exec godot_bin() & " app/project.godot &"
 
 task start, "Run Enu":
   cd "app"
-  var cmd = godot_bin() & " --verbose scenes/game.tscn"
+  var cmd = godot_bin() & " --verbose --quit-after 500 scenes/game.tscn"
   # Support passing additional arguments to start task
   # Usage: nimble start --headless --quit-after 1
   for arg in command_line_params():

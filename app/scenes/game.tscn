@@ -12,7 +12,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 0
 stretch = true
 
 [node name="Viewport" type="SubViewport" parent="ViewportContainer"]
@@ -23,6 +22,7 @@ render_target_update_mode = 4
 [node name="Level" parent="ViewportContainer/Viewport" instance=ExtResource("1")]
 
 [node name="GUI" parent="." instance=ExtResource("3")]
+mouse_filter = 2
 
 [node name="WorldRay" type="RayCast3D" parent="."]
 visible = false

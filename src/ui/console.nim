@@ -1,14 +1,18 @@
 import gdext
-import gdext/classes/[gdrichtextlabel, gdcontrol, gdnode, 
-                     gdinputevent, gdinputeventjoypadbutton, gdvscrollbar,
-                     gdtween, gdviewport]
+import
+  gdext/classes/[
+    gdrichtextlabel, gdcontrol, gdnode, gdinputevent, gdinputeventjoypadbutton,
+    gdinputeventmousebutton, gdvscrollbar, gdtween, gdviewport,
+  ]
 # GD4: Fixed Tween import (was SceneTreeTween in Godot 3)
 import core, gdutils, types, models/states
 import std/strutils
 
-type Console* {.gdsync.} = ptr object of RichTextLabel
-  default_mouse_filter: int64
-  tween: gdref Tween  # GD4: Re-enabled with correct import (was SceneTreeTween)
+type Console* {.gdsync.} =
+  ptr object of RichTextLabel
+    default_mouse_filter: int64
+    tween:
+      gdref Tween # GD4: Re-enabled with correct import (was SceneTreeTween)
 
 proc watch_states(self: Console)
 
@@ -65,11 +69,13 @@ proc hide_console(self: Console) =
   self.set_visible(false)
 
 method ready*(self: Console) {.gdsync.} =
-  print("[UI] Console ready - Godot 4 migration complete with animations and state watching")
-  
+  print(
+    "[UI] Console ready - Godot 4 migration complete with animations and state watching"
+  )
+
   # Store default mouse filter
   self.default_mouse_filter = int64(self.get_mouse_filter())
-  
+
   # Set console height to 1/3 of screen height
   let viewport = self.get_viewport()
   if ?viewport:
@@ -77,16 +83,16 @@ method ready*(self: Console) {.gdsync.} =
     let console_height = screen_height / 3.0
     self.set_custom_minimum_size(vector2(400, console_height))
     print("[UI] Console height set to 1/3 screen height: " & $console_height)
-  
+
   # GD4: Re-enabled state watching
   self.watch_states()
-  
+
   # Set initial visibility
   if ConsoleVisible notin state.local_flags:
     # Modulation disabled - just hide
     # self.set_modulate(color(1.0, 1.0, 1.0, 0.0))
     self.hide_console()
-  
+
   # Modulation disabled - scrollbar remains visible
   # # Configure scrollbar appearance
   # for i in 0 ..< self.get_child_count():
@@ -94,17 +100,19 @@ method ready*(self: Console) {.gdsync.} =
   #   if child of VScrollBar:
   #     let scrollbar = child.as(VScrollBar)
   #     scrollbar.set_modulate(color(1.0, 1.0, 1.0, 0.0))
-  
+
   # Connect close button
   let close_button = self.find("Close", Control)
   if ?close_button:
     discard close_button.connect("pressed", self.callable("_on_close"))
     print("[UI] Console close button connected to signal handler")
-  
+
   # GD4: Re-enabled GUI input signal binding for focus management
   # Note: This will be handled in the gui_input method below
-  
-  print("[UI] Console initialization complete - Tween animations enabled, state flags watched")
+
+  print(
+    "[UI] Console initialization complete - Tween animations enabled, state flags watched"
+  )
 
 proc watch_states(self: Console) =
   # Watch for local flag changes
@@ -118,13 +126,13 @@ proc watch_states(self: Console) =
     #   self.ghost()
     # elif CommandMode.removed:
     #   self.unghost()
-    
+
     if MouseCaptured.added:
       # GD4: Fixed mouse filter enum
       self.set_mouse_filter(mouseFilterIgnore)
     elif MouseCaptured.removed:
       self.set_mouse_filter(Control_MouseFilter(self.default_mouse_filter))
-  
+
   # Watch for console log changes
   state.console.log.changes:
     if added:
@@ -151,9 +159,11 @@ method gui_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
 
 method unhandled_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
   # Handle escape key to close console
-  if ConsoleFocused in state.local_flags and event[].is_action_pressed("ui_cancel"):
+  if ConsoleFocused in state.local_flags and
+      event[].is_action_pressed("ui_cancel"):
     # Don't handle joypad input if in command mode
-    if not (event[] of InputEventJoypadButton) or CommandMode notin state.local_flags:
+    if not (event[] of InputEventJoypadButton) or
+        CommandMode notin state.local_flags:
       state.pop_flags(ConsoleVisible, ConsoleFocused)
       # GD4: Fixed input handling method
       self.get_viewport().setInputAsHandled()
