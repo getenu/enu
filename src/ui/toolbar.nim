@@ -32,7 +32,10 @@ method ready*(self: Toolbar) {.gdsync.} =
   print("[UI] Toolbar ready")
   
   # Connect to action_changed signals from ActionButton components
-  self.bind_signals(self, "action_changed")
+  if not self.has_signal("action_changed"):
+    self.add_user_signal("action_changed")
+  let callable_obj = callable(self, new_string_name("_on_action_changed"))
+  discard self.connect(new_string_name("action_changed"), callable_obj)
   
   # Initialize tool lists for preview generation (simplified for now)
   self.blocks = @["green", "red", "blue", "black", "white", "brown"] 

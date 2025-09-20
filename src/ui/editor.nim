@@ -223,14 +223,23 @@ method ready*(self: EnuEditor) {.gdsync.} =
   self.configure_highlighting()
 
   # Connect signals for editor functionality
-  self.bind_signals(self.code_edit, "text_changed")
-  self.bind_signals(self.code_edit, "caret_changed")
+  if not self.code_edit.has_signal("text_changed"):
+    self.code_edit.add_user_signal("text_changed")
+  let text_changed_callable = callable(self, new_string_name("_on_text_changed"))
+  discard self.code_edit.connect(new_string_name("text_changed"), text_changed_callable)
+
+  if not self.code_edit.has_signal("caret_changed"):
+    self.code_edit.add_user_signal("caret_changed")
+  let caret_changed_callable = callable(self, new_string_name("_on_caret_changed"))
+  discard self.code_edit.connect(new_string_name("caret_changed"), caret_changed_callable)
 
   # Connect button signals
   for name in ["Close", "Run"]:
     let control = self.find(name, Control)
     if ?control:
-      self.bind_signal(control, ("pressed", "on_" & name.to_lower))
+      let method_name = "_on_" & name.to_lower
+      let callable_obj = callable(self, new_string_name(method_name))
+      discard control.connect(new_string_name("pressed"), callable_obj)
     else:
       print("[UI] Warning: Button '", name, "' not found in Editor scene")
 

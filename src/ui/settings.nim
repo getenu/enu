@@ -332,7 +332,8 @@ method ready*(self: Settings) {.gdsync.} =
   discard self.level_name.connect("text_submitted", self.callable("_on_level_name_submitted"))
   discard self.server_address.connect("text_submitted", self.callable("_on_server_address_submitted"))
 
-  state.nodes.game.bind_signal(self, "gui_input", self.get_name())
+  let callable_obj = callable(state.nodes.game, new_string_name("_on_gui_input"))
+  discard self.connect(new_string_name("gui_input"), callable_obj)
 
   self.update_level_list()
   self.update_values()

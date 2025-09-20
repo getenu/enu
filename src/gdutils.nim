@@ -8,42 +8,6 @@ import
 import core, models/[states]
 export strformat.`&`, states, types
 
-proc bind_signal*(
-    receiver: Object,
-    sender: Object,
-    signal: tuple[name: string, meth: string],
-    binds: varargs[Variant, `variant`] = @[],
-) =
-  if not sender.has_signal(signal.name):
-    sender.add_user_signal(signal.name)
-  # GD4: bind variants
-  var variants = new_array()
-  for obj in binds:
-    variants.add(obj)
-  var method_name = signal.meth
-  if not signal.meth.starts_with("_"):
-    method_name = "_on_" & method_name
-
-  # GD4: remove or rename `new_string_name`
-  let callable_obj = callable(receiver, new_string_name(method_name))
-  discard sender.connect(new_string_name(signal.name), callable_obj)
-
-proc bind_signal*(
-    receiver: Object,
-    sender: Object,
-    signal: string,
-    binds: varargs[Variant, `variant`] = @[],
-) =
-  bind_signal(receiver, sender, (signal, signal), binds)
-
-proc bind_signals*(receiver, sender: Object, signals: varargs[string]) =
-  let send_node = if sender == nil: state.nodes.game else: sender
-
-  for signal in signals:
-    receiver.bind_signal(send_node, signal)
-
-proc bind_signals*(receiver: Node, signals: varargs[string]) =
-  bind_signals(receiver, nil, signals)
 
 proc trigger*(node: Object, signal: string, args: varargs[Variant]) =
   if not node.has_user_signal(signal):

@@ -2,7 +2,7 @@
 
 entry_symbol = "init_library"
 compatibility_minimum = 4.5
-reloadable = false
+reloadable = true
 
 [libraries]
 

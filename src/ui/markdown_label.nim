@@ -40,7 +40,10 @@ proc add_label(self: MarkdownLabel) =
   self.container.add_child(self.current_label)
   self.current_label.set_visible(true)
   if not state.nodes.game.is_nil:
-    state.nodes.game.bind_signals(self.current_label, "meta_clicked")
+    if not self.current_label.has_signal("meta_clicked"):
+      self.current_label.add_user_signal("meta_clicked")
+    let callable_obj = callable(state.nodes.game, new_string_name("_on_meta_clicked"))
+    discard self.current_label.connect(new_string_name("meta_clicked"), callable_obj)
 
 proc set_font_sizes(self: MarkdownLabel) =
   let size = 
@@ -109,7 +112,10 @@ proc update*(self: MarkdownLabel)
 method ready*(self: MarkdownLabel) {.gdsync.} =
   print("[UI] MarkdownLabel ready - initializing Godot 4 markdown renderer")
   
-  self.bind_signals(self, "resized")
+  if not self.has_signal("resized"):
+    self.add_user_signal("resized")
+  let callable_obj = callable(self, new_string_name("_on_resized"))
+  discard self.connect(new_string_name("resized"), callable_obj)
   self.container = self.get_node("VBoxContainer").as(VBoxContainer)
   self.og_text_edit = self.container.get_node("TextEdit").as(TextEdit)
   self.og_label = self.container.get_node("RichTextLabel").as(RichTextLabel)
