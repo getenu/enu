@@ -40,7 +40,7 @@ import
     gdmeshinstance3d, gdmaterial, gdanimationplayer, gdstandardmaterial3d,
     gdtextedit, gdraycast3d, gdanimationtree,
   ]
-import core, gdutils, models/colors, ui/markdown_label
+import core, gdcore, models/colors, ui/markdown_label
 import queries
 
 type BotNode* {.gdsync.} =
@@ -98,7 +98,7 @@ method ready*(self: BotNode) {.gdsync.} =
     else:
       print("[BOT] ⚠️ AnimationTree not found")
 
-    # Adjust player model position  
+    # Adjust player model position
     if ?self.model and self.model of Player:
       # hack so player model doesn't hover
       let current_pos = self.skin.get_position()
@@ -198,8 +198,7 @@ proc track_changes(self: BotNode) =
   # Visibility tracking - only update when not initializing to prevent flicker
   self.model.global_flags.watch:
     if (
-      change.item == Visible and
-      ScriptInitializing notin self.model.global_flags
+      change.item == Visible and ScriptInitializing notin self.model.global_flags
     ) or ScriptInitializing.removed:
       self.set_visibility()
 
@@ -237,7 +236,7 @@ proc track_changes(self: BotNode) =
       if touched:
         if bot.animation == "auto":
           self.set_walk_animation(change.item.length, false)
-    
+
     # Animation tracking
     bot.animation_value.watch:
       if added or (touched and change.item in ["", "auto"]):

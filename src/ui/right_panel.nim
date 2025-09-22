@@ -31,17 +31,20 @@
 # 📝 TODOS: Restore tween animations, anchor management, markdown rendering
 
 import gdext
-import gdext/classes/[
-  gdmargincontainer, gdinputevent, gdscenetree, gdtween, gdcontrol,
-  gdinputeventjoypadbutton, gdnode, gdbasebutton
-]
+import
+  gdext/classes/[
+    gdmargincontainer, gdinputevent, gdscenetree, gdtween, gdcontrol,
+    gdinputeventjoypadbutton, gdnode, gdbasebutton,
+  ]
 import ui/markdown_label
-import core, gdutils, models/[states, colors]
+import core, gdcore, models/[states, colors]
 
 proc set_mouse_filter_recursive(self: Control, filter: int) =
   # TODO: Recursively set mouse filter when gdext Control API is stable
   # For now, just print the operation
-  print("[UI] RightPanel set_mouse_filter_recursive called with filter: ", filter)
+  print(
+    "[UI] RightPanel set_mouse_filter_recursive called with filter: ", filter
+  )
 
 proc md(text_only: bool, md: string): string =
   # Format markdown for text-only or rich display
@@ -50,12 +53,13 @@ proc md(text_only: bool, md: string): string =
   else:
     md
 
-type RightPanel* {.gdsync.} = ptr object of MarginContainer
-  label: MarkdownLabel
-  zid: ZID
-  margin: float
-  center: float
-  tween: gdref Tween
+type RightPanel* {.gdsync.} =
+  ptr object of MarginContainer
+    label: MarkdownLabel
+    zid: ZID
+    margin: float
+    center: float
+    tween: gdref Tween
 
 proc offset_x*(self: RightPanel, offset: float) =
   # Position override disabled - keeping for compatibility but not using
@@ -65,32 +69,33 @@ proc offset_x*(self: RightPanel, offset: float) =
 
 method ready*(self: RightPanel) {.gdsync.} =
   print("[UI] RightPanel initializing documentation panel")
-  
+
   # Initialize properties
   self.margin = 3.0
   self.center = 1.0
-  
+
   # Animations disabled - no need for tween
   # self.tween = instantiate(Tween).as(gdref Tween)
-  
+
   # Find child nodes
   self.label = self.find_child("MarkdownLabel", false, false).as(MarkdownLabel)
-  
+
   if ?self.label:
     print("[UI] RightPanel MarkdownLabel found")
-    
+
     # MarkdownLabel signals could be connected here if needed
     # For now, just basic MarkdownLabel setup
     print("[UI] RightPanel MarkdownLabel ready - no additional signals needed")
   else:
     print("[UI] ✗ RightPanel MarkdownLabel not found")
-  
+
   # Find and connect close button signal
   let close_button = self.find_child("Close", false, false).as(BaseButton)
   if ?close_button:
     print("[UI] RightPanel Close button found")
     # Connect close button pressed signal
-    discard close_button.connect("pressed", self.callable("_on_close_button_pressed"))
+    discard
+      close_button.connect("pressed", self.callable("_on_close_button_pressed"))
     print("[UI] RightPanel close button signal connected")
   else:
     print("[UI] ⚠️ RightPanel Close button not found")
@@ -108,7 +113,8 @@ method unhandled_input*(self: RightPanel, event: gdref InputEvent) {.gdsync.} =
   # Handle input for closing docs panel
   if DocsFocused in state.local_flags:
     if event[].is_action_pressed("ui_cancel"):
-      if not event[].is_class("InputEventJoypadButton") or CommandMode notin state.local_flags:
+      if not event[].is_class("InputEventJoypadButton") or
+          CommandMode notin state.local_flags:
         # Close the documentation panel
         state.pop_flags DocsFocused, DocsVisible
         # TODO: Set input as handled when gdext SceneTree API is available
@@ -155,7 +161,9 @@ proc hide_panel*(self: RightPanel) =
   self.set_visible(false)
   print("[UI] RightPanel hidden")
 
-proc update_content*(self: RightPanel, markdown: string, text_only: bool = false) =
+proc update_content*(
+    self: RightPanel, markdown: string, text_only: bool = false
+) =
   # Update the documentation content
   if ?self.label:
     let formatted_content = md(text_only, markdown)
@@ -173,7 +181,7 @@ proc set_full_width*(self: RightPanel, full_width: bool) =
   else:
     self.center = 1.0
     # TODO: Set anchors when gdext allows
-  
+
   print("[UI] RightPanel full width: ", full_width)
 
 proc focus_panel*(self: RightPanel) =
@@ -182,7 +190,7 @@ proc focus_panel*(self: RightPanel) =
   let close_button = self.find_child("Close", false, false).as(Control)
   if ?close_button:
     close_button.set_visible(true)
-  
+
   print("[UI] RightPanel focused")
 
 proc unfocus_panel*(self: RightPanel) =
@@ -190,11 +198,12 @@ proc unfocus_panel*(self: RightPanel) =
   if ?self.label:
     # TODO: Release focus when MarkdownLabel API allows
     discard
-  
+
   let close_button = self.find_child("Close", false, false).as(Control)
-  if ?close_button and FullWidthPanels in state.local_flags and ViewportFocused notin state.local_flags:
+  if ?close_button and FullWidthPanels in state.local_flags and
+      ViewportFocused notin state.local_flags:
     close_button.set_visible(false)
-    
+
   print("[UI] RightPanel unfocused")
 
 proc ghost_panel*(self: RightPanel) =
@@ -210,7 +219,7 @@ proc unghost_panel*(self: RightPanel) =
   # Update mouse filters
   let overlay = self.find_child("Overlay", false, false).as(Control)
   if ?overlay:
-    set_mouse_filter_recursive(overlay, 2)  # MOUSE_FILTER_IGNORE
+    set_mouse_filter_recursive(overlay, 2) # MOUSE_FILTER_IGNORE
 
   let close_button = self.find_child("Close", false, false).as(Control)
   if ?close_button:
@@ -226,6 +235,8 @@ proc close_panel*(self: RightPanel) =
   print("[UI] RightPanel closed")
 
 # Signal handlers
-proc on_close_button_pressed*(self: RightPanel) {.gdsync, name: "_on_close_button_pressed".} =
+proc on_close_button_pressed*(
+    self: RightPanel
+) {.gdsync, name: "_on_close_button_pressed".} =
   print("[UI] RightPanel close button pressed")
   self.close_panel()

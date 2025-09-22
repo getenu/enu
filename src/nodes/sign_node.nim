@@ -1,10 +1,11 @@
 import gdext
-import gdext/classes/[
-  gdnode3d, gdpackedscene, gdresourceloader, gdcollisionshape3d, gdmeshinstance3d,
-  gdquadmesh, gdstandardmaterial3d, gdsubviewport, gdstyleboxflat, gdtextedit,
-  gdcamera3d
-]
-import core, gdutils, types
+import
+  gdext/classes/[
+    gdnode3d, gdpackedscene, gdresourceloader, gdcollisionshape3d,
+    gdmeshinstance3d, gdquadmesh, gdstandardmaterial3d, gdsubviewport,
+    gdstyleboxflat, gdtextedit, gdcamera3d,
+  ]
+import core, gdcore, types
 import ui/[markdown_label, editor]
 
 const
@@ -85,7 +86,9 @@ proc setup*(self: SignNode) =
 
     if self.model.height == 0.0:
       self.quad[].set_size(vector2(self.model.width, self.quad[].get_size().y))
-      self.shape.set_scale(vector3(self.model.width, self.quad[].get_size().y, 1))
+      self.shape.set_scale(
+        vector3(self.model.width, self.quad[].get_size().y, 1)
+      )
     else:
       self.quad[].set_size(vector2(self.model.width, self.model.height))
       self.shape.set_scale(vector3(self.model.width, self.model.height, 1))
@@ -109,8 +112,10 @@ proc setup*(self: SignNode) =
   resize()
 
   self.material.set_billboard_mode(
-    if self.model.billboard: BaseMaterial3D_BillboardMode.billboardEnabled
-    else: BaseMaterial3D_BillboardMode.billboardDisabled
+    if self.model.billboard:
+      BaseMaterial3D_BillboardMode.billboardEnabled
+    else:
+      BaseMaterial3D_BillboardMode.billboardDisabled
   )
 
   if self.model.text_only:
@@ -139,8 +144,7 @@ proc setup*(self: SignNode) =
 
   self.model.global_flags.watch:
     if (
-      change.item == Visible and
-      ScriptInitializing notin self.model.global_flags
+      change.item == Visible and ScriptInitializing notin self.model.global_flags
     ) or ScriptInitializing.removed:
       self.set_visibility()
 
@@ -180,5 +184,7 @@ method ready*(self: SignNode) {.gdsync.} =
 var sign_scene {.threadvar.}: gdref PackedScene
 proc init*(_: type SignNode): SignNode =
   if not ?sign_scene:
-    sign_scene = cast[gdref PackedScene](ResourceLoader.load("res://components/SignNode.tscn"))
+    sign_scene = cast[gdref PackedScene](ResourceLoader.load(
+      "res://components/SignNode.tscn"
+    ))
   result = SignNode(sign_scene[].instantiate())

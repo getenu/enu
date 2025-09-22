@@ -4,7 +4,7 @@ import
     gdviewport, gdsubviewport, gdcamera3d, gdmeshinstance3d, gdmaterial,
     gdnode3d, gdimage, gdresourceloader, gdviewporttexture,
   ]
-import core, gdutils
+import core, gdcore
 
 type PreviewMaker* {.gdsync.} =
   ptr object of SubViewport

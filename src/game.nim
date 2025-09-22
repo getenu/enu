@@ -10,6 +10,7 @@ import
     gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
     gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
     gdviewporttexture, gdtexture2d, gdsubviewportcontainer, gdengine,
+    gdoptionbutton, gdpopupmenu,
   ]
 
 import ui/virtual_joystick
@@ -18,7 +19,7 @@ import
   types,
   controllers,
   models/[serializers, units, colors, states],
-  gdutils,
+  gdcore,
   ui/action_button
 
 if file_exists(".env"):
@@ -234,7 +235,7 @@ proc add_platform_input_actions(self: Game) =
   var base_actions: seq[string] = @[]
 
   # Separate platform-specific actions from base actions
-  for i in 0..<all_actions.size():
+  for i in 0 ..< all_actions.size():
     let action = $all_actions[i]
     if suffix in action:
       platform_actions.add(action)
@@ -260,9 +261,10 @@ proc add_platform_input_actions(self: Game) =
 
     # Copy all events from platform action to base action
     let events = InputMap.action_get_events(action.to_string_name)
-    print "[INPUT] Copying ", events.size(), " events from ", action, " to ", base_name
+    print "[INPUT] Copying ",
+      events.size(), " events from ", action, " to ", base_name
 
-    for j in 0..<events.size():
+    for j in 0 ..< events.size():
       let event = events[j]
       InputMap.action_add_event(base_name.to_string_name, event)
 
@@ -285,15 +287,6 @@ method on_init*(self: Game) {.gdsync.} =
 
   var initial_user_config = load_user_config($OS.get_user_data_dir())
 
-  Zen.thread_ctx = ZenContext.init(
-    id = "main-{generate_id()}",
-    chan_size = 2000,
-    buffer = true,
-    label = "main",
-    max_recv_duration = (1.0 / 30.0).seconds,
-  )
-
-  state = GameState.init
   state.nodes.game = self
 
   var uc = initial_user_config
@@ -453,6 +446,10 @@ proc set_font_size(self: Game, size: int) =
       node.as(Control).add_theme_font_size_override("font_size", actual_size)
     elif node.is_class("Button"):
       node.as(Control).add_theme_font_size_override("font_size", actual_size)
+      if node.is_class("OptionButton"):
+        node.as(OptionButton).get_popup().add_theme_font_size_override(
+          "font_size", actual_size
+        )
     elif node.is_class("LineEdit"):
       node.as(Control).add_theme_font_size_override("font_size", actual_size)
     elif node.is_class("RichTextLabel"):

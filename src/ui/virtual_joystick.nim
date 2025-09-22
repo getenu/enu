@@ -2,7 +2,7 @@
 #
 # ✅ FUNCTIONAL:
 #   - Virtual joystick initialization and ready() lifecycle
-#   - Touch event detection and basic input handling via gui_input() 
+#   - Touch event detection and basic input handling via gui_input()
 #   - Joystick mode configuration (FIXED/DYNAMIC)
 #   - Visibility mode handling (touchscreen detection)
 #   - Base and tip component management
@@ -36,11 +36,12 @@
 # Adapted from https://github.com/MarcoFazioRandom/Virtual-Joystick-Godot/
 
 import gdext
-import gdext/classes/[
-  gdcontrol, gdtexturerect, gdinputevent, gdinputeventscreentouch,
-  gdinputeventscreendrag, gdscenetree, gdinput, gddisplayserver
-]
-import core, gdutils, models/[colors, states]
+import
+  gdext/classes/[
+    gdcontrol, gdtexturerect, gdinputevent, gdinputeventscreentouch,
+    gdinputeventscreendrag, gdscenetree, gdinput, gddisplayserver,
+  ]
+import core, gdcore, models/[colors, states]
 
 type
   JoystickMode* = enum
@@ -51,23 +52,24 @@ type
     ALWAYS
     TOUCHSCREEN_ONLY
 
-type VirtualJoystick* {.gdsync.} = ptr object of Control
-  pressed_color*: gdext.Color
-  deadzone_size*: float
-  clampzone_size*: float
-  joystick_mode*: JoystickMode
-  visibility_mode*: VisibilityMode
-  use_input_actions*: bool
-  action_left*: string
-  action_right*: string  
-  action_up*: string
-  action_down*: string
-  pressed*: bool
-  output: Vector2
-  touch_index: int
-  base, tip: TextureRect
-  base_radius, base_default_position, tip_default_position: Vector2
-  default_color: gdext.Color
+type VirtualJoystick* {.gdsync.} =
+  ptr object of Control
+    pressed_color*: gdext.Color
+    deadzone_size*: float
+    clampzone_size*: float
+    joystick_mode*: JoystickMode
+    visibility_mode*: VisibilityMode
+    use_input_actions*: bool
+    action_left*: string
+    action_right*: string
+    action_up*: string
+    action_down*: string
+    pressed*: bool
+    output: Vector2
+    touch_index: int
+    base, tip: TextureRect
+    base_radius, base_default_position, tip_default_position: Vector2
+    default_color: gdext.Color
 
 proc has_touchscreen_ui_hint(): bool =
   # GD4: For now, assume touchscreen is available
@@ -76,9 +78,9 @@ proc has_touchscreen_ui_hint(): bool =
 
 method ready*(self: VirtualJoystick) {.gdsync.} =
   print("[UI] VirtualJoystick initializing mobile touch controls")
-  
+
   # Initialize properties with default values
-  self.pressed_color = gdext.color(0.8, 0.4, 0.2, 1.0)  # Orange pressed color
+  self.pressed_color = gdext.color(0.8, 0.4, 0.2, 1.0) # Orange pressed color
   self.deadzone_size = 10.0
   self.clampzone_size = 75.0
   self.joystick_mode = FIXED
@@ -90,19 +92,21 @@ method ready*(self: VirtualJoystick) {.gdsync.} =
   self.action_down = "ui_down"
   self.pressed = false
   self.touch_index = -1
-  
+
   # Find child nodes
   self.base = self.find_child("Base", false, false).as(TextureRect)
   self.tip = self.find_child("Tip", false, false).as(TextureRect)
-  
+
   if ?self.base and ?self.tip:
     # TODO: Configure joystick parameters when gdext method calls are stable
-    self.base_radius = vector2(50.0, 50.0)  # Default radius
-    self.base_default_position = vector2(100.0, 100.0)  # Default position
-    self.tip_default_position = vector2(100.0, 100.0)   # Default position  
-    self.default_color = gdext.color(1.0, 1.0, 1.0, 1.0)  # White
-    
-    print("[UI] VirtualJoystick configured: base=", ?self.base, " tip=", ?self.tip)
+    self.base_radius = vector2(50.0, 50.0) # Default radius
+    self.base_default_position = vector2(100.0, 100.0) # Default position
+    self.tip_default_position = vector2(100.0, 100.0) # Default position
+    self.default_color = gdext.color(1.0, 1.0, 1.0, 1.0) # White
+
+    print(
+      "[UI] VirtualJoystick configured: base=", ?self.base, " tip=", ?self.tip
+    )
   else:
     print("[UI] ✗ VirtualJoystick missing Base or Tip child nodes")
 
@@ -124,22 +128,26 @@ proc move_base*(self: VirtualJoystick, new_position: Vector2) =
   print("[UI] VirtualJoystick move_base called")
 
 proc move_tip*(self: VirtualJoystick, new_position: Vector2) =
-  # TODO: Move tip position when gdext position API is stable  
+  # TODO: Move tip position when gdext position API is stable
   print("[UI] VirtualJoystick move_tip called")
 
-proc is_point_inside_joystick_area*(self: VirtualJoystick, point: Vector2): bool =
+proc is_point_inside_joystick_area*(
+    self: VirtualJoystick, point: Vector2
+): bool =
   # TODO: Implement point collision when gdext geometry API is stable
-  result = true  # For now, always return true
+  result = true # For now, always return true
 
 proc is_point_inside_base*(self: VirtualJoystick, point: Vector2): bool =
   # TODO: Implement base collision when gdext geometry API is stable
-  result = true  # For now, always return true
+  result = true # For now, always return true
 
 proc update_joystick*(self: VirtualJoystick, touch_position: Vector2) =
   # TODO: Update joystick state when gdext position API is stable
   self.pressed = true
-  self.output = vector2(0.5, 0.5)  # Default output
-  print("[UI] VirtualJoystick output: (", self.output.x, ", ", self.output.y, ")")
+  self.output = vector2(0.5, 0.5) # Default output
+  print(
+    "[UI] VirtualJoystick output: (", self.output.x, ", ", self.output.y, ")"
+  )
 
 proc update_input_actions*(self: VirtualJoystick) =
   # TODO: Implement input action simulation once gdext Input API is available

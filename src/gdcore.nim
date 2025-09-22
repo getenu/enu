@@ -3,11 +3,20 @@ import gdext
 import
   gdext/classes/[
     gdnode, gdcontrol, gdcanvasitem, gdoptionbutton, gdinputevent,
-    gdinputeventscreentouch,
+    gdinputeventscreentouch, gdscenetree,
   ]
 import core, models/[states]
 export strformat.`&`, states, types
 
+Zen.thread_ctx = ZenContext.init(
+  id = "main-{generate_id()}",
+  chan_size = 2000,
+  buffer = true,
+  label = "main",
+  max_recv_duration = (1.0 / 30.0).seconds,
+)
+
+state = GameState.init
 
 proc trigger*(node: Object, signal: string, args: varargs[Variant]) =
   if not node.has_user_signal(signal):
@@ -76,3 +85,6 @@ proc ignore_touches*(self: Control, event: InputEvent) =
       state.ignored_touches.incl byte(touch_event.index)
       # GD4: set_input_as_handled method API needs investigation
       # self.get_tree().set_input_as_handled()
+
+proc standalone*(node: Node): bool =
+  node.get_parent() == node.get_tree().root

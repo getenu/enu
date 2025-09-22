@@ -46,6 +46,7 @@ layout_mode = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="Window/MainContainer/RowContainer/NewLevelContainer"]
 layout_mode = 2
+theme_override_constants/separation = 15
 
 [node name="Label" type="Label" parent="Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer"]
 layout_mode = 2
@@ -63,6 +64,7 @@ caret_blink = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.6
+theme_override_constants/separation = 15
 
 [node name="Save" type="Button" parent="Window/MainContainer/RowContainer/NewLevelContainer/HBoxContainer/HBoxContainer"]
 layout_mode = 2

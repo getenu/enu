@@ -1,10 +1,13 @@
 import gdext
-import gdext/classes/[gdcontrol, gdbutton, gdinputevent, gdinputeventaction,
-                     gdinputeventscreentouch, gdinputeventscreendrag,
-                     gdinputeventkey, gdinputeventjoypadbutton, gdinputeventjoypadmotion,
-                     gdinputeventmousemotion, gdinputeventmousebutton,
-                     gdinputeventpangesture, gdnode, gdinput, gdviewport, gdtween]
-import core, gdutils, types, models/states
+import
+  gdext/classes/[
+    gdcontrol, gdbutton, gdinputevent, gdinputeventaction,
+    gdinputeventscreentouch, gdinputeventscreendrag, gdinputeventkey,
+    gdinputeventjoypadbutton, gdinputeventjoypadmotion, gdinputeventmousemotion,
+    gdinputeventmousebutton, gdinputeventpangesture, gdnode, gdinput,
+    gdviewport, gdtween,
+  ]
+import core, gdcore, types, models/states
 import std/times, std/options
 
 const
@@ -12,30 +15,32 @@ const
   input_command_timeout = 0.25
   first_delete = 0.5.seconds
   # Responsive design thresholds
-  narrow_screen_threshold = 1200.0  # Below this width, panels become narrow
-  mobile_screen_threshold = 800.0   # Below this width, panels become full-width overlays
+  narrow_screen_threshold = 1200.0 # Below this width, panels become narrow
+  mobile_screen_threshold = 800.0
+    # Below this width, panels become full-width overlays
 
-type GUI* {.gdsync.} = ptr object of Control
-  left_stick: Control
-  up: Button
-  down: Button
-  # Panel references
-  left_panel: Control
-  right_panel: Control
-  # Panel animation tweens
-  left_tween: gdref Tween
-  right_tween: gdref Tween
-  # Responsive design state
-  current_screen_width: float
-  is_narrow_screen: bool
-  is_mobile_screen: bool
-  # Player input state fields
-  command_timer: float
-  input_relative*: Vector2
-  pan_delta: float
-  touch_position: Option[Vector2]
-  delete_timer: MonoTime
-  deleting: bool
+type GUI* {.gdsync.} =
+  ptr object of Control
+    left_stick: Control
+    up: Button
+    down: Button
+    # Panel references
+    left_panel: Control
+    right_panel: Control
+    # Panel animation tweens
+    left_tween: gdref Tween
+    right_tween: gdref Tween
+    # Responsive design state
+    current_screen_width: float
+    is_narrow_screen: bool
+    is_mobile_screen: bool
+    # Player input state fields
+    command_timer: float
+    input_relative*: Vector2
+    pan_delta: float
+    touch_position: Option[Vector2]
+    delete_timer: MonoTime
+    deleting: bool
 
 # Forward declarations - all procedures must be defined before ready() method
 proc configure_mobile_layout(self: GUI) =
@@ -183,7 +188,8 @@ method ready*(self: GUI) {.gdsync.} =
   # Bind settings button
   let settings_button = self.find("OpenSettings", Button)
   if not settings_button.is_nil:
-    discard settings_button.connect("pressed", self.callable("_on_settings_opened"))
+    discard
+      settings_button.connect("pressed", self.callable("_on_settings_opened"))
     print("[UI] Settings button connected to signal handler")
 
   # Set up panel state watching
@@ -256,7 +262,9 @@ proc handle_basic_input(self: GUI, event: InputEvent) =
 method unhandled_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
   # Handle global input events and UI navigation
   let event = event[]
-  if CommandMode notin state.local_flags and event.is_action_pressed("ui_cancel") and ViewportFocused in state.local_flags:
+  if CommandMode notin state.local_flags and event.is_action_pressed(
+    "ui_cancel"
+  ) and ViewportFocused in state.local_flags:
     let flags = state.try_pop(ViewportFocused)
 
     if SettingsFocused in flags:
@@ -268,7 +276,8 @@ method unhandled_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
 
   # Forward input to basic handling
   if event.is_class("InputEventKey") or event.is_class("InputEventAction") or
-     event.is_class("InputEventJoypadButton") or event.is_class("InputEventPanGesture"):
+      event.is_class("InputEventJoypadButton") or
+      event.is_class("InputEventPanGesture"):
     self.handle_basic_input(event)
 
 method gui_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
@@ -284,7 +293,8 @@ method gui_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
           self.delete_timer = get_mono_time() + first_delete
         else:
           # Simple tap handling
-          if self.touch_position.is_some and self.touch_position.get() == touch_event.get_position():
+          if self.touch_position.is_some and
+              self.touch_position.get() == touch_event.get_position():
             state.push_flags PrimaryDown
             state.pop_flags PrimaryDown
             self.deleting = false
@@ -293,7 +303,6 @@ method gui_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
     elif index in state.ignored_touches and not touch_event.is_pressed():
       state.ignored_touches.excl(index)
       self.get_viewport().set_input_as_handled()
-
   elif event[].is_class("InputEventScreenDrag"):
     let drag_event = event[].as(InputEventScreenDrag)
     let index = byte(drag_event.get_index())
@@ -306,13 +315,12 @@ method gui_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
 
         if not self.deleting:
           self.delete_timer = MonoTime.high
-
   elif event[].is_class("InputEventMouseMotion"):
     # Handle mouse motion for camera control
-    if MouseCaptured in state.local_flags and TouchControls notin state.local_flags:
+    if MouseCaptured in state.local_flags and
+        TouchControls notin state.local_flags:
       let mouse_event = event[].as(InputEventMouseMotion)
       self.input_relative += mouse_event.get_relative()
-
   elif event[].is_class("InputEventMouseButton"):
     self.handle_basic_input(event[])
 

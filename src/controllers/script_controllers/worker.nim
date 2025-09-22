@@ -60,7 +60,8 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       self.active_unit = nil
 
 proc change_code(self: Worker, unit: Unit, code: Code) =
-  info "Script: Code changing for unit", unit = unit.id, code_length = code.nim.len
+  info "Script: Code changing for unit",
+    unit = unit.id, code_length = code.nim.len
   unit.errors.clear
   unit.global_flags -= HighlightError
   if ?unit.script_ctx and unit.script_ctx.running and not ?unit.clone_of:
@@ -176,6 +177,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   Zen.thread_ctx = worker_ctx
   ctx.subscribe(Zen.thread_ctx)
 
+  info "loading thread", present = ?main_thread_state
+
   state = GameState.init_from(main_thread_state)
   state.init_logger
   let connect_address = main_thread_state.config.connect_address
@@ -197,7 +200,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
   worker.for_all_units:
     if added:
-      info "Script: Unit added to worker", unit_id = unit.id, unit_type = $unit.type
+      info "Script: Unit added to worker",
+        unit_id = unit.id, unit_type = $unit.type
       unit.worker_thread_joined
       worker.watch_code unit
 

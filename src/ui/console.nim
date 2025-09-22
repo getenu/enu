@@ -5,7 +5,7 @@ import
     gdinputeventmousebutton, gdvscrollbar, gdtween, gdviewport,
   ]
 # GD4: Fixed Tween import (was SceneTreeTween in Godot 3)
-import core, gdutils, types, models/states
+import core, gdcore, types, models/states
 import std/strutils
 
 type Console* {.gdsync.} =

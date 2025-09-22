@@ -6,7 +6,7 @@ import
     gdinputeventmousebutton, gdcontrol, gdnode, gdvscrollbar, gdtween,
     gdstyleboxflat, gdbutton, gdinput, gdviewport,
   ]
-import core, gdutils, types, models/[states, units]
+import core, gdcore, types, models/[states, units]
 # import nim_highlighter  # GD4: Re-enable when CodeHighlighter API is fixedxx
 
 type EnuEditor* {.gdsync.} =
@@ -225,13 +225,19 @@ method ready*(self: EnuEditor) {.gdsync.} =
   # Connect signals for editor functionality
   if not self.code_edit.has_signal("text_changed"):
     self.code_edit.add_user_signal("text_changed")
-  let text_changed_callable = callable(self, new_string_name("_on_text_changed"))
-  discard self.code_edit.connect(new_string_name("text_changed"), text_changed_callable)
+  let text_changed_callable =
+    callable(self, new_string_name("_on_text_changed"))
+  discard self.code_edit.connect(
+    new_string_name("text_changed"), text_changed_callable
+  )
 
   if not self.code_edit.has_signal("caret_changed"):
     self.code_edit.add_user_signal("caret_changed")
-  let caret_changed_callable = callable(self, new_string_name("_on_caret_changed"))
-  discard self.code_edit.connect(new_string_name("caret_changed"), caret_changed_callable)
+  let caret_changed_callable =
+    callable(self, new_string_name("_on_caret_changed"))
+  discard self.code_edit.connect(
+    new_string_name("caret_changed"), caret_changed_callable
+  )
 
   # Connect button signals
   for name in ["Close", "Run"]:

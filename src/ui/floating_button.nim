@@ -17,7 +17,7 @@
 
 import gdext
 import gdext/classes/[gdbutton, gdinputevent]
-import core, gdutils
+import core, gdcore
 
 type FloatingButton* {.gdsync.} = ptr object of Button
 

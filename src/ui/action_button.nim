@@ -2,7 +2,7 @@ import std/[options, strutils]
 import gdext
 # Use custom Godot bindings for consistency with Game and BuildNode
 import gdext/classes/[gdbutton, gdviewport, gdstyleboxflat, gdinputevent]
-import core, gdutils, types, models/states
+import core, gdcore, types, models/states
 
 # Simple state management for the UI components
 # This will eventually connect to the full game state system
@@ -14,29 +14,29 @@ type ActionButton* {.gdsync.} = ptr object of Button
 proc update_size*(self: ActionButton, size: float) =
   var toolbar_size = size * global_screen_scale
   let viewport_width = self.get_viewport().get_visible_rect().size.x
-  
-  # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit  
+
+  # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit
   if (toolbar_size + 4.0) * 8.0 > viewport_width:
     toolbar_size = viewport_width / 8.0 - 4.0
-    
+
   let size_vec = vector2(toolbar_size, toolbar_size)
   self.set_custom_minimum_size(size_vec)
-  
+
   # Update corner radius for responsive design
   let corner_radius = (8.0 * (toolbar_size / 100.0)).int32
-  
+
   # Update style boxes with new corner radius (simplified for now)
   # TODO: Implement style box updates when we understand gdext GdRef patterns better
   # for style in ["hover", "pressed", "focus", "normal"]:
   #   let stylebox = self.getThemeStylebox(StringName(style))
-  #   let flat_style = stylebox as StyleBoxFlat  
+  #   let flat_style = stylebox as StyleBoxFlat
   #   flat_style.setCornerRadiusAll(corner_radius)
 
 proc trigger_action_changed(self: ActionButton) =
   ## Trigger action_changed signal to notify Toolbar of tool selection
   let button_name = $self.get_name()
   print("[UI] ActionButton trigger_action_changed: " & button_name)
-  
+
   # Emit signal to the game node which will route it to Toolbar
   let game_node = state.nodes.game
   if ?game_node:
@@ -51,10 +51,10 @@ method onInit*(self: ActionButton) =
 
 method ready*(self: ActionButton) {.gdsync.} =
   print("[UI] ActionButton ready: " & $self.get_name())
-  
+
   # Set up initial size
   self.update_size(global_toolbar_size)
-  
+
   # Connect signals using the working Godot 4 signal system
   if not self.has_signal("pressed"):
     self.add_user_signal("pressed")
@@ -63,9 +63,12 @@ method ready*(self: ActionButton) {.gdsync.} =
 
   if not self.get_viewport().has_signal("size_changed"):
     self.get_viewport().add_user_signal("size_changed")
-  let size_changed_callable = callable(self, new_string_name("_on_size_changed"))
-  discard self.get_viewport().connect(new_string_name("size_changed"), size_changed_callable)
-  
+  let size_changed_callable =
+    callable(self, new_string_name("_on_size_changed"))
+  discard self.get_viewport().connect(
+      new_string_name("size_changed"), size_changed_callable
+    )
+
   # TODO: Connect to config changes when state system is available
   # state.config_value.changes:
   #   if state.config.toolbar_size != change.item.toolbar_size:

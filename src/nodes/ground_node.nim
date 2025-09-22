@@ -22,18 +22,19 @@
 
 import gdext
 import gdext/classes/[gdmeshinstance3d, gdpackedscene, gdresourceloader]
-import core, gdutils, models
+import core, gdcore, models
 
-type GroundNode* {.gdsync.} = ptr object of MeshInstance3D
-  model*: Ground
+type GroundNode* {.gdsync.} =
+  ptr object of MeshInstance3D
+    model*: Ground
 
 method ready*(self: GroundNode) {.gdsync.} =
   print("[GROUND] GroundNode initializing")
-  
+
   # Initialize ground model
   self.model = Ground.init(self)
   state.ground = self.model
-  
+
   print("[GROUND] Ground model initialized and assigned to state")
 
 var ground_scene {.threadvar.}: gdref PackedScene

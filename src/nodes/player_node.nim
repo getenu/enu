@@ -8,7 +8,7 @@ import
     gdinputeventpangesture, gdpackedscene, gdresourceloader, gdviewport,
     gdkinematiccollision3d, gdos, gdengine,
   ]
-import core, gdutils, models
+import core, gdcore, models
 import aim_target
 
 const
@@ -439,7 +439,6 @@ proc has_active_input(self: PlayerNode, device: int32): bool =
       return true
 
 proc update_raycast*(self: PlayerNode) =
-  
   let ray_length =
     if state.current_tool_value.value == CodeMode: 200.0 else: 100.0
 
@@ -448,21 +447,20 @@ proc update_raycast*(self: PlayerNode) =
     let mouse_pos = self.get_viewport().get_mouse_position()
     let cast_from = self.camera.project_ray_origin(mouse_pos)
     let cast_to =
-      cast_from +
-      self.camera.project_ray_normal(mouse_pos) * ray_length
-    
+      cast_from + self.camera.project_ray_normal(mouse_pos) * ray_length
+
     if not self.world_ray.is_nil:
-      self.world_ray.target_position = cast_to  
+      self.world_ray.target_position = cast_to
       self.world_ray.position = cast_from
       self.world_ray.set_enabled(true)
-      
+
       # Update aim target with world ray (matches Godot 3)
       if not self.aim_target.is_nil:
         self.aim_target.update(self.world_ray)
   else:
     # Mouse is captured - cast ray from camera center
     self.aim_ray.target_position = vector3(0, 0, -ray_length)
-    
+
     # Update aim target with aim ray (matches Godot 3)
     if not self.aim_target.is_nil:
       self.aim_target.update(self.aim_ray)

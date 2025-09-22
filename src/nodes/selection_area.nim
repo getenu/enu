@@ -28,26 +28,29 @@
 
 import gdext
 import gdext/classes/[gdarea3d, gdpackedscene, gdresourceloader]
-import core, gdutils
+import core, gdcore
 
-type SelectionArea* {.gdsync.} = ptr object of Area3D
-  # TODO: Add bot reference when model system is available
-  # bot*: Bot
+type SelectionArea* {.gdsync.} =
+  ptr object of Area3D
+    # TODO: Add bot reference when model system is available
+    # bot*: Bot
 
 method ready*(self: SelectionArea) {.gdsync.} =
   print("[SELECTION] SelectionArea initializing")
-  
+
   # Enable area monitoring for collision detection
   self.set_monitoring(true)
-  
+
   # Connect signals for area and body detection
-  for signal_name in ["body_entered", "body_exited", "area_entered", "area_exited"]:
+  for signal_name in [
+    "body_entered", "body_exited", "area_entered", "area_exited"
+  ]:
     if not self.has_signal(signal_name):
       self.add_user_signal(signal_name)
     let method_name = "_on_" & signal_name
     let callable_obj = callable(self, new_string_name(method_name))
     discard self.connect(new_string_name(signal_name), callable_obj)
-  
+
   print("[SELECTION] Area3D monitoring enabled and signals connected")
   print("[SELECTION] SelectionArea ready")
 
@@ -55,7 +58,7 @@ method ready*(self: SelectionArea) {.gdsync.} =
 # TODO: Signal handler implementation needs investigation of character encoding issue
 # The following handlers are ready to implement once character issue is resolved:
 # - body_entered signal handling
-# - body_exited signal handling 
+# - body_exited signal handling
 # - area_entered signal handling
 # - area_exited signal handling
 print("[SELECTION] Signal handlers ready for implementation")
@@ -71,6 +74,8 @@ proc init*(_: type SelectionArea): SelectionArea =
       result = cast[SelectionArea](instance)
       print("[SELECTION] SelectionArea instantiated successfully")
     else:
-      print("[SELECTION] ✗ Failed to load SelectionArea scene - resource is nil")
+      print(
+        "[SELECTION] ✗ Failed to load SelectionArea scene - resource is nil"
+      )
   except:
     print("[SELECTION] ✗ Failed to load or instantiate SelectionArea")

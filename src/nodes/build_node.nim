@@ -1,11 +1,15 @@
 import std/[tables, bitops, monotimes, times]
 import gdext
-import core, types, models/[units, builds, colors], gdutils
-import gdext/classes/[gdvoxelterrain, gdvoxeltool, gdvoxeltoolterrain, gdvoxelmesher, gdvoxelmesherblocky,
-                     gdvoxelblockylibrary, gdvoxelblockylibrarybase, gdvoxelstream, gdvoxelstreammemory,
-                     gdvoxelgenerator, gdvoxelgeneratorflat, gdvoxelblockymodel,
-                     gdvoxelblockymodelcube, gdvoxelblockymodelempty, gdvoxelbuffer,
-                     gdpackedscene, gdresourceloader, gdraycast3d, gdshadermaterial, gdshader]
+import core, types, models/[units, builds, colors], gdcore
+import
+  gdext/classes/[
+    gdvoxelterrain, gdvoxeltool, gdvoxeltoolterrain, gdvoxelmesher,
+    gdvoxelmesherblocky, gdvoxelblockylibrary, gdvoxelblockylibrarybase,
+    gdvoxelstream, gdvoxelstreammemory, gdvoxelgenerator, gdvoxelgeneratorflat,
+    gdvoxelblockymodel, gdvoxelblockymodelcube, gdvoxelblockymodelempty,
+    gdvoxelbuffer, gdpackedscene, gdresourceloader, gdraycast3d,
+    gdshadermaterial, gdshader,
+  ]
 import ./queries
 
 const
@@ -19,15 +23,16 @@ var shader {.threadvar.}: gdref Shader
 var hidden_shader {.threadvar.}: gdref Shader
 
 # BuildNode for Godot 4 using complete custom Godot bindings with voxel support
-type BuildNode* {.gdsync.} = ptr object of VoxelTerrain
-  model*: Build
-  active_chunks: Table[Vector3, ZID]
-  transform_zid: ZID
-  default_view_distance: int
-  chunks_zid: ZID
-  toggle_error_highlight_at: MonoTime
-  error_highlight_on: bool
-  update_at: MonoTime
+type BuildNode* {.gdsync.} =
+  ptr object of VoxelTerrain
+    model*: Build
+    active_chunks: Table[Vector3, ZID]
+    transform_zid: ZID
+    default_view_distance: int
+    chunks_zid: ZID
+    toggle_error_highlight_at: MonoTime
+    error_highlight_on: bool
+    update_at: MonoTime
 
 method on_init*(self: BuildNode) =
   # Constructor-like initialization - equivalent to gdobj's init
@@ -67,8 +72,10 @@ proc prepare_materials(self: BuildNode) =
 proc draw(self: BuildNode, location: Vector3, color: colors.Color) =
   let voxel_tool = self.get_voxel_tool()
   if ?voxel_tool:
-    voxel_tool[].set_voxel(vector3i(location.x.int32, location.y.int32, location.z.int32),
-                          ord(color.action_index).uint64)
+    voxel_tool[].set_voxel(
+      vector3i(location.x.int32, location.y.int32, location.z.int32),
+      ord(color.action_index).uint64,
+    )
 
 proc draw_block(self: BuildNode, voxels: Chunk) =
   for loc, info in voxels:
@@ -153,7 +160,6 @@ proc track_changes(self: BuildNode) =
     if added:
       self.set_glow(change.item)
 
-
   echo "bounds: ", ?self.model.bounds_value
 
   self.set_bounds(self.model.bounds)
@@ -166,8 +172,7 @@ proc track_changes(self: BuildNode) =
 
   self.model.global_flags.watch:
     if (
-      change.item == Visible and
-      ScriptInitializing notin self.model.global_flags
+      change.item == Visible and ScriptInitializing notin self.model.global_flags
     ) or ScriptInitializing.removed:
       self.set_visibility()
     elif Resetting.added:
@@ -203,7 +208,9 @@ proc track_changes(self: BuildNode) =
       self.set_scale(vector3(scale, scale, scale))
       self.model.transform_value.pause self.transform_zid:
         self.model.transform = self.get_transform()
-      self.set_max_view_distance(int32(self.default_view_distance.float / scale))
+      self.set_max_view_distance(
+        int32(self.default_view_distance.float / scale)
+      )
 
   self.transform_zid = self.model.transform_value.watch:
     if added:
@@ -241,7 +248,9 @@ proc setup*(self: BuildNode) =
 proc create_test_voxels*(self: BuildNode) {.gdsync.} =
   ## Create some test voxels using real VoxelTerrain functionality
 
-  print("[VOXEL] Creating test voxels with properly initialized VoxelTerrain...")
+  print(
+    "[VOXEL] Creating test voxels with properly initialized VoxelTerrain..."
+  )
 
   # Get voxel tool for editing
   let voxel_tool = self.get_voxel_tool()
@@ -264,9 +273,9 @@ proc create_test_voxels*(self: BuildNode) {.gdsync.} =
   print("[VOXEL] ✓ Area is editable, creating 3x3x3 cube...")
 
   # Create a simple 3x3x3 cube of different colored blocks
-  for x in 0..2:
-    for y in 0..2:
-      for z in 0..2:
+  for x in 0 .. 2:
+    for y in 0 .. 2:
+      for z in 0 .. 2:
         let pos = vector3i(x.int32, y.int32, z.int32)
         # Alternate between different voxel types (1-6 for different colors)
         let voxel_type = (x + y + z) mod 6 + 1
@@ -292,8 +301,11 @@ method process*(self: BuildNode, delta: float64) {.gdsync.} =
     self.create_test_voxels()
 
 method ready*(self: BuildNode) {.gdsync.} =
-  print("[VOXEL] BuildNode ready - checking VoxelTerrain configuration from .tscn...")
-  self.update_at = get_mono_time() + init_duration(seconds = 2)  # Give terrain time to initialize
+  print(
+    "[VOXEL] BuildNode ready - checking VoxelTerrain configuration from .tscn..."
+  )
+  self.update_at = get_mono_time() + init_duration(seconds = 2)
+    # Give terrain time to initialize
   self.toggle_error_highlight_at = MonoTime.high
 
   # Initialize based on on_init equivalent
@@ -304,13 +316,21 @@ method ready*(self: BuildNode) {.gdsync.} =
   print("[VOXEL] Generator: ", self.get_generator())
   print("[VOXEL] Mesher: ", self.get_mesher())
   print("[VOXEL] Bounds: ", self.get_bounds())
-  print("[VOXEL] VoxelTerrain initialized - waiting 2 seconds for area loading...")
+  print(
+    "[VOXEL] VoxelTerrain initialized - waiting 2 seconds for area loading..."
+  )
 
 proc init*(_: type BuildNode): BuildNode =
   if not ?build_scene:
-    build_scene = ResourceLoader.load("res://components/BuildNode.tscn").as(gdref PackedScene)
+    build_scene = ResourceLoader.load("res://components/BuildNode.tscn").as(
+        gdref PackedScene
+      )
     # GD4: Load shaders for Godot 4
-    shader = ResourceLoader.load("res://shaders/terrain_voxel.gdshader").as(gdref Shader)
-    hidden_shader = ResourceLoader.load("res://shaders/terrain_voxel_hidden.gdshader").as(gdref Shader)
+    shader = ResourceLoader.load("res://shaders/terrain_voxel.gdshader").as(
+        gdref Shader
+      )
+    hidden_shader = ResourceLoader
+      .load("res://shaders/terrain_voxel_hidden.gdshader")
+      .as(gdref Shader)
 
   result = build_scene[].instantiate().as(BuildNode)

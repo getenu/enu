@@ -259,72 +259,95 @@ proc save_user_config*(config: UserConfig) =
   write_file(config_file, jsonutils.to_json(config).pretty)
 
 proc change_loaded_level*(level, world: string) =
-  var config = state.config
-  config.world = world
-  config.level = level
-  state.level_name = config.world & "/" & config.level
-  config.world_dir = join_path(config.work_dir, config.world)
-  config.level_dir = join_path(config.world_dir, config.level)
-  state.config = config
+  try:
+    info "[LEVEL] Changing level to: ", level = level, world = world
+    var config = state.config
+    config.world = world
+    config.level = level
+    state.level_name = config.world & "/" & config.level
+    config.world_dir = join_path(config.work_dir, config.world)
+    config.level_dir = join_path(config.world_dir, config.level)
+    state.config = config
+    info "[LEVEL] Level change completed successfully"
+  except Exception as e:
+    error "[LEVEL] Error changing level", error = e.msg
+    raise
 
 proc unload_level*(worker: Worker) =
-  state.global_flags += LoadingLevel
-  state.push_flag LoadingScript
-  state.pop_flag Playing
-  state.units.clear_all
-  state.pop_flag LoadingScript
-  state.global_flags -= LoadingLevel
+  try:
+    info "[LEVEL] Starting level unload"
+    state.global_flags += LoadingLevel
+    state.push_flag LoadingScript
+    state.pop_flag Playing
+    state.units.clear_all
+    state.pop_flag LoadingScript
+    state.global_flags -= LoadingLevel
+    info "[LEVEL] Level unload completed"
+  except Exception as e:
+    error "[LEVEL] Error during level unload", error = e.msg
+    # Ensure flags are cleaned up even if unload fails
+    state.pop_flag LoadingScript
+    state.global_flags -= LoadingLevel
+    raise
 
 proc load_level*(worker: Worker, level_dir: string) =
-  state.global_flags += LoadingLevel
-  state.push_flag LoadingScript
-  var config = state.config
+  try:
+    info "[LEVEL] Starting level load", level_dir = level_dir
+    state.global_flags += LoadingLevel
+    state.push_flag LoadingScript
+    var config = state.config
 
-  config.level_dir = level_dir
-  config.data_dir = join_path(config.level_dir, "data")
-  config.script_dir = join_path(config.level_dir, "scripts")
+    config.level_dir = level_dir
+    config.data_dir = join_path(config.level_dir, "data")
+    config.script_dir = join_path(config.level_dir, "scripts")
 
-  let level_file = level_dir / "level.json"
+    let level_file = level_dir / "level.json"
 
-  if not file_exists(level_file):
-    let
-      base = config.lib_dir / "worlds" / config.world
-      level = base / config.level
-      tmpl = base / "template"
+    if not file_exists(level_file):
+      let
+        base = config.lib_dir / "worlds" / config.world
+        level = base / config.level
+        tmpl = base / "template"
 
-    if dir_exists(level):
-      copy_dir(level, config.level_dir)
-    elif dir_exists(config.world_dir / "template"):
-      copy_dir(config.world_dir / "template", config.level_dir)
-    elif dir_exists(tmpl):
-      copy_dir(tmpl, config.level_dir)
+      if dir_exists(level):
+        copy_dir(level, config.level_dir)
+      elif dir_exists(config.world_dir / "template"):
+        copy_dir(config.world_dir / "template", config.level_dir)
+      elif dir_exists(tmpl):
+        copy_dir(tmpl, config.level_dir)
 
-  create_dir(config.data_dir)
-  create_dir(config.script_dir)
+    create_dir(config.data_dir)
+    create_dir(config.script_dir)
 
-  state.config = config
+    state.config = config
 
-  info "loading ", level_file
-  if file_exists(level_file):
-    try:
-      let level_json = read_file(level_file)
-      let level = level_json.parse_json.json_to(LevelInfo)
-      load_chunks = level.format_version == "v0.9"
-    except Exception as e:
-      error "Failed to load level", error = e[]
+    info "loading ", level_file
+    if file_exists(level_file):
+      try:
+        let level_json = read_file(level_file)
+        let level = level_json.parse_json.json_to(LevelInfo)
+        load_chunks = level.format_version == "v0.9"
+      except Exception as e:
+        error "Failed to load level", error = e[]
 
-  dont_join = true
-  worker.retry_failures = true
-  info "Loading units..."
-  load_units(nil)
-  info "Retrying failed scripts..."
-  worker.retry_failed_scripts()
-  info "Script retry completed"
-  worker.retry_failures = false
-  dont_join = false
-  for unit in state.units:
-    unit.global_flags -= Dirty
-  state.pop_flag LoadingScript
-  info "Clearing LoadingLevel flag"
-  state.global_flags -= LoadingLevel
-  info "Level loading completed"
+    dont_join = true
+    worker.retry_failures = true
+    info "Loading units..."
+    load_units(nil)
+    info "Retrying failed scripts..."
+    worker.retry_failed_scripts()
+    info "Script retry completed"
+    worker.retry_failures = false
+    dont_join = false
+    for unit in state.units:
+      unit.global_flags -= Dirty
+    state.pop_flag LoadingScript
+    info "Clearing LoadingLevel flag"
+    state.global_flags -= LoadingLevel
+    info "[LEVEL] Level loading completed successfully"
+  except Exception as e:
+    error "[LEVEL] Error during level load", error = e.msg
+    # Ensure flags are cleaned up even if load fails
+    state.pop_flag LoadingScript
+    state.global_flags -= LoadingLevel
+    raise

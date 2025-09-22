@@ -1,39 +1,40 @@
 import std/[tables, strutils, re, sequtils]
 import gdext
-import gdext/classes/[
-  gdrichtextlabel, gdscrollcontainer, gdtextedit, gdtheme, gdfont, 
-  gdstyleboxflat, gdnode, gdvboxcontainer, gdcontrol
-]
-import core, gdutils, types, models/colors
+import
+  gdext/classes/[
+    gdrichtextlabel, gdscrollcontainer, gdtextedit, gdtheme, gdfont,
+    gdstyleboxflat, gdnode, gdvboxcontainer, gdcontrol,
+  ]
+import core, gdcore, types, models/colors
 # TODO: Add markdown package when available
 # import pkg/markdown
 
 export gdscrollcontainer
 
-
-type MarkdownLabel* {.gdsync.} = ptr object of ScrollContainer
-  markdown*: string
-  old_markdown: string
-  default_font*: gdref Font
-  italic_font*: gdref Font 
-  bold_font*: gdref Font
-  bold_italic_font*: gdref Font
-  header_font*: gdref Font
-  mono_font*: gdref Font
-  size*: int
-  current_label: RichTextLabel
-  container: VBoxContainer
-  og_text_edit: TextEdit
-  og_label*: RichTextLabel
-  needs_margin: bool
-  resized: bool
-  local_default_font: gdref Font
-  local_italic_font: gdref Font
-  local_bold_font: gdref Font
-  local_bold_italic_font: gdref Font
-  local_header_font: gdref Font
-  local_mono_font: gdref Font
-  zid: ZID
+type MarkdownLabel* {.gdsync.} =
+  ptr object of ScrollContainer
+    markdown*: string
+    old_markdown: string
+    default_font*: gdref Font
+    italic_font*: gdref Font
+    bold_font*: gdref Font
+    bold_italic_font*: gdref Font
+    header_font*: gdref Font
+    mono_font*: gdref Font
+    size*: int
+    current_label: RichTextLabel
+    container: VBoxContainer
+    og_text_edit: TextEdit
+    og_label*: RichTextLabel
+    needs_margin: bool
+    resized: bool
+    local_default_font: gdref Font
+    local_italic_font: gdref Font
+    local_bold_font: gdref Font
+    local_bold_italic_font: gdref Font
+    local_header_font: gdref Font
+    local_mono_font: gdref Font
+    zid: ZID
 
 proc add_label(self: MarkdownLabel) =
   self.current_label = self.og_label.duplicate().as(RichTextLabel)
@@ -42,11 +43,13 @@ proc add_label(self: MarkdownLabel) =
   if not state.nodes.game.is_nil:
     if not self.current_label.has_signal("meta_clicked"):
       self.current_label.add_user_signal("meta_clicked")
-    let callable_obj = callable(state.nodes.game, new_string_name("_on_meta_clicked"))
-    discard self.current_label.connect(new_string_name("meta_clicked"), callable_obj)
+    let callable_obj =
+      callable(state.nodes.game, new_string_name("_on_meta_clicked"))
+    discard
+      self.current_label.connect(new_string_name("meta_clicked"), callable_obj)
 
 proc set_font_sizes(self: MarkdownLabel) =
-  let size = 
+  let size =
     if self.size > 0:
       self.size
     else:
@@ -61,14 +64,14 @@ proc set_font_sizes(self: MarkdownLabel) =
   let child_count = self.container.get_child_count()
   for i in 0 ..< child_count:
     let child = self.container.get_child(i)
-    
+
     if child.is_class("TextEdit"):
       let child_edit = child.as(TextEdit)
       let line_count = child_edit.get_line_count()
       let line_height = 20 # TODO: Get actual line height from theme
       let height = line_count * line_height + 24
       let text_lines = ($child_edit.get_text()).split('\n')
-      
+
       var size = child_edit.get_custom_minimum_size()
       size.y = float(height)
       if text_lines.len > 0:
@@ -80,7 +83,6 @@ proc set_font_sizes(self: MarkdownLabel) =
         size.x = float(max_len * 8) # 8px per character estimate
       child_edit.set_custom_minimum_size(size)
       child_edit.set_size(size)
-      
     elif child.is_class("RichTextLabel"):
       # TODO: Handle RichTextLabel styling for Godot 4
       let child_label = child.as(RichTextLabel)
@@ -111,7 +113,7 @@ proc update*(self: MarkdownLabel)
 
 method ready*(self: MarkdownLabel) {.gdsync.} =
   print("[UI] MarkdownLabel ready - initializing Godot 4 markdown renderer")
-  
+
   if not self.has_signal("resized"):
     self.add_user_signal("resized")
   let callable_obj = callable(self, new_string_name("_on_resized"))
@@ -119,7 +121,7 @@ method ready*(self: MarkdownLabel) {.gdsync.} =
   self.container = self.get_node("VBoxContainer").as(VBoxContainer)
   self.og_text_edit = self.container.get_node("TextEdit").as(TextEdit)
   self.og_label = self.container.get_node("RichTextLabel").as(RichTextLabel)
-  
+
   self.container.remove_child(self.og_text_edit)
   self.container.remove_child(self.og_label)
 
@@ -150,16 +152,16 @@ proc render_plain_text(self: MarkdownLabel, text: string) =
   # Fallback renderer when markdown package isn't available
   if not ?self.current_label:
     self.add_label()
-  
+
   let label = self.current_label
   label.clear()
-  
+
   # Split text into paragraphs and code blocks
   let lines = text.split('\n')
   var i = 0
   while i < lines.len:
     let line = lines[i].strip()
-    
+
     if line.startsWith("```"):
       # Code block
       var code_lines: seq[string]
@@ -167,7 +169,7 @@ proc render_plain_text(self: MarkdownLabel, text: string) =
       while i < lines.len and not lines[i].strip().startsWith("```"):
         code_lines.add(lines[i])
         inc i
-      
+
       if code_lines.len > 0:
         let editor = self.add_text_edit()
         editor.set_text(code_lines.join("\n"))
@@ -211,7 +213,7 @@ proc update*(self: MarkdownLabel) =
 
     self.current_label = nil
     self.old_markdown = self.markdown
-    
+
     # TODO: Use full markdown parser when available
     # For now, use plain text renderer
     self.render_plain_text(self.markdown)
