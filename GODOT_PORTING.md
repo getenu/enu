@@ -115,6 +115,19 @@ This document tracks the progress of porting Enu from Godot 3 to Godot 4. The mi
    - Comprehensive logging for debugging and verification
    - Restores runtime key binding system from Godot 3
 
+5. **Jump Input System** - ✅ **COMPLETED**
+   - Fixed space bar jumping not working
+   - Root cause: GUI layer was consuming jump input with `set_input_as_handled()` but not processing it
+   - Solution: Removed problematic jump handling from `gui.nim:handle_basic_input` method
+   - Jump input now properly flows to `player_node.nim` where actual jumping logic exists
+
+6. **TouchControls Flag System** - ✅ **COMPLETED**
+   - Implemented comprehensive visibility control for virtual joystick and on-screen buttons
+   - TouchControls flag correctly set only for iOS platforms in `game.nim`
+   - Added dynamic visibility updates when flag changes
+   - Initial state setting based on TouchControls flag at startup
+   - Touch controls (LeftStick, Up/Down buttons) properly hidden on non-mobile platforms
+
 **Current High Priority Issues:**
 5. **Level Loading** - ❌ **CRASHES** when switching levels
    - Enhanced with defensive error handling and detailed logging

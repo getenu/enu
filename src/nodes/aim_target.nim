@@ -112,89 +112,76 @@ proc update*(self: AimTarget, ray: RayCast3D) =
         if unit of Build or unit of Ground:
           state.push_flag BlockTargetVisible
 
-  # Position the aim target at collision point
+  # Position the aim target at collision point with proper orientation and snapping
   if ?collider:
-    # Position at collision point but keep it flat on the ground
-    let collision_point = ray.get_collision_point()
-    let collision_normal = ray.get_collision_normal()
+    var global_normal = ray.get_collision_normal()
+    var local_point: Vector3
 
-    # Position slightly above the collision point, but keep sprite flat
-    self.global_position = collision_point + collision_normal * 0.01
+    let local_collision_point = collider.to_local(ray.get_collision_point())
+    let basis = collider.global_transform.basis
+    let half = vector3(0.5, 0.5, 0.5)
 
-    # Make sure the target is oriented flat (horizontal) regardless of surface normal
-    # Reset rotation to face up (flat on ground)
-    self.rotation = vector3(0, 0, 0)
+    # Calculate local normal - need to handle scale
+    let scale = collider.scale
+    let inv_scale = vector3(1.0 / scale.x, 1.0 / scale.y, 1.0 / scale.z)
+
+    # Transform global normal to local space and snap it
+    var local_normal = basis.inverse() * global_normal
+    local_normal = (local_normal * inv_scale).snapped(half)
+
+    # Helper function to check if a vector component is close to a value
+    proc is_close(a, b: float, tolerance = 0.01): bool =
+      abs(a - b) < tolerance
+
+    # Check if normal is axis-aligned (matching Godot 3 logic)
+    let is_axis_aligned =
+      (is_close(abs(local_normal.x), 1.0) and is_close(local_normal.y, 0.0) and is_close(local_normal.z, 0.0)) or
+      (is_close(local_normal.x, 0.0) and is_close(abs(local_normal.y), 1.0) and is_close(local_normal.z, 0.0)) or
+      (is_close(local_normal.x, 0.0) and is_close(local_normal.y, 0.0) and is_close(abs(local_normal.z), 1.0))
+
+    if not is_axis_aligned:
+      # All local normals should be axis aligned because we're dealing with cubes.
+      # If it isn't, we probably got a corner or something.
+      return
+
+    # Calculate factor for positioning (matching Godot 3's inverse_normalized logic)
+    let factor = local_normal.inverse_normalized() * 0.5
+
+    # Snap the local point to grid (1x1 squares)
+    local_point = (local_collision_point - factor).snapped(vector3(1, 1, 1)) + factor
+
+    # Transform local normal back to global space
+    global_normal = (basis * local_normal) * inv_scale
+
+    # Position the aim target with snapping
+    let local_offset = local_point + (local_normal * 0.01) * inv_scale
+    let target_pos_arr = collider.to_global(local_offset)
+    let target_pos = vector3(target_pos_arr[0], target_pos_arr[1], target_pos_arr[2])
+    self.global_position = target_pos_arr
+    self.scale = collider.scale
+
+    # Orient the sprite to lay flat on the surface (matching Godot 3 look_at behavior)
+    let global_normal_vec = vector3(global_normal[0], global_normal[1], global_normal[2])
+    let align_normal = vector3(
+      target_pos.x + global_normal_vec.x,
+      target_pos.y + global_normal_vec.y,
+      target_pos.z + global_normal_vec.z
+    )
+
+    # In Godot 3, the look_at uses self.transform.basis.x as the up vector
+    # This orients the sprite to face along the normal with the X-axis as up
+    self.look_at(align_normal, self.transform.basis.get_column_x())
 
     self.set_visible(true)
 
-    # Keep the complex calculation for when we have models working
-    if false: # Disabled for now - re-enable when model system is fully working
-      var global_normal = ray.get_collision_normal()
-      var local_point: Vector3
-
-      let local_collision_point = collider.to_local(ray.get_collision_point())
-      let basis = collider.global_transform.basis
-      let half = vector3(0.5, 0.5, 0.5)
-
-      # Calculate local normal - need to handle scale
-      let scale = collider.scale
-      let inv_scale = vector3(1.0 / scale.x, 1.0 / scale.y, 1.0 / scale.z)
-      var local_normal = basis.inverse() * global_normal
-      local_normal = local_normal * inv_scale
-      local_normal = local_normal.snapped(half)
-
-      # Check if normal is axis-aligned
-      let axis_aligned = (
-        (
-          abs(local_normal.x) == 1.0 and local_normal.y == 0.0 and
-          local_normal.z == 0.0
-        ) or (
-          local_normal.x == 0.0 and abs(local_normal.y) == 1.0 and
-          local_normal.z == 0.0
-        ) or (
-          local_normal.x == 0.0 and local_normal.y == 0.0 and
-          abs(local_normal.z) == 1.0
-        )
-      )
-
-      if not axis_aligned:
-        # All local normals should be axis aligned because we're dealing with cubes.
-        # If it isn't, we probably got a corner or something.
-        return
-
-      # Calculate factor for positioning
-      let factor =
-        if local_normal.x != 0.0:
-          vector3(0.5 * sign(local_normal.x), 0.0, 0.0)
-        elif local_normal.y != 0.0:
-          vector3(0.0, 0.5 * sign(local_normal.y), 0.0)
-        else:
-          vector3(0.0, 0.0, 0.5 * sign(local_normal.z))
-
-      local_point =
-        (local_collision_point - factor).snapped(vector3(1, 1, 1)) + factor
-      global_normal = basis * local_normal * inv_scale
-
-      # Position the aim target
-      let offset = (local_normal * 0.01) * inv_scale
-      self.global_position = collider.to_global(local_point + offset)
-      self.scale = collider.scale
-      self.set_visible(true) # Make sure it's visible when positioned
-
-      # Orient the sprite to face along the normal
-      let origin = self.transform.origin
-      let origin_vec = vector3(origin[0], origin[1], origin[2])
-      let align_normal: Vector3 = origin_vec + global_normal
-      self.look_at(align_normal, self.transform.basis.x)
-
-      # Update target model if we have one
-      if ?unit:
-        if unit.target_point != local_point or unit.target_normal != local_normal:
-          unit.target_point = local_point
-          unit.target_normal = local_normal
-          unit.local_flags.touch TargetMoved
-        else:
-          unit.local_flags -= TargetMoved
+    # Update target model if we have one
+    if ?unit:
+      if unit.target_point != local_point or unit.target_normal != local_normal:
+        unit.target_point = local_point
+        unit.target_normal = local_normal
+        unit.local_flags.touch TargetMoved
+      else:
+        unit.local_flags -= TargetMoved
   else:
     # No collision - hide the target
     self.set_visible(false)

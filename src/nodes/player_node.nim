@@ -296,7 +296,6 @@ method unhandled_input*(self: PlayerNode, event: gdref InputEvent) {.gdsync.} =
       state.push_flag CommandMode
 
   if event.is_action_pressed("jump"):
-    self.get_viewport().set_input_as_handled()
     self.jump_down = true
     let toggle = ?self.jump_time and time < self.jump_time.get() + fly_toggle
 
@@ -311,7 +310,6 @@ method unhandled_input*(self: PlayerNode, event: gdref InputEvent) {.gdsync.} =
     else:
       self.jump_time = some(time)
   elif event.is_action_released("jump"):
-    self.get_viewport().set_input_as_handled()
     self.jump_down = false
 
   if event.is_action_pressed("crouch") and self.flying():

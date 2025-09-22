@@ -10,7 +10,7 @@ import
     gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
     gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
     gdviewporttexture, gdtexture2d, gdsubviewportcontainer, gdengine,
-    gdoptionbutton, gdpopupmenu,
+    gdoptionbutton, gdpopupmenu, gdbutton,
   ]
 
 import ui/virtual_joystick
@@ -52,6 +52,8 @@ type Game* {.gdsync.} =
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
+    up_button: Button
+    down_button: Button
     verify_mode: bool
     screenshot_mode: bool
     screenshot_timer: float64
@@ -602,7 +604,18 @@ method ready*(self: Game) {.gdsync.} =
   self.reticle = self.find_child("Reticle").as(Control)
   self.stats = self.find_child("stats").as(Label)
   self.left_stick = find("LeftStick", VirtualJoystick)
+  self.up_button = self.find_child("Up").as(Button)
+  self.down_button = self.find_child("Down").as(Button)
   self.stats.visible = state.config.show_stats
+
+  # Set initial visibility of touch controls based on TouchControls flag
+  let touch_controls_visible = TouchControls in state.local_flags
+  if ?self.left_stick:
+    self.left_stick.visible = touch_controls_visible
+  if ?self.up_button:
+    self.up_button.visible = touch_controls_visible
+  if ?self.down_button:
+    self.down_button.visible = touch_controls_visible
 
   state.config_value.changes:
     if change.item.full_screen != state.config.full_screen:
@@ -692,6 +705,22 @@ method ready*(self: Game) {.gdsync.} =
       self.reticle.visible = true
     elif ReticleVisible.removed:
       self.reticle.visible = false
+    if TouchControls.added:
+      # Show touch controls (virtual joystick and action buttons)
+      if ?self.left_stick:
+        self.left_stick.visible = true
+      if ?self.up_button:
+        self.up_button.visible = true
+      if ?self.down_button:
+        self.down_button.visible = true
+    elif TouchControls.removed:
+      # Hide touch controls
+      if ?self.left_stick:
+        self.left_stick.visible = false
+      if ?self.up_button:
+        self.up_button.visible = false
+      if ?self.down_button:
+        self.down_button.visible = false
 
   if TouchControls notin state.local_flags:
     state.push_flag MouseCaptured

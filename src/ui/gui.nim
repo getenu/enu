@@ -242,10 +242,7 @@ proc handle_basic_input(self: GUI, event: InputEvent) =
   elif event.is_action_released("remove"):
     state.pop_flags SecondaryDown
 
-  # Handle jump
-  if event.is_action_pressed("jump"):
-    self.get_viewport().set_input_as_handled()
-    # Simple jump handling - can be expanded later
+  # Jump handling is done in player_node.nim, not here
 
   # Handle pan gestures for tool cycling
   if event.is_class("InputEventPanGesture"):
