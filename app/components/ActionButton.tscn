@@ -3,6 +3,7 @@
 [ext_resource type="Texture2D" uid="uid://bycpi6y6xe8rr" path="res://textures/code.png" id="1"]
 
 [node name="ActionButton" type="ActionButton"]
+texture_filter = 6
 focus_mode = 0
 toggle_mode = true
 action_mode = 0

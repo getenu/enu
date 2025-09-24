@@ -1,8 +1,10 @@
 import std/[options, strutils, sequtils]
 import gdext
 # Use custom Godot bindings for consistency with other classes
-import gdext/classes/[gdhboxcontainer, gdbutton, gdnode]
+import
+  gdext/classes/[gdhboxcontainer, gdbutton, gdnode, gdimagetexture, gdimage]
 import core, gdcore
+import ui/preview_maker
 
 # Tool types - simplified version of original game tools
 type ToolType* = enum
@@ -19,11 +21,20 @@ type ToolType* = enum
 # Simple state management - will eventually connect to full game state
 var current_tool = BlueBlock
 
+type PreviewResult = object
+  color: string
+  preview: gdref Image
+
 type Toolbar* {.gdsync.} =
   ptr object of HBoxContainer
+    preview_maker: PreviewMaker
     blocks: seq[string]
     objects: seq[string]
+    preview_result: Option[PreviewResult]
     waiting: bool
+
+# Forward declaration
+proc set_tool(self: Toolbar, tool: ToolType)
 
 method onInit*(self: Toolbar) =
   # Constructor-like initialization
@@ -38,10 +49,21 @@ method ready*(self: Toolbar) {.gdsync.} =
   let callable_obj = callable(self, new_string_name("_on_action_changed"))
   discard self.connect(new_string_name("action_changed"), callable_obj)
 
-  # Initialize tool lists for preview generation (simplified for now)
+  # Find the PreviewMaker node (it's inside a SubViewport)
+  self.preview_maker =
+    self.get_node("../PreviewMaker/PreviewWorld").as(PreviewMaker)
+  if not ?self.preview_maker:
+    print(
+      "[UI] ✗ PreviewMaker not found - toolbar preview generation will be disabled"
+    )
+  else:
+    print("[UI] ✓ PreviewMaker found for toolbar preview generation")
+
+  # Initialize tool lists for preview generation
   self.blocks = @["green", "red", "blue", "black", "white", "brown"]
   self.objects = @["bot"]
   self.waiting = false
+  self.preview_result = none(PreviewResult)
 
   # TODO: Connect to game state changes
   # state.local_flags.changes:
@@ -51,9 +73,7 @@ method ready*(self: Toolbar) {.gdsync.} =
   #     self.visible = true
 
   # Set initial tool selection
-  # TODO: Fix set_tool call - temporarily commented out for build
-  # self.set_tool(BlueBlock)
-  current_tool = BlueBlock
+  self.set_tool(BlueBlock)
 
   print("[UI] Toolbar initialized with " & $self.get_child_count() & " buttons")
 
@@ -95,15 +115,61 @@ proc on_action_changed*(self: Toolbar) {.gdsync.} =
       break
 
 method process*(self: Toolbar, delta: float64) {.gdsync.} =
-  # Handle preview generation and other toolbar updates
-  # This is simplified - the original had complex preview generation
+  # Handle preview result and update button icons
+  if self.preview_result.is_some:
+    let p = self.preview_result.get()
+    let button_node = self.get_node("Button-" & p.color)
+    if ?button_node:
+      let button = button_node.as(Button)
+      if ?button:
+        # Create ImageTexture from the preview image with mipmaps for better quality
+        let preview_img = p.preview
+        # discard preview_img[].generateMipmaps()
+        let tex = ImageTexture.create_from_image(preview_img)
+        button.set_button_icon(tex.as(gdref Texture2D))
+        print("[UI] ✓ Set preview icon for button: Button-", p.color)
+      else:
+        print("[UI] ✗ Failed to cast node to Button: Button-", p.color)
+    else:
+      print("[UI] ✗ Button not found: Button-", p.color)
+    self.preview_result = none(PreviewResult)
 
-  # TODO: Implement preview generation when we have the PreviewMaker
-  # if self.preview_result.is_some:
-  #   let p = self.preview_result.get
-  #   let b = self.get_node("Button-" & p.color) as Button
-  #   # Update button icon with generated preview
-  discard # Placeholder until preview generation is implemented
+  # Generate previews for remaining blocks
+  if not self.waiting and self.blocks.len > 0 and ?self.preview_maker:
+    let color = self.blocks.pop()
+    self.waiting = true
+    print("[UI] Generating preview for block: ", color)
+
+    self.preview_maker.generate_block_preview(
+      color & "-block-grid",
+      proc(preview: gdref Image) {.gcsafe.} =
+        if ?preview:
+          self.preview_result =
+            some(PreviewResult(color: color, preview: preview))
+          print("[UI] ✓ Preview generated for: ", color)
+        else:
+          print("[UI] ✗ Preview generation failed for: ", color)
+        self.waiting = false,
+    )
+
+  # Generate previews for remaining objects
+  if not self.waiting and self.blocks.len == 0 and self.objects.len > 0 and
+      ?self.preview_maker:
+    let obj = self.objects.pop()
+    self.waiting = true
+    print("[UI] Generating preview for object: ", obj)
+
+    self.preview_maker.generate_object_preview(
+      obj,
+      proc(preview: gdref Image) {.gcsafe.} =
+        if ?preview:
+          self.preview_result =
+            some(PreviewResult(color: obj, preview: preview))
+          print("[UI] ✓ Preview generated for object: ", obj)
+        else:
+          print("[UI] ✗ Preview generation failed for object: ", obj)
+        self.waiting = false,
+    )
 
 proc set_tool(self: Toolbar, tool: ToolType) =
   ## Set the current tool and update button states

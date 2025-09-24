@@ -7,12 +7,11 @@ import core, gdcore, types, models/states
 # Simple state management for the UI components
 # This will eventually connect to the full game state system
 var global_toolbar_size* = 100.0
-var global_screen_scale* = 1.0
 
 type ActionButton* {.gdsync.} = ptr object of Button
 
 proc update_size*(self: ActionButton, size: float) =
-  var toolbar_size = size * global_screen_scale
+  var toolbar_size = size * state.config.screen_scale
   let viewport_width = self.get_viewport().get_visible_rect().size.x
 
   # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit

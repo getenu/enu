@@ -280,12 +280,15 @@ method on_init*(self: Game) {.gdsync.} =
   # Basic field initialization
   self.process_priority = -100
 
-  # GD4: TODO - Fix screen scale detection for Godot 4
-  let screen_scale = 1.0
-  # if host_os == "macos":
-  #   get_screen_scale(-1)
-  # else:
-  #   get_screen_dpi(-1).float / 96.0
+  # GD4: Get screen scale for proper DPI scaling
+  let screen_scale =
+    if host_os == "macosx":
+      # On macOS, use DPI-based detection since DisplayServer.screen_get_scale(-1) doesn't work properly
+      let dpi = DisplayServer.screen_get_dpi(-1)
+      if dpi > 120: 2.0 else: 1.0  # Retina DPI is typically > 120 (standard is 96)
+    else:
+      # On other platforms, calculate based on DPI
+      DisplayServer.screen_get_dpi(-1) / 96.0
 
   var initial_user_config = load_user_config($OS.get_user_data_dir())
 
@@ -573,6 +576,7 @@ method ready*(self: Game) {.gdsync.} =
     info "Running in editor mode - skipping game initialization"
     return
 
+
   # GD4: added by claude. Do we need this?
   self.set_process_unhandled_input(true)
   state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
@@ -599,6 +603,7 @@ method ready*(self: Game) {.gdsync.} =
   # assert not self.scaled_viewport.is_nil
   self.get_tree().auto_accept_quit = false
   self.set_font_size(state.config.font_size)
+  self.set_toolbar_size(state.config.toolbar_size)
   self.load_environment(state.config.environment)
   info "config", config = state.config
   self.reticle = self.find_child("Reticle").as(Control)

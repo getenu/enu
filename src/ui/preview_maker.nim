@@ -6,13 +6,21 @@ import
   ]
 import core, gdcore
 
-type PreviewMaker* {.gdsync.} =
-  ptr object of SubViewport
-    camera: Camera3D
-    cube: MeshInstance3D
-    bot: Node3D
-    callback: proc(img: gdref Image) {.gcsafe.}
-    skip_next: bool
+type
+  SubViewport_UpdateMode* {.size: sizeof(cint).} = enum
+    updateDisabled = 0
+    updateOnce = 1
+    updateWhenVisible = 2
+    updateWhenParentVisible = 3
+    updateAlways = 4
+
+  PreviewMaker* {.gdsync.} =
+    ptr object of SubViewport
+      camera: Camera3D
+      cube: MeshInstance3D
+      bot: Node3D
+      callback: proc(img: gdref Image) {.gcsafe.}
+      skip_next: bool
 
 method ready*(self: PreviewMaker) {.gdsync.} =
   print("[UI] PreviewMaker ready - initializing preview generation system")
@@ -21,14 +29,17 @@ method ready*(self: PreviewMaker) {.gdsync.} =
   self.cube = self.find_child("Cube", false, false).as(MeshInstance3D)
   self.bot = self.find_child("bot", false, false).as(Node3D)
 
-  if not ?self.camera:
-    print("[UI] ✗ Camera3D not found in PreviewMaker scene")
-  if not ?self.cube:
-    print("[UI] ✗ Cube MeshInstance3D not found in PreviewMaker scene")
-  if not ?self.bot:
-    print("[UI] ✗ bot Node3D not found in PreviewMaker scene")
+  # Add assertions to fail early if required nodes are missing
+  assert ?self.camera,
+    "[UI] FATAL: Camera3D not found in PreviewMaker scene - preview generation will not work"
+  assert ?self.cube,
+    "[UI] FATAL: Cube MeshInstance3D not found in PreviewMaker scene - block previews will not work"
+  assert ?self.bot,
+    "[UI] FATAL: bot Node3D not found in PreviewMaker scene - object previews will not work"
 
-  print("[UI] PreviewMaker initialized")
+  print(
+    "[UI] ✓ PreviewMaker initialized successfully with all required nodes"
+  )
 
 method process*(self: PreviewMaker, delta: float64) {.gdsync.} =
   if not self.skip_next and ?self.callback:
@@ -38,6 +49,7 @@ method process*(self: PreviewMaker, delta: float64) {.gdsync.} =
       let image = texture[].get_image()
       if ?image:
         self.callback(image)
+        print("[UI] ✓ PreviewMaker: Successfully extracted image")
       else:
         print("[UI] ✗ PreviewMaker: Failed to get image from texture")
     else:
@@ -65,8 +77,8 @@ proc generate_block_preview*(
   self.bot.set_visible(false)
   self.cube.set_surface_override_material(0, material)
 
-  # GD4: TODO - Set render mode to UPDATE_ONCE equivalent when rendering system is clearer
-  # In Godot 4, this may be handled differently through the SubViewport or RenderingServer
+  # GD4: Force a single frame render
+  self.render_target_update_mode = update_once
 
   # Configure camera for block preview
   if ?self.camera:
@@ -88,8 +100,8 @@ proc generate_object_preview*(
   self.cube.set_visible(false)
   self.bot.set_visible(true)
 
-  # GD4: TODO - Set render mode to UPDATE_ONCE equivalent when rendering system is clearer
-  # In Godot 4, this may be handled differently through the SubViewport or RenderingServer
+  # GD4: Force a single frame render
+  self.render_target_update_mode = update_once
 
   # Configure camera for object preview
   if ?self.camera:

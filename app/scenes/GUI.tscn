@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://dwdwrpr24c21"]
+[gd_scene load_steps=11 format=3 uid="uid://dwdwrpr24c21"]
 
 [ext_resource type="PackedScene" uid="uid://b7niuv3040wa1" path="res://components/Editor.tscn" id="1"]
 [ext_resource type="PackedScene" uid="uid://bann7wwh06wvt" path="res://components/Console.tscn" id="2"]
@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://b4j5nvqrpgurp" path="res://scenes/PreviewWorld.tscn" id="9"]
 [ext_resource type="PackedScene" uid="uid://b61cmxchjiwua" path="res://components/Settings.tscn" id="12"]
 [ext_resource type="PackedScene" uid="uid://qka7r0t7by65" path="res://joystick/virtual_joystick.tscn" id="13"]
+[ext_resource type="ButtonGroup" path="res://resources/toolbar_button_group.tres" id="14"]
 
 [node name="GUI" type="GUI"]
 anchors_preset = 15
@@ -20,46 +21,61 @@ focus_mode = 2
 mouse_filter = 1
 
 [node name="Toolbar" type="Toolbar" parent="."]
-layout_mode = 0
+layout_mode = 1
+anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = -50.0
-offset_right = 92.0
-offset_bottom = -5.0
 grow_horizontal = 2
 grow_vertical = 0
 alignment = 1
 
 [node name="Button-code" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 
 [node name="Button-blue" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="Button-red" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="Button-green" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="Button-black" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="Button-white" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="Button-brown" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="Button-bot" parent="Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
+button_group = ExtResource("14")
 icon = null
 
 [node name="HBoxContainer" type="HBoxContainer" parent="."]
@@ -237,7 +253,9 @@ scale = Vector2(0.14, 0.14)
 texture = ExtResource("5")
 
 [node name="PreviewMaker" type="SubViewport" parent="."]
+own_world_3d = true
 transparent_bg = true
+msaa_3d = 3
 render_target_update_mode = 0
 
 [node name="PreviewWorld" parent="PreviewMaker" instance=ExtResource("9")]

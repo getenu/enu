@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://cg8j1x6x8mhgb"]
+[gd_scene load_steps=4 format=3 uid="uid://cg8j1x6x8mhgb"]
 
 [ext_resource type="PackedScene" uid="uid://bxvxbxj8j8x8x" path="res://scenes/world.tscn" id="1"]
 [ext_resource type="PackedScene" uid="uid://dwdwrpr24c21" path="res://scenes/GUI.tscn" id="3"]
+[ext_resource type="Theme" uid="uid://bp8yx1t6v72uf" path="res://themes/DarkTheme.tres" id="3_lnu2h"]
 
 [node name="Game" type="Game"]
 process_priority = 0
@@ -23,6 +24,7 @@ render_target_update_mode = 4
 
 [node name="GUI" parent="." instance=ExtResource("3")]
 mouse_filter = 2
+theme = ExtResource("3_lnu2h")
 
 [node name="WorldRay" type="RayCast3D" parent="."]
 visible = false

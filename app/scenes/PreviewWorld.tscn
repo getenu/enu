@@ -1,6 +1,6 @@
 [gd_scene load_steps=8 format=3 uid="uid://b4j5nvqrpgurp"]
 
-[ext_resource type="Material" path="res://materials/blue-block-grid.tres" id="1"]
+[ext_resource type="Material" uid="uid://cyfco3v155eoj" path="res://materials/blue-block-grid.tres" id="1"]
 [ext_resource type="PackedScene" uid="uid://dm3460jxexhc6" path="res://components/BotNode.tscn" id="2"]
 
 [sub_resource type="BoxMesh" id="1"]
@@ -17,6 +17,7 @@ models = Array[VoxelBlockyModel]([SubResource("VoxelBlockyModelCube_air"), SubRe
 library = SubResource("4")
 
 [node name="PreviewWorld" type="PreviewMaker"]
+transparent_bg = true
 
 [node name="Cube" type="MeshInstance3D" parent="."]
 mesh = SubResource("1")
