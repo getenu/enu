@@ -24,12 +24,13 @@ proc update_size*(self: ActionButton, size: float) =
   # Update corner radius for responsive design
   let corner_radius = (8.0 * (toolbar_size / 100.0)).int32
 
-  # Update style boxes with new corner radius (simplified for now)
-  # TODO: Implement style box updates when we understand gdext GdRef patterns better
-  # for style in ["hover", "pressed", "focus", "normal"]:
-  #   let stylebox = self.getThemeStylebox(StringName(style))
-  #   let flat_style = stylebox as StyleBoxFlat
-  #   flat_style.setCornerRadiusAll(corner_radius)
+  # Update style boxes with new corner radius
+  for style in ["hover", "pressed", "focus", "normal"]:
+    let stylebox = self.getThemeStylebox(new_string_name(style))
+    if ?stylebox and stylebox[].is_class("StyleBoxFlat"):
+      let flat_style = stylebox.as(gdref StyleBoxFlat)
+      if ?flat_style:
+        flat_style[].setCornerRadiusAll(corner_radius)
 
 proc trigger_action_changed(self: ActionButton) =
   ## Trigger action_changed signal to notify Toolbar of tool selection

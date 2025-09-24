@@ -9,7 +9,9 @@
 [ext_resource type="PackedScene" uid="uid://b4j5nvqrpgurp" path="res://scenes/PreviewWorld.tscn" id="9"]
 [ext_resource type="PackedScene" uid="uid://b61cmxchjiwua" path="res://components/Settings.tscn" id="12"]
 [ext_resource type="PackedScene" uid="uid://qka7r0t7by65" path="res://joystick/virtual_joystick.tscn" id="13"]
-[ext_resource type="ButtonGroup" path="res://resources/toolbar_button_group.tres" id="14"]
+
+[sub_resource type="ButtonGroup" id="ButtonGroup_cekc3"]
+resource_local_to_scene = false
 
 [node name="GUI" type="GUI"]
 anchors_preset = 15
@@ -34,48 +36,48 @@ alignment = 1
 [node name="Button-code" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 
 [node name="Button-blue" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="Button-red" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="Button-green" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="Button-black" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="Button-white" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="Button-brown" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="Button-bot" parent="Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
-button_group = ExtResource("14")
+button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
 [node name="HBoxContainer" type="HBoxContainer" parent="."]
