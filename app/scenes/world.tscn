@@ -21,7 +21,7 @@ light_color = Color(0.976471, 0.909804, 0.839216, 1)
 light_energy = 0.786
 shadow_enabled = true
 
-[node name="Ground" type="MeshInstance3D" parent="."]
+[node name="Ground" type="GroundNode" parent="."]
 mesh = SubResource("PlaneMesh_1")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="Ground"]

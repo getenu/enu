@@ -4,7 +4,7 @@ from dotenv import nil
 import gdext
 import
   gdext/classes/[
-    gdinput, gdinputevent, gdos, gdnode, gdscenetree, gdpackedscene, gdcontrol,
+    gdinput, gdinputevent, gdos, gdnode, gdnode3d, gdscenetree, gdpackedscene, gdcontrol,
     gdviewport, gdperformance, gdlabel, gdtheme, gdfont, gdresourceloader,
     gdprojectsettings, gdinputmap, gdinputeventaction, gdinputeventkey,
     gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
@@ -18,7 +18,7 @@ import
   core,
   types,
   controllers,
-  models/[serializers, units, colors, states],
+  models/[serializers, units, colors, states, ground],
   gdcore,
   ui/action_button
 
@@ -581,6 +581,15 @@ method ready*(self: Game) {.gdsync.} =
   self.set_process_unhandled_input(true)
   state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
   assert not state.nodes.data.is_nil
+
+  # Initialize ground model for the Ground node in the scene
+  let ground_node = state.nodes.game.find_child("Level").get_node("Ground")
+  if ?ground_node:
+    print("[GAME] Found Ground node, initializing ground model")
+    state.ground = Ground.init(ground_node.as(Node3D))
+    print("[GAME] Ground model initialized and assigned to state")
+  else:
+    warn "Could not find Ground node in scene"
 
   # GD4: Set up scaled viewport for megapixels functionality
   # In Godot 4, we use SubViewportContainer/SubViewport structure like Godot 3's ViewportContainer/Viewport

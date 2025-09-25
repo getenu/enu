@@ -637,7 +637,7 @@ parameters/move_ground/blend_position = 0.0
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.875, 0)
 shape = SubResource("29")
 
-[node name="SelectionArea" type="Area3D" parent="."]
+[node name="SelectionArea" type="SelectionArea" parent="."]
 collision_layer = 16
 collision_mask = 0
 

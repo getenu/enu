@@ -1,0 +1,3 @@
+[gd_scene format=3]
+
+[node name="GroundNode" type="MeshInstance3D"]

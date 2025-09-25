@@ -37,13 +37,13 @@ proc trigger_action_changed(self: ActionButton) =
   let button_name = $self.get_name()
   print("[UI] ActionButton trigger_action_changed: " & button_name)
 
-  # Emit signal to the game node which will route it to Toolbar
-  let game_node = state.nodes.game
-  if ?game_node:
+  # Emit signal to the parent Toolbar (same as Godot 3 version)
+  let parent = self.get_parent()
+  if ?parent:
     # Create and emit the action_changed signal with the button name
-    game_node.trigger("action_changed", variant(button_name))
+    parent.trigger("action_changed", variant(button_name))
   else:
-    print("[UI] ERROR: game node not available for signal routing")
+    print("[UI] ERROR: parent not available for signal routing")
 
 method onInit*(self: ActionButton) =
   # Constructor-like initialization

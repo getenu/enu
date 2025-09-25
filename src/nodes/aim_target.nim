@@ -12,13 +12,14 @@
 #
 # 📝 NOTES: Direct port from Godot 3 to maintain compatibility
 
-import std/[strutils, options]
+import std/[strutils, options, wrapnils]
 import gdext
 import
   gdext/classes/
     [gdsprite3d, gdraycast3d, gdnode3d, gdpackedscene, gdresourceloader]
+
 import core, gdcore, models
-import ./[ground_node, build_node, bot_node, sign_node]
+import ./[ground_node, build_node, bot_node, sign_node, helpers]
 
 type AimTarget* {.gdsync.} =
   ptr object of Sprite3D
@@ -61,24 +62,8 @@ proc update*(self: AimTarget, ray: RayCast3D) =
     else:
       nil
 
-  # Get the unit/model from the collider
-  var unit: Model = nil
-  if ?collider:
-    # Try to cast to our known node types and get their model
-    # Check using the actual class name from get_class()
-    let class_name = $collider.get_class() # Convert to string
-
-    # For now, just check if it's a GroundNode or VoxelTerrain (BuildNode)
-    if class_name == "MeshInstance3D":
-      # This might be a GroundNode
-      let ground = cast[GroundNode](collider)
-      if ?ground and ?ground.model:
-        unit = ground.model
-    elif class_name == "VoxelTerrain":
-      # This is a BuildNode
-      let build = cast[BuildNode](collider)
-      if ?build and ?build.model:
-        unit = build.model
+  # Use the helpers.nim model accessor just like Godot 3
+  let unit = if ?collider: collider.model else: nil
 
   # Check if target_model is still valid
   if ?self.target_model:
@@ -97,20 +82,31 @@ proc update*(self: AimTarget, ray: RayCast3D) =
       state.pop_flag BlockTargetVisible
     self.target_model = unit
 
-    # Check if we should show hover state
-    if ?unit:
-      # Complex condition check from Godot 3
-      let should_show =
-        not (
-          unit of Sign and Sign(unit).more == "" or (
+    # Restore Godot 3 hover logic with assertions to find the real bug
+    if unit != nil:
+      # Add assertions to help debug the issue
+      assert unit != nil, "unit should not be nil at this point"
+      assert ?unit.local_flags, "unit.local_flags should be initialized"
+
+      # Handle Ground models separately since they don't inherit from Unit
+      if unit of Ground:
+        print("[AIM] Unit is Ground - adding Hover flag and BlockTargetVisible")
+        unit.local_flags += Hover
+        state.push_flag BlockTargetVisible
+      else:
+        # Handle Unit models (Bot, Build, Sign) with Godot 3 logic
+        let should_hide = (
+          (unit of Sign and Sign(unit).more == "") or (
             God notin state.local_flags and (unit of Bot or unit of Build) and
             Lock in Unit(unit).find_root.global_flags
           )
         )
-      if should_show:
-        unit.local_flags += Hover
-        if unit of Build or unit of Ground:
-          state.push_flag BlockTargetVisible
+
+        if not should_hide:
+          print("[AIM] Adding Hover flag to unit")
+          unit.local_flags += Hover
+          if unit of Build:
+            state.push_flag BlockTargetVisible
 
   # Position the aim target at collision point with proper orientation and snapping
   if ?collider:
@@ -135,9 +131,16 @@ proc update*(self: AimTarget, ray: RayCast3D) =
 
     # Check if normal is axis-aligned (matching Godot 3 logic)
     let is_axis_aligned =
-      (is_close(abs(local_normal.x), 1.0) and is_close(local_normal.y, 0.0) and is_close(local_normal.z, 0.0)) or
-      (is_close(local_normal.x, 0.0) and is_close(abs(local_normal.y), 1.0) and is_close(local_normal.z, 0.0)) or
-      (is_close(local_normal.x, 0.0) and is_close(local_normal.y, 0.0) and is_close(abs(local_normal.z), 1.0))
+      (
+        is_close(abs(local_normal.x), 1.0) and is_close(local_normal.y, 0.0) and
+        is_close(local_normal.z, 0.0)
+      ) or (
+        is_close(local_normal.x, 0.0) and is_close(abs(local_normal.y), 1.0) and
+        is_close(local_normal.z, 0.0)
+      ) or (
+        is_close(local_normal.x, 0.0) and is_close(local_normal.y, 0.0) and
+        is_close(abs(local_normal.z), 1.0)
+      )
 
     if not is_axis_aligned:
       # All local normals should be axis aligned because we're dealing with cubes.
@@ -148,7 +151,8 @@ proc update*(self: AimTarget, ray: RayCast3D) =
     let factor = local_normal.inverse_normalized() * 0.5
 
     # Snap the local point to grid (1x1 squares)
-    local_point = (local_collision_point - factor).snapped(vector3(1, 1, 1)) + factor
+    local_point =
+      (local_collision_point - factor).snapped(vector3(1, 1, 1)) + factor
 
     # Transform local normal back to global space
     global_normal = (basis * local_normal) * inv_scale
@@ -156,16 +160,18 @@ proc update*(self: AimTarget, ray: RayCast3D) =
     # Position the aim target with snapping
     let local_offset = local_point + (local_normal * 0.01) * inv_scale
     let target_pos_arr = collider.to_global(local_offset)
-    let target_pos = vector3(target_pos_arr[0], target_pos_arr[1], target_pos_arr[2])
+    let target_pos =
+      vector3(target_pos_arr[0], target_pos_arr[1], target_pos_arr[2])
     self.global_position = target_pos_arr
     self.scale = collider.scale
 
     # Orient the sprite to lay flat on the surface (matching Godot 3 look_at behavior)
-    let global_normal_vec = vector3(global_normal[0], global_normal[1], global_normal[2])
+    let global_normal_vec =
+      vector3(global_normal[0], global_normal[1], global_normal[2])
     let align_normal = vector3(
       target_pos.x + global_normal_vec.x,
       target_pos.y + global_normal_vec.y,
-      target_pos.z + global_normal_vec.z
+      target_pos.z + global_normal_vec.z,
     )
 
     # In Godot 3, the look_at uses self.transform.basis.x as the up vector

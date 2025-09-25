@@ -53,8 +53,9 @@ proc `||=`*[T](opt: var Option[T], val: T): T {.discardable.} =
 proc `||`*[T](a: Option[T], b: T): T =
   if ?a: a.get else: b
 
-proc `||`*[T](a, b: T): T =
-  if ?a: a else: b
+proc `||=`*[T](a: var T, b: T) =
+  if not ?a:
+    a = b
 
 converter from_option*[T](val: Option[T]): T =
   val.get()

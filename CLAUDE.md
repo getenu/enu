@@ -14,9 +14,9 @@ Note that some of these are broken during the Godot 3 -> 4 migration. If you nee
 - `nimble setup` - Sync Nim dependencies
 - `nimble build_godot` - Fully build Godot
 - `nimble generate_bindings` - Generate Nim bindings. The `gdext` package we depend on also includes Godot bindings, but because our Godot is build with the voxel module it has ~70 additional classes.
-- `nimble build_extension` - build Enu.
+- `./build.sh` - build Enu.
 - `nimble edit` - Open project in Godot.
-- `nimble start` - Launch Enu
+- `./start.sh` - Launch Enu
 
 ### Distribution and Packaging
 - `nimble dist` - Build complete distribution package for current platform
@@ -37,7 +37,7 @@ Note that some of these are broken during the Godot 3 -> 4 migration. If you nee
 ### Directory Structure
 
 **Core Application (`src/`)**
-- `src/enu.nim` - Entry point that imports all UI and node components
+- `app/extension/enu.nim` - Entry point that imports all UI and node components
 - `src/core.nim` - Core utilities, globals, and common imports
 - `src/game.nim` - Main game loop and Godot integration
 - `src/types.nim` - Type definitions for game state, tools, and model flags

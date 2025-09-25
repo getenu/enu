@@ -26,44 +26,20 @@
 #
 # 📝 TODOS: Restore StringName conversion, SignNode extraction, SelectionArea integration
 
+import std/wrapnils
 import gdext
 import gdext/classes/[gdobject, gdstaticbody3d]
 import core, bot_node, build_node, ground_node, selection_area, sign_node
 
 proc model*(self: Object): Model =
-  print("[HELPERS] Extracting model from object: ", self.get_class())
-  
-  # Type-based model extraction
-  result = 
-    if self.is_class("SelectionArea"):
-      print("[HELPERS] Found SelectionArea")
-      let selection = cast[SelectionArea](self)
-      # TODO: Get bot model when SelectionArea.bot API is available
-      print("[HELPERS] ⚠️ SelectionArea.bot.model extraction temporarily disabled")
-      nil
-    elif self.is_class("BuildNode"):
-      print("[HELPERS] Found BuildNode")
-      let build = cast[BuildNode](self)
-      build.model
-    elif self.is_class("BotNode"):
-      print("[HELPERS] Found BotNode")  
-      let bot = cast[BotNode](self)
-      bot.model
-    elif self.is_class("GroundNode"):
-      print("[HELPERS] Found GroundNode")
-      let ground = cast[GroundNode](self)
-      ground.model
-    elif self.is_class("StaticBody3D"):
-      print("[HELPERS] Found StaticBody3D")
-      # TODO: Check name for SignBody when StringName conversion API is stable
-      # TODO: Get SignNode via parent navigation when Node hierarchy API is stable
-      print("[HELPERS] ⚠️ StaticBody3D SignBody detection temporarily disabled")
-      nil
-    else:
-      print("[HELPERS] Unknown object type, no model available")
-      nil
-      
+  result = ?.self.as(SelectionArea).bot.model
   if not ?result:
-    print("[HELPERS] No model extracted")
-  else:
-    print("[HELPERS] Model extracted successfully")
+    result = ?.self.as(BuildNode).model
+
+  if not ?result and self of StaticBody3D:
+    let body = self.as(StaticBody3D)
+    result =
+      if $body.name == "SignNode":
+        body.get_parent.get_parent.as(SignNode).model
+      else:
+        ?.body.get_parent.as(GroundNode).model

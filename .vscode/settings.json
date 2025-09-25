@@ -1,6 +1,6 @@
 {
     "nim.project": [
-        "src/enu.nim"
+        "app/extension/enu.nim"
     ],
     "cSpell.words": [
         "bbcode",

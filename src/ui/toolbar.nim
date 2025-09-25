@@ -6,20 +6,8 @@ import
 import core, gdcore
 import ui/preview_maker
 
-# Tool types - simplified version of original game tools
-type ToolType* = enum
-  Disabled
-  CodeMode
-  BlueBlock
-  RedBlock
-  GreenBlock
-  BlackBlock
-  WhiteBlock
-  BrownBlock
-  PlaceBot
-
-# Simple state management - will eventually connect to full game state
-var current_tool = BlueBlock
+# Note: Tool state is now managed through the global state.current_tool
+# Using the global Tools enum from types.nim instead of local ToolType
 
 type PreviewResult = object
   color: string
@@ -34,7 +22,7 @@ type Toolbar* {.gdsync.} =
     waiting: bool
 
 # Forward declaration
-proc set_tool(self: Toolbar, tool: ToolType)
+proc set_tool(self: Toolbar, tool: Tools)
 
 method onInit*(self: Toolbar) =
   # Constructor-like initialization
@@ -96,23 +84,13 @@ proc handle_tool_selection(self: Toolbar, button_name: string) =
       else: BlueBlock
       # Default fallback
 
-    # Update the current tool
-    current_tool = new_tool
+    # Update the current tool in global state
+    state.current_tool = new_tool
     print("[UI] Tool changed to: " & $new_tool)
 
-    # TODO: Update visual feedback and connect to game state
-    # state.tool = new_tool
-
-proc on_action_changed*(self: Toolbar) {.gdsync.} =
-  print("[UI] Toolbar action_changed signal received")
-
-  # Find which button was pressed by checking all children
-  for child in self.get_children():
-    let button = child as Button
-    if ?button and button.is_pressed():
-      let button_name = $button.get_name()
-      self.handle_tool_selection(button_name)
-      break
+proc on_action_changed*(self: Toolbar, button_name: string) {.gdsync, name: "_on_action_changed".} =
+  print("[UI] Toolbar action_changed signal received: " & button_name)
+  self.handle_tool_selection(button_name)
 
 method process*(self: Toolbar, delta: float64) {.gdsync.} =
   # Handle preview result and update button icons
@@ -171,9 +149,9 @@ method process*(self: Toolbar, delta: float64) {.gdsync.} =
         self.waiting = false,
     )
 
-proc set_tool(self: Toolbar, tool: ToolType) =
+proc set_tool(self: Toolbar, tool: Tools) =
   ## Set the current tool and update button states
-  current_tool = tool
+  state.current_tool = tool
 
   # Find and press the corresponding button
   let tool_name =
@@ -196,30 +174,6 @@ proc set_tool(self: Toolbar, tool: ToolType) =
       if ?button:
         button.set_pressed(true)
         print("[TOOLBAR] Tool set to: " & tool_name)
-
-proc on_action_changed(self: Toolbar, button_name: string) =
-  ## Handle tool change from ActionButton
-  print("[TOOLBAR] Action changed: " & button_name)
-
-  if button_name.len > 7 and button_name.startsWith("Button-"):
-    let tool_name = button_name[7 ..^ 1] # Skip "Button-" prefix
-
-    let new_tool =
-      case tool_name
-      of "code": CodeMode
-      of "blue": BlueBlock
-      of "red": RedBlock
-      of "green": GreenBlock
-      of "black": BlackBlock
-      of "white": WhiteBlock
-      of "brown": BrownBlock
-      of "bot": PlaceBot
-      else: Disabled
-
-    if new_tool != Disabled:
-      # TODO: Fix set_tool architecture later
-      current_tool = new_tool
-      print("[TOOLBAR] Tool changed to: " & $new_tool)
 
 # Proc to be called by ActionButtons when they're pressed
 proc handle_button_press(self: Toolbar, button_name: string) =
