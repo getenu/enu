@@ -40,7 +40,7 @@ method ready*(self: Toolbar) {.gdsync.} =
 
   # Find the PreviewMaker node (it's inside a SubViewport)
   self.preview_maker =
-    self.get_node("../PreviewMaker/PreviewWorld").as(PreviewMaker)
+    self.get_node("../../PreviewMaker/PreviewWorld").as(PreviewMaker)
   if not ?self.preview_maker:
     print(
       "[UI] ✗ PreviewMaker not found - toolbar preview generation will be disabled"
@@ -94,7 +94,9 @@ proc handle_tool_selection(self: Toolbar, button_name: string) =
     state.current_tool = new_tool
     print("[UI] Tool changed to: " & $new_tool)
 
-proc on_action_changed*(self: Toolbar, button_name: string) {.gdsync, name: "_on_action_changed".} =
+proc on_action_changed*(
+    self: Toolbar, button_name: string
+) {.gdsync, name: "_on_action_changed".} =
   print("[UI] Toolbar action_changed signal received: " & button_name)
   self.handle_tool_selection(button_name)
 
@@ -170,7 +172,7 @@ proc update_button_states(self: Toolbar, tool: Tools) =
     of Disabled: ""
 
   # Unpress all buttons first
-  for i in 0..<self.get_child_count():
+  for i in 0 ..< self.get_child_count():
     let child = self.get_child(i.int32)
     if ?child:
       let button = child.as(Button)

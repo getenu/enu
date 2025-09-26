@@ -6,7 +6,7 @@ import
     gdinput, gdinputevent, gdinputeventmousemotion, gdinputeventscreentouch,
     gdinputeventscreendrag, gdinputeventjoypadbutton, gdinputeventjoypadmotion,
     gdinputeventpangesture, gdpackedscene, gdresourceloader, gdviewport,
-    gdkinematiccollision3d, gdos, gdengine,
+    gdkinematiccollision3d, gdos, gdengine, gdcontrol, gdscenetree,
   ]
 import core, gdcore, models
 import aim_target
@@ -41,6 +41,7 @@ type PlayerNode* {.gdsync.} =
     down_ray*: RayCast3D
     collision_shape*: CollisionShape3D
     aim_target*: AimTarget
+    gui_node*: Control
 
     # Player state
     alt_speed*: bool
@@ -94,6 +95,8 @@ method ready*(self: PlayerNode) {.gdsync.} =
       nil
   self.down_ray = self.find_child("DownRay").as(RayCast3D)
   self.aim_target = self.camera_rig.get_node("AimTarget").as(AimTarget)
+  self.gui_node = state.nodes.game.find_child("GUI").as(Control)
+  assert not self.gui_node.is_nil, "GUI node not found"
 
   self.position_start = self.camera_rig.position
   self.delete_timer = MonoTime.high
@@ -436,25 +439,61 @@ proc has_active_input(self: PlayerNode, device: int32): bool =
     if Input.is_joy_button_pressed(device, JoyButton(button)):
       return true
 
+proc is_mouse_over_ui(self: PlayerNode): bool =
+  ## Check if mouse is over any visible UI control that should block raycast
+  let mouse_pos = self.get_viewport().get_mouse_position()
+
+  # Use cached GUI node for faster lookup
+  let all_controls = self.gui_node.find_children("*", "Control", true, false)
+
+  for i in 0..<all_controls.size():
+    let control_node = all_controls.get(i.int32)
+    if ?control_node:
+      let control = control_node.as(Control)
+      if ?control:
+        # Check if control is truly visible and interactive
+        if control.is_visible_in_tree():
+          let global_rect = control.get_global_rect()
+
+          # Check if mouse is over this control
+          if global_rect.has_point(mouse_pos):
+            let mouse_filter = control.get_mouse_filter()
+
+            # Only STOP filter should block the raycast
+            # PASS and IGNORE should not block
+            if mouse_filter == Control_MouseFilter.mouseFilterStop:
+              return true
+
+  return false
+
 proc update_raycast*(self: PlayerNode) =
   let ray_length =
     if state.current_tool_value.value == CodeMode: 200.0 else: 100.0
 
   if MouseCaptured notin state.local_flags:
-    # Mouse is free - cast ray from camera through mouse position
-    let mouse_pos = self.get_viewport().get_mouse_position()
-    let cast_from = self.camera.project_ray_origin(mouse_pos)
-    let cast_to =
-      cast_from + self.camera.project_ray_normal(mouse_pos) * ray_length
-
-    if not self.world_ray.is_nil:
-      self.world_ray.target_position = cast_to
-      self.world_ray.position = cast_from
-      self.world_ray.set_enabled(true)
-
-      # Update aim target with world ray (matches Godot 3)
+    # Check if mouse is over UI - if so, skip raycast
+    if self.is_mouse_over_ui():
+      # Disable world ray when mouse is over UI
+      if not self.world_ray.is_nil:
+        self.world_ray.set_enabled(false)
+      # Hide aim target
       if not self.aim_target.is_nil:
-        self.aim_target.update(self.world_ray)
+        self.aim_target.set_visible(false)
+    else:
+      # Mouse is free and not over UI - cast ray from camera through mouse position
+      let mouse_pos = self.get_viewport().get_mouse_position()
+      let cast_from = self.camera.project_ray_origin(mouse_pos)
+      let cast_to =
+        cast_from + self.camera.project_ray_normal(mouse_pos) * ray_length
+
+      if not self.world_ray.is_nil:
+        self.world_ray.target_position = cast_to
+        self.world_ray.position = cast_from
+        self.world_ray.set_enabled(true)
+
+        # Update aim target with world ray (matches Godot 3)
+        if not self.aim_target.is_nil:
+          self.aim_target.update(self.world_ray)
   else:
     # Mouse is captured - cast ray from camera center
     self.aim_ray.target_position = vector3(0, 0, -ray_length)

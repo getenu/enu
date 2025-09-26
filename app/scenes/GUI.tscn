@@ -22,7 +22,7 @@ grow_vertical = 2
 focus_mode = 2
 mouse_filter = 1
 
-[node name="Toolbar" type="Toolbar" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="."]
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0
@@ -31,50 +31,56 @@ anchor_bottom = 1.0
 offset_top = -50.0
 grow_horizontal = 2
 grow_vertical = 0
+mouse_filter = 2
+
+[node name="Toolbar" type="Toolbar" parent="MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 0
 alignment = 1
 
-[node name="Button-code" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-code" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
 
-[node name="Button-blue" parent="Toolbar" instance=ExtResource("3")]
-custom_minimum_size = Vector2(50, 50)
-layout_mode = 2
-button_group = SubResource("ButtonGroup_cekc3")
-icon = null
-
-[node name="Button-red" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-blue" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
-[node name="Button-green" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-red" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
-[node name="Button-black" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-green" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
-[node name="Button-white" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-black" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
-[node name="Button-brown" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-white" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
 icon = null
 
-[node name="Button-bot" parent="Toolbar" instance=ExtResource("3")]
+[node name="Button-brown" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
+custom_minimum_size = Vector2(50, 50)
+layout_mode = 2
+button_group = SubResource("ButtonGroup_cekc3")
+icon = null
+
+[node name="Button-bot" parent="MarginContainer/Toolbar" instance=ExtResource("3")]
 custom_minimum_size = Vector2(50, 50)
 layout_mode = 2
 button_group = SubResource("ButtonGroup_cekc3")
