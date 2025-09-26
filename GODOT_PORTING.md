@@ -173,6 +173,30 @@ self.get_viewport().set_input_as_handled()
 
 ## Common Migration Issues
 
+### Scene Structure Assumptions
+**Problem:** Don't assume Godot 4 scene structures match what you expect from code inspection alone.
+
+**Example Issue:**
+```nim
+# WRONG: Assuming AnimationTree exists because code references it
+self.animation_tree = self.skin.find_child("AnimationTree", false, false).as(AnimationTree)
+if ?self.animation_tree:  # Treating as "optional"
+```
+
+**Solution:**
+1. **Always check the actual .tscn files** to see what nodes exist
+2. **Match the Godot 3 structure** - if Godot 3 only used AnimationPlayer, Godot 4 likely should too
+3. **Use assertions for required components** that must exist according to the scene
+
+```nim
+# CORRECT: Only expect what's actually in the scene
+self.animation_player = self.skin.find_child("AnimationPlayer", false, false).as(AnimationPlayer)
+assert ?self.animation_player, "BotNode must have an AnimationPlayer"
+# No AnimationTree handling - it's not in the scene
+```
+
+**Key Insight:** Scene files are the source of truth, not code assumptions.
+
 ### Matrix Access (Basis Vectors)
 **Problem:** Godot stores matrices in row-major format but movement code expects column vectors (axis vectors).
 
