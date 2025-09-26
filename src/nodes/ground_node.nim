@@ -29,25 +29,16 @@ type GroundNode* {.gdsync.} =
     model*: Ground
 
 method ready*(self: GroundNode) {.gdsync.} =
-  print("[GROUND] GroundNode initializing")
-
   # Initialize ground model
   self.model = Ground.init(self)
   state.ground = self.model
 
-  print("[GROUND] Ground model initialized and assigned to state")
-
 var ground_scene {.threadvar.}: gdref PackedScene
 
 proc init*(_: type GroundNode): GroundNode =
-  try:
-    let resource = ResourceLoader.load("res://components/GroundNode.tscn")
-    ground_scene = resource.as(gdref PackedScene)
-    if ?ground_scene:
-      let instance = ground_scene[].instantiate()
-      result = cast[GroundNode](instance)
-      print("[GROUND] GroundNode instantiated successfully")
-    else:
-      print("[GROUND] ✗ Failed to load GroundNode scene - resource is nil")
-  except:
-    print("[GROUND] ✗ Failed to load or instantiate GroundNode")
+  let resource = ResourceLoader.load("res://components/GroundNode.tscn")
+  ground_scene = resource.as(gdref PackedScene)
+  assert ?ground_scene, "GroundNode.tscn must be loadable"
+
+  let instance = ground_scene[].instantiate()
+  result = cast[GroundNode](instance)

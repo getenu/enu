@@ -5,6 +5,7 @@
 [node name="ActionButton" type="ActionButton"]
 texture_filter = 6
 focus_mode = 0
+mouse_behavior_recursive = 2
 toggle_mode = true
 action_mode = 0
 keep_pressed_outside = true

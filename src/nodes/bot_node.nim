@@ -46,154 +46,144 @@ import queries
 type BotNode* {.gdsync.} =
   ptr object of CharacterBody3D
     model*: Unit
-    material*: gdref Material
-    highlight_material*: gdref Material
-    selected_material*: gdref Material
+    material* {.gdexport.}: gdref Material
+    highlight_material* {.gdexport.}: gdref Material
+    selected_material* {.gdexport.}: gdref Material
     skin: Node3D
     mesh: MeshInstance3D
     animation_player: AnimationPlayer
-    animation_tree: AnimationTree
     transform_zid: ZID
 
 proc update_material*(self: BotNode, value: gdref Material) =
-  if ?self.mesh and ?value:
-    self.mesh.set_surface_override_material(0, value)
-    print("[BOT] Material updated")
+  assert ?self.mesh, "BotNode mesh must be available"
+  assert ?value, "Material must be provided"
+  self.mesh.set_surface_override_material(0, value)
 
 proc set_default_material(self: BotNode) =
-  if ?self.material:
-    self.update_material(self.material)
+  self.update_material(self.material)
 
 proc highlight(self: BotNode) =
-  if ?self.highlight_material:
-    self.update_material(self.highlight_material)
+  self.update_material(self.highlight_material)
 
 method ready*(self: BotNode) {.gdsync.} =
-  print("[BOT] BotNode initializing")
-
   # Find child nodes
   self.skin = self.find_child("model", false, false).as(Node3D)
-  if ?self.skin:
-    self.mesh = self.skin.find_child("body001", false, false).as(MeshInstance3D)
-    self.animation_player =
-      self.skin.find_child("AnimationPlayer", false, false).as(AnimationPlayer)
-    self.animation_tree =
-      self.skin.find_child("AnimationTree", false, false).as(AnimationTree)
+  assert ?self.skin, "BotNode must have a 'model' child node"
 
-    if ?self.mesh:
-      self.set_default_material()
-      print("[BOT] Mesh and material configured")
-    else:
-      print("[BOT] ✗ Mesh not found")
+  # In Godot 4, the mesh is under root/Skeleton3D/body_001 path (note underscore)
+  let root_node = self.skin.find_child("root", false, false)
+  if ?root_node:
+    let skeleton = root_node.find_child("Skeleton3D", false, false)
+    if ?skeleton:
+      self.mesh = skeleton.find_child("body_001", false, false).as(MeshInstance3D)
 
-    if ?self.animation_player:
-      print("[BOT] AnimationPlayer found")
-    else:
-      print("[BOT] ✗ AnimationPlayer not found")
+  if not ?self.mesh:
+    # Fallback: try to find body_001 directly with deep search
+    self.mesh = self.skin.find_child("body_001", true, false).as(MeshInstance3D)
 
-    if ?self.animation_tree:
-      # Disable AnimationTree so we can use AnimationPlayer directly like Godot 3
-      self.animation_tree.set_active(false)
-      print("[BOT] AnimationTree found and disabled")
-    else:
-      print("[BOT] ⚠️ AnimationTree not found")
+  assert ?self.mesh, "BotNode must have a mesh (body_001)"
 
-    # Adjust player model position
-    if ?self.model and self.model of Player:
-      # hack so player model doesn't hover
-      let current_pos = self.skin.get_position()
-      self.skin.set_position(current_pos + vector3(0, -0.8, 0))
-      print("[BOT] Player model position adjusted (moved down by 0.8)")
+  self.animation_player =
+    self.skin.find_child("AnimationPlayer", false, false).as(AnimationPlayer)
+  assert ?self.animation_player, "BotNode must have an AnimationPlayer"
+
+  # Set up material
+  if ?self.material:
+    self.set_default_material()
   else:
-    print("[BOT] ✗ Skin model not found")
+    # Get existing material from mesh as fallback
+    let existing_material = self.mesh.get_surface_override_material(0)
+    if ?existing_material:
+      self.material = existing_material.as(gdref Material)
 
-  print("[BOT] BotNode ready")
+  # Adjust player model position
+  if ?self.model and self.model of Player:
+    # hack so player model doesn't hover
+    let current_pos = self.skin.get_position()
+    self.skin.set_position(current_pos + vector3(0, -0.8, 0))
 
 proc set_color(self: BotNode, color: chroma.Color) =
-  if ?self.mesh and ?self.material:
-    # Get the material (create a copy if needed to avoid modifying shared materials)
-    let material = self.material[].duplicate().as(gdref StandardMaterial3D)
-    if ?material:
-      # Convert chroma Color to Godot Color
-      let godot_color = gdext.color(color.r, color.g, color.b, 1.0)
-      material[].set_albedo(godot_color)
+  assert ?self.material, "BotNode material must be available for color setting"
 
-      # Apply the modified material
-      self.mesh.set_surface_override_material(0, material.as(gdref Material))
-      print("[BOT] Color set to: (", color.r, ", ", color.g, ", ", color.b, ")")
-    else:
-      print("[BOT] ✗ Could not cast material to StandardMaterial3D")
+  var adjusted: chroma.Color
+
+  # Apply color adjustments based on specific colors (matching Godot 3 logic)
+  if color == action_colors[Colors.Green]:
+    adjusted = color
+    adjusted.a = 0.015
+  elif color == action_colors[Colors.White]:
+    adjusted = color
+    adjusted.a = 0.1
   else:
-    print("[BOT] ✗ Cannot set color - missing mesh or material")
+    # Calculate distance-based adjustments for other colors
+    var dist = (color.distance(action_colors[Colors.Brown]) + 10).cbrt / 7.5
+    adjusted = color.saturate(0.2).darken(dist - 0.15)
+    adjusted.a = 0.95 - color.distance(action_colors[Colors.Black]) / 100
+
+  # Convert to Godot Color and directly modify the material (like Godot 3)
+  let godot_color = gdext.color(adjusted.r, adjusted.g, adjusted.b, adjusted.a)
+  let material = self.material.as(gdref StandardMaterial3D)
+  assert ?material, "BotNode material must be StandardMaterial3D"
+
+  material[].albedo_color = godot_color
+
+  # Set transparency mode if alpha is less than 1
+  if adjusted.a < 1.0:
+    material[].transparency = BaseMaterial3D_Transparency.transparencyAlpha
 
 proc set_visibility(self: BotNode) =
-  if ?self.model:
-    let visible_flag = Visible in self.model.global_flags
-    let god_mode = God in state.local_flags
+  assert ?self.model, "BotNode model must be available for visibility setting"
 
-    if visible_flag:
-      self.set_visible(true)
-      self.set_color(self.model.color)
-    elif not visible_flag and god_mode:
-      self.set_visible(true)
-      # Set transparent color for god mode
-      if ?self.mesh and ?self.material:
-        let material = self.material[].duplicate().as(gdref StandardMaterial3D)
-        if ?material:
-          # Make material semi-transparent
-          material[].set_transparency(
-            BaseMaterial3D_Transparency.transparencyAlpha
-          )
-          let transparent_color = gdext.color(
-            self.model.color.r, self.model.color.g, self.model.color.b, 0.3
-          )
-          material[].set_albedo(transparent_color)
-          self.mesh.set_surface_override_material(
-            0, material.as(gdref Material)
-          )
-          print("[BOT] God mode transparency applied")
-        else:
-          print("[BOT] ✗ Could not create transparent material for god mode")
-      else:
-        print("[BOT] ✗ Cannot apply transparency - missing mesh or material")
-    else:
-      self.set_visible(false)
+  var color = self.model.color
+  let visible_flag = Visible in self.model.global_flags
+  let god_mode = God in state.local_flags
 
-    print("[BOT] Visibility set: ", self.is_visible())
+  if visible_flag:
+    self.set_visible(true)
+    self.set_color(color)
+  elif not visible_flag and god_mode:
+    self.set_visible(true)
+    # Set fully transparent color for god mode (matching Godot 3)
+    color.a = 0.0
+    let material = self.material.as(gdref StandardMaterial3D)
+    assert ?material, "BotNode material must be StandardMaterial3D for god mode"
+
+    material[].transparency = BaseMaterial3D_Transparency.transparencyAlpha
+    let godot_color = gdext.color(color.r, color.g, color.b, color.a)
+    material[].albedo_color = godot_color
+  else:
+    self.set_visible(false)
 
 proc set_walk_animation(self: BotNode, velocity: float, backwards: bool) =
   if ?self.animation_player:
     if velocity <= 0.1:
       # Play idle animation with slower speed
       self.animation_player.set_speed_scale(0.5)
-      self.animation_player.play(newStringName("idle"))
+      self.animation_player.play(newStringName("idle"), 0.5) # custom_blend = 0.5
     elif velocity < 5:
       # Play walk animation with speed based on velocity
       self.animation_player.set_speed_scale(velocity / 2.0)
       if backwards:
         # TODO: Implement play_backwards when gdext supports it
-        self.animation_player.play(newStringName("walk"))
+        self.animation_player.play(newStringName("walk"), 0.1)
+          # custom_blend = 0.1
       else:
-        self.animation_player.play(newStringName("walk"))
+        self.animation_player.play(newStringName("walk"), 0.1)
+          # custom_blend = 0.1
     else:
       # Play run animation
-      self.animation_player.set_speed_scale(velocity / 4.0)
+      self.animation_player.set_speed_scale(velocity / 10.0)
       let anim_name = if backwards: "run_backwards" else: "run"
-      self.animation_player.play(newStringName(anim_name))
+      self.animation_player.play(newStringName(anim_name), 0.1)
+        # custom_blend = 0.1
 
 proc track_changes(self: BotNode) =
-  if not ?self.model:
-    print("[BOT] ✗ Cannot track changes - no model")
-    return
-
-  print("[BOT] Setting up model change tracking")
+  assert ?self.model, "BotNode model must be available for change tracking"
 
   # Transform tracking - critical for bot movement
   self.transform_zid = self.model.transform_value.watch:
     if added:
       self.set_transform(change.item)
-      # Debug output disabled - working correctly
-      # print("[BOT] Transform updated from model")
 
   # Visibility tracking - only update when not initializing to prevent flicker
   self.model.global_flags.watch:
@@ -240,33 +230,27 @@ proc track_changes(self: BotNode) =
     # Animation tracking
     bot.animation_value.watch:
       if added or (touched and change.item in ["", "auto"]):
-        self.animation_player.play(newStringName("idle"))
+        self.animation_player.play(newStringName("idle"), 0.5) # Add blend
       elif added:
-        self.animation_player.play(newStringName(change.item))
-
-  print("[BOT] Model change tracking active")
+        self.animation_player.play(newStringName(change.item), 0.1) # Add blend
 
 proc setup*(self: BotNode) =
-  print("[BOT] Setting up BotNode")
+  assert ?self.model, "BotNode model must be available for setup"
 
-  if ?self.model:
-    self.set_color(self.model.color)
-    self.track_changes()
-    # Initial visibility check
-    self.set_visibility()
+  self.set_color(self.model.color)
+  self.track_changes()
+  # Initial visibility check
+  self.set_visibility()
 
-    # Set up sight ray
-    let sight_ray = self.find_child("SightRay", false, false).as(RayCast3D)
-    if ?sight_ray:
-      # TODO: Set model sight ray when Unit model API is available
-      print("[BOT] SightRay found and would be configured")
-    else:
-      print("[BOT] ⚠️ SightRay not found")
-  else:
-    print("[BOT] ✗ Cannot setup - no model")
+  # Set up sight ray - it's optional for bots
+  let sight_ray = self.find_child("SightRay", false, false).as(RayCast3D)
+  if ?sight_ray:
+    # TODO: Set model sight ray when Unit model API is available
+    discard
 
 method physics_process*(self: BotNode, delta: float64) {.gdsync.} =
   # Godot 4 uses physics_process for CharacterBody3D movement
+  # Model can be nil during initialization, that's expected
   if ?self.model:
     # Bidirectional sync: update model transform from node transform if this thread owns the model
     if self.model.code.owner == state.worker_ctx_name:
@@ -280,20 +264,13 @@ method physics_process*(self: BotNode, delta: float64) {.gdsync.} =
         # Use Godot 4 CharacterBody3D movement
         self.set_velocity(bot.velocity)
         discard self.move_and_slide()
-        # Debug output disabled - too spammy
-        # print("[BOT] Moving with velocity: ", bot.velocity)
 
 var bot_scene {.threadvar.}: gdref PackedScene
 
 proc init*(_: type BotNode): BotNode =
-  try:
-    let resource = ResourceLoader.load("res://components/BotNode.tscn")
-    bot_scene = resource.as(gdref PackedScene)
-    if ?bot_scene:
-      let instance = bot_scene[].instantiate()
-      result = cast[BotNode](instance)
-      print("[BOT] BotNode instantiated successfully")
-    else:
-      print("[BOT] ✗ Failed to load BotNode scene - resource is nil")
-  except:
-    print("[BOT] ✗ Failed to load or instantiate BotNode")
+  let resource = ResourceLoader.load("res://components/BotNode.tscn")
+  bot_scene = resource.as(gdref PackedScene)
+  assert ?bot_scene, "BotNode.tscn must be loadable"
+
+  let instance = bot_scene[].instantiate()
+  result = cast[BotNode](instance)

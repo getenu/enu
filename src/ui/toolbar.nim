@@ -21,8 +21,9 @@ type Toolbar* {.gdsync.} =
     preview_result: Option[PreviewResult]
     waiting: bool
 
-# Forward declaration
+# Forward declarations
 proc set_tool(self: Toolbar, tool: Tools)
+proc update_button_states(self: Toolbar, tool: Tools)
 
 method onInit*(self: Toolbar) =
   # Constructor-like initialization
@@ -59,6 +60,11 @@ method ready*(self: Toolbar) {.gdsync.} =
   #     self.visible = false
   #   if Playing.removed:
   #     self.visible = true
+
+  # Watch for tool changes to update button states (like keyboard shortcuts)
+  state.current_tool_value.changes:
+    if added:
+      self.update_button_states(change.item)
 
   # Set initial tool selection
   self.set_tool(BlueBlock)
@@ -149,11 +155,8 @@ method process*(self: Toolbar, delta: float64) {.gdsync.} =
         self.waiting = false,
     )
 
-proc set_tool(self: Toolbar, tool: Tools) =
-  ## Set the current tool and update button states
-  state.current_tool = tool
-
-  # Find and press the corresponding button
+proc update_button_states(self: Toolbar, tool: Tools) =
+  ## Update all button pressed states to match the current tool
   let tool_name =
     case tool
     of CodeMode: "code"
@@ -166,14 +169,30 @@ proc set_tool(self: Toolbar, tool: Tools) =
     of PlaceBot: "bot"
     of Disabled: ""
 
+  # Unpress all buttons first
+  for i in 0..<self.get_child_count():
+    let child = self.get_child(i.int32)
+    if ?child:
+      let button = child.as(Button)
+      if ?button:
+        button.set_pressed(false)
+
+  # Press the active tool button
   if tool_name.len > 0:
     let button_name = "Button-" & tool_name
     let button_node = self.get_node(NodePath(button_name))
     if ?button_node:
-      let button = button_node as Button
+      let button = button_node.as(Button)
       if ?button:
         button.set_pressed(true)
-        print("[TOOLBAR] Tool set to: " & tool_name)
+        print("[TOOLBAR] Button state updated to: " & tool_name)
+
+proc set_tool(self: Toolbar, tool: Tools) =
+  ## Set the current tool and update button states
+  state.current_tool = tool
+
+  # Update button visual states
+  self.update_button_states(tool)
 
 # Proc to be called by ActionButtons when they're pressed
 proc handle_button_press(self: Toolbar, button_name: string) =

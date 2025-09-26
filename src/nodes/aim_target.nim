@@ -29,8 +29,8 @@ method ready*(self: AimTarget) {.gdsync.} =
   self.set_as_top_level(true)
   # TODO: Restore signal binding when character encoding is fixed
   # self.bind_signals "collider_exiting"
-  # Start visible for debugging
-  self.set_visible(true)
+  # Initialize visibility based on BlockTargetVisible flag (matching Godot 3)
+  self.set_visible(BlockTargetVisible in state.local_flags)
 
   state.local_flags.changes:
     if BlockTargetVisible.added:
@@ -82,15 +82,10 @@ proc update*(self: AimTarget, ray: RayCast3D) =
       state.pop_flag BlockTargetVisible
     self.target_model = unit
 
-    # Restore Godot 3 hover logic with assertions to find the real bug
+    # Restore Godot 3 hover logic
     if unit != nil:
-      # Add assertions to help debug the issue
-      assert unit != nil, "unit should not be nil at this point"
-      assert ?unit.local_flags, "unit.local_flags should be initialized"
-
       # Handle Ground models separately since they don't inherit from Unit
       if unit of Ground:
-        print("[AIM] Unit is Ground - adding Hover flag and BlockTargetVisible")
         unit.local_flags += Hover
         state.push_flag BlockTargetVisible
       else:
@@ -103,7 +98,6 @@ proc update*(self: AimTarget, ray: RayCast3D) =
         )
 
         if not should_hide:
-          print("[AIM] Adding Hover flag to unit")
           unit.local_flags += Hover
           if unit of Build:
             state.push_flag BlockTargetVisible
@@ -178,7 +172,8 @@ proc update*(self: AimTarget, ray: RayCast3D) =
     # This orients the sprite to face along the normal with the X-axis as up
     self.look_at(align_normal, self.transform.basis.get_column_x())
 
-    self.set_visible(true)
+    # Only show the aim target if BlockTargetVisible flag is set (matching Godot 3 logic)
+    self.set_visible(BlockTargetVisible in state.local_flags)
 
     # Update target model if we have one
     if ?unit:

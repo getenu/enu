@@ -4,7 +4,7 @@ import
   gdext/classes/[
     gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventkey,
     gdinputeventmousebutton, gdcontrol, gdnode, gdvscrollbar, gdtween,
-    gdstyleboxflat, gdbutton, gdinput, gdviewport,
+    gdstyleboxflat, gdbutton, gdinput, gdviewport, gdmethodtweener,
   ]
 import core, gdcore, types, models/[states, units]
 # import nim_highlighter  # GD4: Re-enable when CodeHighlighter API is fixedxx
@@ -83,57 +83,67 @@ proc set_executing_line(self: EnuEditor, line: int) =
     self.code_edit.set_line_as_executing(int32(line), true)
     print("[UI] Editor executing line set to: ", line)
 
+proc offset_x(self: EnuEditor, offset: float) {.gdsync.} =
+  # Move editor horizontally based on offset (-1.0 = off-screen left, 0.0 = visible)
+  let width = self.get_size().x
+  let new_position = vector2(width * offset, self.get_position().y)
+  self.set_position(new_position)
+
 proc open_editor(self: EnuEditor) =
   print("[UI] Editor opening...")
 
-  # Animation disabled - just show editor
-  # # Start with transparent editor
-  # self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-  #
-  # # Smooth fade-in animation
-  # if ?self.tween:
-  #   discard self.tween[].tween_property(
-  #     self,
-  #     newNodePath("modulate"),
-  #     variant(gdext.color(1.0, 1.0, 1.0, 1.0)),
-  #     0.25, # duration in seconds
-  #   )
-  #   print("[UI] Editor opened with smooth fade-in")
-  # else:
-  #   # Fallback to instant appearance
-  #   self.set_modulate(gdext.color(1.0, 1.0, 1.0, 1.0))
-  #   print("[UI] Editor opened instantly")
-
+  # Start editor off-screen (hidden to the left)
+  self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+  self.offset_x(-1.0)  # Start off-screen
   self.set_visible(true)
-  print("[UI] Editor opened")
+
+  # Create tween for smooth slide-in animation (matches Godot 3 behavior)
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for editor animation"
+
+  # Immediate fade in (like Godot 3 tween_property with 0.0 duration)
+  discard self.tween[].tween_property(
+    self, new_node_path("modulate:a"), variant(1.0), 0.0
+  )
+  # Slide in from left with proper EXPO easing
+  let tweener = self.tween[].tween_method(
+    callable(self, new_string_name("offset_x")),
+    variant(-1.0),
+    variant(0.0),
+    animation_duration
+  )
+  discard tweener[].setTrans(transExpo)
+  discard tweener[].setEase(easeInOut)
+  print("[UI] Editor opened with slide-in animation (EXPO/EASE_IN_OUT)")
 
 proc close_editor(self: EnuEditor) =
   print("[UI] Editor closing...")
   if not self.code_edit.is_nil:
     self.code_edit.release_focus()
 
-  # Animation disabled - just hide editor
-  # # Smooth fade-out animation
-  # if ?self.tween:
-  #   discard self.tween[].tween_property(
-  #     self,
-  #     newNodePath("modulate"),
-  #     variant(gdext.color(1.0, 1.0, 1.0, 0.0)),
-  #     0.25, # duration in seconds
-  #   )
-  #
-  #   # Hide editor after animation completes
-  #   discard self.tween[].tween_callback(
-  #     callable(self, newStringName("set_visible")).bind(false)
-  #   )
-  #   print("[UI] Editor closed with smooth fade-out")
-  # else:
-  #   # Fallback to instant hide
-  #   self.set_visible(false)
-  #   print("[UI] Editor closed instantly")
+  # Reset position and animate slide-out
+  self.set_position(vector2(0, self.get_position().y))
 
-  self.set_visible(false)
-  print("[UI] Editor closed")
+  # Create tween for smooth slide-out animation (matches Godot 3 behavior)
+  if ?self.tween:
+    self.tween[].kill()  # Kill existing tween
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for editor animation"
+
+  # Slide out to the left with proper EXPO easing
+  let tweener = self.tween[].tween_method(
+    callable(self, new_string_name("offset_x")),
+    variant(0.0),
+    variant(-1.0),
+    animation_duration
+  )
+  discard tweener[].setTrans(transExpo)
+  discard tweener[].setEase(easeInOut)
+  # Hide editor after animation completes
+  discard self.tween[].tween_callback(
+    callable(self, new_string_name("set_visible")).bind(variant(false))
+  )
+  print("[UI] Editor closed with slide-out animation (EXPO/EASE_IN_OUT)")
 
 proc watch_open_unit(self: EnuEditor) =
   var line_zid: ZID
@@ -205,14 +215,8 @@ method ready*(self: EnuEditor) {.gdsync.} =
   else:
     print("[UI] Warning: state.nodes.game is nil, cannot find LeftPanel")
 
-  # Animations disabled - no need for tween
-  # # Initialize tween for smooth animations
-  # # Create a new tween for smooth animations (must use create_tween in Godot 4)
-  # self.tween = self.create_tween()
-  # if ?self.tween:
-  #   print("[UI] Created new Tween for Editor animations")
-  # else:
-  #   print("[UI] Warning: Failed to create Tween for Editor animations")
+  # Initialize tween for smooth animations - restored for slide animation
+  # Note: Tween will be created when needed, not here to avoid lifecycle issues
 
   # Get colors for UI state management
   self.selection_color =
@@ -243,7 +247,7 @@ method ready*(self: EnuEditor) {.gdsync.} =
   for name in ["Close", "Run"]:
     let control = self.find(name, Control)
     if ?control:
-      let method_name = "_on_" & name.to_lower
+      let method_name = "on_" & name.to_lower
       let callable_obj = callable(self, new_string_name(method_name))
       discard control.connect(new_string_name("pressed"), callable_obj)
     else:
@@ -271,20 +275,22 @@ proc on_caret_changed(self: EnuEditor) =
   # if ?state.player:
   #   state.player.cursor_position = (int(line), int(column))
 
-proc on_close(self: EnuEditor) =
+proc on_close(self: EnuEditor) {.gdsync.} =
   # Save code and close editor
   if ?state.open_unit:
     # TODO: Fix Code.init with proper string conversion
     state.open_unit.code = Code.init($self.code_edit.get_text())
     state.open_unit = nil
 
-proc on_run(self: EnuEditor) =
+proc on_run(self: EnuEditor) {.gdsync.} =
   # Run the current code
   if ?state.open_unit:
     # TODO: Fix Code.init with proper string conversion
     state.open_unit.code = Code.init($self.code_edit.get_text())
     # TODO: Force code execution when Code.init is fixed
     # state.open_unit.code = Code.init(self.code_edit.get_text())
+
+
 
 proc indent_new_line*(self: EnuEditor) =
   # Smart indentation for new lines - simplified for compilation

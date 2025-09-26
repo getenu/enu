@@ -4,17 +4,14 @@ import gdext
 import gdext/classes/[gdbutton, gdviewport, gdstyleboxflat, gdinputevent]
 import core, gdcore, types, models/states
 
-# Simple state management for the UI components
-# This will eventually connect to the full game state system
-var global_toolbar_size* = 100.0
-
 type ActionButton* {.gdsync.} = ptr object of Button
 
-proc update_size*(self: ActionButton, size: float) =
-  var toolbar_size = size * state.config.screen_scale
+proc update_size*(self: ActionButton) =
+  # Use state.config.toolbar_size like Godot 3, applying screen scale
+  var toolbar_size = state.config.toolbar_size * state.config.screen_scale
   let viewport_width = self.get_viewport().get_visible_rect().size.x
 
-  # Original logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit
+  # Original Godot 3 logic: if (toolbar_size + 4) * 8 > viewport_width: resize to fit
   if (toolbar_size + 4.0) * 8.0 > viewport_width:
     toolbar_size = viewport_width / 8.0 - 4.0
 
@@ -53,31 +50,25 @@ method ready*(self: ActionButton) {.gdsync.} =
   print("[UI] ActionButton ready: " & $self.get_name())
 
   # Set up initial size
-  self.update_size(global_toolbar_size)
+  self.update_size()
 
-  # Connect signals using the working Godot 4 signal system
-  if not self.has_signal("pressed"):
-    self.add_user_signal("pressed")
-  let pressed_callable = callable(self, new_string_name("_on_pressed"))
-  discard self.connect(new_string_name("pressed"), pressed_callable)
+  # Connect to config changes like Godot 3
+  state.config_value.changes:
+    if state.config.toolbar_size != change.item.toolbar_size:
+      self.update_size()
 
-  if not self.get_viewport().has_signal("size_changed"):
-    self.get_viewport().add_user_signal("size_changed")
-  let size_changed_callable =
-    callable(self, new_string_name("_on_size_changed"))
+  # Connect to viewport size changes like Godot 3
   discard self.get_viewport().connect(
-      new_string_name("size_changed"), size_changed_callable
-    )
+    "size_changed", self.callable("_on_size_changed")
+  )
 
-  # TODO: Connect to config changes when state system is available
-  # state.config_value.changes:
-  #   if state.config.toolbar_size != change.item.toolbar_size:
-  #     self.update_size(change.item.toolbar_size)
+  # Connect button press signal
+  discard self.connect("pressed", self.callable("_on_pressed"))
 
-method pressed*(self: ActionButton) {.gdsync.} =
+proc on_pressed*(self: ActionButton) {.gdsync, name: "_on_pressed".} =
   print("[UI] ActionButton pressed: " & $self.get_name())
   self.trigger_action_changed()
 
-proc on_size_changed*(self: ActionButton) {.gdsync.} =
+proc on_size_changed*(self: ActionButton) {.gdsync, name: "_on_size_changed".} =
   print("[UI] ActionButton size changed: " & $self.get_name())
-  self.update_size(global_toolbar_size)
+  self.update_size()

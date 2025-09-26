@@ -280,14 +280,13 @@ method on_init*(self: Game) {.gdsync.} =
   # Basic field initialization
   self.process_priority = -100
 
-  # GD4: Get screen scale for proper DPI scaling
+  # GD4: Get screen scale exactly like Godot 3 for consistent scaling
   let screen_scale =
     if host_os == "macosx":
-      # On macOS, use DPI-based detection since DisplayServer.screen_get_scale(-1) doesn't work properly
-      let dpi = DisplayServer.screen_get_dpi(-1)
-      if dpi > 120: 2.0 else: 1.0  # Retina DPI is typically > 120 (standard is 96)
+      # On macOS, use direct screen scale API (equivalent to Godot 3's get_screen_scale(-1))
+      DisplayServer.screen_get_scale(-1)
     else:
-      # On other platforms, calculate based on DPI
+      # On other platforms, calculate based on DPI (same as Godot 3)
       DisplayServer.screen_get_dpi(-1) / 96.0
 
   var initial_user_config = load_user_config($OS.get_user_data_dir())
@@ -462,6 +461,8 @@ proc set_font_size(self: Game, size: int) =
       rtl.add_theme_font_size_override("normal_font_size", actual_size)
       rtl.add_theme_font_size_override("bold_font_size", actual_size)
       rtl.add_theme_font_size_override("italics_font_size", actual_size)
+    elif node.is_class("CodeEdit"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
 
     # Recursively apply to children
     for i in 0 ..< node.get_child_count():
@@ -474,15 +475,18 @@ proc set_font_size(self: Game, size: int) =
   self.set_panel_width()
 
 proc set_toolbar_size(self: Game, size: float) =
-  # Update the global toolbar size variable that ActionButton components use
-  action_button.global_toolbar_size = size
+  # The ActionButton components now read directly from state.config.toolbar_size
+  # No need to set a global variable - the state change will trigger updates
+  if state.config.toolbar_size != size:
+    state.config_value.value:
+      toolbar_size = size
 
   # Find and update all toolbar buttons
   proc update_toolbar_buttons(node: Node) =
     if node.is_class("Button") and node.get_name().begins_with("Button-"):
       # This is a toolbar button (ActionButton)
       let button = node.as(ActionButton)
-      button.update_size(size)
+      button.update_size()
 
     # Recursively check children
     for i in 0 ..< node.get_child_count():
@@ -851,29 +855,44 @@ method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
       state.set_flag MouseCaptured, MouseCaptured notin state.local_flags
       self.get_viewport().set_input_as_handled()
 
+  # Only log for key events to avoid spam
+  if event of InputEventKey and event.as(InputEventKey).is_pressed():
+    print("[INPUT] Key pressed - Current tool: ", state.current_tool, " (", int(state.current_tool), ")")
+
   if state.current_tool != Disabled:
     if event.is_action_pressed("toggle_code_mode"):
+      print("[INPUT] Toggle code mode pressed")
       if state.current_tool != CodeMode:
         self.last_tool = state.current_tool
         state.current_tool = CodeMode
       else:
         state.current_tool = self.last_tool
     elif event.is_action_pressed("mode_1"):
+      print("[INPUT] Mode 1 key pressed - switching to CodeMode")
       state.current_tool = CodeMode
     elif event.is_action_pressed("mode_2"):
+      print("[INPUT] Mode 2 key pressed - switching to BlueBlock")
       state.current_tool = BlueBlock
     elif event.is_action_pressed("mode_3"):
+      print("[INPUT] Mode 3 key pressed - switching to RedBlock")
       state.current_tool = RedBlock
     elif event.is_action_pressed("mode_4"):
+      print("[INPUT] Mode 4 key pressed - switching to GreenBlock")
       state.current_tool = GreenBlock
     elif event.is_action_pressed("mode_5"):
+      print("[INPUT] Mode 5 key pressed - switching to BlackBlock")
       state.current_tool = BlackBlock
     elif event.is_action_pressed("mode_6"):
+      print("[INPUT] Mode 6 key pressed - switching to WhiteBlock")
       state.current_tool = WhiteBlock
     elif event.is_action_pressed("mode_7"):
+      print("[INPUT] Mode 7 key pressed - switching to BrownBlock")
       state.current_tool = BrownBlock
     elif event.is_action_pressed("mode_8"):
+      print("[INPUT] Mode 8 key pressed - switching to PlaceBot")
       state.current_tool = PlaceBot
+  else:
+    print("[INPUT] Tool switching disabled - current_tool is Disabled")
 
 # GD4: is this working?
 proc on_meta_clicked(self: Game, url: string) {.gdsync.} =
