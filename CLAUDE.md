@@ -86,6 +86,17 @@ Note that some of these are broken during the Godot 3 -> 4 migration. If you nee
 - Scripts are Logo-inspired but use Nim syntax
 - World data is stored as JSON with accompanying Nim scripts
 
+### Godot 4 Migration
+
+This project is currently migrating from Godot 3 to Godot 4. For detailed guidance on migration patterns, see [GODOT_PORTING.md](GODOT_PORTING.md) which covers:
+
+- `gdref` object handling and dereferencing
+- Signal system changes (from bind_signal helpers to direct connections)
+- Animation system migration (Tween changes)
+- Property access patterns (theme overrides, node properties)
+- Common migration issues (matrix access, string conversion)
+- Build validation requirements
+
 ## Coding Conventions
 
 This project follows specific naming conventions inherited from the `model_citizen` library:
@@ -215,3 +226,4 @@ This mode:
 - ALWAYS USE snake_case FOR VARIABLES AND FUNCTIONS!!!
 - When doing UI work, ALWAYS verify work by capturing a screenshot by passing `--screenshot` to enu.
 - The app can be launched in screenshot mode with ./screenshot.sh. Feel free to modify this command.
+- NEVER USE `lowerCamelCase` FOR IDENTIFIERS! NEVER! It doesn't matter that it's lowerCamelCase in ./generated. Nim is style insensitive. You always switch to camelCase when things aren't working, and that is never the problem. Please don't ever do that.

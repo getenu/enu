@@ -1,145 +1,45 @@
-# Godot 3 to 4 Migration Status
+# Godot 3 to 4 Migration Guide
 
-This document tracks the progress of porting Enu from Godot 3 to Godot 4. The migration involves updating from the nim-godot bindings to gdext, along with adapting to Godot 4's API changes.
+This guide provides essential patterns and concepts for migrating Enu from Godot 3 to Godot 4, specifically using the transition from nim-godot bindings to gdext.
 
-## Overview
+## Core Migration Concepts
 
-- **Source location**: `./src/` (46 files - migration completed, Godot 3 code replaced)
-- **Entry point**: `./app/extension/enu.nim` (Godot 4 extension entry)
-- **Build command**: `./build.sh` (returns exit code 0 - build successful)
-- **Binary output**: `app/extension/lib/libEnugame.macos.debug.dylib`
+### Object Reference Types
 
-## Migration Progress: ~99% Complete
+**gdext References (`gdref`)**
+- All Godot objects in gdext are wrapped in `gdref` types
+- Must be cast using `.as(gdref Type)` before accessing properties
+- Must be dereferenced with `[]` to access/modify properties
+- Example: `material.as(gdref StandardMaterial3D)[]` for property access
 
-### ✅ **FULLY MIGRATED** (95-100% Complete)
+**Standard Node Types**
+- Built-in Godot nodes (Control, Node, etc.) do not need dereferencing
+- Access properties directly: `self.window.set_visible(true)`
+- Cast standard nodes with `.as(NodeType)` without `gdref`
 
-**Main Systems:**
-- **`game.nim`**: Core game loop fully updated for Godot 4 APIs
-- **`types.nim`**: Type definitions updated for gdext
-- **`app/extension/enu.nim`**: New entry point for Godot 4 extension system
-- **`core.nim`**: Universal `?` operator implementation for all types
-- **`gdutils.nim`**: Signal binding and utility functions for gdext
+### Memory Management
 
-**UI Systems (All Completed with Animations):**
-- **`toolbar.nim`**: Interactive tool selection with state management
-- **`action_button.nim`**: Button system with press animations
-- **`editor.nim`**: Code editing with syntax highlighting and fade animations
-- **`console.nim`**: Debug interface with slide animations and state watching
-- **`gui.nim`**: Main UI coordination with input handling and touch controls
-- **`markdown_label.nim`**: Full markdown rendering with RichTextLabel
-- **`preview_maker.nim`**: Viewport-based preview generation
-- **`settings.nim`**: **✅ COMPLETED** - Window animations, signal handlers, and UI controls all functional
-- **`right_panel.nim`**: Documentation panel with slide animations
-- **`virtual_joystick.nim`**: Mobile touch controls with visual feedback
-- **`floating_button.nim`**: UI component with proper initialization
-- **`nim_highlighter.nim`**: **✅ NEW** - Syntax highlighting for Nim code
+**Property Access Patterns**
+```nim
+# gdref objects - need casting and dereferencing
+let material = self.material.as(gdref StandardMaterial3D)
+if ?material:
+  material[].albedo_color = godot_color
+  material[].transparency = BaseMaterial3D_Transparency.transparencyAlpha
 
-**Node Systems:**
-- **`build_node.nim`**: Full VoxelTerrain integration with model binding and voxel drawing
-- **`player_node.nim`**: Complete player movement, input, collision detection, and raycast system
-- **`sign_node.nim`**: Full 3D sign rendering with MarkdownLabel integration
-- **`ground_node.nim`**: Terrain rendering system (95% complete)
-- **`bot_node.nim`**: **✅ COMPLETED** - Full model-node sync, movement, materials, scaling, and animation framework
+# Standard nodes - direct access
+self.window.set_visible(true)
+self.button.set_text("New Text")
+```
 
-**Scripting System:**
-- **`worker.nim`**: **✅ COMPLETED** - Script loading, VM execution, and retry mechanism working
-- **`scripting.nim`**: **✅ COMPLETED** - Failed script retry system and timeout handling
-- **`host_bridge.nim`**: VM to host communication bridge
-- **Bot Movement API**: **✅ COMPLETED** - Bots can move and turn in squares using forward/turn commands
-
-### ⚠️ **PARTIALLY MIGRATED** (85-95% Complete)
-
-**Node Systems with Framework Complete:**
-- **`aim_target.nim`**: **✅ COMPLETED** - Mouse following and center crosshair targeting working correctly
-- **`queries.nim`**: **95% Complete** - Spatial raycast queries with correct gdext method syntax
-- **`selection_area.nim`**: **75% Complete** - Area3D collision detection (signal handlers need character encoding fix)
-- **`helpers.nim`**: Unused imports (warning in build)
-
-**Supporting Systems:**
-- **All controller files**: 85% - Basic conversion with minor API updates remaining
-- **All model files**: 90% - Import updates completed, minor API changes pending
-
-## Current State
-
-### What's Working (96% Complete)
-- ✅ **Build System**: Project builds successfully with `./build.sh` (exit code 0)
-- ✅ **Core Systems**: Application launches with full extension system
-- ✅ **Complete UI Suite**: All UI components functional with animations (Settings, Editor, Console, Toolbar, RightPanel, VirtualJoystick, etc.)
-- ✅ **Player Movement**: WASD movement fully working - direction correctly matches look direction at all angles
-- ✅ **Voxel System**: BuildNode with VoxelTerrain integration working
-- ✅ **Bot System**: Full animations, material system, color changes, and movement framework
-- ✅ **Sign System**: Complete 3D text displays with MarkdownLabel integration
-- ✅ **Ground System**: Terrain rendering and model initialization (95% complete)
-- ✅ **Input Handling**: Keyboard, mouse, gamepad, and touch input systems
-- ✅ **Animation System**: Tweens and AnimationPlayer integration throughout UI
-- ✅ **Universal `?` Operator**: Presence checking for all types (gdext, Options, strings, etc.)
-- ✅ **Basis Column Accessors**: Helper methods for extracting axis vectors from row-stored matrix data
-- ✅ **RayCast3D Integration**: Full raycast API working with correct gdext method syntax
-- ✅ **AimTarget System**: Mouse following when released, center crosshair when captured - fully functional
-- ✅ **Settings Window**: All animations working, signal handlers connected with proper Godot 4 callable pattern
-
-### Remaining Work (2% - Technical Blockers)
-
-**High Priority Technical Issues:**
-1. **Signal Handler Character Encoding** - ✅ **RESOLVED**
-   - Solution: Use `{.gdsync, name: "_on_method_name".}` pragma pattern
-   - Allows Nim methods to map to Godot's underscore-prefixed signal handlers
-   - Applied to `settings.nim` close button and other signal handlers
-
-**Settings Window - Major Features Complete:**
-1. **Font Size Changes** - ✅ **COMPLETED**
-   - Implemented scene tree traversal with `add_theme_font_size_override`
-   - Applies font size changes to all Labels, Buttons, LineEdits, and RichTextLabels
-   - Uses config change handler to trigger updates automatically
-   - Self-contained approach that can be easily replaced if needed
-
-2. **Toolbar Size Changes** - ✅ **COMPLETED**
-   - Created `set_toolbar_size` function that updates global toolbar size
-   - Fixed ActionButton.update_size to use parameter instead of global variable
-   - Traverses scene tree to find and resize all toolbar buttons (Button-*)
-   - Integrated with config change system for automatic updates
-
-**Recently Completed:**
-3. **Signal System Cleanup** - ✅ **COMPLETED**
-   - Removed bind_signal helper procs from gdutils.nim
-   - Replaced all bind_signal usage with direct .connect() calls
-   - All signal connections verified working with successful build
-   - Created comprehensive MIGRATION_COMPARISON.md documenting all differences
-
-**Recently Completed Features:**
-4. **Platform Input Action Overrides** - ✅ **COMPLETED**
-   - Implemented full InputMap API integration using gdext classes
-   - Process platform-specific input actions (.macosx, .windows, .linux)
-   - Copy events from platform actions to base action names
-   - Remove platform-specific actions after processing
-   - Comprehensive logging for debugging and verification
-   - Restores runtime key binding system from Godot 3
-
-5. **Jump Input System** - ✅ **COMPLETED**
-   - Fixed space bar jumping not working
-   - Root cause: GUI layer was consuming jump input with `set_input_as_handled()` but not processing it
-   - Solution: Removed problematic jump handling from `gui.nim:handle_basic_input` method
-   - Jump input now properly flows to `player_node.nim` where actual jumping logic exists
-
-6. **TouchControls Flag System** - ✅ **COMPLETED**
-   - Implemented comprehensive visibility control for virtual joystick and on-screen buttons
-   - TouchControls flag correctly set only for iOS platforms in `game.nim`
-   - Added dynamic visibility updates when flag changes
-   - Initial state setting based on TouchControls flag at startup
-   - Touch controls (LeftStick, Up/Down buttons) properly hidden on non-mobile platforms
-
-**Current High Priority Issues:**
-5. **Level Loading** - ❌ **CRASHES** when switching levels
-   - Enhanced with defensive error handling and detailed logging
-   - Need to investigate remaining crash causes in production
-   - May be related to scene transition handling or node cleanup
-
-**Medium Priority Completions:**
-6. **Minor API Gaps** - `gdutils.nim` and others
-   - Mouse filter constants need investigation
-   - `set_input_as_handled()` method access verification
-
-## Key Migration Patterns
+**Safe Reference Checking**
+Always check references before use with the custom `?` operator:
+```nim
+if ?material:
+  # Safe to use material
+if ?self.mesh:
+  # Safe to use mesh
+```
 
 ### Import Changes
 ```nim
@@ -168,156 +68,160 @@ method ready*() =
 method ready*(self: MyClass) {.gdsync.} =
 ```
 
+## Signal System Migration
+
+### Signal Connection Changes
+The signal binding system changed significantly from Godot 3 to 4:
+
+**Godot 3 Pattern (using helper function):**
+```nim
+# Helper function approach
+self.bind_signal(button, "pressed", button.name)
+self.bind_signal(option_button, "item_selected", option_button.name)
+```
+
+**Godot 4 Pattern (direct connections):**
+```nim
+# Direct signal connections using callable
+discard self.megapixels_up.connect(
+  "pressed", self.callable("_on_megapixels_up_pressed")
+)
+discard self.environments.connect(
+  "item_selected", self.callable("_on_environments_selected")
+)
+```
+
 ### Signal Handler Naming
-Nim doesn't allow identifiers starting with underscores, but Godot expects signal handlers to be prefixed with `_on_`. Use the `name` pragma to specify the Godot-side name:
+Nim doesn't allow identifiers starting with underscores, but Godot expects signal handlers to be prefixed with `_on_`. Use the `name` pragma:
 
 ```nim
-# Signal handler that Godot calls as "_on_pressed"
+# Method that Godot calls as "_on_pressed"
 proc on_pressed(self: MyClass) {.gdsync, name: "_on_pressed".} =
   # Handle button press
 
-# Signal handler for close button
-proc on_closed(self: Settings) {.gdsync, name: "_on_closed".} =
-  state.pop_flag SettingsVisible
+# Handler for specific button
+proc on_megapixels_up_pressed(self: Settings) {.gdsync, name: "_on_megapixels_up_pressed".} =
+  self.on_pressed("MegapixelsUp")
 ```
 
-This pattern is essential when using `bind_signal` with custom method names, as the binding system automatically prepends `_on_` to the method name for Godot.
+### Animation System Changes
 
-## Priority Tasks
-
-### **COMPLETED ✅**
-1. **~~Complete `build_node.nim`~~** - ✅ **COMPLETED** - Core voxel functionality for world building
-2. **~~Implement `console.nim`~~** - ✅ **COMPLETED** - Essential for debugging and testing
-3. **~~Complete `gui.nim`~~** - ✅ **COMPLETED** - Main UI coordination
-4. **~~Complete `player_node.nim`~~** - ✅ **COMPLETED** - Player movement and interactions
-5. **~~Implement `editor.nim`~~** - ✅ **COMPLETED** - Code editing interface
-6. **~~Complete `settings.nim`~~** - ✅ **COMPLETED** - Configuration management with animations
-7. **~~Complete remaining UI components~~** - ✅ **COMPLETED** - All UI systems functional (right_panel, virtual_joystick, floating_button)
-8. **~~Implement remaining node systems~~** - ✅ **COMPLETED** - Bot, ground, and targeting systems at 70-95%
-9. **~~Universal `?` operator~~** - ✅ **COMPLETED** - Presence checking for all types
-10. **~~Animation system~~** - ✅ **COMPLETED** - Tweens and AnimationPlayer throughout UI
-
-### **REMAINING TECHNICAL ISSUES** (95% → 96%+)
-
-**HIGH PRIORITY (Current Focus)**
-1. **Settings System Completion**
-   - ✅ **COMPLETED**: Signal handlers fixed with proper Godot 4 callable pattern
-   - **IN PROGRESS**: Font size changes not applying to UI
-   - **TODO**: Toolbar size changes not applying
-   - **TODO**: Megapixels/viewport resolution changes not applying
-   - **TODO**: Level loading crashes need investigation
-
-**MEDIUM PRIORITY (Next Phase)**
-2. **Selection Area Collision Detection**
-   - Investigate signal handler patterns for `body_entered`, `body_exited`
-   - Enable full collision detection in `selection_area.nim`
-
-3. **Minor API Gap Resolution**
-   - Investigate missing mouse filter constants in `gdutils.nim`
-   - Verify `set_input_as_handled()` method access patterns
-   - Restore viewport scaling functionality in `game.nim`
-
-## Testing Strategy
-
-- Use `./build_and_start.sh` for regular builds
-- Test after each major component implementation
-- Verify core systems before moving to UI components
-- Maintain build stability throughout development
-
-## Technical Notes
-
-### Godot 4 Extension System
-- Uses `{.gdsync.}` pragma for Godot lifecycle methods
-- Exports types and public APIs with `*` symbol
-- Maintains snake_case conventions despite gdext camelCase bindings
-
-### VoxelTerrain Integration Issues (From Previous Attempts)
-- **Area Editability Problem**: `is_area_editable()` returns false
-- **Root Cause**: VoxelTerrain streaming system needs time to load areas
-- **Solution**: Add 2-second delay after VoxelTerrain initialization
-- **Technical Details**: Found in `vendor/godot/modules/voxel/edition/voxel_tool_terrain.cpp`
-
-### Build Commands
-- `nimble build_extension` - Build the Enu extension
-- `nimble generate_bindings` - Generate Nim bindings for custom Godot build
-- `nimble build_godot` - Build Godot with voxel module
-- `./build_and_start.sh` - Build and launch for testing
-
-### Naming Conventions
-- Always use `snake_case` for variables and function names
-- Use `init_hash_set()` instead of `initHashSet()`
-- Use `to_flatty()` instead of `toFlatty()`
-- Use `join_path()` instead of `joinPath()`
-
-## Recent Major Completions
-
-### Comprehensive Migration Wave ✅ (Just Completed)
-**All UI Components (100% Complete)**
-- **Settings**: 494→134 lines - Full configuration management with fade animations
-- **RightPanel**: 123→103 lines - Documentation panel with slide animations
-- **VirtualJoystick**: 155→130 lines - Mobile touch controls with visual feedback
-- **FloatingButton**: 7→42 lines - UI component with proper initialization
-
-**Node System Completions (70-95% Complete)**
-- **BotNode**: 183→127 lines - Full animations, materials, and color system
-- **GroundNode**: 10→52 lines - Terrain rendering system (95% complete)
-- **AimTarget**: 104→127 lines - Targeting reticle with texture and billboard (80% complete)
-- **SelectionArea**: 9→71 lines - Area3D collision detection framework (75% complete)
-- **Queries**: 20→71 lines - Spatial raycast queries framework (70% complete)
-
-**Core Infrastructure Completions**
-- **Universal `?` Operator**: Complete presence checking for all types (gdext, Options, strings, procs, pointers)
-- **Animation System**: Tween and AnimationPlayer integration throughout UI
-- **Signal System**: gdext signal binding and connection utilities
-
-### Technical Status Summary
-- **Migration Completion**: 99% (up from 98%)
-- **Build Status**: ✅ All components compile successfully
-- **Functional Status**: Core game fully playable with complete UI suite, working player movement, aim targeting, and fully functional settings window
-- **Remaining Work**: Snake_case cleanup, level loading fix, minor API gaps
-- **Major Achievements**:
-  - ✅ Player movement direction bug fixed with Basis column accessors
-  - ✅ RayCast3D API fully integrated with correct gdext snake_case syntax
-  - ✅ AimTarget crosshair system working with both mouse modes
-  - ✅ Settings window font and toolbar sizing fully implemented
-  - ✅ Megapixels/render resolution hybrid scaling working with pixel art effects
-  - ✅ Mouse input fixed - mouselook fully functional
-  - ✅ Window resize and fullscreen toggle render resolution recalculation
-  - ✅ String converters added for cleaner GdString/StringName usage
-
-### Next Phase Focus
-**Final Migration Cleanup** (Next Session)
-- **Priority 1**: Snake_case cleanup throughout codebase (excluding eval.nim and nimpcre.nim)
-  - Systematic conversion of camelCase to snake_case following project conventions
-  - Ensure consistency with model_citizen library naming patterns
-
-**Remaining Technical Issues** (Low Priority)
-- Level loading crash investigation  
-- Selection area collision detection completion
-- Minor API gap resolution
-
-## Recent Critical Fix: Basis Row-Major vs Column-Major Issue
-
-### Problem Solved
-During the Godot 3 to 4 migration, player movement directions didn't match camera look direction at any angle except 0° and 180°. This was caused by a mismatch between:
-- **Godot's storage**: Matrices stored in row-major format for performance
-- **Movement code expectation**: Column vectors (axis vectors) for calculating movement directions
-- **gdext-nim behavior**: Both `basis[i]` and `basis.x/y/z` return rows, not columns
-
-### Solution Implemented
-Added column accessor helper methods in `core.nim`:
+**Godot 3 Tween Pattern:**
 ```nim
-proc get_column_x*(self: Basis): Vector3 = 
-  vector3(self.x.x, self.y.x, self.z.x)  # Extract right vector
-proc get_column_y*(self: Basis): Vector3 = 
-  vector3(self.x.y, self.y.y, self.z.y)  # Extract up vector
-proc get_column_z*(self: Basis): Vector3 = 
-  vector3(self.x.z, self.y.z, self.z.z)  # Extract forward vector
+# Single tween instance, reused
+discard self.tween.interpolate_property(
+  node, property, start_value, end_value,
+  duration, transition, ease
+)
+discard self.tween.start()
 ```
 
-These methods properly extract axis vectors (columns) from the row-stored matrix data, matching what the movement code expects and fixing player movement at all angles.
+**Godot 4 Tween Pattern:**
+```nim
+# Create new tween for each animation
+self.tween = self.create_tween()
+let tweener = self.tween[].tween_property(
+  node, new_node_path(property), variant(end_value), duration
+)
+discard tweener[].set_trans(Tween_TransitionType(transition))
+discard tweener[].set_ease(Tween_EaseType(ease))
+```
 
----
+## Property Access Migration
 
-**Last Updated**: Megapixels/render resolution, mouse input, and window resize handling all completed (99% total)
-**Next Focus**: Snake_case cleanup and final migration polish
+### Theme Overrides
+**Godot 3:**
+```nim
+self.main_container.add_constant_override("margin_bottom", value)
+node.add_color_override("font_color", color_value)
+```
+
+**Godot 4:**
+```nim
+self.main_container.add_theme_constant_override("margin_bottom", value)
+node.add_theme_color_override("font_color", color_value)
+```
+
+### Node Property Access
+**Godot 3:**
+```nim
+button.text = "New Text"
+button.disabled = true
+container.rect_size.y
+```
+
+**Godot 4:**
+```nim
+button.set_text("New Text")
+button.set_disabled(true)
+container.get_size().y
+```
+
+### Viewport and Scene Tree
+**Godot 3:**
+```nim
+viewport.size.x
+self.get_tree().set_input_as_handled()
+```
+
+**Godot 4:**
+```nim
+let viewport_rect = viewport.get_visible_rect()
+viewport_rect.size.x
+self.get_viewport().set_input_as_handled()
+```
+
+## Common Migration Issues
+
+### Matrix Access (Basis Vectors)
+**Problem:** Godot stores matrices in row-major format but movement code expects column vectors (axis vectors).
+
+**Godot 3:**
+```nim
+# Direct access worked
+let forward = transform.basis.z
+```
+
+**Godot 4 Solution:**
+```nim
+# Need helper methods to extract columns
+proc get_column_z*(self: Basis): Vector3 =
+  vector3(self.x.z, self.y.z, self.z.z)
+
+let forward = transform.basis.get_column_z()
+```
+
+### String Conversion
+**Godot 4 requires explicit string conversion:**
+```nim
+# Convert GdString to Nim string
+let level_text = $self.levels.get_text()
+let item_text = $self.environments.get_item_text(index.int32)
+```
+
+### Input Handling
+**Method name changes:**
+```nim
+# Godot 3
+event.is_action_pressed("ui_cancel")
+
+# Godot 4 (same API, but different import paths)
+event.is_action_pressed("ui_cancel")
+```
+
+## Migration Workflow
+
+### Before Implementing New Functionality
+**IMPORTANT:** When adding new functionality (as opposed to fixing bugs), always reference the Godot 3 version first. The goal is to match the Godot 3 logic as closely as possible, only adapting the API calls and patterns necessary for Godot 4 compatibility.
+
+**Workflow:**
+1. Locate the corresponding Godot 3 implementation in `/Users/scott/src/github.com/dsrw/enu/src/`
+2. Study the logic, flow, and behavior patterns
+3. Identify which parts need API adaptation for Godot 4
+4. Implement the same logic using Godot 4 patterns from this guide
+5. Preserve the original behavior and user experience
+
+This approach ensures consistency between versions and reduces the risk of introducing unintended behavioral changes during migration.
+
+## Build Validation
+**CRITICAL:** Always ensure `./build.sh` returns exit code 0 before considering any migration task complete. This is the primary success criterion for all code changes.
