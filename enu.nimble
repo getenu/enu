@@ -78,10 +78,7 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
-    let str =
-      &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} dev_build=yes"
-    echo "building: ", str
-    exec str
+    exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} dev_build=yes"
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
