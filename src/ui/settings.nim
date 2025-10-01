@@ -3,9 +3,10 @@ import gdext
 import
   gdext/classes/[
     gdpanelcontainer, gdoptionbutton, gdlineedit, gdmargincontainer, gdtween,
-    gdinputevent, gdscenetree, gdvseparator, gdviewport, gdgridcontainer,
-    gdbutton, gdlabel, gdcontainer, gdinputeventjoypadbutton, gdbasebutton,
-    gdinputeventjoypadmotion, gdpropertytweener, gdcontrol, gdboxcontainer,
+    gdinputevent, gdinputeventmousebutton, gdscenetree, gdvseparator,
+    gdviewport, gdgridcontainer, gdbutton, gdlabel, gdcontainer,
+    gdinputeventjoypadbutton, gdbasebutton, gdinputeventjoypadmotion,
+    gdpropertytweener, gdcontrol, gdboxcontainer,
   ]
 import core, gdcore, models/[colors, serializers]
 
@@ -384,10 +385,6 @@ method ready*(self: Settings) {.gdsync.} =
     "text_submitted", self.callable("_on_server_address_submitted")
   )
 
-  let callable_obj =
-    callable(state.nodes.game, new_string_name("_on_gui_input"))
-  discard self.connect(new_string_name("gui_input"), callable_obj)
-
   self.update_level_list()
   self.update_values()
 
@@ -710,10 +707,15 @@ method process*(self: Settings, delta: float) {.gdsync.} =
       self.left_separator.set_stretch_ratio(0.5)
       self.right_separator.set_stretch_ratio(0.5)
 
-method unhandled_input*(self: Settings, event: InputEvent) {.gdsync.} =
+method gui_input*(self: Settings, event: gdref InputEvent) {.gdsync.} =
+  if event[] of InputEventMouseButton:
+    debug "pushing SettingsFocused", topics = "state"
+    state.push_flags SettingsFocused
+
+method unhandled_input*(self: Settings, event: gdref InputEvent) {.gdsync.} =
   if SettingsFocused in state.local_flags and
-      event.is_action_pressed("ui_cancel"):
-    if not (event of InputEventJoypadButton) or
+      event[].is_action_pressed("ui_cancel"):
+    if not (event[] of InputEventJoypadButton) or
         CommandMode notin state.local_flags:
       if self.state == NewLevel:
         self.on_cancelled()

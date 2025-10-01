@@ -158,6 +158,7 @@ proc watch_panel_states(self: GUI) =
 
 method ready*(self: GUI) {.gdsync.} =
   print("[UI] GUI ready - initializing main UI coordination system")
+  print("[UI] GUI unhandled_input method should be registered for ESC handling")
 
   # Initialize state
   self.delete_timer = MonoTime.high
@@ -192,6 +193,12 @@ method ready*(self: GUI) {.gdsync.} =
       settings_button.connect("pressed", self.callable("_on_settings_opened"))
     print("[UI] Settings button connected to signal handler")
 
+  # Connect focus signals for ViewportFocused management (matches Godot 3)
+  discard self.connect("mouse_entered", self.callable("_on_mouse_entered"))
+  discard self.connect("mouse_exited", self.callable("_on_mouse_exited"))
+  discard self.connect("focus_entered", self.callable("_on_focus_entered"))
+  discard self.connect("focus_exited", self.callable("_on_focus_exited"))
+
   # Set up panel state watching
   self.watch_panel_states()
 
@@ -200,9 +207,19 @@ method ready*(self: GUI) {.gdsync.} =
 
   print("[UI] GUI configured with responsive panels and input handling")
 
+proc on_mouse_entered(self: GUI) {.gdsync, name: "_on_mouse_entered".} =
+  state.push_flags ViewportFocused
+
+proc on_mouse_exited(self: GUI) {.gdsync, name: "_on_mouse_exited".} =
+  state.pop_flags ViewportFocused
+
+proc on_focus_entered(self: GUI) {.gdsync, name: "_on_focus_entered".} =
+  state.push_flags ViewportFocused
+
+proc on_focus_exited(self: GUI) {.gdsync, name: "_on_focus_exited".} =
+  state.pop_flags ViewportFocused
+
 proc on_settings_opened(self: GUI) {.gdsync, name: "_on_settings_opened".} =
-  # Open settings panel
-  print("[UI] Settings button pressed - opening settings panel")
   state.push_flags SettingsVisible
 
 proc update_responsive_design(self: GUI) =
@@ -257,8 +274,9 @@ proc handle_basic_input(self: GUI, event: InputEvent) =
       # state.cycle_tool(-1) - TODO: Add when tool cycling is available
 
 method unhandled_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
-  # Handle global input events and UI navigation
   let event = event[]
+
+  # ESC handling for panels (matches Godot 3 - console handles itself)
   if CommandMode notin state.local_flags and event.is_action_pressed(
     "ui_cancel"
   ) and ViewportFocused in state.local_flags:
@@ -270,6 +288,7 @@ method unhandled_input*(self: GUI, event: gdref InputEvent) {.gdsync.} =
       state.open_unit = nil
     elif DocsFocused in flags:
       state.open_sign = nil
+    # Console handles its own ESC in console.nim
 
   # Forward input to basic handling
   if event.is_class("InputEventKey") or event.is_class("InputEventAction") or

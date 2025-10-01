@@ -794,6 +794,10 @@ method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
 
   let event = event[]
 
+  # Log ui_cancel in game.nim
+  if event.is_action_pressed("ui_cancel"):
+    print("[GAME] ui_cancel pressed - will handle other actions but not ESC")
+
   if event of InputEventKey:
     let event = InputEventKey(event)
     # GD4: TODO - Fix alt key detection (raw_code was enu-specific Godot 3 addition)

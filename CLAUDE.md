@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enu is a 3D sandbox environment for creating and exploring voxel worlds using a Logo-inspired programming API. It's built with Nim and the Godot game engine (v3.5), enabling users to program interactive 3D environments using Nim scripts that run in the Nim VM.
+Enu is a 3D sandbox environment for creating and exploring voxel worlds using a Logo-inspired programming API. It's built with Nim and the Godot game engine, enabling users to program interactive 3D environments using Nim scripts that run in the Nim VM.
+
+**Note:** This is the Godot 4 migration branch. The main branch uses Godot 3.5.
 
 ## Build Commands
 
@@ -71,7 +73,7 @@ Note that some of these are broken during the Godot 3 -> 4 migration. If you nee
 
 **VM Integration**: User scripts run in the Nim VM, isolated from the main application. The VM has access to a curated API through `vmlib/enu/`.
 
-**Godot Binding**: Uses nim-godot with auto-generated bindings from Godot 3.5 API. Generated code uses `camelCase` but project convention is `snake_case`.
+**Godot Binding**: Uses gdext with auto-generated bindings from Godot 4 API. Generated code uses `camelCase` but project convention is `snake_case`.
 
 **Model-View Architecture**:
 - Models handle data and state (using model_citizen library)
@@ -81,7 +83,7 @@ Note that some of these are broken during the Godot 3 -> 4 migration. If you nee
 ### Important Notes
 
 - Always use `snake_case` for naming (despite generated bindings using `camelCase`)
-- Use `nimble build` to verify changes compile correctly
+- Use `./build.sh` to verify changes compile correctly
 - The project uses ZenContext for metrics and threading
 - Scripts are Logo-inspired but use Nim syntax
 - World data is stored as JSON with accompanying Nim scripts
@@ -136,7 +138,7 @@ The `{.gdsync.}` pragma is used specifically for methods that are called by Godo
 # Godot lifecycle methods - MUST use {.gdsync.}
 method ready*(self: MyClass) {.gdsync.} =
 method process*(self: MyClass, delta: float) {.gdsync.} =
-method unhandled_input*(self: MyClass, event: InputEvent) {.gdsync.} =
+method unhandled_input*(self: MyClass, event: gdref InputEvent) {.gdsync.} =
 
 # Godot signal callbacks - MUST use {.gdsync.}
 method pressed*(self: ActionButton) {.gdsync.} =
@@ -145,6 +147,8 @@ method pressed*(self: ActionButton) {.gdsync.} =
 proc setup_ui(self: Game) =
 proc calculate_toolbar_size(self: Game) =
 ```
+
+**CRITICAL**: Input event methods (`gui_input`, `unhandled_input`, `input`) MUST use `gdref InputEvent` and dereference with `[]`. Using plain `InputEvent` will prevent Godot from calling the method. See [GODOT_PORTING.md](GODOT_PORTING.md) for details.
 
 **Rule**: Only use `{.gdsync.}` for methods that Godot calls directly (lifecycle methods, signal callbacks). Internal methods should not use this pragma.
 

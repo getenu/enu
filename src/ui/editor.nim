@@ -3,9 +3,9 @@ import gdext
 import
   gdext/classes/[
     gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventkey,
-    gdinputeventmousebutton, gdcontrol, gdnode, gdvscrollbar, gdtween,
-    gdstyleboxflat, gdbutton, gdinput, gdviewport, gdmethodtweener,
-    gdcodehighlighter,
+    gdinputeventmousebutton, gdinputeventjoypadbutton, gdcontrol, gdnode,
+    gdvscrollbar, gdtween, gdstyleboxflat, gdbutton, gdinput, gdviewport,
+    gdmethodtweener, gdcodehighlighter,
   ]
 import core, gdcore, types, models/[states, units, players]
 import nim_highlighter
@@ -275,12 +275,11 @@ proc on_close(self: EnuEditor) {.gdsync.} =
     state.open_unit = nil
 
 proc on_run(self: EnuEditor) {.gdsync.} =
-  # Run the current code
+  # Run the current code (force re-execution by touching code field)
   if ?state.open_unit:
-    # TODO: Fix Code.init with proper string conversion
+    # Set to empty first to force a change, then set to actual code
+    state.open_unit.code = Code.init("")
     state.open_unit.code = Code.init($self.code_edit.get_text())
-    # TODO: Force code execution when Code.init is fixed
-    # state.open_unit.code = Code.init(self.code_edit.get_text())
 
 proc indent_new_line*(self: EnuEditor) =
   # Smart indentation for new lines (ported from Godot 3)
@@ -312,23 +311,20 @@ method input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
       self.indent_new_line()
 
 method unhandled_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
-  # Handle editor-specific input events
   if EditorFocused in state.local_flags and
       event[].is_action_pressed("ui_cancel"):
-    # Escape key - save and close editor
-    if ?state.open_unit:
-      # TODO: Fix Code.init with proper string conversion
-      state.open_unit.code = Code.init($self.code_edit.get_text())
-      state.open_unit = nil
-    self.get_viewport().set_input_as_handled()
+    if not (event[] of InputEventJoypadButton) or
+        CommandMode notin state.local_flags:
+      if ?state.open_unit:
+        state.open_unit.code = Code.init($self.code_edit.get_text())
+        state.open_unit = nil
+      self.get_viewport().set_input_as_handled()
 
 method gui_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
-  # Handle GUI input for focus management first
   if event[] of InputEventMouseButton:
     debug "pushing EditorFocused", topics = "state"
-    state.push_flag EditorFocused
+    state.push_flags EditorFocused
 
-  # Handle GUI input for the editor
   if event[] of InputEventKey and EditorFocused in state.local_flags:
     let key_event = event[].as(InputEventKey)
     if not key_event.is_pressed():

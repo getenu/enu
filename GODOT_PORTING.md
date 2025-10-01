@@ -224,14 +224,29 @@ let item_text = $self.environments.get_item_text(index.int32)
 ```
 
 ### Input Handling
-**Method name changes:**
+
+**CRITICAL: Input event method signatures must use `gdref InputEvent`**
+
+All input handling methods (`gui_input`, `unhandled_input`, `input`) must use `gdref InputEvent` and dereference with `[]`:
+
 ```nim
 # Godot 3
-event.is_action_pressed("ui_cancel")
+method gui_input*(self: MyClass, event: InputEvent) =
+  if event of InputEventMouseButton:
+    # handle event
 
-# Godot 4 (same API, but different import paths)
-event.is_action_pressed("ui_cancel")
+# Godot 4 - MUST use gdref and dereference
+method gui_input*(self: MyClass, event: gdref InputEvent) {.gdsync.} =
+  if event[] of InputEventMouseButton:
+    let mouse_event = event[].as(InputEventMouseButton)
+    # handle event
+
+method unhandled_input*(self: MyClass, event: gdref InputEvent) {.gdsync.} =
+  if event[].is_action_pressed("ui_cancel"):
+    # handle ESC key
 ```
+
+**Common mistake:** Using `InputEvent` instead of `gdref InputEvent` will prevent the method from being called by Godot's input system.
 
 ## Migration Workflow
 
