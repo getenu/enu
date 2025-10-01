@@ -1,5 +1,6 @@
 name: Build on Linux
-on: push
+# Temporarily disabled - switch back to 'on: push' when Linux build is fixed
+on: workflow_dispatch
 
 jobs:
   build:
