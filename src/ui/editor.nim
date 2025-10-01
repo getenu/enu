@@ -10,14 +10,12 @@ import
 import core, gdcore, types, models/[states, units, players]
 import nim_highlighter
 
-var tween {.threadvar.}: gdref Tween
-
 type EnuEditor* {.gdsync.} =
   ptr object of MarginContainer
     code_edit*: CodeEdit
     # scroll_container: ScrollContainer
     left_panel: Control
-    #ween: gdref Tween
+    tween: gdref Tween
     og_bg_color: Color
     selection_color: Color
     caret_color: Color
@@ -94,14 +92,14 @@ proc open_editor(self: EnuEditor) =
   self.set_visible(true)
 
   # Create tween for smooth slide-in animation (matches Godot 3 behavior)
-  tween = self.create_tween()
-  assert ?tween, "Failed to create tween for editor animation"
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for editor animation"
 
   # Immediate fade in (like Godot 3 tween_property with 0.0 duration)
   discard
-    tween[].tween_property(self, new_node_path("modulate:a"), variant(1.0), 0.0)
+    self.tween[].tween_property(self, new_node_path("modulate:a"), variant(1.0), 0.0)
   # Slide in from left with proper EXPO easing
-  let tweener = tween[].tween_method(
+  let tweener = self.tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(-1.0),
     variant(0.0),
@@ -120,13 +118,13 @@ proc close_editor(self: EnuEditor) =
   self.set_position(vector2(0, self.get_position().y))
 
   # Create tween for smooth slide-out animation (matches Godot 3 behavior)
-  if ?tween:
-    tween[].kill() # Kill existing tween
-  tween = self.create_tween()
-  assert ?tween, "Failed to create tween for editor animation"
+  if ?self.tween:
+    self.tween[].kill() # Kill existing tween
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for editor animation"
 
   # Slide out to the left with proper EXPO easing
-  let tweener = tween[].tween_method(
+  let tweener = self.tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(0.0),
     variant(-1.0),
@@ -135,7 +133,7 @@ proc close_editor(self: EnuEditor) =
   discard tweener[].setTrans(transExpo)
   discard tweener[].setEase(easeInOut)
   # Hide editor after animation completes
-  discard tween[].tween_callback(
+  discard self.tween[].tween_callback(
     callable(self, new_string_name("set_visible")).bind(variant(false))
   )
   print("[UI] Editor closed with slide-out animation (EXPO/EASE_IN_OUT)")

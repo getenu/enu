@@ -11,62 +11,66 @@ import std/strutils
 type Console* {.gdsync.} =
   ptr object of RichTextLabel
     default_mouse_filter: int64
-    tween:
-      gdref Tween # GD4: Re-enabled with correct import (was SceneTreeTween)
+    tween: gdref Tween
 
 proc watch_states(self: Console)
 
-proc offset_x*(self: Console, offset: float) =
-  # Position override disabled - keeping for compatibility but not using
-  # let width = self.get_size().x
-  # self.set_position(vector2(width * offset, self.get_position().y))
-  discard
+proc offset_x*(self: Console, offset: float) {.gdsync.} =
+  # Move console horizontally based on offset (1.0 = off-screen right, 0.0 = visible)
+  let width = self.get_size().x
+  let new_position = vector2(width * offset, self.get_position().y)
+  self.set_position(new_position)
 
 proc show_console(self: Console) =
-  # Modulation and animations disabled - just set visibility
-  # # Set appropriate opacity based on state
-  # if CommandMode in state.local_flags:
-  #   self.set_modulate(dimmed_alpha)
-  # else:
-  #   self.set_modulate(color(1.0, 1.0, 1.0, 1.0))
+  print("[UI] Console showing...")
 
-  # # GD4: Re-enabled SceneTreeTween animations
-  # # Kill existing tween
-  # if ?self.tween:
-  #   self.tween[].kill()
-  #
-  # self.tween = self.create_tween()
-  #
-  # # Animate sliding in from right
-  # discard self.tween[].tween_method(
-  #   callable(self, "offset_x"), variant(-1.0), variant(0.0), animation_duration
-  # )
-  # discard self.tween[].set_trans(transExpo)
-  # discard self.tween[].set_ease(easeInOut)
-
+  # Start console off-screen (hidden to the right)
+  self.offset_x(1.0) # Start off-screen
   self.set_visible(true)
 
-proc hide_console(self: Console) =
-  # Animations disabled - just hide
-  # # GD4: Re-enabled SceneTreeTween animations
-  # # Kill existing tween
-  # if ?self.tween:
-  #   self.tween[].kill()
-  #
-  # self.tween = self.create_tween()
-  # self.set_position(vector2(0.0, self.get_position().y))
-  #
-  # # Animate sliding out to right
-  # discard self.tween[].tween_method(
-  #   callable(self, "offset_x"), variant(0.0), variant(-1.0), animation_duration
-  # )
-  # discard self.tween[].set_trans(transExpo)
-  # discard self.tween[].set_ease(easeInOut)
-  #
-  # # Hide when animation complete
-  # discard self.tween[].tween_callback(callable(self, "set_visible").bind(false))
+  # Create tween for smooth slide-in animation (from right)
+  if ?self.tween:
+    self.tween[].kill()
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for console animation"
 
-  self.set_visible(false)
+  # Slide in from right with proper EXPO easing
+  discard self.tween[].tween_method(
+    callable(self, new_string_name("offset_x")),
+    variant(1.0),
+    variant(0.0),
+    animation_duration,
+  )
+  discard self.tween[].setTrans(transExpo)
+  discard self.tween[].setEase(easeInOut)
+  print("[UI] Console opened with slide-in animation (EXPO/EASE_IN_OUT)")
+
+proc hide_console(self: Console) =
+  print("[UI] Console hiding...")
+
+  # Reset position and animate slide-out
+  self.set_position(vector2(0, self.get_position().y))
+
+  # Create tween for smooth slide-out animation (to right)
+  if ?self.tween:
+    self.tween[].kill() # Kill existing tween
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for console animation"
+
+  # Slide out to the right with proper EXPO easing
+  discard self.tween[].tween_method(
+    callable(self, new_string_name("offset_x")),
+    variant(0.0),
+    variant(1.0),
+    animation_duration,
+  )
+  discard self.tween[].setTrans(transExpo)
+  discard self.tween[].setEase(easeInOut)
+  # Hide console after animation completes
+  discard self.tween[].tween_callback(
+    callable(self, new_string_name("set_visible")).bind(variant(false))
+  )
+  print("[UI] Console closed with slide-out animation (EXPO/EASE_IN_OUT)")
 
 method ready*(self: Console) {.gdsync.} =
   print(
@@ -87,11 +91,9 @@ method ready*(self: Console) {.gdsync.} =
   # GD4: Re-enabled state watching
   self.watch_states()
 
-  # Set initial visibility
+  # Set initial visibility - start hidden
   if ConsoleVisible notin state.local_flags:
-    # Modulation disabled - just hide
-    # self.set_modulate(color(1.0, 1.0, 1.0, 0.0))
-    self.hide_console()
+    self.set_visible(false)
 
   # Modulation disabled - scrollbar remains visible
   # # Configure scrollbar appearance
