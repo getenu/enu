@@ -16,9 +16,14 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme = ExtResource("2")
+focus_mode = 2
+mouse_filter = 1
 drag_and_drop_selection_enabled = false
 caret_blink = true
 line_folding = true
+indent_size = 2
+indent_use_spaces = true
+indent_automatic = false
 delimiter_strings = Array[String]([])
 
 [node name="GridContainer" type="GridContainer" parent="."]

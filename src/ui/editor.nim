@@ -254,6 +254,9 @@ method ready*(self: EnuEditor) {.gdsync.} =
     else:
       print("[UI] Warning: Button '", name, "' not found in Editor scene")
 
+  # Enable input processing to intercept keyboard events
+  self.set_process_input(true)
+
   # GD4: Re-enabled GUI input focus management - handled in gui_input method
 
   # Start watching state changes
@@ -299,6 +302,9 @@ proc on_run(self: EnuEditor) {.gdsync.} =
 
 proc indent_new_line*(self: EnuEditor) =
   # Smart indentation for new lines (ported from Godot 3)
+  # Note: CodeEdit's built-in auto-indent handles maintaining current indentation.
+  # This only handles special cases where we need extra indentation beyond what
+  # the built-in system provides (e.g., after 'var', 'let', 'const', 'type' keywords).
   let column = int(self.code_edit.get_caret_column()) - 1
   if column > 0:
     let
@@ -308,23 +314,20 @@ proc indent_new_line*(self: EnuEditor) =
       stripped = line_segment.strip()
 
     if stripped.len > 0:
-      let last_char = $stripped[stripped.high]
-
-      if (stripped in ["var", "let", "const", "type"]) or last_char in [
-        ":", "="
-      ]:
+      # Check if we need to add extra indentation for Nim-specific keywords
+      # CodeEdit's indent_automatic_prefixes handles ":" and "=" already
+      if stripped in ["var", "let", "const", "type"]:
+        # Add extra indentation level
         let spaces = " ".repeat(line_segment.indentation + 2)
         self.code_edit.insert_text_at_caret("\n" & spaces)
         self.get_viewport().set_input_as_handled()
-      else:
-        # Just insert a normal newline
-        self.code_edit.insert_text_at_caret("\n")
-    else:
-      # Just insert a normal newline
-      self.code_edit.insert_text_at_caret("\n")
-  else:
-    # Just insert a normal newline
-    self.code_edit.insert_text_at_caret("\n")
+
+method input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
+  # Process input events before children (like CodeEdit) handle them
+  if event[] of InputEventKey and EditorFocused in state.local_flags:
+    let key_event = event[].as(InputEventKey)
+    if key_event.is_pressed() and key_event.get_keycode() == keyEnter:
+      self.indent_new_line()
 
 method unhandled_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
   # Handle editor-specific input events
@@ -351,9 +354,7 @@ method gui_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
 
     case key_event.get_keycode()
     of keyEnter:
-      # Smart indentation on Enter
       self.indent_new_line()
-      self.get_viewport().set_input_as_handled()
     of keySemicolon:
       # Optional: semicolon as colon for Logo-style syntax
       if state.config.semicolon_as_colon:
