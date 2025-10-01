@@ -1,3 +1,7 @@
+# NOTE: Godot 4 adds infinite loop protection to retry_failed_scripts with
+# max_retries limit and associated logging. This prevents hangs when script
+# loading is broken.
+
 import std/[os, re, posix]
 
 import gdext
