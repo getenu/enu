@@ -1,12 +1,11 @@
-[submodule "vendor/godot_voxel"]
-	path = vendor/modules/voxel
-	url = https://github.com/getenu/godot_voxel.git
-	branch = master
 [submodule "vendor/godot"]
 	path = vendor/godot
-	url = https://github.com/getenu/godot.git
-	branch = enu
-	ignore = untracked
+	url = https://github.com/godotengine/godot.git
+	branch = 4.4.1-stable
+[submodule "vendor/godot_voxel"]
+	path = vendor/modules/voxel
+	url = https://github.com/Zylann/godot_voxel.git
+	branch = master
 [submodule "vendor/pcre"]
 	path = vendor/pcre
 	url = https://github.com/luvit/pcre

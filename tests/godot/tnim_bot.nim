@@ -1,7 +1,7 @@
 import godot
 import godotapi/[objects]
 import engine/[engine, contexts]
-import core, world/bot_node, gdutils
+import core, world/bot_node, gdcore
 import os
 include helper
 import compiler/[vm, vmdef, options, lineinfos, ast, astalgo, renderer]

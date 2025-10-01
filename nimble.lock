@@ -1,0 +1,381 @@
+{
+  "version": 2,
+  "packages": {
+    "unittest2": {
+      "version": "0.2.4",
+      "vcsRevision": "8b51e99b4a57fcfb31689230e75595f024543024",
+      "url": "https://github.com/status-im/nim-unittest2",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "746106a4dfefffce497f1693733f1c1513b5c62c"
+      }
+    },
+    "bearssl": {
+      "version": "0.2.6",
+      "vcsRevision": "11e798b62b8e6beabe958e048e9e24c7e0f9ee63",
+      "url": "https://github.com/status-im/nim-bearssl",
+      "downloadMethod": "git",
+      "dependencies": [
+        "unittest2"
+      ],
+      "checksums": {
+        "sha1": "7e068f119664cf47ad0cfb74ef4c56fb6b616523"
+      }
+    },
+    "chroma": {
+      "version": "1.0.0",
+      "vcsRevision": "8bf4a0933ff405f83dc3a176199f528601e5b796",
+      "url": "https://github.com/treeform/chroma",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "76a12834f1b7e211e4232c1e13960accba6bd477"
+      }
+    },
+    "results": {
+      "version": "0.5.1",
+      "vcsRevision": "df8113dda4c2d74d460a8fa98252b0b771bf1f27",
+      "url": "https://github.com/arnetheduck/nim-results",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "a9c011f74bc9ed5c91103917b9f382b12e82a9e7"
+      }
+    },
+    "stew": {
+      "version": "0.4.1",
+      "vcsRevision": "e5740014961438610d336cd81706582dbf2c96f0",
+      "url": "https://github.com/status-im/nim-stew",
+      "downloadMethod": "git",
+      "dependencies": [
+        "results",
+        "unittest2"
+      ],
+      "checksums": {
+        "sha1": "996d9c058ee078d0209a5f539424a0235683918c"
+      }
+    },
+    "faststreams": {
+      "version": "0.4.1",
+      "vcsRevision": "c3ac3f639ed1d62f59d3077d376a29c63ac9750c",
+      "url": "https://github.com/status-im/nim-faststreams",
+      "downloadMethod": "git",
+      "dependencies": [
+        "stew",
+        "unittest2"
+      ],
+      "checksums": {
+        "sha1": "e2d03280cf0675314136e6e63d9d928d9dfc9705"
+      }
+    },
+    "serialization": {
+      "version": "0.4.9",
+      "vcsRevision": "b5193007a49639b21b2b80cd8ef8cbe0df6b0e48",
+      "url": "https://github.com/status-im/nim-serialization",
+      "downloadMethod": "git",
+      "dependencies": [
+        "faststreams",
+        "unittest2",
+        "stew"
+      ],
+      "checksums": {
+        "sha1": "ab0812a7e16ae39ee68f4a6b1938a1b83dee34be"
+      }
+    },
+    "json_serialization": {
+      "version": "0.4.2",
+      "vcsRevision": "e076cb9a2dff30e13aad0bb4a13049da86d07967",
+      "url": "https://github.com/status-im/nim-json-serialization",
+      "downloadMethod": "git",
+      "dependencies": [
+        "serialization",
+        "stew",
+        "results"
+      ],
+      "checksums": {
+        "sha1": "2b26a9e0fc79638dbb9272fb4ab5a1d79264f938"
+      }
+    },
+    "testutils": {
+      "version": "0.8.0",
+      "vcsRevision": "e4d37dc1652d5c63afb89907efb5a5e812261797",
+      "url": "https://github.com/status-im/nim-testutils",
+      "downloadMethod": "git",
+      "dependencies": [
+        "unittest2"
+      ],
+      "checksums": {
+        "sha1": "d1678f50aa47d113b4e77d41eec2190830b523fa"
+      }
+    },
+    "chronicles": {
+      "version": "0.12.2",
+      "vcsRevision": "27ec507429a4eb81edc20f28292ee8ec420be05b",
+      "url": "https://github.com/status-im/nim-chronicles",
+      "downloadMethod": "git",
+      "dependencies": [
+        "faststreams",
+        "serialization",
+        "json_serialization",
+        "testutils"
+      ],
+      "checksums": {
+        "sha1": "02febb20d088120b2836d3306cfa21f434f88f65"
+      }
+    },
+    "httputils": {
+      "version": "0.3.0",
+      "vcsRevision": "79cbab1460f4c0cdde2084589d017c43a3d7b4f1",
+      "url": "https://github.com/status-im/nim-http-utils",
+      "downloadMethod": "git",
+      "dependencies": [
+        "stew",
+        "results",
+        "unittest2"
+      ],
+      "checksums": {
+        "sha1": "cd92ac3eaa067eb641429d4325d926bc0f7786a9"
+      }
+    },
+    "chronos": {
+      "version": "4.0.4",
+      "vcsRevision": "0646c444fce7c7ed08ef6f2c9a7abfd172ffe655",
+      "url": "https://github.com/status-im/nim-chronos",
+      "downloadMethod": "git",
+      "dependencies": [
+        "results",
+        "stew",
+        "bearssl",
+        "httputils",
+        "unittest2"
+      ],
+      "checksums": {
+        "sha1": "455802a90204d8ad6b31d53f2efff8ebfe4c834a"
+      }
+    },
+    "cligen": {
+      "version": "1.9.2",
+      "vcsRevision": "c41e6e8af33d89d13ade880f65eda45f5be5595c",
+      "url": "https://github.com/c-blake/cligen.git",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "b1e805469f9b5f6055db1e712bb156817d1b3961"
+      }
+    },
+    "dotenv": {
+      "version": "2.0.2",
+      "vcsRevision": "a3c6726147276ea1447dee292fd27bb036242b78",
+      "url": "https://github.com/euantorano/dotenv.nim",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "1e70fc63c286ca3da7592d61dbe501fcea35bc72"
+      }
+    },
+    "flatty": {
+      "version": "0.3.4",
+      "vcsRevision": "07f6ba8ab96238e5bd1264cf0cea1d1746abb00c",
+      "url": "https://github.com/treeform/flatty",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "5775e6ea6ca339efc5bd37b082b8294342d49dc5"
+      }
+    },
+    "fusion": {
+      "version": "1.2",
+      "vcsRevision": "0b0a0273b8df860cd54e3fcca7bb4c617244ac77",
+      "url": "https://github.com/nim-lang/fusion",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "408bde8679bce63dfb6f424e107eb37c5eb31510"
+      }
+    },
+    "gdext": {
+      "version": "0.15.0",
+      "vcsRevision": "941d09362c2ec4d382510419bbd5075360f0c2a1",
+      "url": "https://github.com/godot-nim/gdext-nim",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "8d3a0b86674bf6be732fcf22d6fb0ef0bacebe83"
+      }
+    },
+    "jsony": {
+      "version": "1.1.5",
+      "vcsRevision": "ea811bec7fa50f5abd3088ba94cda74285e93f18",
+      "url": "https://github.com/treeform/jsony",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "6aeb83e7481ca8686396a568096054bc668294df"
+      }
+    },
+    "markdown": {
+      "version": "0.8.8",
+      "vcsRevision": "5a7a7bafd1da23b25332316a7b888e6586f4177a",
+      "url": "https://github.com/soasme/nim-markdown",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "a59d1205efe2e0bbc3657481e188ce7e7de3d943"
+      }
+    },
+    "metrics": {
+      "version": "0.0.1",
+      "vcsRevision": "51f1227d0fd04ce84b1ef784b11280cb7875348c",
+      "url": "https://github.com/status-im/nim-metrics",
+      "downloadMethod": "git",
+      "dependencies": [
+        "chronos"
+      ],
+      "checksums": {
+        "sha1": "948aaca1763c838a7752251bab9a8bcfda66acfe"
+      }
+    },
+    "pretty": {
+      "version": "0.2.0",
+      "vcsRevision": "9e770046c5cdf23d395d6b21c4657345481b1c76",
+      "url": "https://github.com/treeform/pretty",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "9929e14b867e54ae38ddb6ae27ab32fafae4be59"
+      }
+    },
+    "threading": {
+      "version": "0.2.1",
+      "vcsRevision": "c5a39a039f24d48ba9503dcb9a0aee68a0fbb36d",
+      "url": "https://github.com/nim-lang/threading",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "6904743cf079e9715f15a1e9e84c8187113ce1f4"
+      }
+    },
+    "netty": {
+      "version": "0.2.1",
+      "vcsRevision": "7b4266458b7435349b28a4468e0af58f1674b198",
+      "url": "https://github.com/treeform/netty/",
+      "downloadMethod": "git",
+      "dependencies": [
+        "flatty"
+      ],
+      "checksums": {
+        "sha1": "c7271855fd2d9f81a55f6705d8d0c2efdc055b41"
+      }
+    },
+    "supersnappy": {
+      "version": "2.1.3",
+      "vcsRevision": "e4df8cb5468dd96fc5a4764028e20c8a3942f16a",
+      "url": "https://github.com/guzba/supersnappy",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "36a05ee6befe3764ed8e2a6fb5d0882c2fd090f8"
+      }
+    },
+    "nanoid": {
+      "version": "0.2.1",
+      "vcsRevision": "bbbf8f5ac6e1ee7fa088d648cc29ade859c0bc05",
+      "url": "https://github.com/dsrw/nanoid.nim",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "c57bbe7a154c4dbaddc88fb973799a97d9a5e058"
+      }
+    },
+    "model_citizen": {
+      "version": "0.19.6",
+      "vcsRevision": "11390435bdcc2d461c90fd60ba2b4b385cabec71",
+      "url": "https://github.com/getenu/model_citizen",
+      "downloadMethod": "git",
+      "dependencies": [
+        "pretty",
+        "threading",
+        "chronicles",
+        "flatty",
+        "netty",
+        "supersnappy",
+        "nanoid",
+        "metrics"
+      ],
+      "checksums": {
+        "sha1": "38138100d3d3dc0aabd4be02e023a85ab9000c23"
+      }
+    },
+    "mustache": {
+      "version": "0.4.3",
+      "vcsRevision": "1677949a848fc126a0716a67bba2c6217205255c",
+      "url": "https://github.com/soasme/nim-mustache",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "9c7e49440ae9bb6494bd202eea6ef7405811c6bb"
+      }
+    },
+    "nim": {
+      "version": "2.2.4",
+      "vcsRevision": "7483e78e43077d22d3d98974a36b28f8eb5b2e83",
+      "url": "https://github.com/dsrw/Nim",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "6e6fb49725f2f5cca259bd5a5ec5710449e1c3ea"
+      }
+    },
+    "parsetoml": {
+      "version": "0.7.2",
+      "vcsRevision": "d297f5a81be2472905d367aa675dcbbca6e7a5d2",
+      "url": "https://github.com/NimParsers/parsetoml.git",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "2a9fb57ef1f6460fd61b1cfab2d83af44f788a25"
+      }
+    },
+    "nimib": {
+      "version": "0.3.12",
+      "vcsRevision": "54541820232ee41cfa719fac002c718f5e7d628d",
+      "url": "https://github.com/pietroppeter/nimib",
+      "downloadMethod": "git",
+      "dependencies": [
+        "fusion",
+        "markdown",
+        "mustache",
+        "parsetoml",
+        "jsony"
+      ],
+      "checksums": {
+        "sha1": "f905e5b5233411fc4608f27187da5726976f28ab"
+      }
+    },
+    "nimibook": {
+      "version": "0.3.1",
+      "vcsRevision": "1405553199b12915a502df8b871ffe86dcfc5e91",
+      "url": "https://github.com/pietroppeter/nimibook",
+      "downloadMethod": "git",
+      "dependencies": [
+        "nimib",
+        "jsony"
+      ],
+      "checksums": {
+        "sha1": "06712caa40fe85d8b150e04e4eb9c7d9955f4bbe"
+      }
+    },
+    "zippy": {
+      "version": "0.10.16",
+      "vcsRevision": "a99f6a7d8a8e3e0213b3cad0daf0ea974bf58e3f",
+      "url": "https://github.com/guzba/zippy",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "da3bb5ea388f980babcc29760348e2899d29a639"
+      }
+    }
+  },
+  "tasks": {}
+}

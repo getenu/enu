@@ -1,54 +1,113 @@
+import gdext
 import
-  godotapi/[
-    viewport, camera, mesh_instance, material, camera, viewport_texture, image,
-    resource_loader
+  gdext/classes/[
+    gdviewport, gdsubviewport, gdcamera3d, gdmeshinstance3d, gdmaterial,
+    gdnode3d, gdimage, gdresourceloader, gdviewporttexture,
   ]
-import godot
-import ".."/[core, gdutils]
+import core, gdcore
 
-gdobj PreviewMaker of Viewport:
-  var
-    camera: Camera
-    cube: MeshInstance
-    bot: Spatial
-    callback: proc(img: Image) {.gcsafe.}
-    skip_next = false
+type
+  SubViewport_UpdateMode* {.size: sizeof(cint).} = enum
+    updateDisabled = 0
+    updateOnce = 1
+    updateWhenVisible = 2
+    updateWhenParentVisible = 3
+    updateAlways = 4
 
-  method ready*() =
-    self.camera = self.find_node("Camera") as Camera
-    self.cube = self.find_node("Cube") as MeshInstance
-    self.bot = self.find_node("bot") as Spatial
-    assert not self.camera.is_nil
-    assert not self.cube.is_nil
-    assert not self.bot.is_nil
+  PreviewMaker* {.gdsync.} =
+    ptr object of SubViewport
+      camera: Camera3D
+      cube: MeshInstance3D
+      bot: Node3D
+      callback: proc(img: gdref Image) {.gcsafe.}
+      skip_next: bool
 
-  method process*(delta: float) =
-    if not self.skip_next and not self.callback.is_nil:
-      let image = self.get_texture().get_data()
-      self.callback(image)
-      self.callback = nil
-    self.skip_next = false
+method ready*(self: PreviewMaker) {.gdsync.} =
+  print("[UI] PreviewMaker ready - initializing preview generation system")
 
-  proc generate_block_preview*(
-      material_name: string, callback: proc(preview: Image) {.gcsafe.}
-  ) =
-    let material = load(\"res://materials/{material_name}.tres") as Material
-    self.cube.visible = true
-    self.bot.visible = false
-    self.cube.set_surface_material(0, material)
-    self.render_target_update_mode = UPDATE_ONCE
-    self.camera.fov = 1
-    self.camera.look_at vec3(), UP
-    self.callback = callback
-    self.skip_next = true
+  self.camera = self.find_child("Camera3D", false, false).as(Camera3D)
+  self.cube = self.find_child("Cube", false, false).as(MeshInstance3D)
+  self.bot = self.find_child("bot", false, false).as(Node3D)
 
-  proc generate_object_preview*(
-      object_name: string, callback: proc(preview: Image) {.gcsafe.}
-  ) =
-    self.cube.visible = false
-    self.bot.visible = true
-    self.render_target_update_mode = UPDATE_ONCE
-    self.camera.fov = 1.2
-    self.camera.look_at vec3(), UP
-    self.callback = callback
-    self.skip_next = true
+  # Add assertions to fail early if required nodes are missing
+  assert ?self.camera,
+    "[UI] FATAL: Camera3D not found in PreviewMaker scene - preview generation will not work"
+  assert ?self.cube,
+    "[UI] FATAL: Cube MeshInstance3D not found in PreviewMaker scene - block previews will not work"
+  assert ?self.bot,
+    "[UI] FATAL: bot Node3D not found in PreviewMaker scene - object previews will not work"
+
+  print(
+    "[UI] ✓ PreviewMaker initialized successfully with all required nodes"
+  )
+
+method process*(self: PreviewMaker, delta: float64) {.gdsync.} =
+  if not self.skip_next and ?self.callback:
+    # GD4: Get viewport texture and extract image data
+    let texture = self.get_texture().as(gdref ViewportTexture)
+    if ?texture:
+      let image = texture[].get_image()
+      if ?image:
+        self.callback(image)
+        print("[UI] ✓ PreviewMaker: Successfully extracted image")
+      else:
+        print("[UI] ✗ PreviewMaker: Failed to get image from texture")
+    else:
+      print("[UI] ✗ PreviewMaker: Failed to get viewport texture")
+    self.callback = nil
+  self.skip_next = false
+
+proc generate_block_preview*(
+    self: PreviewMaker,
+    material_name: string,
+    callback: proc(preview: gdref Image) {.gcsafe.},
+) =
+  print("[UI] Generating block preview for material: ", material_name)
+
+  # GD4: Load material resource
+  let material_path = "res://materials/" & material_name & ".tres"
+  let material = ResourceLoader.load(material_path).as(gdref Material)
+
+  if not ?material:
+    print("[UI] ✗ Failed to load material: ", material_path)
+    return
+
+  # Set up scene for block preview
+  self.cube.set_visible(true)
+  self.bot.set_visible(false)
+  self.cube.set_surface_override_material(0, material)
+
+  # GD4: Force a single frame render
+  self.render_target_update_mode = update_once
+
+  # Configure camera for block preview
+  if ?self.camera:
+    self.camera.set_fov(1.0)
+    # GD4: look_at syntax changed
+    self.camera.look_at(vector3(0, 0, 0), vector3(0, 1, 0))
+
+  self.callback = callback
+  self.skip_next = true
+
+proc generate_object_preview*(
+    self: PreviewMaker,
+    object_name: string,
+    callback: proc(preview: gdref Image) {.gcsafe.},
+) =
+  print("[UI] Generating object preview for: ", object_name)
+
+  # Set up scene for object preview
+  self.cube.set_visible(false)
+  self.bot.set_visible(true)
+
+  # GD4: Force a single frame render
+  self.render_target_update_mode = update_once
+
+  # Configure camera for object preview
+  if ?self.camera:
+    self.camera.set_fov(1.2)
+    # GD4: look_at syntax changed
+    self.camera.look_at(vector3(0, 0, 0), vector3(0, 1, 0))
+
+  self.callback = callback
+  self.skip_next = true

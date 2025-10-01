@@ -1,6 +1,6 @@
 import std/[tables, typetraits]
-import pkg/godot except print
-import godotapi/[node, spatial]
+import gdext
+import gdext/classes/[gdnode, gdnode3d]
 import core, models, nodes/[bot_node, build_node, sign_node, player_node]
 
 proc remove_from_scene(unit: Unit) =

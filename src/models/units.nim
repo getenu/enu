@@ -1,6 +1,7 @@
 import std/[os, with, tables]
-import godotapi/spatial
-from pkg/core/godotcoretypes import Basis
+import gdext
+import gdext/classes/gdnode3d
+# from pkg/core/godotcoretypes import Basis
 import core, models/[states, colors], libs/interpreters
 
 proc fix_parents*(self: Unit, parent: Unit) =

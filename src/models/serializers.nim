@@ -1,4 +1,4 @@
-import std/[json, jsonutils, sugar, tables, strutils, os, times, algorithm]
+import std/[json, jsonutils, sugar, tables, strutils, os, times, algorithm, strformat]
 import pkg/zippy/ziparchives_v1
 import core except to_json
 import models
@@ -35,12 +35,17 @@ proc from_json_hook(self: var VoxelInfo, json: JsonNode) =
   self.color = json[1].json_to(Color)
 
 proc to_json_hook(self: Vector3): JsonNode =
-  %[self.x, self.y, self.z]
+  %[self[0], self[1], self[2]]
 
 proc from_json_hook(self: var Vector3, json: JsonNode) =
-  self.x = json[0].get_float
-  self.y = json[1].get_float
-  self.z = json[2].get_float
+  self[0] = json[0].get_float
+  self[1] = json[1].get_float
+  self[2] = json[2].get_float
+
+proc from_json_hook(self: var Basis, json: JsonNode) =
+  self.x = json[0].json_to(Vector3)
+  self.y = json[1].json_to(Vector3)
+  self.z = json[2].json_to(Vector3)
 
 proc from_json_hook(
     self: var ZenTable[Vector3, VoxelInfo], json: JsonNode
@@ -67,22 +72,15 @@ proc from_json_hook(
       locations[location] = info
       self[id] = locations
 
-proc from_json_hook(self: var Transform, json: JsonNode) =
-  self = Transform.init(origin = json["origin"].json_to(Vector3))
-  let elements =
-    if json["basis"].kind == JObject:
-      # old way
-      json["basis"]["elements"]
-    else:
-      # new way
-      json["basis"]
-  self.basis.elements.from_json(elements)
+proc from_json_hook(self: var Transform3D, json: JsonNode) =
+  self = Transform3D.init(origin = json["origin"].json_to(Vector3))
+  self.basis = json["basis"].json_to(Basis)
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
   self = Build.init(
     id = json["id"].json_to(string),
-    transform = json["start_transform"].json_to(Transform),
+    transform = json["start_transform"].json_to(Transform3D),
     color = color,
   )
 
@@ -96,7 +94,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
 proc from_json_hook(self: var Bot, json: JsonNode) =
   self = Bot.init(
     id = json["id"].json_to(string),
-    transform = json["start_transform"].json_to(Transform),
+    transform = json["start_transform"].json_to(Transform3D),
   )
 
   if not load_chunks:
@@ -109,10 +107,11 @@ proc `$`(self: VoxelInfo): string =
   \"[{self.kind.ord}, \"{self.color}\"]"
 
 proc `$`(self: Vector3): string =
-  \"[{self.x}, {self.y}, {self.z}]"
+  \"[{self[0]}, {self[1]}, {self[2]}]"
 
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
-  \"[{self.voxel}, [{int self.info.kind}, {self.info.color}]]"
+  # ???: `$self.voxel` formats as an array, but `&"{self.voxel}"` is a tuple.
+  \"[{$self.voxel}, [{int self.info.kind}, {self.info.color}]]"
 
 proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   let edits = collect:
@@ -126,7 +125,11 @@ proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
-  let elements = self.start_transform.basis.elements.map_it($it).join(",\n")
+  let elements = [
+    $self.start_transform.basis.x,
+    $self.start_transform.basis.y,
+    $self.start_transform.basis.z,
+  ].join(",\n")
   let edits = $self.shared.edits
   result =
     \"""
@@ -191,8 +194,10 @@ proc backup_level*(level_dir: string) =
     create_zip_archive(level_dir, backup_file)
 
 proc load_units(parent: Unit) =
+  info "load_units called", parent_is_nil = parent.is_nil
   let opts = JOptions(allow_missing_keys: true)
   let path = if ?parent: parent.data_dir else: state.config.data_dir
+  info "Scanning for units in", path = path
   for dir in walk_dirs(path / "*"):
     let unit_id = dir.split_path.tail
     let file_name = dir / unit_id & ".json"
@@ -220,11 +225,14 @@ proc load_units(parent: Unit) =
         Build(unit).restore_edits
 
       if file_exists(unit.script_ctx.script):
+        info "Setting code for unit", unit_id = unit.id
         unit.code = Code.init(read_file(unit.script_ctx.script))
+        info "Code set for unit", unit_id = unit.id
       else:
         unit.global_flags -= ScriptInitializing
     except Exception as e:
-      error "Failed to load unit", unit_id, error = e[]
+      error "Failed to load unit", unit_id, error = e
+  info "load_units completed"
 
 proc load_user_config*(dir = ""): UserConfig =
   var work_dir = dir
@@ -251,67 +259,95 @@ proc save_user_config*(config: UserConfig) =
   write_file(config_file, jsonutils.to_json(config).pretty)
 
 proc change_loaded_level*(level, world: string) =
-  var config = state.config
-  config.world = world
-  config.level = level
-  state.level_name = config.world & "/" & config.level
-  config.world_dir = join_path(config.work_dir, config.world)
-  config.level_dir = join_path(config.world_dir, config.level)
-  state.config = config
+  try:
+    info "[LEVEL] Changing level to: ", level = level, world = world
+    var config = state.config
+    config.world = world
+    config.level = level
+    state.level_name = config.world & "/" & config.level
+    config.world_dir = join_path(config.work_dir, config.world)
+    config.level_dir = join_path(config.world_dir, config.level)
+    state.config = config
+    info "[LEVEL] Level change completed successfully"
+  except Exception as e:
+    error "[LEVEL] Error changing level", error = e.msg
+    raise
 
 proc unload_level*(worker: Worker) =
-  state.global_flags += LoadingLevel
-  state.push_flag LoadingScript
-  state.pop_flag Playing
-  state.units.clear_all
-  state.pop_flag LoadingScript
-  state.global_flags -= LoadingLevel
+  try:
+    info "[LEVEL] Starting level unload"
+    state.global_flags += LoadingLevel
+    state.push_flag LoadingScript
+    state.pop_flag Playing
+    state.units.clear_all
+    state.pop_flag LoadingScript
+    state.global_flags -= LoadingLevel
+    info "[LEVEL] Level unload completed"
+  except Exception as e:
+    error "[LEVEL] Error during level unload", error = e.msg
+    # Ensure flags are cleaned up even if unload fails
+    state.pop_flag LoadingScript
+    state.global_flags -= LoadingLevel
+    raise
 
 proc load_level*(worker: Worker, level_dir: string) =
-  state.global_flags += LoadingLevel
-  state.push_flag LoadingScript
-  var config = state.config
+  try:
+    info "[LEVEL] Starting level load", level_dir = level_dir
+    state.global_flags += LoadingLevel
+    state.push_flag LoadingScript
+    var config = state.config
 
-  config.level_dir = level_dir
-  config.data_dir = join_path(config.level_dir, "data")
-  config.script_dir = join_path(config.level_dir, "scripts")
+    config.level_dir = level_dir
+    config.data_dir = join_path(config.level_dir, "data")
+    config.script_dir = join_path(config.level_dir, "scripts")
 
-  let level_file = level_dir / "level.json"
+    let level_file = level_dir / "level.json"
 
-  if not file_exists(level_file):
-    let
-      base = config.lib_dir / "worlds" / config.world
-      level = base / config.level
-      tmpl = base / "template"
+    if not file_exists(level_file):
+      let
+        base = config.lib_dir / "worlds" / config.world
+        level = base / config.level
+        tmpl = base / "template"
 
-    if dir_exists(level):
-      copy_dir(level, config.level_dir)
-    elif dir_exists(config.world_dir / "template"):
-      copy_dir(config.world_dir / "template", config.level_dir)
-    elif dir_exists(tmpl):
-      copy_dir(tmpl, config.level_dir)
+      if dir_exists(level):
+        copy_dir(level, config.level_dir)
+      elif dir_exists(config.world_dir / "template"):
+        copy_dir(config.world_dir / "template", config.level_dir)
+      elif dir_exists(tmpl):
+        copy_dir(tmpl, config.level_dir)
 
-  create_dir(config.data_dir)
-  create_dir(config.script_dir)
+    create_dir(config.data_dir)
+    create_dir(config.script_dir)
 
-  state.config = config
+    state.config = config
 
-  debug "loading ", level_file
-  if file_exists(level_file):
-    try:
-      let level_json = read_file(level_file)
-      let level = level_json.parse_json.json_to(LevelInfo)
-      load_chunks = level.format_version == "v0.9"
-    except Exception as e:
-      error "Failed to load level", error = e[]
+    info "loading ", level_file
+    if file_exists(level_file):
+      try:
+        let level_json = read_file(level_file)
+        let level = level_json.parse_json.json_to(LevelInfo)
+        load_chunks = level.format_version == "v0.9"
+      except Exception as e:
+        error "Failed to load level", error = e[]
 
-  dont_join = true
-  worker.retry_failures = true
-  load_units(nil)
-  worker.retry_failed_scripts()
-  worker.retry_failures = false
-  dont_join = false
-  for unit in state.units:
-    unit.global_flags -= Dirty
-  state.pop_flag LoadingScript
-  state.global_flags -= LoadingLevel
+    dont_join = true
+    worker.retry_failures = true
+    info "Loading units..."
+    load_units(nil)
+    info "Retrying failed scripts..."
+    worker.retry_failed_scripts()
+    info "Script retry completed"
+    worker.retry_failures = false
+    dont_join = false
+    for unit in state.units:
+      unit.global_flags -= Dirty
+    state.pop_flag LoadingScript
+    info "Clearing LoadingLevel flag"
+    state.global_flags -= LoadingLevel
+    info "[LEVEL] Level loading completed successfully"
+  except Exception as e:
+    error "[LEVEL] Error during level load", error = e.msg
+    # Ensure flags are cleaned up even if load fails
+    state.pop_flag LoadingScript
+    state.global_flags -= LoadingLevel
+    raise

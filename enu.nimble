@@ -9,7 +9,7 @@ const
       if get_env("TARGET") == "ios":
         ("iOS", ".a", "")
       else:
-        ("osx", ".dylib", "")
+        ("macos", ".dylib", "")
     else:
       ("x11", ".so", "")
   cpu = if host_cpu == "arm64": "arm64" else: "64"
@@ -20,36 +20,38 @@ const
     "https://docs.godotengine.org/en/stable/development/compiling/index.html"
   gcc_dlls = ["libgcc_s_seh-1.dll", "libwinpthread-1.dll"]
   nim_dlls = ["pcre64.dll"]
-  godot_opts = "target=debug"
+  godot_opts = "target=editor"
 
-version = "0.2.2"
+version = "0.2.95"
 author = "Scott Wadden"
 description = "Logo-like DSL for Godot"
 license = "MIT"
 install_files = @["enu.nim"]
-bin_dir = "app"
-src_dir = "src"
+bin_dir = "app/extension/lib"
+src_dir = "app/extension"
 bin = @["enu" & lib_ext]
+package_name = "enu"
 
-requires "nim >= 2.2.0",
-  "https://github.com/getenu/Nim#31b77d0",
-  "https://github.com/getenu/godot-nim#43addc1",
-  "https://github.com/getenu/model_citizen 0.19.3",
-  "https://github.com/getenu/nanoid.nim 0.2.1", "cligen 1.6.17",
-  "https://github.com/treeform/pretty", "chroma", "markdown", "chronicles",
-  "dotenv", "nimibook", "metrics#51f1227", "zippy"
+requires "https://github.com/dsrw/Nim#7483e78",
+  "https://github.com/getenu/model_citizen 0.19.6",
+  "https://github.com/dsrw/nanoid.nim 0.2.1",
+  "https://github.com/godot-nim/gdext-nim 0.15.0",
+  "https://github.com/godot-nim/gdext-nim?subdir=coronation 0.1.0",
+  "https://github.com/treeform/pretty", "cligen", "chroma", "markdown",
+  "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
 proc godot_bin(target = target): string =
-  result = this_dir() & &"/vendor/godot/bin/godot.{target}.tools.{cpu}{exe_ext}"
+  result =
+    this_dir() & &"/vendor/godot/bin/godot.{target}.editor.{cpu}{exe_ext}"
   if target == "server":
     result = result.replace("godot.server", "godot_server.x11")
 
 var generator_path = ""
 proc gen(): string =
   if generator_path == "":
-    exec &"nimble c -d:ssl {generator}"
+    exec &"nim c -d:ssl {generator}"
     generator_path = find_exe generator
   generator_path
 
@@ -67,14 +69,19 @@ proc p(msg: varargs[string, `$`]) =
 
 proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   p "Building Godot..."
-  exec "git submodule update --init"
-  let
-    scons = find_exe "scons"
-    cores = gorge(gen() & " core_count")
+  exec "git submodule update --init --recursive"
+  when host_os == "macosx":
+    with_dir "vendor/godot":
+      exec "./misc/scripts/install_vulkan_sdk_macos.sh"
+
+  let scons = find_exe "scons"
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
-    exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} -j{cores}"
+    let str =
+      &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} dev_build=yes"
+    echo "building: ", str
+    exec str
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
@@ -94,7 +101,7 @@ task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
 
 task test, "run godot tests":
-  exec "nimble c tests/godot/tnode_factories"
+  exec "nim c tests/godot/tnode_factories"
   cd "tests/godot/app"
   exec this_dir() /
     &"vendor/godot/bin/godot_server.osx.opt.tools.{cpu} --quiet --script tests/tests.gdns"
@@ -196,11 +203,16 @@ proc gen_binding_and_copy_stdlib(target = target) =
   exec &"{gen()} generate_api -d={generated_dir} -j={api_json}"
   exec &"{gen()} copy_stdlib -d=vmlib/stdlib"
 
-task prereqs, "Build godot, download fonts, generate binding and stdlib":
+proc gen_godot_bindings() =
+  p "Generating complete Godot bindings from custom Godot build..."
+  exec "nim r tools/generate_godot_bindings.nim"
+
+task prereqs, "Build godot, download fonts, generate bindings and stdlib":
   build_godot()
   download_fonts()
   copy_fonts()
   gen_binding_and_copy_stdlib()
+  gen_godot_bindings()
 
 task import_assets,
   "Import Godot assets. Only required if you're not using the Godot editor":
@@ -211,12 +223,21 @@ task clean, "Remove files produced by build":
   rm_dir generated_dir
   rm_dir ".nimcache"
 
+task edit_then_quit, "Edit project in Godot":
+  exec godot_bin() & " --verbose --quit-after 500 app/project.godot &"
+
 task edit, "Edit project in Godot":
   exec godot_bin() & " app/project.godot &"
 
 task start, "Run Enu":
   cd "app"
-  exec godot_bin() & " --verbose scenes/game.tscn"
+  var cmd = godot_bin() & " --verbose --quit-after 500 scenes/game.tscn"
+  # Support passing additional arguments to start task
+  # Usage: nimble start --headless --quit-after 1
+  for arg in command_line_params():
+    if arg.startsWith("--"):
+      cmd = cmd & " " & arg
+  exec cmd
 
 task build_and_start, "Build and start":
   exec "nimble build"
@@ -224,6 +245,33 @@ task build_and_start, "Build and start":
 
 task gen, "Generate build_helpers":
   discard gen()
+
+task build_extension, "Build the gdextension":
+  p "Building gdextension..."
+  let output_lib =
+    case host_os
+    of "windows": "lib/libEnugame.windows.debug.dll"
+    of "macosx": "lib/libEnugame.macos.debug.dylib"
+    else: "lib/libEnugame.linux.debug.so"
+  with_dir "app/extension":
+    exec &"nim c --app:lib --out:{output_lib} enu.nim"
+
+task generate_bindings, "Generate Godot extension API bindings":
+  p "Generating Godot extension API bindings..."
+  let extension_api_json = "extension_api.json"
+  let generated_dir = "generated"
+  rm_dir generated_dir
+  mk_dir generated_dir
+
+  with_dir(generated_dir):
+    exec &"{godot_bin()} --headless --dump-extension-api"
+
+  exec &"nimbledeps/bin/coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+
+task start_headless, "Run Enu":
+  build_extension_task()
+  cd "app"
+  exec godot_bin() & " --headless --quit-after 1 --verbose scenes/game.tscn"
 
 proc code_sign(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"

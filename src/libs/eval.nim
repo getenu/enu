@@ -1,10 +1,10 @@
 import std/options
 import pkg/pretty
-import compiler/[syntaxes, reorder, vmdef, msgs]
-import compiler/passes {.all.}
+import pkg/compiler/[syntaxes, reorder, vmdef, msgs]
+import pkg/compiler/passes {.all.}
 
 {.warning[UnusedImport]: off.}
-include compiler/[nimeval, pipelines]
+include pkg/compiler/[nimeval, pipelines]
 
 export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 
@@ -143,7 +143,7 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       iface.module.ast = nil
       break
 
-import std / posix
+import std/posix
 
 proc loadModule*(
     i: Interpreter, fileName, code: string, ctx: var PContext

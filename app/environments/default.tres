@@ -1,29 +1,24 @@
-[gd_resource type="Environment" load_steps=3 format=2]
+[gd_resource type="Environment" load_steps=4 format=3 uid="uid://dpg7oejg7j7j7"]
 
-[ext_resource path="res://textures/planet_sky.png" type="Texture" id=1]
+[ext_resource type="Texture2D" uid="uid://b40l64r5sqjb2" path="res://textures/planet_sky.png" id="1_vxf3i"]
 
-[sub_resource type="PanoramaSky" id=1]
-panorama = ExtResource( 1 )
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_vxf3i"]
+panorama = ExtResource("1_vxf3i")
+
+[sub_resource type="Sky" id="Sky_sjrnr"]
+sky_material = SubResource("PanoramaSkyMaterial_vxf3i")
 
 [resource]
 background_mode = 2
-background_sky = SubResource( 1 )
-background_sky_orientation = Basis( -1, 1.52079e-08, -8.60899e-08, 0, 0.984753, 0.173958, 8.74228e-08, 0.173958, -0.984753 )
-background_energy = 0.5
-ambient_light_color = Color( 1, 1, 1, 1 )
+background_energy_multiplier = 0.5
+sky = SubResource("Sky_sjrnr")
+sky_rotation = Vector3(0, 3.1415927, 0)
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 1.5
-ambient_light_sky_contribution = 0.0
-fog_enabled = true
-fog_color = Color( 0, 0, 0, 1 )
-fog_sun_color = Color( 0.211765, 0.211765, 0.211765, 1 )
-fog_depth_begin = 150.0
-fog_depth_end = 200.0
-fog_height_max = 50.0
 tonemap_mode = 3
 tonemap_white = 0.13
-dof_blur_far_distance = 200.0
-dof_blur_far_transition = 20.0
-dof_blur_far_quality = 0
 glow_enabled = true
-glow_bloom = 1.0
-glow_high_quality = true
+glow_normalized = true
+fog_light_color = Color(0.211765, 0.211765, 0.211765, 1)
+volumetric_fog_density = 0.0

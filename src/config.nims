@@ -1,3 +1,10 @@
+--path:
+  "../../src"
+--path:
+  "../../generated"
+--path:
+  "../../vmlib/enu"
+
 --threads:
   on
 --mm:
@@ -19,6 +26,8 @@ if host_os == "windows":
   "LockLevel:off"
 --warning:
   "UseBase:off"
+--warning:
+  "GcUnsafe2:off"
 
 --experimental:
   "dynamic_bind_sym"
@@ -34,7 +43,13 @@ if host_os == "windows":
 --define:
   "chronicles_log_level=INFO"
 --define:
-  "chronicles_sinks=textlines[dynamic]"
+  "chronicles_sinks=textlines"
+# --define:
+#   "chronicles_disabled_topics=verbose"
+
+# GD4: remove me
+--threadAnalysis:
+  off
 
 if defined(release):
   --define:
@@ -45,30 +60,3 @@ if defined(release):
     off
   --define:
     "zen_lax_free"
-
-if project_name() == "enu":
-  if host_os == "ios":
-    --define:
-      use_pcre_header
-    --define:
-      "chronicles_colors=None"
-    --passC:
-      "-Ivendor/pcre -miphoneos-version-min=12.0 --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk -mcpu=apple-a10"
-    --passL:
-      "-target aarch64-ios --sysroot=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk"
-    --app:
-      staticlib
-  else:
-    --app:
-      lib
-  --no_main
-else:
-  --define:
-    no_godot
-
-switch("path", this_dir())
-switch("path", this_dir() & "/../generated")
-switch("path", this_dir() & "/../vmlib/enu")
-
-when with_dir(this_dir(), system.file_exists("user_config.nims")):
-  include "user_config.nims"

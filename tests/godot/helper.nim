@@ -1,4 +1,4 @@
-import gdutils, os
+import gdcore, os
 
 proc echo(args: varargs[string, `$`]) =
   stdout.write "Enu: " & args.join() & "\n"

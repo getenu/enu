@@ -1,17 +1,26 @@
-import std/[monotimes, os, json, math, random, net]
-import pkg/[godot, metrics, metrics/stdlib_httpserver]
+import std/[monotimes, os, json, math, random, net, times, strformat]
+import pkg/[metrics, metrics/stdlib_httpserver]
 from dotenv import nil
+import gdext
 import
-  godotapi/[
-    input, input_event, gd_os, node, scene_tree, packed_scene, sprite, control,
-    viewport, viewport_texture, performance, label, theme, dynamic_font,
-    resource_loader, main_loop, project_settings, input_map, input_event_action,
-    input_event_key, input_event, global_constants, scroll_container,
-    voxel_server, world_environment,
+  gdext/classes/[
+    gdinput, gdinputevent, gdos, gdnode, gdnode3d, gdscenetree, gdpackedscene,
+    gdcontrol, gdviewport, gdperformance, gdlabel, gdtheme, gdfont,
+    gdresourceloader, gdprojectsettings, gdinputmap, gdinputeventaction,
+    gdinputeventkey, gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
+    gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
+    gdviewporttexture, gdtexture2d, gdsubviewportcontainer, gdengine,
+    gdoptionbutton, gdpopupmenu, gdbutton,
   ]
 
 import ui/virtual_joystick
-import core, types, gdutils, controllers, models/[serializers, units, colors]
+import
+  core,
+  types,
+  controllers,
+  models/[serializers, units, colors, states, ground],
+  gdcore,
+  ui/action_button
 
 if file_exists(".env"):
   dotenv.overload()
@@ -25,569 +34,897 @@ ZenContext.init_metrics "main", "worker"
 const savable_flags =
   {ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed}
 
-var environment_cache {.threadvar.}: Table[string, Environment]
+var environment_cache {.threadvar.}: Table[string, gdref Environment]
 
-gdobj Game of Node:
-  var
+type Game* {.gdsync.} =
+  ptr object of Node
     reticle: Control
-    scaled_viewport: Viewport
+    scaled_viewport: SubViewport
+    viewport_container: SubViewportContainer
     triggered = false
     saved_mouse_captured_state = false
     stats: Label
     last_tool = BlueBlock
     saved_mouse_position: Vector2
-    rescale_at = get_mono_time()
-    update_metrics_at = get_mono_time()
+    rescale_at = MonoTime.low
+    update_metrics_at = MonoTime.low
     force_quit_at = MonoTime.high
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
+    up_button: Button
+    down_button: Button
+    verify_mode: bool
+    screenshot_mode: bool
+    screenshot_timer: float64
 
-  method process*(delta: float) =
-    Zen.thread_ctx.boop
-    inc state.frame_count
-    let time = get_mono_time()
-    when defined(metrics):
-      if self.update_metrics_at < time:
-        update_thread_metrics()
-        self.update_metrics_at = time + 10.seconds
+# GD4: Basic initialization moved to main init_game function
 
-    if state.config.full_screen != is_window_fullscreen():
-      state.config_value.value:
-        full_screen = not state.config.full_Screen
+proc take_screenshot*(self: Game) =
+  # Get viewport image using Godot 4 API
+  let viewport = self.get_viewport()
 
-    if state.config.show_stats:
-      let fps = get_monitor(TIME_FPS)
+  # Try to get the rendered image from viewport
+  let texture = viewport.get_texture()
+  if not ?texture:
+    warn "[SCREENSHOT] Viewport texture is null - cannot take screenshot"
+    state.push_flag Quitting
+    return
 
-      let vram = get_monitor(RENDER_VIDEO_MEM_USED)
-      var unit_count = 0
-      state.units.value.walk_tree proc(unit: Unit) =
-        inc unit_count
+  let image = texture[].get_image()
+  if not ?image:
+    warn "[SCREENSHOT] Could not get image from texture"
+    state.push_flag Quitting
+    return
 
-      self.stats.text =
-        \"""
-        FPS: {fps}
-        scale_factor: {state.scale_factor}
-        vram: {vram}
-        units: {unit_count}
-        zen objects: {Zen.thread_ctx.len}
-        level: {state.level_name}
-        {get_stats()}
-        """
-    state.voxel_tasks =
-      parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
+  # Generate filename with timestamp
+  let timestamp = format(times.now(), "yyyy-MM-dd'T'HH-mm-ss")
+  let filename = &"screenshot_{timestamp}.png"
+  let filepath = join_path(state.config.work_dir, filename)
 
-    if time > self.rescale_at:
-      self.rescale_at = MonoTime.high
-      self.rescale()
+  # Save the image
+  if image[].save_png(newGdString(filepath)) == ok:
+    info "[SCREENSHOT] Screenshot saved", filepath = filepath
+  else:
+    warn "[SCREENSHOT] Failed to save screenshot", filepath = filepath
 
-    if time > self.force_quit_at:
-      state.pop_flag Quitting
+  # Quit after taking screenshot
+  print("[SCREENSHOT] Screenshot saved, quitting...")
+  state.push_flag Quitting
 
-    if SceneReady notin state.local_flags:
-      state.push_flag SceneReady
+proc rescale*(self: Game) =
+  # GD4: Hybrid scaling approach combining stretch_shrink and scaling_3d_scale
+  #
+  # Research findings on viewport scaling approaches in Godot 4:
+  # 1. size_2d_override: Has bugs when set in _ready(), doesn't work reliably
+  # 2. stretch_shrink: Only accepts integers >=1, good for pixel art but limited range
+  # 3. scaling_3d_scale: Works well for upscaling but has 0.25 minimum limit
+  # 4. Window stretch: Affects entire UI, not suitable for independent 3D scaling
+  #
+  # Hybrid solution:
+  # - For megapixels >= 1.0: Use scaling_3d_scale (smooth, no minimum limit)
+  # - For megapixels < 1.0: Use stretch_shrink (pixel art effect, integer-only)
+  # This provides the best of both approaches while working around their limitations.
+  if self.scaled_viewport.is_nil:
+    # If scaled_viewport is not set up, skip rescaling
+    return
 
-  proc rescale*() =
-    let vp = self.get_viewport().size
-    let megapixels =
-      if ?state.config.megapixels_override:
-        state.config.megapixels_override
-      else:
-        state.config.megapixels
-    state.scale_factor = sqrt(megapixels * 1_000_000.0 / (vp.x * vp.y))
+  let vp = self.get_viewport().get_visible_rect().size
+  let megapixels =
+    if ?state.config.megapixels_override:
+      state.config.megapixels_override
+    else:
+      state.config.megapixels
 
-    self.scaled_viewport.size = vp * state.scale_factor
-    self.scaled_viewport.get_texture.flags =
-      if megapixels >= 1.0: FLAG_FILTER else: 0
+  # Calculate scale factor based on megapixels setting
+  state.scale_factor = sqrt(megapixels * 1_000_000.0 / (vp.x * vp.y))
 
-    info "Rescaled viewport", size = self.scaled_viewport.size
+  if megapixels >= 1.0:
+    # For high megapixels (>=1.0): Use scaling_3d_scale and set stretch_shrink to 1
+    let stretch_shrink_value = int32(1)
+    let scaling_3d_value = state.scale_factor
 
-  method notification*(what: int) =
-    if what == main_loop.NOTIFICATION_WM_QUIT_REQUEST:
+    self.viewport_container.set_stretch_shrink(stretch_shrink_value)
+    self.scaled_viewport.set_scaling_3d_scale(scaling_3d_value)
+
+    info "High quality mode - using scaling_3d_scale",
+      stretch_shrink = stretch_shrink_value,
+      scaling_3d_scale = scaling_3d_value,
+      scale_factor = state.scale_factor,
+      megapixels = megapixels
+  else:
+    # For low megapixels (<1.0): Use stretch_shrink and set scaling_3d_scale to 1
+    # Calculate appropriate stretch_shrink value (integer >= 1)
+    # Since stretch_shrink = 1/scale_factor, we need to invert and round up
+    let stretch_shrink_value = max(1, int32(ceil(1.0 / state.scale_factor)))
+    let scaling_3d_value = 1.0
+
+    self.viewport_container.set_stretch_shrink(stretch_shrink_value)
+    self.scaled_viewport.set_scaling_3d_scale(scaling_3d_value)
+
+    info "Low quality mode - using stretch_shrink",
+      stretch_shrink = stretch_shrink_value,
+      scaling_3d_scale = scaling_3d_value,
+      scale_factor = state.scale_factor,
+      megapixels = megapixels
+
+method process*(self: Game, delta: float64) {.gdsync.} =
+  # Skip most processing if running in the editor
+  if Engine.is_editor_hint():
+    return
+
+  Zen.thread_ctx.boop
+  inc state.frame_count
+  let time = get_mono_time()
+  when defined(metrics):
+    if self.update_metrics_at < time:
+      update_thread_metrics()
+      self.update_metrics_at = time + 10.seconds
+
+  if state.config.full_screen !=
+      (DisplayServer.window_get_mode() == windowModeFullscreen):
+    state.config_value.value:
+      full_screen = not state.config.full_Screen
+
+  if state.config.show_stats:
+    let fps = Performance.get_monitor(timeFps)
+
+    let vram = Performance.get_monitor(renderVideoMemUsed)
+    var unit_count = 0
+    state.units.value.walk_tree proc(unit: Unit) =
+      inc unit_count
+
+    self.stats.text =
+      """
+      FPS: {fps}
+      scale_factor: {state.scale_factor}
+      vram: {vram}
+      units: {unit_count}
+      zen objects: {Zen.thread_ctx.len}
+      level: {state.level_name}
+      # {get_stats()} # TODO: Fix for Godot 4
+      """
+  # GD4
+  # state.voxel_tasks =
+  #   parse_int($get_stats()["tasks"].as_dictionary()["main_thread"])
+  state.voxel_tasks = 0
+
+  if time > self.rescale_at:
+    self.rescale_at = MonoTime.high
+    rescale(self)
+
+  if time > self.force_quit_at:
+    print("[QUIT] Force quit timeout reached - removing Quitting flag")
+    state.pop_flag Quitting
+
+  if SceneReady notin state.local_flags:
+    state.push_flag SceneReady
+
+  # Handle screenshot mode
+  if self.screenshot_mode:
+    self.screenshot_timer += delta
+    if self.screenshot_timer >= 10.0: # Wait 10 seconds for animations
+      self.take_screenshot()
+      print("[SCREENSHOT] Screenshot saved, quitting...")
       state.push_flag Quitting
 
-    if what == main_loop.NOTIFICATION_WM_ABOUT:
-      alert \"Enu {enu_version}\n\n© 2025 Scott Wadden", "Enu"
+# GD4 - notification method not supported in gdext yet
+# Need to handle window close through other means
+# TODO: Investigate gdext support for notification virtual method
+method notification*(self: Game, what: int32) =
+  let what = int what
+  if what == NotificationWmCloseRequest:
+    print("[QUIT] Window close request received")
+    state.push_flag Quitting
 
-  proc add_platform_input_actions() =
-    let suffix = "." & host_os
-    for action in get_actions():
-      let action = action.as_string()
-      if suffix in action:
-        let name = action.replace(suffix, "")
-        if has_action(name):
-          erase_action(name)
-        add_action(name)
-        for event in get_action_list(action):
-          let event = event.as_object(InputEvent)
-          action_add_event(name, event)
-        erase_action(action)
+  if what == gdmainloop.NotificationWmAbout:
+    print("Enu {enu_version}\n\n© 2025 Scott Wadden")
+    # TODO: Show about dialog when gdext dialog API is available
 
-  proc init*() =
-    self.process_priority = -100
+proc add_platform_input_actions(self: Game) =
+  print("[INPUT] Setting up platform-specific input actions")
 
-    let screen_scale =
-      if host_os == "macos":
-        get_screen_scale(-1)
-      else:
-        get_screen_dpi(-1).float / 96.0
+  # Get the OS suffix for platform-specific input actions
+  let suffix = "." & host_os
+  print "[INPUT] Platform suffix: ", suffix
+  print "[INPUT] host_os: ", host_os
 
-    var initial_user_config = load_user_config(get_user_data_dir())
+  # Get all actions from the input map
+  let all_actions = InputMap.get_actions()
+  print "[INPUT] Found ", all_actions.size(), " total actions"
 
-    Zen.thread_ctx = ZenContext.init(
-      id = \"main-{generate_id()}",
-      chan_size = 2000,
-      buffer = true,
-      label = "main",
-      max_recv_duration = (1.0 / 30.0).seconds,
+  var platform_actions: seq[string] = @[]
+  var base_actions: seq[string] = @[]
+
+  # Separate platform-specific actions from base actions
+  for i in 0 ..< all_actions.size():
+    let action = $all_actions[i]
+    if suffix in action:
+      platform_actions.add(action)
+    else:
+      base_actions.add(action)
+
+  print "[INPUT] Platform-specific actions: ", platform_actions.len
+  print "[INPUT] Base actions: ", base_actions.len
+
+  # Process platform-specific actions
+  for action in platform_actions:
+    let base_name = action.replace(suffix, "")
+    print "[INPUT] Processing platform action: ", action, " -> ", base_name
+
+    # Remove existing base action if it exists
+    if InputMap.has_action(base_name.to_string_name):
+      print "[INPUT] Removing existing action: ", base_name
+      InputMap.erase_action(base_name.to_string_name)
+
+    # Add new base action
+    print "[INPUT] Adding new action: ", base_name
+    InputMap.add_action(base_name.to_string_name)
+
+    # Copy all events from platform action to base action
+    let events = InputMap.action_get_events(action.to_string_name)
+    print "[INPUT] Copying ",
+      events.size(), " events from ", action, " to ", base_name
+
+    for j in 0 ..< events.size():
+      let event = events[j]
+      InputMap.action_add_event(base_name.to_string_name, event)
+
+    # Remove the platform-specific action
+    print "[INPUT] Removing platform action: ", action
+    InputMap.erase_action(action.to_string_name)
+
+  print "[INPUT] Platform input actions setup complete"
+
+method on_init*(self: Game) {.gdsync.} =
+  # Basic field initialization
+  self.process_priority = -100
+
+  # GD4: Get screen scale exactly like Godot 3 for consistent scaling
+  let screen_scale =
+    if host_os == "macosx":
+      # On macOS, use direct screen scale API (equivalent to Godot 3's get_screen_scale(-1))
+      DisplayServer.screen_get_scale(-1)
+    else:
+      # On other platforms, calculate based on DPI (same as Godot 3)
+      DisplayServer.screen_get_dpi(-1) / 96.0
+
+  var initial_user_config = load_user_config($OS.get_user_data_dir())
+
+  state.nodes.game = self
+
+  var uc = initial_user_config
+  assert not state.is_nil
+
+  random.randomize()
+
+  var args = OS.get_cmdline_args().to_seq.map_it($it)
+
+  var connect_address = ""
+  var listen_address = ""
+  var verify_mode = false
+  var screenshot_mode = false
+
+  if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
+    connect_address = args[i + 1]
+    args.delete(i .. i + 1)
+  if (let i = args.find("--listen"); i) > -1:
+    if args.len > i + 1:
+      listen_address = args[i + 1]
+      args.delete(i .. i + 1)
+    else:
+      listen_address = "0.0.0.0"
+      args.delete(i)
+  if (let i = args.find("--verify"); i) > -1:
+    verify_mode = true
+    args.delete(i)
+  if (let i = args.find("--screenshot"); i) > -1:
+    screenshot_mode = true
+    args.delete(i)
+
+  state.verify_mode = verify_mode
+  state.screenshot_mode = screenshot_mode
+
+  if ?($OS.get_environment("ENU_LISTEN_ADDRESS")) and not ?listen_address:
+    listen_address = $OS.get_environment("ENU_LISTEN_ADDRESS")
+  if ?($OS.get_environment("ENU_CONNECT_ADDRESS")) and not ?connect_address:
+    connect_address = $OS.get_environment("ENU_CONNECT_ADDRESS")
+  if ?listen_address and ?connect_address:
+    fail "Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS"
+
+  if ?saved_state.connect_address:
+    connect_address = saved_state.connect_address
+
+  when host_os == "ios":
+    state.push_flag TouchControls
+    let vmlib = join_path($OS.get_executable_path().get_base_dir(), "vmlib")
+  else:
+    # state.push_flag TouchControls
+    let vmlib = join_path(
+      $OS.get_executable_path().get_base_dir(), "..", "..", "..", "vmlib"
     )
 
-    state = GameState.init
-    state.nodes.game = self
+  state.config_value.value:
+    screen_scale = screen_scale
+    work_dir = $OS.get_user_data_dir()
+    font_size = uc.font_size ||= 20
+    toolbar_size = uc.toolbar_size ||= 100
+    world = uc.world ||= "tutorial"
+    level = uc.level ||= value.world & "-1"
+    run_server = uc.run_server ||= false
+    show_stats = uc.show_stats ||= false
+    megapixels = uc.megapixels ||= 2.0
+    full_screen = uc.full_screen ||= true
+    semicolon_as_colon = uc.semicolon_as_colon ||= false
+    lib_dir = vmlib
+    connect_address = uc.connect_address ||= ""
+    listen_address = uc.listen_address ||= ""
+    player_color =
+      uc.player_color ||= colortools.color(rand(1.0), rand(1.0), rand(1.0))
+    world_dir = join_path(value.work_dir, value.world)
+    level_dir = join_path(value.world_dir, value.level)
+    walk_speed = uc.walk_speed ||= 500
+    fly_speed = uc.fly_speed ||= 1500
+    alt_walk_speed = uc.alt_walk_speed ||= 1000
+    alt_fly_speed = uc.alt_fly_speed ||= 250
+    mouse_sensitivity = uc.mouse_sensitivity ||= 5.0
+    gamepad_sensitivity = uc.gamepad_sensitivity ||= 2.5
+    invert_gamepad_y_axis = uc.invert_gamepad_y_axis ||= false
+    environment = uc.environment ||= "default"
+    megapixels_override = environments[value.environment]
 
-    var uc = initial_user_config
-    assert not state.is_nil
-
-    randomize()
-
-    var args = get_cmdline_args().to_seq
-
-    var connect_address = ""
-    var listen_address = ""
-    if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
-      connect_address = args[i + 1]
-      args.delete(i .. i + 1)
-    if (let i = args.find("--listen"); i) > -1:
-      if args.len > i + 1:
-        listen_address = args[i + 1]
-        args.delete(i .. i + 1)
-      else:
-        listen_address = "0.0.0.0"
-        args.delete(i)
-
-    if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address:
-      listen_address = get_env("ENU_LISTEN_ADDRESS")
-    if ?get_env("ENU_CONNECT_ADDRESS") and not ?connect_address:
-      connect_address = get_env("ENU_CONNECT_ADDRESS")
-    if ?listen_address and ?connect_address:
-      fail "Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS"
-
-    if ?saved_state.connect_address:
-      connect_address = saved_state.connect_address
-
-    if host_os == "macosx" and not saved_state.restarting:
-      global_menu_add_item(
-        "Help", "Documentation", "help".to_variant, "".to_variant
-      )
-      global_menu_add_item("Help", "Web Site", "site".to_variant, "".to_variant)
-      if connect_address == "":
-        global_menu_add_separator("Help")
-        global_menu_add_item(
-          "Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant
-        )
-
-    when host_os == "ios":
-      state.push_flag TouchControls
-      let vmlib = join_path(get_executable_path().parent_dir(), "vmlib")
-    else:
-      # state.push_flag TouchControls
-      let vmlib =
-        join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
-
+  if ?listen_address:
     state.config_value.value:
-      screen_scale = screen_scale
-      work_dir = get_user_data_dir()
-      font_size = uc.font_size ||= 20
-      toolbar_size = uc.toolbar_size ||= 100
-      world = uc.world ||= "tutorial"
-      level = uc.level ||= value.world & "-1"
-      run_server = uc.run_server ||= false
-      show_stats = uc.show_stats ||= false
-      megapixels = uc.megapixels ||= 2.0
-      full_screen = uc.full_screen ||= true
-      semicolon_as_colon = uc.semicolon_as_colon ||= false
-      lib_dir = vmlib
-      connect_address = uc.connect_address ||= ""
-      listen_address = uc.listen_address ||= ""
-      player_color = uc.player_color ||= color(rand(1.0), rand(1.0), rand(1.0))
-      world_dir = join_path(value.work_dir, value.world)
-      level_dir = join_path(value.world_dir, value.level)
-      walk_speed = uc.walk_speed ||= 500
-      fly_speed = uc.fly_speed ||= 1500
-      alt_walk_speed = uc.alt_walk_speed ||= 1000
-      alt_fly_speed = uc.alt_fly_speed ||= 250
-      mouse_sensitivity = uc.mouse_sensitivity ||= 5.0
-      gamepad_sensitivity = uc.gamepad_sensitivity ||= 2.5
-      invert_gamepad_y_axis = uc.invert_gamepad_y_axis ||= false
-      environment = uc.environment ||= "default"
-      megapixels_override = environments[value.environment]
+      listen_address = listen_address
 
-    if ?listen_address:
+  if ?connect_address:
+    state.config_value.value:
+      connect_address = connect_address
+
+  state.set_flag(God, uc.god_mode ||= false)
+
+  DisplayServer.window_set_mode(
+    if state.config.full_screen: windowModeFullscreen else: windowModeWindowed
+  )
+  when defined(metrics):
+    let metrics_port =
+      if ?($OS.get_environment("ENU_METRICS_PORT")):
+        ($OS.get_environment("ENU_METRICS_PORT")).parse_int
+      else:
+        8000
+
+    {.cast(gcsafe).}:
+      start_metrics_http_server("0.0.0.0", Port(metrics_port))
+
+  self.add_platform_input_actions()
+
+  when defined(dist):
+    let exe_dir = $OS.get_executable_path().get_base_dir()
+    if host_os == "macosx":
       state.config_value.value:
-        listen_address = listen_address
-
-    if ?connect_address:
+        lib_dir = join_path(exe_dir.parent_dir, "Resources", "vmlib")
+    elif host_os == "windows":
       state.config_value.value:
-        connect_address = connect_address
+        lib_dir = join_path(exe_dir, "vmlib")
+    elif host_os == "linux":
+      state.config_value.value:
+        lib_dir = join_path(exe_dir.parent_dir, "lib", "vmlib")
 
-    state.set_flag(God, uc.god_mode ||= false)
+  self.verify_mode = verify_mode
+  self.screenshot_mode = screenshot_mode
 
-    set_window_fullscreen state.config.full_screen
-    when defined(metrics):
-      let metrics_port =
-        if ?get_env("ENU_METRICS_PORT"):
-          get_env("ENU_METRICS_PORT").parse_int
-        else:
-          8000
-
-      {.cast(gcsafe).}:
-        start_metrics_http_server("0.0.0.0", Port(metrics_port))
-
-    self.add_platform_input_actions()
-
-    when defined(dist):
-      let exe_dir = parent_dir get_executable_path()
-      if host_os == "macosx":
-        state.config_value.value:
-          lib_dir = join_path(exe_dir.parent_dir, "Resources", "vmlib")
-      elif host_os == "windows":
-        state.config_value.value:
-          lib_dir = join_path(exe_dir, "vmlib")
-      elif host_os == "linux":
-        state.config_value.value:
-          lib_dir = join_path(exe_dir.parent_dir, "lib", "vmlib")
-
+  # Skip controller initialization if running in the editor
+  if not Engine.is_editor_hint():
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init
 
-    save_user_config(uc)
+  # TEMPORARY: Run property corruption test
+  if ?($OS.get_environment("TEST_CORRUPTION")):
+    print("[GAME] TEST_CORRUPTION env var set, will run test in ready()")
 
-  proc set_panel_width() =
-    let
-      theme = self.find_node("LeftPanel").as(Container).theme
-      mono_font = theme.get_font("font", "MonoButton").as(DynamicFont)
-      font_width = mono_font.get_string_size(" ".repeat(34)).x
-      viewport_width = self.get_viewport().size.x
+  save_user_config(uc)
 
-    if font_width > viewport_width / 2.0:
-      state.push_flag FullWidthPanels
-    else:
-      state.pop_flag FullWidthPanels
+# GD4: TODO - Fix panel width calculation for Godot 4
+proc set_panel_width(self: Game) =
+  discard
+  # let
+  #   theme = self.find_child("LeftPanel").as(Container).theme
+  #   mono_font = theme.get_font("font", "MonoButton").as(DynamicFont)
+  #   font_width = mono_font.get_string_size(" ".repeat(34)).x
+  #   viewport_width = self.get_viewport().size.x
+  #
+  # if font_width > viewport_width / 2.0:
+  #   state.push_flag FullWidthPanels
+  # else:
+  #   state.pop_flag FullWidthPanels
 
-  proc set_font_size(size: int) =
-    if state.config.font_size != size:
-      var user_config = load_user_config()
-      state.config_value.value:
-        font_size = size
-
-    let
-      theme = find("LeftPanel", Container).theme
-      font = theme.default_font.as(DynamicFont)
-      bold_font = theme.get_font("bold_font", "RichTextLabel").as(DynamicFont)
-      icon_font = theme.get_font("font", "IconButton").as(DynamicFont)
-      mono_font = theme.get_font("font", "MonoButton").as(DynamicFont)
-      label_font = theme.get_font("font", "Label").as(DynamicFont)
-      normal_font = theme.get_font("font", "LineEdit").as(DynamicFont)
-
-    font.size = (size.float * state.config.screen_scale).int
-    bold_font.size = font.size
-    icon_font.size = font.size
-    mono_font.size = font.size
-    label_font.size = font.size
-    normal_font.size = font.size
-
-    self.set_panel_width()
-
-  method on_gui_input*(event: InputEvent, name: string) =
-    if event of InputEventMouseButton:
-      case name
-      of "Editor":
-        debug "pushing EditorFocused", topics = "state"
-        state.push_flag EditorFocused
-      of "Console":
-        debug "pushing ConsoleFocused", topics = "state"
-        state.push_flag ConsoleFocused
-      of "Settings":
-        debug "pushing SettingsFocused", topics = "state"
-        state.push_flag SettingsFocused
-      of "RightPanel":
-        debug "pushing DocsFocused", topics = "state"
-        state.push_flag DocsFocused
-      else:
-        warn "Couldn't focus control", name
-
-  method load_environment(environment: string) =
-    let env =
-      state.nodes.game.find_node("Level").get_node("WorldEnvironment") as
-      WorldEnvironment
-    if environment notin environment_cache:
-      let res = \"res://environments/{environment}.tres"
-
-      var environment_res: Environment = nil
-      if environment != "none":
-        environment_res = load(res) as Environment
-        if not ?environment_res:
-          logger("err", \"Environment {environment} not found")
-          return
-      environment_cache[environment] = environment_res
-    env.environment = environment_cache[environment]
+proc set_font_size(self: Game, size: int) =
+  if state.config.font_size != size:
     state.config_value.value:
-      megapixels_override = environments[environment]
-    info "Changed game mode", environment
+      font_size = size
 
-  method ready*() =
-    state.nodes.data = state.nodes.game.find_node("Level").get_node("data")
-    assert not state.nodes.data.is_nil
-    self.scaled_viewport =
-      self.get_node("ViewportContainer/Viewport") as Viewport
+  # In Godot 4, we apply font size overrides to controls rather than theme
+  # Calculate the actual size including screen scale like Godot 3
+  let actual_size = (size.float * state.config.screen_scale).int32
 
-    self.bind_signals(self.get_viewport(), "size_changed")
-    self.bind_signals(self.get_tree(), "global_menu_action")
-    assert not self.scaled_viewport.is_nil
-    self.get_tree().auto_accept_quit = false
-    self.set_font_size(state.config.font_size)
-    self.load_environment(state.config.environment)
-    info "config", config = state.config
-    self.reticle = self.find_node("Reticle").as(Control)
-    self.stats = self.find_node("stats").as(Label)
-    self.left_stick = find("LeftStick", VirtualJoystick)
-    self.stats.visible = state.config.show_stats
+  # Apply font size overrides to all relevant controls
+  # Find and update all labels, buttons, line edits, etc.
+  proc apply_font_size_to_node(node: Node) =
+    if node.is_nil:
+      return
 
-    state.config_value.changes:
-      if change.item.full_screen != state.config.full_screen:
-        set_window_fullscreen state.config.full_screen
-      if change.item.environment != state.config.environment or
-          change.item.environment_override != state.config.environment_override:
-        let env =
-          if ?state.config.environment_override:
-            state.config.environment_override
-          else:
-            state.config.environment
-        self.load_environment(env)
+    if node.is_class("Label"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
+    elif node.is_class("Button"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
+      if node.is_class("OptionButton"):
+        node.as(OptionButton).get_popup().add_theme_font_size_override(
+          "font_size", actual_size
+        )
+    elif node.is_class("LineEdit"):
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
+    elif node.is_class("RichTextLabel"):
+      let rtl = node.as(Control)
+      rtl.add_theme_font_size_override("normal_font_size", actual_size)
+      rtl.add_theme_font_size_override("bold_font_size", actual_size)
+      rtl.add_theme_font_size_override("italics_font_size", actual_size)
+    elif node.is_class("CodeEdit"):
+      print "!!! CODEEDIT"
+      echo "!!! ", node.get_class()
+      # CodeEdit inherits from Control, so cast to Control to call the method
+      node.as(Control).add_theme_font_size_override("font_size", actual_size)
 
-      if change.item.megapixels != state.config.megapixels:
-        state.config_value.value:
-          megapixels_override = 0.0
-        self.rescale_at = get_mono_time()
+    # Recursively apply to children
+    for i in 0 ..< node.get_child_count():
+      let child = node.get_child(i)
+      if not child.is_nil:
+        apply_font_size_to_node(child)
 
-      if change.item.megapixels_override != state.config.megapixels_override:
-        self.rescale_at = get_mono_time()
+  # Apply to the entire scene tree starting from root
+  apply_font_size_to_node(self.get_tree().get_current_scene())
 
-      if change.item.font_size != state.config.font_size:
-        self.set_font_size(state.config.font_size)
+  # Call set_panel_width like in Godot 3
+  self.set_panel_width()
 
-    state.player_value.changes:
-      if added and ?change.item and saved_state.restarting:
-        change.item.transform = saved_state.transform
-        change.item.rotation = saved_state.rotation
+proc set_toolbar_size(self: Game, size: float) =
+  # The ActionButton components now read directly from state.config.toolbar_size
+  # No need to set a global variable - the state change will trigger updates
+  if state.config.toolbar_size != size:
+    state.config_value.value:
+      toolbar_size = size
 
-        for flag in saved_state.flags:
-          state.push_flag(flag)
+  # Find and update all toolbar buttons
+  proc update_toolbar_buttons(node: Node) =
+    if node.is_class("Button") and node.get_name().begins_with("Button-"):
+      # This is a toolbar button (ActionButton)
+      let button = node.as(ActionButton)
+      button.update_size()
 
-        saved_state.restarting = false
+    # Recursively check children
+    for i in 0 ..< node.get_child_count():
+      update_toolbar_buttons(node.get_child(i))
 
-    state.local_flags.changes(false):
-      if Quitting.added:
-        # We don't quit until the worker thread acks by popping the `Quitting`
-        # flag, giving it a chance to save and cleanup. If the worker thread is
-        # stuck, killed, or hasn't fully started because it's trying to connect
-        # to a server, it won't pop the flag, so we force it after a timeout.
-        self.force_quit_at = get_mono_time() + 2.seconds
-      elif Quitting.removed:
-        self.get_tree().quit()
+  # Update all toolbar buttons in the scene
+  update_toolbar_buttons(self.get_tree().get_current_scene())
 
-      if NeedsRestart.removed:
-        saved_state.transform = state.player.transform
-        saved_state.rotation = state.player.rotation
-        saved_state.flags = {}
-        saved_state.connect_address = state.config.connect_address
+# GD4: These should be connected
+proc handle_gui_input*(self: Game, event: InputEvent, name: string) =
+  discard
+  # GD4 these handlers have move to the controls.
+  # Verify they work before removing this
+  # if event of InputEventMouseButton:
+  #   case name
+  #   of "Editor":
+  #     debug "pushing EditorFocused", topics = "state"
+  #     state.push_flag EditorFocused
+  #   of "Console":
+  #     debug "pushing ConsoleFocused", topics = "state"
+  #     state.push_flag ConsoleFocused
+  #   of "Settings":
+  #     debug "pushing SettingsFocused", topics = "state"
+  #     state.push_flag SettingsFocused
+  #   of "RightPanel":
+  #     debug "pushing DocsFocused", topics = "state"
+  #     state.push_flag DocsFocused
+  #   else:
+  #     warn "Couldn't focus control", name
 
-        for flag in state.local_flags:
-          if flag in savable_flags:
-            saved_state.flags.incl(flag)
+proc load_environment(self: Game, environment: string) =
+  let env =
+    state.nodes.game.find_child("Level").get_node("WorldEnvironment") as
+    WorldEnvironment
+  if environment notin environment_cache:
+    let res = &"res://environments/{environment}.tres"
 
-        saved_state.restarting = true
-        discard self.get_tree.reload_current_scene()
+    var environment_res: Environment = nil
+    if environment != "none":
+      environment_res = cast[Environment](ResourceLoader.load(res))
+      if environment_res.is_nil:
+        logger("err", &"Environment {environment} not found")
+        return
+    environment_cache[environment] = cast[gdref Environment](environment_res)
+  env.set_environment(environment_cache[environment])
+  state.config_value.value:
+    megapixels_override = environments[environment]
+  info "Changed game mode", environment
 
-      if Connecting.added:
-        state.status_message =
-          \"""
+proc run_verification*(self: Game) =
+  info "[VERIFY] Enu verification starting..."
+
+  # Test basic systems and configuration
+  info "[VERIFY] Systems initialized",
+    vm = ?self.script_controller,
+    node_controller = not self.node_controller.is_nil,
+    scene_system = ?state.nodes,
+    world = state.config.world,
+    level = state.config.level,
+    work_dir = state.config.work_dir,
+    lib_dir = state.config.lib_dir
+
+  # Test VM context and paths
+  let world_path = join_path(state.config.work_dir, state.config.world)
+  let level_path = join_path(world_path, state.config.level)
+
+  info "[VERIFY] System status",
+    vm_context = not Zen.thread_ctx.is_nil,
+    world_exists = dir_exists(world_path),
+    level_exists = dir_exists(level_path),
+    world_path = world_path,
+    level_path = level_path
+
+  # Test basic scene tree
+  let viewport = self.get_viewport()
+  let scene_tree =
+    if not viewport.is_nil:
+      self.get_tree()
+    else:
+      nil
+
+  info "[VERIFY] Scene tree status",
+    viewport_ok = not viewport.is_nil, scene_tree_ok = not scene_tree.is_nil
+
+  #info "[VERIFY] Verification completed - setting quit flag"
+  #state.push_flag(Quitting)
+
+method ready*(self: Game) {.gdsync.} =
+  # Skip most initialization if running in the editor
+  if Engine.is_editor_hint():
+    info "Running in editor mode - skipping game initialization"
+    return
+
+  # GD4: added by claude. Do we need this?
+  self.set_process_unhandled_input(true)
+  state.nodes.data = state.nodes.game.find_child("Level").get_node("data")
+  assert not state.nodes.data.is_nil
+
+  # Initialize ground model for the Ground node in the scene
+  let ground_node = state.nodes.game.find_child("Level").get_node("Ground")
+  if ?ground_node:
+    print("[GAME] Found Ground node, initializing ground model")
+    state.ground = Ground.init(ground_node.as(Node3D))
+    print("[GAME] Ground model initialized and assigned to state")
+  else:
+    warn "Could not find Ground node in scene"
+
+  # GD4: Set up scaled viewport for megapixels functionality
+  # In Godot 4, we use SubViewportContainer/SubViewport structure like Godot 3's ViewportContainer/Viewport
+  self.scaled_viewport =
+    self.get_node("ViewportContainer/Viewport").as(SubViewport)
+  self.viewport_container =
+    self.get_node("ViewportContainer").as(SubViewportContainer)
+
+  if self.scaled_viewport.is_nil:
+    warn "Could not find scaled viewport for megapixels functionality"
+  elif self.viewport_container.is_nil:
+    warn "Could not find SubViewportContainer for texture filtering control"
+  else:
+    info "Found scaled viewport and container for megapixels functionality"
+    # Initial rescale to apply current megapixels setting
+    self.rescale()
+
+  discard
+    self.get_window().connect("size_changed", self.callable("_on_size_changed"))
+  # assert not self.scaled_viewport.is_nil
+  self.get_tree().auto_accept_quit = false
+  self.set_font_size(state.config.font_size)
+  self.set_toolbar_size(state.config.toolbar_size)
+  self.load_environment(state.config.environment)
+  info "config", config = state.config
+  self.reticle = self.find_child("Reticle").as(Control)
+  self.stats = self.find_child("stats").as(Label)
+  self.left_stick = find("LeftStick", VirtualJoystick)
+  self.up_button = self.find_child("Up").as(Button)
+  self.down_button = self.find_child("Down").as(Button)
+  self.stats.visible = state.config.show_stats
+
+  # Set initial visibility of touch controls based on TouchControls flag
+  let touch_controls_visible = TouchControls in state.local_flags
+  if ?self.left_stick:
+    self.left_stick.visible = touch_controls_visible
+  if ?self.up_button:
+    self.up_button.visible = touch_controls_visible
+  if ?self.down_button:
+    self.down_button.visible = touch_controls_visible
+
+  state.config_value.changes:
+    if change.item.full_screen != state.config.full_screen:
+      DisplayServer.window_set_mode(
+        if state.config.full_screen:
+          window_mode_fullscreen
+        else:
+          window_mode_windowed
+      )
+      # Trigger rescale when fullscreen mode changes to recalculate render resolution
+      self.rescale_at = get_mono_time()
+    if change.item.environment != state.config.environment or
+        change.item.environment_override != state.config.environment_override:
+      let env =
+        if ?state.config.environment_override:
+          state.config.environment_override
+        else:
+          state.config.environment
+      self.load_environment(env)
+
+    if change.item.megapixels != state.config.megapixels:
+      state.config_value.value:
+        megapixels_override = 0.0
+      self.rescale_at = get_mono_time()
+
+    if change.item.megapixels_override != state.config.megapixels_override:
+      self.rescale_at = get_mono_time()
+
+    if change.item.font_size != state.config.font_size:
+      self.set_font_size(state.config.font_size)
+    if change.item.toolbar_size != state.config.toolbar_size:
+      self.set_toolbar_size(state.config.toolbar_size)
+
+  state.player_value.changes:
+    if added and ?change.item and saved_state.restarting:
+      change.item.transform = saved_state.transform
+      change.item.rotation = saved_state.rotation
+
+      for flag in saved_state.flags:
+        state.push_flag(flag)
+
+      saved_state.restarting = false
+
+  state.local_flags.changes(false):
+    if Quitting.added:
+      # We don't quit until the worker thread acks by popping the `Quitting`
+      # flag, giving it a chance to save and cleanup. If the worker thread is
+      # stuck, killed, or hasn't fully started because it's trying to connect
+      # to a server, it won't pop the flag, so we force it after a timeout.
+      self.force_quit_at = get_mono_time() + init_duration(seconds = 2)
+    elif Quitting.removed:
+      self.get_tree().quit()
+
+    if NeedsRestart.removed:
+      saved_state.transform = state.player.transform
+      saved_state.rotation = state.player.rotation
+      saved_state.flags = {}
+      saved_state.connect_address = state.config.connect_address
+
+      for flag in state.local_flags:
+        if flag in savable_flags:
+          saved_state.flags.incl(flag)
+
+      saved_state.restarting = true
+      discard self.get_tree().reload_current_scene()
+
+    if Connecting.added:
+      state.status_message =
+        """
           # Connecting...
 
           Trying to connect to {state.config.connect_address}.
           """
-      elif Connecting.removed:
-        state.status_message = ""
+    elif Connecting.removed:
+      state.status_message = ""
 
-      if MouseCaptured.added:
-        let center = self.get_viewport().get_visible_rect().size * 0.5
-        self.saved_mouse_position = self.get_viewport().get_mouse_position()
-        warp_mouse_position(center)
-        set_mouse_mode MOUSE_MODE_CAPTURED
-      elif MouseCaptured.removed:
-        set_mouse_mode MOUSE_MODE_VISIBLE
-        warp_mouse_position(self.saved_mouse_position)
+    if MouseCaptured.added:
+      let center = self.get_viewport().get_visible_rect().size * 0.5
+      self.saved_mouse_position = self.get_viewport().get_mouse_position()
+      Input.warp_mouse(center)
+      Input.set_mouse_mode(mouseModeCaptured)
+    elif MouseCaptured.removed:
+      Input.set_mouse_mode(mouseModeVisible)
+      Input.warp_mouse(self.saved_mouse_position)
 
-      if ReticleVisible.added:
-        self.reticle.visible = true
-      elif ReticleVisible.removed:
-        self.reticle.visible = false
+    if ReticleVisible.added:
+      self.reticle.visible = true
+    elif ReticleVisible.removed:
+      self.reticle.visible = false
+    if TouchControls.added:
+      # Show touch controls (virtual joystick and action buttons)
+      if ?self.left_stick:
+        self.left_stick.visible = true
+      if ?self.up_button:
+        self.up_button.visible = true
+      if ?self.down_button:
+        self.down_button.visible = true
+    elif TouchControls.removed:
+      # Hide touch controls
+      if ?self.left_stick:
+        self.left_stick.visible = false
+      if ?self.up_button:
+        self.up_button.visible = false
+      if ?self.down_button:
+        self.down_button.visible = false
 
-    if TouchControls notin state.local_flags:
-      state.push_flag MouseCaptured
-    state.push_flag ViewportFocused
+  if TouchControls notin state.local_flags:
+    state.push_flag MouseCaptured
+  state.push_flag ViewportFocused
 
-    state.queued_action_value.changes:
-      if added and change.item != "":
-        var ev = gdnew[InputEventAction]()
-        ev.action = state.queued_action
-        ev.pressed = true
-        state.queued_action = ""
-        parse_input_event(ev)
+  # GD4: TODO - Fix InputEventAction creation for Godot 4
+  # state.queued_action_value.changes:
+  #   if added and change.item != "":
+  #     var ev = gdnew[InputEventAction]()
+  #     ev.action = state.queued_action
+  #     ev.pressed = true
+  #     state.queued_action = ""
+  #     parse_input_event(ev)
 
-  method on_size_changed() =
-    self.rescale_at = get_mono_time()
-    self.set_panel_width()
+  # Run verification mode if requested
+  if self.verify_mode:
+    self.run_verification()
 
-  method on_global_menu_action(action: string, id: string) =
-    if action == "help":
-      discard shell_open("http://getenu.com/docs/intro.html")
-    elif action == "site":
-      discard shell_open("http://getenu.com")
-    elif action == "settings":
-      state.push_flag SettingsVisible
-    elif action == "openurl":
-      logger("info", \"Open URL: {id}")
-    elif action == "tutorial":
+proc on_size_changed(self: Game) {.gdsync, name: "_on_size_changed".} =
+  self.rescale_at = get_mono_time()
+  self.set_panel_width()
+
+proc switch_world(self: Game, diff: int) =
+  var config = state.config
+  if diff != 0:
+    change_loaded_level(
+      resolve_level_name(state.config.world, state.config.level, diff),
+      state.config.world,
+    )
+  else:
+    # force a reload of the current world
+    let current_level = state.config.level_dir
+    state.config_value.value:
+      level_dir = ""
+    state.config_value.value:
+      level_dir = current_level
+
+method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
+  # Skip input handling if running in the editor
+  if Engine.is_editor_hint():
+    return
+
+  let event = event[]
+
+  # Log ui_cancel in game.nim
+  if event.is_action_pressed("ui_cancel"):
+    print("[GAME] ui_cancel pressed - will handle other actions but not ESC")
+
+  if event of InputEventKey:
+    let event = InputEventKey(event)
+    # GD4: TODO - Fix alt key detection (raw_code was enu-specific Godot 3 addition)
+    # Left alt support. raw_code is an enu specific addition
+    # if (host_os == "macosx" and event.raw_code == 58) or
+    #     (host_os == "windows" and event.raw_code == 56) or
+    #     (host_os == "linux" and event.raw_code == 65513):
+    #   if event.pressed:
+    #     state.push_flag CommandMode
+    #   else:
+    #     state.pop_flag CommandMode
+
+  if EditorVisible in state.local_flags or DocsVisible in state.local_flags or
+      ConsoleVisible in state.local_flags:
+    if event.is_action_pressed("zoom_in"):
       state.config_value.value:
-        level_dir = ""
-      state.player.transform = Transform.init(origin = vec3(0, 2, 0))
-      state.player.rotation = 0
-      change_loaded_level("tutorial-1", "tutorial")
+        font_size = state.config.font_size + 1
+    elif event.is_action_pressed("zoom_out"):
+      state.config_value.value:
+        font_size = state.config.font_size - 1
+  else:
+    if event.is_action_pressed("next"):
+      state.update_action_index(1)
+
+    if event.is_action_pressed("previous"):
+      state.update_action_index(-1)
+
+  # NOTE: alt+enter isn't being picked up on windows if the editor is
+  # open. Needs investigation.
+  if event.is_action_pressed("toggle_fullscreen") or (
+    host_os == "windows" and CommandMode in state.local_flags and
+    EditorVisible in state.local_flags and event of InputEventKey and
+    event.as(InputEventKey).keycode == keyEnter
+  ):
+    state.config_value.value:
+      full_screen = not state.config.full_screen
+  elif event.is_action_pressed("settings"):
+    state.set_flag SettingsVisible, SettingsVisible notin state.local_flags
+  elif event.is_action_pressed("next_level"):
+    self.switch_world(+1)
+  elif event.is_action_pressed("prev_level"):
+    self.switch_world(-1)
+  elif event.is_action_pressed("save_and_reload"):
+    state.pop_flag Playing
+    state.push_flag ResettingVM
+    self.switch_world(0)
+    state.pop_flag ResettingVM
+    self.get_viewport().set_input_as_handled()
+  elif event.is_action_pressed("pause"):
+    state.paused = not state.paused
+  elif event.is_action_pressed("clear_console"):
+    state.console.log.clear()
+  elif event.is_action_pressed("toggle_console"):
+    if ConsoleVisible in state.local_flags:
+      state.pop_flags ConsoleVisible, ConsoleFocused
     else:
-      warn "Unknown action", action, id
+      state.push_flags ConsoleVisible, ConsoleFocused
+  elif event.is_action_pressed("quit"):
+    print("[QUIT] Quit action pressed")
+    state.push_flag Quitting
+  elif event.is_action_pressed("change_mode"):
+    var mode = state.config.environment
+    let keys = environments.keys.to_seq
+    while (mode = keys.sample; mode == state.config.environment):
+      discard
+    state.config_value.value:
+      environment = mode
+  elif EditorVisible notin state.local_flags:
+    if event.is_action_pressed("toggle_mouse_captured"):
+      state.set_flag MouseCaptured, MouseCaptured notin state.local_flags
+      self.get_viewport().set_input_as_handled()
 
-  proc switch_world(diff: int) =
-    var config = state.config
-    if diff != 0:
-      change_loaded_level(
-        resolve_level_name(state.config.world, state.config.level, diff),
-        state.config.world,
-      )
-    else:
-      # force a reload of the current world
-      let current_level = state.config.level_dir
-      state.config_value.value:
-        level_dir = ""
-      state.config_value.value:
-        level_dir = current_level
+  # Only log for key events to avoid spam
+  if event of InputEventKey and event.as(InputEventKey).is_pressed():
+    print(
+      "[INPUT] Key pressed - Current tool: ",
+      state.current_tool,
+      " (",
+      int(state.current_tool),
+      ")",
+    )
 
-  method unhandled_input*(event: InputEvent) =
-    if event of InputEventKey:
-      let event = InputEventKey(event)
-      # Left alt support. raw_code is an enu specific addition
-      if (host_os == "macosx" and event.raw_code == 58) or
-          (host_os == "windows" and event.raw_code == 56) or
-          (host_os == "linux" and event.raw_code == 65513):
-        if event.pressed:
-          state.push_flag CommandMode
-        else:
-          state.pop_flag CommandMode
-
-    if EditorVisible in state.local_flags or DocsVisible in state.local_flags or
-        ConsoleVisible in state.local_flags:
-      if event.is_action_pressed("zoom_in"):
-        state.config_value.value:
-          font_size = state.config.font_size + 1
-      elif event.is_action_pressed("zoom_out"):
-        state.config_value.value:
-          font_size = state.config.font_size - 1
-    else:
-      if event.is_action_pressed("next"):
-        state.update_action_index(1)
-
-      if event.is_action_pressed("previous"):
-        state.update_action_index(-1)
-
-    # NOTE: alt+enter isn't being picked up on windows if the editor is
-    # open. Needs investigation.
-    if event.is_action_pressed("toggle_fullscreen") or (
-      host_os == "windows" and CommandMode in state.local_flags and
-      EditorVisible in state.local_flags and event of InputEventKey and
-      event.as(InputEventKey).scancode == KEY_ENTER
-    ):
-      state.config_value.value:
-        full_screen = not state.config.full_screen
-    elif event.is_action_pressed("settings"):
-      state.set_flag SettingsVisible, SettingsVisible notin state.local_flags
-    elif event.is_action_pressed("next_level"):
-      self.switch_world(+1)
-    elif event.is_action_pressed("prev_level"):
-      self.switch_world(-1)
-    elif event.is_action_pressed("save_and_reload"):
-      state.pop_flag Playing
-      state.push_flag ResettingVM
-      self.switch_world(0)
-      state.pop_flag ResettingVM
-      self.get_tree().set_input_as_handled()
-    elif event.is_action_pressed("pause"):
-      state.paused = not state.paused
-    elif event.is_action_pressed("clear_console"):
-      state.console.log.clear()
-    elif event.is_action_pressed("toggle_console"):
-      if ConsoleVisible in state.local_flags:
-        state.pop_flags ConsoleVisible, ConsoleFocused
+  if state.current_tool != Disabled:
+    if event.is_action_pressed("toggle_code_mode"):
+      print("[INPUT] Toggle code mode pressed")
+      if state.current_tool != CodeMode:
+        self.last_tool = state.current_tool
+        state.current_tool = CodeMode
       else:
-        state.push_flags ConsoleVisible, ConsoleFocused
-    elif event.is_action_pressed("quit"):
-      if host_os != "macosx":
-        state.push_flag Quitting
-    elif event.is_action_pressed("change_mode"):
-      var mode = state.config.environment
-      let keys = environments.keys.to_seq
-      while (mode = keys.sample; mode == state.config.environment):
-        discard
-      state.config_value.value:
-        environment = mode
-    elif EditorVisible notin state.local_flags:
-      if event.is_action_pressed("toggle_mouse_captured"):
-        state.set_flag MouseCaptured, MouseCaptured notin state.local_flags
-        self.get_tree().set_input_as_handled()
+        state.current_tool = self.last_tool
+    elif event.is_action_pressed("mode_1"):
+      print("[INPUT] Mode 1 key pressed - switching to CodeMode")
+      state.current_tool = CodeMode
+    elif event.is_action_pressed("mode_2"):
+      print("[INPUT] Mode 2 key pressed - switching to BlueBlock")
+      state.current_tool = BlueBlock
+    elif event.is_action_pressed("mode_3"):
+      print("[INPUT] Mode 3 key pressed - switching to RedBlock")
+      state.current_tool = RedBlock
+    elif event.is_action_pressed("mode_4"):
+      print("[INPUT] Mode 4 key pressed - switching to GreenBlock")
+      state.current_tool = GreenBlock
+    elif event.is_action_pressed("mode_5"):
+      print("[INPUT] Mode 5 key pressed - switching to BlackBlock")
+      state.current_tool = BlackBlock
+    elif event.is_action_pressed("mode_6"):
+      print("[INPUT] Mode 6 key pressed - switching to WhiteBlock")
+      state.current_tool = WhiteBlock
+    elif event.is_action_pressed("mode_7"):
+      print("[INPUT] Mode 7 key pressed - switching to BrownBlock")
+      state.current_tool = BrownBlock
+    elif event.is_action_pressed("mode_8"):
+      print("[INPUT] Mode 8 key pressed - switching to PlaceBot")
+      state.current_tool = PlaceBot
+  else:
+    print("[INPUT] Tool switching disabled - current_tool is Disabled")
 
-    if state.tool != Disabled:
-      if event.is_action_pressed("toggle_code_mode"):
-        if state.tool != CodeMode:
-          self.last_tool = state.tool
-          state.tool = CodeMode
-        else:
-          state.tool = self.last_tool
-      elif event.is_action_pressed("mode_1"):
-        state.tool = CodeMode
-      elif event.is_action_pressed("mode_2"):
-        state.tool = BlueBlock
-      elif event.is_action_pressed("mode_3"):
-        state.tool = RedBlock
-      elif event.is_action_pressed("mode_4"):
-        state.tool = GreenBlock
-      elif event.is_action_pressed("mode_5"):
-        state.tool = BlackBlock
-      elif event.is_action_pressed("mode_6"):
-        state.tool = WhiteBlock
-      elif event.is_action_pressed("mode_7"):
-        state.tool = BrownBlock
-      elif event.is_action_pressed("mode_8"):
-        state.tool = PlaceBot
-
-  method on_meta_clicked(url: string) =
-    if url.starts_with("nim://"):
-      assert ?state.open_sign
-      state.open_sign.owner.eval = url[6 ..^ 1]
-    elif url.starts_with("unit://"):
-      let id = url[7 ..^ 1]
-      for unit in state.units:
-        if unit.id == id:
-          state.open_unit = unit
-          return
-      logger("err", \"Unable to open unit {id}")
-    elif shell_open(url) != godotcoretypes.Error.OK:
-      logger("err", \"Unable to open url {url}")
+proc on_meta_clicked(self: Game, url: string) {.gdsync.} =
+  if url.starts_with("nim://"):
+    assert ?state.open_sign
+    state.open_sign.owner.eval = url[6 ..^ 1]
+  elif url.starts_with("unit://"):
+    let id = url[7 ..^ 1]
+    for unit in state.units:
+      if unit.id == id:
+        state.open_unit = unit
+        return
+    logger("err", "Unable to open unit {id}")
+  elif OS.shell_open(url) != ok:
+    logger("err", "Unable to open url {url}")

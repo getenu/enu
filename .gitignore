@@ -1,10 +1,13 @@
 # ignore all files with no extension (unix binaries)
-*
+src/**/*
+tools/**/*
+tests/**/*
 !/**/
 !*.*
-!AppRun
 
+.godot/
 vendor/pcre
+.claude/settings.local.json
 
 *.dSYM
 *.so
@@ -42,3 +45,4 @@ nimbledeps/
 .submodules.tmp
 
 *.previous
+*.log

@@ -1,4 +1,3 @@
-import godotapi/spatial
 import core, states, bots, builds, models/[colors, units]
 
 proc init*(
@@ -6,7 +5,7 @@ proc init*(
     message: string,
     more = "",
     owner: Unit,
-    transform = Transform.init,
+    transform = Transform3D.init,
     width = 1.0,
     height = 1.0,
     size = 32,

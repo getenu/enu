@@ -9,7 +9,8 @@ proc get_pnode(a: VmArgs, pos: int): PNode {.inline.} =
 
 proc get_vector3(a: VmArgs, pos: int): Vector3 =
   let fields = a.get_node(pos).sons
-  result = vec3(fields[0].float_val, fields[1].float_val, fields[2].float_val)
+  result =
+    vector3(fields[0].float_val, fields[1].float_val, fields[2].float_val)
 
 # adapted from https://github.com/h0lley/embeddedNimScript/blob/6101fb37d4bd3f947db86bac96f53b35d507736a/embeddedNims/enims.nim#L31
 proc to_node(val: int): PNode =
@@ -27,9 +28,11 @@ proc to_node(a: bool): Pnode =
 proc to_node(val: enum): PNode =
   val.ord.to_node
 
-proc to_node(list: open_array[int | float | string | bool | enum]): PNode =
-  result = nkBracket.new_node
-  result.sons.initialize(list.len)
+proc to_node(
+    list: open_array[int | float | string | bool | enum | real_elem]
+): PNode =
+  result = ast.new_node(nkBracket)
+  new_seq(result.sons, list.len)
   for i in 0 .. list.high:
     result.sons[i] = list[i].to_node()
 

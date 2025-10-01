@@ -1,402 +1,353 @@
-import std/[strutils, tables]
-import pkg/[godot]
-import pkg/compiler/[lineinfos]
+import std/[strutils, tables, monotimes]
+import gdext
 import
-  godotapi/[
-    text_edit, scene_tree, node, input_event, global_constants, input_event_key,
-    style_box_flat, gd_os, tween, scene_tree_tween, property_tweener,
-    method_tweener, input, scroll_container, input_event_screen_touch,
+  gdext/classes/[
+    gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventkey,
+    gdinputeventmousebutton, gdinputeventjoypadbutton, gdcontrol, gdnode,
+    gdvscrollbar, gdtween, gdstyleboxflat, gdbutton, gdinput, gdviewport,
+    gdmethodtweener, gdcodehighlighter,
   ]
-import core, gdutils
-import models except Color
+import core, gdcore, types, models/[states, units, players]
+import nim_highlighter
 
-type ScrollState = enum
-  Idle
-  Detecting
-  Scrolling
-  Selecting
-  WaitingForSelection
-
-const clear = init_color(0.0, 0.0, 0.0, 0.0)
-
-proc configure_highlighting*(self: TextEdit) =
-  # strings
-  self.add_color_region("\"", "\"", ir_black[Text], false)
-  self.add_color_region("\"\"\"", "\"\"\"", ir_black[Text], false)
-  # block comments
-  self.add_color_region("#[", "]#", ir_black[Comment], false)
-  # line comments
-  self.add_color_region("#", "\n", ir_black[Comment], true)
-
-gdobj Editor of MarginContainer:
-  var
-    comment_color* {.gdExport.} = init_color(0.5, 0.5, 0.5)
+type EnuEditor* {.gdsync.} =
+  ptr object of MarginContainer
+    code_edit*: CodeEdit
+    # scroll_container: ScrollContainer
+    left_panel: Control
+    tween: gdref Tween
     og_bg_color: Color
-    tween: SceneTreeTween
-    scroll_bar: VScrollBar
-    text_edit: TextEdit
-    scroll_container: ScrollContainer
-    adjust_scroll_next_frame: bool
-
-    start_scroll: int64
-    scroll_state = Idle
     selection_color: Color
     caret_color: Color
-    selecting: bool
-    selection_timer: MonoTime
-    touch_timer: MonoTime
-    left_panel: Container
+    code_highlighter: gdref CodeHighlighter  # Kept to prevent GC
 
-  proc indent_new_line() =
-    let editor = self.text_edit
-    let column = int editor.cursor_get_column - 1
-    if column > 0:
-      let
-        line = editor.get_line(editor.cursor_get_line)[0 .. column]
-        stripped = line.strip
+proc configure_highlighting*(self: EnuEditor) =
+  # Configure syntax highlighting for Nim - Godot 4 version
+  let code_edit = self.code_edit
 
-      if stripped.high > 0:
-        let last = stripped[stripped.high]
+  # Enable basic code editing features
+  code_edit.set_draw_line_numbers(true)
+  code_edit.set_draw_tabs(true)
+  code_edit.set_draw_spaces(false)
 
-        var spaces = line.indentation
-        if (stripped in ["var", "let", "const", "type"]) or last in [':', '=']:
-          spaces += 2
+  # Set up Nim syntax highlighting with ir_black colors
+  self.code_highlighter = create_nim_highlighter()
+  if ?self.code_highlighter:
+    # Store the CodeHighlighter reference to prevent garbage collection (that was the bug!)
+    # Use GdRef cast to convert to parent type
+    let syntax_hl = cast[gdref SyntaxHighlighter](self.code_highlighter)
+    code_edit.setSyntaxHighlighter(syntax_hl)
+    print("[UI] Applied Nim syntax highlighting with ir_black colors")
+  else:
+    print("[UI] Warning: Could not apply syntax highlighting - highlighter is nil")
 
-        editor.insert_text_at_cursor("\n" & " ".repeat(spaces))
-        self.get_tree.set_input_as_handled()
-      elif stripped.len == 0 and line.len > 0:
-        editor.insert_text_at_cursor("\n" & line)
-        self.get_tree.set_input_as_handled()
+  # Enable line folding
+  code_edit.set_line_folding_enabled(true)
+  code_edit.set_draw_fold_gutter(true)
 
-  method input*(event: InputEvent) =
-    if event of InputEventKey and EditorFocused in state.local_flags:
-      let event = event.as(InputEventKey)
-      if not event.pressed:
-        return
-      if event.scancode == KEY_ENTER and host_os != "ios":
-        self.indent_new_line()
-      if event.scancode == KEY_SEMICOLON and state.config.semicolon_as_colon:
-        self.text_edit.insert_text_at_cursor(":")
-        self.get_tree.set_input_as_handled()
-      elif event.scancode == KEY_HOME:
-        self.text_edit.cursor_set_column(0)
-        self.get_tree.set_input_as_handled()
-      elif event.scancode == KEY_END:
-        self.text_edit.cursor_set_column self.text_edit.get_line(
-          self.text_edit.cursor_get_line
-        ).len
-        self.get_tree.set_input_as_handled()
-      self.adjust_scroll_next_frame = true
+  # Enable gutters for debugging features
+  code_edit.set_draw_bookmarks_gutter(true) # For error highlighting
+  code_edit.set_draw_executing_lines_gutter(true) # For execution tracking
 
-  method gui_input*(event: InputEvent) =
-    if event of InputEventScreenTouch:
-      let event = event as InputEventScreenTouch
-      self.ignore_touches(event)
-      if event.pressed:
-        self.touch_timer = get_mono_time() + 0.5.seconds
-      else:
-        self.touch_timer = MonoTime.high
-    elif (
-      EditorVisible in state.local_flags or EditorClosing in state.local_flags
-    ) and CommandMode notin state.local_flags and event of InputEventScreenDrag and
-        self.scroll_state == Idle:
-      self.get_tree.set_input_as_handled()
-      self.ignore_touches(event)
+proc get_text*(self: EnuEditor): string =
+  return $self.code_edit.get_text()
 
-  method unhandled_input*(event: InputEvent) =
-    if EditorFocused in state.local_flags and
-        event.is_action_pressed("ui_cancel"):
-      if not (event of InputEventJoypadButton) or
-          CommandMode notin state.local_flags:
-        state.open_unit.code = Code.init(self.text_edit.text)
-        state.open_unit = nil
-        self.get_tree().set_input_as_handled()
+proc set_text*(self: EnuEditor, text: string) =
+  self.code_edit.set_text(text)
 
-  proc clear_errors() =
-    for i in 0 ..< self.text_edit.get_line_count():
-      self.text_edit.set_line_as_marked(i, false)
+proc clear_errors(self: EnuEditor) =
+  # Clear all bookmarked lines (used for error marking)
+  for i in 0 ..< self.code_edit.get_line_count():
+    if self.code_edit.is_line_bookmarked(int32(i)):
+      self.code_edit.set_line_as_bookmarked(int32(i), false)
 
-  proc highlight_errors() =
-    self.text_edit.clear_executing_line()
-    if ?state.open_unit:
-      for err in state.open_unit.errors:
-        self.text_edit.set_line_as_marked(int64(err.info.line - 1), true)
+proc highlight_errors(self: EnuEditor) =
+  # Use bookmarks to mark error lines
+  if ?state.open_unit:
+    for err in state.open_unit.errors:
+      self.code_edit.set_line_as_bookmarked(int32(err.info.line - 1), true)
+      print("[UI] Editor marked error line: ", err.info.line - 1)
 
-  proc `executing_line=`*(line: int) =
-    if self.text_edit.get_line_count >= line and line >= 0:
-      self.text_edit.set_executing_line(line)
-    else:
-      self.text_edit.clear_executing_line()
+proc set_executing_line(self: EnuEditor, line: int) =
+  # Clear all executing lines first
+  self.code_edit.clear_executing_lines()
 
-  proc line_rect(
-      line_num: int
-  ): tuple[top_left: Vector2, bottom_right: Vector2] =
-    let line_height = float self.text_edit.get_line_height
-    for line in 1 ..< line_num:
-      result.top_left.y +=
-        (self.text_edit.get_line_wrap_count(line).float + 1) * line_height
-    result.bottom_right = vec2(
-      self.rect_size.x,
-      result.top_left.y +
-        (self.text_edit.get_line_wrap_count(line_num).float + 1) * line_height,
-    )
+  # Set the new executing line if valid
+  if self.code_edit.get_line_count() >= line and line >= 0:
+    self.code_edit.set_line_as_executing(int32(line), true)
+    print("[UI] Editor executing line set to: ", line)
 
-  proc visible_window(): tuple[top_left: Vector2, bottom_right: Vector2] =
-    let vscroll = float self.scroll_container.scroll_vertical
-    result =
-      (vec2(0.0, vscroll), vec2(self.rect_size.x, self.rect_size.y + vscroll))
+proc offset_x(self: EnuEditor, offset: float) {.gdsync.} =
+  # Move editor horizontally based on offset (-1.0 = off-screen left, 0.0 = visible)
+  let width = self.get_size().x
+  let new_position = vector2(width * offset, self.get_position().y)
+  self.set_position(new_position)
 
-  proc scroll_to_cursor() =
-    let rect = self.line_rect(self.text_edit.cursor_get_line + 1)
-    let window = self.visible_window
-    if rect.top_left.y <= window.top_left.y:
-      self.scroll_container.scroll_vertical = int rect.top_left.y
-    elif rect.bottom_right.y >= window.bottom_right.y:
-      self.scroll_container.scroll_vertical =
-        int(rect.bottom_right.y - self.rect_size.y)
+proc open_editor(self: EnuEditor) =
+  print("[UI] Editor opening...")
 
-  method on_text_changed*() =
-    state.player.open_code = self.text_edit.text
-    self.rescale
+  # Start editor off-screen (hidden to the left)
+  self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
+  self.offset_x(-1.0) # Start off-screen
+  self.set_visible(true)
 
-  method on_cursor_changed*() =
-    state.player.cursor_position =
-      (int self.text_edit.cursor_get_line, int self.text_edit.cursor_get_column)
-    if self.text_edit.is_selection_active:
-      self.scroll_to_cursor
+  # Create tween for smooth slide-in animation (matches Godot 3 behavior)
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for editor animation"
 
-  method set_opacity*(opacity: float) {.gdexport.} =
-    self.opacity = opacity
+  # Immediate fade in (like Godot 3 tween_property with 0.0 duration)
+  discard
+    self.tween[].tween_property(self, new_node_path("modulate:a"), variant(1.0), 0.0)
+  # Slide in from left with proper EXPO easing
+  let tweener = self.tween[].tween_method(
+    callable(self, new_string_name("offset_x")),
+    variant(-1.0),
+    variant(0.0),
+    animation_duration,
+  )
+  discard tweener[].setTrans(transExpo)
+  discard tweener[].setEase(easeInOut)
+  print("[UI] Editor opened with slide-in animation (EXPO/EASE_IN_OUT)")
 
-  method offset_x*(offset: float) {.gdexport.} =
-    let width = self.rect_size.x
-    self.rect_position = vec2(width * offset, self.rect_position.y)
+proc close_editor(self: EnuEditor) =
+  print("[UI] Editor closing...")
+  if not self.code_edit.is_nil:
+    self.code_edit.release_focus()
 
-  method ghost*() {.gdexport.} =
-    self.text_edit.ghost()
-    self.scroll_container.ghost()
-    self.mouse_filter = MOUSE_FILTER_PASS
+  # Reset position and animate slide-out
+  self.set_position(vector2(0, self.get_position().y))
 
-  method unghost*() {.gdexport.} =
-    self.text_edit.unghost()
-    self.scroll_container.unghost()
-    self.text_edit.mouse_filter = MOUSE_FILTER_PASS
-    self.scroll_container.mouse_filter = MOUSE_FILTER_PASS
-    self.mouse_filter = MOUSE_FILTER_STOP
+  # Create tween for smooth slide-out animation (matches Godot 3 behavior)
+  if ?self.tween:
+    self.tween[].kill() # Kill existing tween
+  self.tween = self.create_tween()
+  assert ?self.tween, "Failed to create tween for editor animation"
 
-  proc close_editor() =
-    self.text_edit.release_focus()
-    self.rect_position = vec2(0, 0)
-    if ?self.tween:
-      self.tween.kill
-    self.tween = self.get_tree.create_tween()
-    discard self.tween
-      .tween_method(
-        self, "_offset_x", 0.0.to_variant, -1.0.to_variant, animation_duration
-      )
-      .set_trans(TRANS_EXPO)
-      .set_ease(EASE_IN_OUT)
-    discard self.tween.tween_callback(
-      self, "set_visible", new_array(false.to_variant)
-    )
+  # Slide out to the left with proper EXPO easing
+  let tweener = self.tween[].tween_method(
+    callable(self, new_string_name("offset_x")),
+    variant(0.0),
+    variant(-1.0),
+    animation_duration,
+  )
+  discard tweener[].setTrans(transExpo)
+  discard tweener[].setEase(easeInOut)
+  # Hide editor after animation completes
+  discard self.tween[].tween_callback(
+    callable(self, new_string_name("set_visible")).bind(variant(false))
+  )
+  print("[UI] Editor closed with slide-out animation (EXPO/EASE_IN_OUT)")
 
-  method open_done() =
-    state.pop_flag EditorClosing
-
-  proc open_editor() =
-    self.opacity = 0.0
-    if ?self.tween:
-      self.tween.kill
-    self.tween = self.get_tree.create_tween()
-    self.visible = true
-    discard
-      self.tween.tween_callback(self, "_offset_x", new_array(0.0.to_variant))
-    discard self.tween.tween_property(self, "modulate:a", 1.0.to_variant, 0.0)
-    if CommandMode in state.local_flags:
-      discard self.tween.tween_callback(self.text_edit, "_ghost")
-    discard self.tween
-      .tween_method(
-        self, "_offset_x", -1.0.to_variant, 0.0.to_variant, animation_duration
-      )
-      .set_trans(TRANS_EXPO)
-      .set_ease(EASE_IN_OUT)
-    discard self.tween.tween_callback(self, "_open_done")
-    discard self.tween.tween_callback(self, "_rescale")
-
-  proc watch_open_unit() =
-    var line_zid: ZID
-    state.open_unit_value.changes:
-      if removed:
-        let unit = state.open_unit
-        if unit.is_nil:
-          Zen.thread_ctx.untrack(line_zid)
-          self.close_editor()
+proc watch_open_unit(self: EnuEditor) =
+  var line_zid: ZID
+  state.open_unit_value.changes:
+    if removed:
+      let unit = state.open_unit
+      if unit.is_nil:
+        Zen.thread_ctx.untrack(line_zid)
+        self.close_editor()
+        if ?state.player:
           state.player.open_code = ""
-        else:
-          self.open_editor()
-          line_zid = unit.current_line_value.changes:
-            if added:
-              # only update the executing line if the code hasn't been changed.
-              if self.text_edit.text == state.open_unit.code.nim:
-                self.executing_line = change.item - 1
-              else:
-                self.text_edit.clear_executing_line()
+      else:
+        print("[UI] Editor opening for unit: ", unit.id)
+        self.open_editor()
+        line_zid = unit.current_line_value.changes:
+          if added:
+            # Only update the executing line if the code hasn't been changed
+            if $self.code_edit.get_text() == state.open_unit.code.nim:
+              self.set_executing_line(change.item - 1)
+            else:
+              self.code_edit.clear_executing_lines()
 
-          self.text_edit.text = state.open_unit.code.nim
-          state.player.open_code = self.text_edit.text
+        self.code_edit.set_text(state.open_unit.code.nim)
+        if ?state.player:
+          state.player.open_code = $self.get_text()
 
-          if CommandMode in state.local_flags:
-            self.ghost()
-          else:
-            self.unghost()
-          self.clear_errors()
-          self.highlight_errors()
-          let line = unit.current_line - 1
-          self.executing_line = line
-
-  proc watch_local_flags() =
-    state.local_flags.changes:
-      if FullWidthPanels.added:
-        self.left_panel.anchor_right = 1.0
-        self.left_panel.margin_right = 0.0
-      elif FullWidthPanels.removed:
-        self.left_panel.margin_right = -1.0
-        self.left_panel.anchor_right = 0.5
-
-      if ConsoleVisible.added:
-        self.highlight_errors()
-      elif ConsoleVisible.removed:
         self.clear_errors()
-      elif EditorFocused.added:
-        self.text_edit.grab_focus
-        self.left_panel.raisee()
-      if CommandMode.added:
-        if EditorVisible in state.local_flags:
-          state.open_unit.code = Code.init(self.text_edit.text)
+        self.highlight_errors()
+        let line = unit.current_line - 1
+        self.set_executing_line(line)
 
-          self.ghost()
-          self.text_edit.release_focus()
-          self.mouse_filter = MOUSE_FILTER_IGNORE
-      elif CommandMode.removed:
-        if EditorVisible in state.local_flags:
-          self.unghost()
-          self.text_edit.grab_focus()
-          self.mouse_filter = MOUSE_FILTER_STOP
+proc watch_local_flags(self: EnuEditor) =
+  state.local_flags.changes:
+    if EditorFocused.added:
+      if not self.code_edit.is_nil:
+        self.code_edit.grab_focus()
+    elif CommandMode.added:
+      if EditorVisible in state.local_flags and ?state.open_unit:
+        # TODO: Fix Code.init with proper string conversion
+        state.open_unit.code = Code.init($self.code_edit.get_text())
+        # TODO: Ghost mode for command overlay
+        # discard
+    elif CommandMode.removed:
+      if EditorVisible in state.local_flags:
+        if not self.code_edit.is_nil:
+          self.code_edit.grab_focus()
 
-  proc watch() =
-    self.watch_open_unit()
-    self.watch_local_flags()
+proc watch_states(self: EnuEditor) =
+  self.watch_open_unit()
+  self.watch_local_flags()
 
-  proc content_height(): float =
-    self.line_rect(self.text_edit.get_line_count).bottom_right.y
+method ready*(self: EnuEditor) {.gdsync.} =
+  print("[UI] Editor ready - using Godot 4 CodeEdit")
 
-  method rescale() =
-    self.text_edit.rect_min_size =
-      vec2(self.rect_size.x, max(float self.content_height, self.rect_size.y))
-    self.text_edit.rect_size = self.text_edit.rect_min_size
-    self.scroll_to_cursor
+  # Find the CodeEdit node - this should always succeed if scene is properly set up
+  self.code_edit = self.find("CodeEdit", CodeEdit)
+  assert ?self.code_edit, "CodeEdit node not found in Editor scene"
 
-  method ready*() =
-    self.text_edit = find("TextEdit", TextEdit)
-    self.caret_color = self.text_edit.get_color("caret_color")
-    self.selection_color = self.text_edit.get_color("selection_color")
-    self.scroll_container = find("ScrollContainer", ScrollContainer)
-    self.left_panel = state.nodes.game.find("LeftPanel", Container)
-    self.bind_signals(self.text_edit, "text_changed", "cursor_changed")
-    self.bind_signals(self.scroll_container, "scroll_started", "scroll_ended")
-    self.bind_signal(self, ("resized", "_rescale"))
-    state.nodes.game.bind_signal(self, "gui_input", self.name)
+  # Start hidden until opened
+  self.set_visible(false)
+  print("[UI] Editor initialized (hidden by default)")
+  # Find other UI elements - some may not exist in current scene
+  # self.scroll_container = self.find("ScrollContainer", ScrollContainer)
+  if not state.nodes.game.is_nil:
+    self.left_panel = state.nodes.game.find("LeftPanel", Control)
+  else:
+    print("[UI] Warning: state.nodes.game is nil, cannot find LeftPanel")
 
-    for name in ["Close", "Run"]:
-      let control = find(name, Control)
-      self.bind_signal(control, ("pressed", name.to_lower))
-      self.bind_signal(control, ("gui_input", "child_focused"))
-    var stylebox = self.text_edit.get_stylebox("normal").as(StyleBoxFlat)
-    self.og_bg_color = stylebox.bg_color
+  # Initialize tween for smooth animations - restored for slide animation
+  # Note: Tween will be created when needed, not here to avoid lifecycle issues
 
-    self.text_edit.configure_highlighting()
+  # Get colors for UI state management
+  self.selection_color =
+    self.code_edit.get_theme_color("selection_color", "TextEdit")
+  self.caret_color = self.code_edit.get_theme_color("caret_color", "TextEdit")
 
-    # hide verticle scrollbar. Should be restyled and re-enabled in the future.
-    for child in self.text_edit.get_children().to_seq.concat(
-      self.scroll_container.get_children().to_seq
-    ):
-      let o = child.as_object(Node) as VScrollBar
-      if ?o:
-        self.scroll_bar = o
-        o.modulate = clear
-    assert ?self.scroll_bar
-    self.rescale()
-    self.watch()
+  # Configure the code editor
+  self.configure_highlighting()
 
-  proc enable_selecting() =
-    self.text_edit.add_color_override("selection_color", self.selection_color)
-    self.text_edit.add_color_override("caret_color", self.caret_color)
-    self.scroll_state = Selecting
-    self.text_edit.mouse_filter = MOUSE_FILTER_STOP
-    self.text_edit.selecting_enabled = true
-    if not self.text_edit.is_selection_active:
-      self.selection_timer = get_mono_time() + 2.0.seconds
-      self.scroll_state = WaitingForSelection
+  self.add_theme_font_size_override("font_size", 30)
 
-  proc enable_scrolling() =
-    self.text_edit.add_color_override("selection_color", clear)
-    self.text_edit.add_color_override("caret_color", clear)
-    self.scroll_state = Scrolling
-    self.text_edit.mouse_filter = MOUSE_FILTER_IGNORE
-    self.text_edit.selecting_enabled = false
+  # Connect signals for editor functionality
+  if not self.code_edit.has_signal("text_changed"):
+    self.code_edit.add_user_signal("text_changed")
+  let text_changed_callable =
+    callable(self, new_string_name("_on_text_changed"))
+  discard self.code_edit.connect(
+    new_string_name("text_changed"), text_changed_callable
+  )
 
-  proc enable_detecting() =
-    self.start_scroll = self.scroll_container.scroll_vertical
-    self.text_edit.add_color_override("selection_color", clear)
-    self.text_edit.add_color_override("caret_color", clear)
-    self.scroll_state = Detecting
+  if not self.code_edit.has_signal("caret_changed"):
+    self.code_edit.add_user_signal("caret_changed")
+  let caret_changed_callable =
+    callable(self, new_string_name("_on_caret_changed"))
+  discard self.code_edit.connect(
+    new_string_name("caret_changed"), caret_changed_callable
+  )
 
-  proc enable_idle() =
-    self.text_edit.add_color_override("selection_color", self.selection_color)
-    self.text_edit.add_color_override("caret_color", self.caret_color)
-    self.scroll_state = Idle
-    self.text_edit.mouse_filter = MOUSE_FILTER_PASS
-    self.text_edit.selecting_enabled = true
-
-  method process(delta: float) =
-    if self.adjust_scroll_next_frame:
-      self.adjust_scroll_next_frame = false
-      self.scroll_to_cursor()
-
-    if self.scroll_state == Detecting:
-      if abs(self.scroll_container.scroll_vertical - self.start_scroll) > 20:
-        self.enable_scrolling
-      elif get_mono_time() > self.touch_timer:
-        self.enable_selecting()
-    elif self.scroll_state == Selecting and
-        not self.text_edit.is_selection_active:
-      self.selection_timer = get_mono_time() + 0.5.seconds
-      self.scroll_state = WaitingForSelection
-    elif self.scroll_state == WaitingForSelection and
-        self.text_edit.is_selection_active:
-      self.scroll_state = Selecting
-    elif self.scroll_state == WaitingForSelection and
-        get_mono_time() > self.selection_timer:
-      self.enable_idle
-
-  method on_scroll_started() =
-    if not self.text_edit.is_selection_active:
-      self.enable_detecting
+  # Connect button signals
+  for name in ["Close", "Run"]:
+    let control = self.find(name, Control)
+    if ?control:
+      let method_name = "on_" & name.to_lower
+      let callable_obj = callable(self, new_string_name(method_name))
+      discard control.connect(new_string_name("pressed"), callable_obj)
     else:
-      self.enable_selecting
+      print("[UI] Warning: Button '", name, "' not found in Editor scene")
 
-  method on_scroll_ended() =
-    self.enable_idle
+  # Enable input processing to intercept keyboard events
+  self.set_process_input(true)
 
-  method on_close() =
-    if ?state.open_unit:
-      state.open_unit.code = Code.init(self.text_edit.text)
-      state.open_unit = nil
+  # GD4: Re-enabled GUI input focus management - handled in gui_input method
 
-  method on_run() =
-    if ?state.open_unit:
-      state.open_unit.code = Code.init("")
-      state.open_unit.code = Code.init(self.text_edit.text)
+  # Start watching state changes
+  self.watch_states()
 
-  method on_child_focused(event: InputEvent) =
-    self.grab_focus()
+  print("[UI] Editor configured with CodeEdit!")
+
+proc on_text_changed(self: EnuEditor) =
+  # Handle text changes - update player's open_code
+  if ?state.player:
+    state.player.open_code = $self.get_text()
+
+proc on_caret_changed(self: EnuEditor) =
+  # Handle caret position changes - update player's cursor_position
+  if ?state.player:
+    let line = self.code_edit.get_caret_line()
+    let column = self.code_edit.get_caret_column()
+    state.player.cursor_position = (line: int(line), col: int(column))
+
+proc on_close(self: EnuEditor) {.gdsync.} =
+  # Save code and close editor
+  if ?state.open_unit:
+    # TODO: Fix Code.init with proper string conversion
+    state.open_unit.code = Code.init($self.code_edit.get_text())
+    state.open_unit = nil
+
+proc on_run(self: EnuEditor) {.gdsync.} =
+  # Run the current code (force re-execution by touching code field)
+  if ?state.open_unit:
+    # Set to empty first to force a change, then set to actual code
+    state.open_unit.code = Code.init("")
+    state.open_unit.code = Code.init($self.code_edit.get_text())
+
+proc indent_new_line*(self: EnuEditor) =
+  # Smart indentation for new lines (ported from Godot 3)
+  # Note: CodeEdit's built-in auto-indent handles maintaining current indentation.
+  # This only handles special cases where we need extra indentation beyond what
+  # the built-in system provides (e.g., after 'var', 'let', 'const', 'type' keywords).
+  let column = int(self.code_edit.get_caret_column()) - 1
+  if column > 0:
+    let
+      current_line = self.code_edit.get_caret_line()
+      line_text = $self.code_edit.get_line(current_line)
+      line_segment = line_text[0 .. column]
+      stripped = line_segment.strip()
+
+    if stripped.len > 0:
+      # Check if we need to add extra indentation for Nim-specific keywords
+      # CodeEdit's indent_automatic_prefixes handles ":" and "=" already
+      if stripped in ["var", "let", "const", "type"]:
+        # Add extra indentation level
+        let spaces = " ".repeat(line_segment.indentation + 2)
+        self.code_edit.insert_text_at_caret("\n" & spaces)
+        self.get_viewport().set_input_as_handled()
+
+method input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
+  # Process input events before children (like CodeEdit) handle them
+  if event[] of InputEventKey and EditorFocused in state.local_flags:
+    let key_event = event[].as(InputEventKey)
+    if key_event.is_pressed() and key_event.get_keycode() == keyEnter:
+      self.indent_new_line()
+
+method unhandled_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
+  if EditorFocused in state.local_flags and
+      event[].is_action_pressed("ui_cancel"):
+    if not (event[] of InputEventJoypadButton) or
+        CommandMode notin state.local_flags:
+      if ?state.open_unit:
+        state.open_unit.code = Code.init($self.code_edit.get_text())
+        state.open_unit = nil
+      self.get_viewport().set_input_as_handled()
+
+method gui_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
+  if event[] of InputEventMouseButton:
+    debug "pushing EditorFocused", topics = "state"
+    state.push_flags EditorFocused
+
+  if event[] of InputEventKey and EditorFocused in state.local_flags:
+    let key_event = event[].as(InputEventKey)
+    if not key_event.is_pressed():
+      return
+
+    case key_event.get_keycode()
+    of keyEnter:
+      self.indent_new_line()
+    of keySemicolon:
+      # Optional: semicolon as colon for Logo-style syntax
+      if state.config.semicolon_as_colon:
+        self.code_edit.insert_text_at_caret(":")
+        self.get_viewport().set_input_as_handled()
+    of keyHome:
+      # Go to beginning of line
+      self.code_edit.set_caret_column(0'i32)
+      self.get_viewport().set_input_as_handled()
+    of keyEnd:
+      # Go to end of line
+      let current_line = self.code_edit.get_caret_line()
+      let line_text = self.code_edit.get_line(current_line)
+      self.code_edit.set_caret_column(int32(line_text.length()))
+      self.get_viewport().set_input_as_handled()
+    else:
+      # Handle all other keys - do nothing for now
+      discard
