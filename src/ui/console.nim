@@ -16,7 +16,7 @@ type Console* {.gdsync.} =
 proc watch_states(self: Console)
 
 proc offset_x*(self: Console, offset: float) {.gdsync.} =
-  # Move console horizontally based on offset (1.0 = off-screen right, 0.0 = visible)
+  # Move console horizontally based on offset (-1.0 = off-screen left, 0.0 = visible)
   let width = self.get_size().x
   let new_position = vector2(width * offset, self.get_position().y)
   self.set_position(new_position)
@@ -24,20 +24,20 @@ proc offset_x*(self: Console, offset: float) {.gdsync.} =
 proc show_console(self: Console) =
   print("[UI] Console showing...")
 
-  # Start console off-screen (hidden to the right)
-  self.offset_x(1.0) # Start off-screen
+  # Start console off-screen (hidden to the left)
+  self.offset_x(-1.0) # Start off-screen
   self.set_visible(true)
 
-  # Create tween for smooth slide-in animation (from right)
+  # Create tween for smooth slide-in animation (from left)
   if ?self.tween:
     self.tween[].kill()
   self.tween = self.create_tween()
   assert ?self.tween, "Failed to create tween for console animation"
 
-  # Slide in from right with proper EXPO easing
+  # Slide in from left with proper EXPO easing
   discard self.tween[].tween_method(
     callable(self, new_string_name("offset_x")),
-    variant(1.0),
+    variant(-1.0),
     variant(0.0),
     animation_duration,
   )
@@ -51,17 +51,17 @@ proc hide_console(self: Console) =
   # Reset position and animate slide-out
   self.set_position(vector2(0, self.get_position().y))
 
-  # Create tween for smooth slide-out animation (to right)
+  # Create tween for smooth slide-out animation (to left)
   if ?self.tween:
     self.tween[].kill() # Kill existing tween
   self.tween = self.create_tween()
   assert ?self.tween, "Failed to create tween for console animation"
 
-  # Slide out to the right with proper EXPO easing
+  # Slide out to the left with proper EXPO easing
   discard self.tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(0.0),
-    variant(1.0),
+    variant(-1.0),
     animation_duration,
   )
   discard self.tween[].setTrans(transExpo)
