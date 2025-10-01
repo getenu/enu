@@ -222,16 +222,11 @@ method notification*(self: Game, what: int32) =
     # TODO: Show about dialog when gdext dialog API is available
 
 proc add_platform_input_actions(self: Game) =
-  print("[INPUT] Setting up platform-specific input actions")
-
   # Get the OS suffix for platform-specific input actions
   let suffix = "." & host_os
-  print "[INPUT] Platform suffix: ", suffix
-  print "[INPUT] host_os: ", host_os
 
   # Get all actions from the input map
   let all_actions = InputMap.get_actions()
-  print "[INPUT] Found ", all_actions.size(), " total actions"
 
   var platform_actions: seq[string] = @[]
   var base_actions: seq[string] = @[]
@@ -244,37 +239,26 @@ proc add_platform_input_actions(self: Game) =
     else:
       base_actions.add(action)
 
-  print "[INPUT] Platform-specific actions: ", platform_actions.len
-  print "[INPUT] Base actions: ", base_actions.len
-
   # Process platform-specific actions
   for action in platform_actions:
     let base_name = action.replace(suffix, "")
-    print "[INPUT] Processing platform action: ", action, " -> ", base_name
 
     # Remove existing base action if it exists
     if InputMap.has_action(base_name.to_string_name):
-      print "[INPUT] Removing existing action: ", base_name
       InputMap.erase_action(base_name.to_string_name)
 
     # Add new base action
-    print "[INPUT] Adding new action: ", base_name
     InputMap.add_action(base_name.to_string_name)
 
     # Copy all events from platform action to base action
     let events = InputMap.action_get_events(action.to_string_name)
-    print "[INPUT] Copying ",
-      events.size(), " events from ", action, " to ", base_name
 
     for j in 0 ..< events.size():
       let event = events[j]
       InputMap.action_add_event(base_name.to_string_name, event)
 
     # Remove the platform-specific action
-    print "[INPUT] Removing platform action: ", action
     InputMap.erase_action(action.to_string_name)
-
-  print "[INPUT] Platform input actions setup complete"
 
 method on_init*(self: Game) {.gdsync.} =
   # Basic field initialization
@@ -870,50 +854,29 @@ method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
       state.set_flag MouseCaptured, MouseCaptured notin state.local_flags
       self.get_viewport().set_input_as_handled()
 
-  # Only log for key events to avoid spam
-  if event of InputEventKey and event.as(InputEventKey).is_pressed():
-    print(
-      "[INPUT] Key pressed - Current tool: ",
-      state.current_tool,
-      " (",
-      int(state.current_tool),
-      ")",
-    )
-
   if state.current_tool != Disabled:
     if event.is_action_pressed("toggle_code_mode"):
-      print("[INPUT] Toggle code mode pressed")
       if state.current_tool != CodeMode:
         self.last_tool = state.current_tool
         state.current_tool = CodeMode
       else:
         state.current_tool = self.last_tool
     elif event.is_action_pressed("mode_1"):
-      print("[INPUT] Mode 1 key pressed - switching to CodeMode")
       state.current_tool = CodeMode
     elif event.is_action_pressed("mode_2"):
-      print("[INPUT] Mode 2 key pressed - switching to BlueBlock")
       state.current_tool = BlueBlock
     elif event.is_action_pressed("mode_3"):
-      print("[INPUT] Mode 3 key pressed - switching to RedBlock")
       state.current_tool = RedBlock
     elif event.is_action_pressed("mode_4"):
-      print("[INPUT] Mode 4 key pressed - switching to GreenBlock")
       state.current_tool = GreenBlock
     elif event.is_action_pressed("mode_5"):
-      print("[INPUT] Mode 5 key pressed - switching to BlackBlock")
       state.current_tool = BlackBlock
     elif event.is_action_pressed("mode_6"):
-      print("[INPUT] Mode 6 key pressed - switching to WhiteBlock")
       state.current_tool = WhiteBlock
     elif event.is_action_pressed("mode_7"):
-      print("[INPUT] Mode 7 key pressed - switching to BrownBlock")
       state.current_tool = BrownBlock
     elif event.is_action_pressed("mode_8"):
-      print("[INPUT] Mode 8 key pressed - switching to PlaceBot")
       state.current_tool = PlaceBot
-  else:
-    print("[INPUT] Tool switching disabled - current_tool is Disabled")
 
 proc on_meta_clicked(self: Game, url: string) {.gdsync.} =
   if url.starts_with("nim://"):
