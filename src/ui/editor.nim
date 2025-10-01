@@ -7,7 +7,7 @@ import
     gdstyleboxflat, gdbutton, gdinput, gdviewport, gdmethodtweener,
     gdcodehighlighter,
   ]
-import core, gdcore, types, models/[states, units]
+import core, gdcore, types, models/[states, units, players]
 import nim_highlighter
 
 var tween {.threadvar.}: gdref Tween
@@ -148,25 +148,22 @@ proc watch_open_unit(self: EnuEditor) =
       if unit.is_nil:
         Zen.thread_ctx.untrack(line_zid)
         self.close_editor()
-        # TODO: Set open_code on player when field is available
-        # if ?state.player:
-        #   state.player.open_code = ""
+        if ?state.player:
+          state.player.open_code = ""
       else:
         print("[UI] Editor opening for unit: ", unit.id)
         self.open_editor()
         line_zid = unit.current_line_value.changes:
           if added:
             # Only update the executing line if the code hasn't been changed
-            # TODO: Fix string comparison for Godot 4 String vs nim string
-            # if string(self.code_edit.get_text()) == state.open_unit.code.nim:
-            self.set_executing_line(change.item - 1)
-            # else:
-            #   self.code_edit.clear_executing_line()  # TODO: Implement method
+            if $self.code_edit.get_text() == state.open_unit.code.nim:
+              self.set_executing_line(change.item - 1)
+            else:
+              self.code_edit.clear_executing_lines()
 
         self.code_edit.set_text(state.open_unit.code.nim)
-        # TODO: Set open_code on player when field is available
-        # if ?state.player:
-        #   state.player.open_code = self.code_edit.get_text()
+        if ?state.player:
+          state.player.open_code = $self.get_text()
 
         self.clear_errors()
         self.highlight_errors()
@@ -271,19 +268,16 @@ method ready*(self: EnuEditor) {.gdsync.} =
   print("[UI] Editor configured with CodeEdit!")
 
 proc on_text_changed(self: EnuEditor) =
-  # Handle text changes for auto-save, validation, etc.
-  print("[UI] Editor text changed")
-  # TODO: Connect to script compilation/validation system
+  # Handle text changes - update player's open_code
+  if ?state.player:
+    state.player.open_code = $self.get_text()
 
 proc on_caret_changed(self: EnuEditor) =
-  # Handle caret position changes for status display
-  let line = self.code_edit.get_caret_line()
-  let column = self.code_edit.get_caret_column()
-  print("[UI] Editor caret moved to line ", line, ", column ", column)
-
-  # TODO: Set cursor position on player when field is available
-  # if ?state.player:
-  #   state.player.cursor_position = (int(line), int(column))
+  # Handle caret position changes - update player's cursor_position
+  if ?state.player:
+    let line = self.code_edit.get_caret_line()
+    let column = self.code_edit.get_caret_column()
+    state.player.cursor_position = (line: int(line), col: int(column))
 
 proc on_close(self: EnuEditor) {.gdsync.} =
   # Save code and close editor
