@@ -86,43 +86,26 @@ proc update*(self: AimTarget, ray: RayCast3D) =
 
     # Restore Godot 3 hover logic
     if ?unit:
-      # Add additional safety checks before type checking
-      # Check if the unit has valid local_flags before proceeding
-      if ?unit.local_flags:
-        # Handle Ground models separately since they don't inherit from Unit
-        # Use safe type checking by avoiding `of` operator entirely
-        # Instead, check the type name directly
-        let unit_type_name = $unit.type
-        if unit_type_name.contains("Ground"):
-          unit.local_flags += Hover
-          if not state.is_nil:
-            state.push_flag BlockTargetVisible
-        else:
-          # For other model types, be more conservative with type checking
-          # Only proceed if we can safely check the type without crashes
-          if unit_type_name.contains("Sign"):
-            # Handle Sign models - cast to Sign type first
-            let sign_unit = Sign(unit)
-            if ?sign_unit and ?sign_unit.more and sign_unit.more == "":
-              # Skip hover for empty signs
-              discard
-            else:
-              unit.local_flags += Hover
-          elif unit_type_name.contains("Bot") or unit_type_name.contains("Build"):
-            # Handle Bot and Build models with lock checking
-            let should_hide = (
-              not state.is_nil and God notin state.local_flags and
-              ?Unit(unit).find_root and ?Unit(unit).find_root.global_flags and
-              Lock in Unit(unit).find_root.global_flags
-            )
+      # Handle Ground models separately since they don't inherit from Unit
+      if unit of Ground:
+        unit.local_flags += Hover
+        if not state.is_nil:
+          state.push_flag BlockTargetVisible
+      else:
+        # Handle Unit models (Bot, Build, Sign) with Godot 3 logic
+        let should_hide = (
+          (unit of Sign and Sign(unit).more == "") or (
+            not state.is_nil and God notin state.local_flags and
+            (unit of Bot or unit of Build) and ?Unit(unit).find_root and
+            ?Unit(unit).find_root.global_flags and
+            Lock in Unit(unit).find_root.global_flags
+          )
+        )
 
-            if not should_hide:
-              unit.local_flags += Hover
-              if unit_type_name.contains("Build") and not state.is_nil:
-                state.push_flag BlockTargetVisible
-          else:
-            # Unknown or other model type - just add hover safely
-            unit.local_flags += Hover
+        if not should_hide:
+          unit.local_flags += Hover
+          if unit of Build and not state.is_nil:
+            state.push_flag BlockTargetVisible
 
   # Position the aim target at collision point with proper orientation and snapping
   if ?collider:
