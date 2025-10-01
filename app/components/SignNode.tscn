@@ -1,12 +1,33 @@
-[gd_scene load_steps=5 format=3 uid="uid://c6xbmhm5o1tys"]
+[gd_scene load_steps=9 format=3 uid="uid://c6xbmhm5o1tys"]
 
 [ext_resource type="PackedScene" uid="uid://dhqbo5qugujff" path="res://components/MarkdownLabel.tscn" id="5"]
+[ext_resource type="FontFile" uid="uid://cgmokq5xdv6dk" path="res://themes/mono.otf" id="6"]
+
+[sub_resource type="ViewportTexture" id="16"]
+viewport_path = NodePath("Viewport")
+
+[sub_resource type="StandardMaterial3D" id="17"]
+resource_local_to_scene = true
+cull_mode = 2
+shading_mode = 0
+albedo_color = Color(0.478431, 0.478431, 0.478431, 1)
+albedo_texture = SubResource("16")
+metallic_specular = 0.0
+roughness = 0.0
+emission_enabled = true
+emission = Color(0.137255, 0.137255, 0.137255, 1)
+emission_energy_multiplier = 0.0
 
 [sub_resource type="QuadMesh" id="18"]
 resource_local_to_scene = true
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vqa23"]
-albedo_color = Color(0, 0, 0, 1)
+[sub_resource type="StyleBoxFlat" id="20"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(1, 0.45098, 0.992157, 1)
+
+[sub_resource type="StyleBoxFlat" id="21"]
+bg_color = Color(0, 0, 0, 0.839216)
+border_color = Color(1, 0.45098, 0.992157, 1)
 
 [sub_resource type="ConcavePolygonShape3D" id="15"]
 resource_local_to_scene = true
@@ -16,24 +37,36 @@ data = PackedVector3Array(-0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -1.99)
 
 [node name="Viewport" type="SubViewport" parent="."]
+transparent_bg = true
 size = Vector2i(1200, 1200)
 render_target_update_mode = 3
 
 [node name="MarkdownLabel" parent="Viewport" instance=ExtResource("5")]
+custom_minimum_size = Vector2(1200, 1200)
 size_flags_horizontal = 1
 size_flags_vertical = 1
+scroll_horizontal_enabled = false
+scroll_vertical_enabled = false
 
 [node name="TextEdit" type="TextEdit" parent="Viewport"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-mouse_filter = 2
+offset_bottom = 2.0
+theme_override_colors/selection_color = Color(0.207843, 0, 0.321569, 1)
+theme_override_colors/font_readonly_color = Color(0.878431, 0.878431, 0.878431, 1)
+theme_override_fonts/font = ExtResource("6")
+theme_override_font_sizes/font_size = 72
+theme_override_styles/read_only = SubResource("20")
+theme_override_styles/normal = SubResource("21")
+editable = false
 caret_blink = true
+caret_move_on_right_click = false
 
 [node name="MeshInstance" type="MeshInstance3D" parent="."]
 transform = Transform3D(-1, 0, -1.50996e-07, 0, 1, 0, 1.50996e-07, 0, -1, 0, 0, 0)
 mesh = SubResource("18")
-surface_material_override/0 = SubResource("StandardMaterial3D_vqa23")
+surface_material_override/0 = SubResource("17")
 
 [node name="SignBody" type="StaticBody3D" parent="MeshInstance"]
 collision_layer = 16

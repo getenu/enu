@@ -39,7 +39,7 @@ proc model*(self: Object): Model =
   if not ?result and self of StaticBody3D:
     let body = self.as(StaticBody3D)
     result =
-      if $body.name == "SignNode":
-        body.get_parent.get_parent.as(SignNode).model
+      if $body.name == "SignBody":
+        ?.body.get_parent.get_parent.as(SignNode).model
       else:
         ?.body.get_parent.as(GroundNode).model

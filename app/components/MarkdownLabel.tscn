@@ -23,6 +23,7 @@ size_flags_horizontal = 3
 focus_mode = 2
 mouse_filter = 1
 theme = ExtResource("2")
+bbcode_enabled = true
 scroll_active = false
 tab_size = 2
 selection_enabled = true

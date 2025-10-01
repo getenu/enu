@@ -3,7 +3,7 @@ import
   gdext/classes/[
     gdnode3d, gdpackedscene, gdresourceloader, gdcollisionshape3d,
     gdmeshinstance3d, gdquadmesh, gdstandardmaterial3d, gdsubviewport,
-    gdstyleboxflat, gdtextedit, gdcamera3d,
+    gdstyleboxflat, gdtextedit, gdcamera3d, gdcontrol, gdrichtextlabel,
   ]
 import core, gdcore, types
 import ui/[markdown_label, editor]
@@ -66,14 +66,20 @@ proc setup*(self: SignNode) =
   var text_edit = self.viewport.get_node("TextEdit").as(TextEdit)
 
   self.material = mesh.get_active_material(0)[].as(StandardMaterial3D)
-  echo "Material? ", not ?self.material
-  # TODO: Configure highlighting for TextEdit in Godot 4
-  # text_edit.configure_highlighting()
 
-  # TODO: Hide scrollbars in Godot 4 - need to check if this is still necessary
-  # for child in text_edit.get_children():
-  #   if child.is_class("ScrollBar") or child.is_class("HScrollBar"):
-  #     child.set_scale(vector2(0, 0))
+  # Note: TextEdit in signs uses basic text display, not full syntax highlighting
+  # The styling is handled by theme overrides in the scene file
+
+  # Hide scrollbars by scaling them to zero
+  let children = text_edit.get_children()
+  for i in 0 ..< children.size():
+    let child = children[i]
+    if ?child:
+      if child.is_class(gdstring("VScrollBar")) or child.is_class(gdstring("HScrollBar")):
+        if child.is_class(gdstring("Control")):
+          let control = child.as(Control)
+          if ?control:
+            control.set_scale(vector2(0, 0))
 
   proc resize() =
     info "[SIGN] Resizing sign", sign = self.model.id
@@ -100,9 +106,11 @@ proc setup*(self: SignNode) =
       mesh.set_transform(t)
       self.viewport.set_size(vector2i(int32(size.x), int32(size.y)))
 
-    # TODO: Style box configuration for Godot 4
-    # var stylebox = self.label.og_label.get_theme_stylebox("normal", "RichTextLabel").as(StyleBoxFlat)
-    # stylebox.set_content_margin(Side.LEFT, 80 / self.model.width)
+    # Configure StyleBox margin
+    if ?self.label.og_label:
+      let stylebox = self.label.og_label.get_theme_stylebox("normal".to_string_name()).as(gdref StyleBoxFlat)
+      if ?stylebox:
+        stylebox[].set_content_margin(Side.sideLeft, 80.0 / self.model.width)
 
     self.label.size = int(float(self.model.size) / self.model.width)
 
@@ -117,6 +125,11 @@ proc setup*(self: SignNode) =
     else:
       BaseMaterial3D_BillboardMode.billboardDisabled
   )
+
+  info "[SIGN] Setting text",
+    sign = self.model.id,
+    text_only = self.model.text_only,
+    message_length = self.model.message.len
 
   if self.model.text_only:
     text_edit.set_text(self.model.message)

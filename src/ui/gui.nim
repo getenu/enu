@@ -193,11 +193,11 @@ method ready*(self: GUI) {.gdsync.} =
       settings_button.connect("pressed", self.callable("_on_settings_opened"))
     print("[UI] Settings button connected to signal handler")
 
-  # Connect focus signals for ViewportFocused management (matches Godot 3)
-  discard self.connect("mouse_entered", self.callable("_on_mouse_entered"))
-  discard self.connect("mouse_exited", self.callable("_on_mouse_exited"))
-  discard self.connect("focus_entered", self.callable("_on_focus_entered"))
-  discard self.connect("focus_exited", self.callable("_on_focus_exited"))
+  # Note: ViewportFocused is managed automatically by:
+  # 1. Being set at startup (game.nim)
+  # 2. Being auto-included when MouseCaptured is set (states.nim)
+  # 3. Being excluded when UI panels have focus (states.nim groups)
+  # Mouse signals cannot work here since GUI has mouse_filter = IGNORE
 
   # Set up panel state watching
   self.watch_panel_states()
@@ -206,18 +206,6 @@ method ready*(self: GUI) {.gdsync.} =
   print("[UI] Panel visibility controlled by state flags")
 
   print("[UI] GUI configured with responsive panels and input handling")
-
-proc on_mouse_entered(self: GUI) {.gdsync, name: "_on_mouse_entered".} =
-  state.push_flags ViewportFocused
-
-proc on_mouse_exited(self: GUI) {.gdsync, name: "_on_mouse_exited".} =
-  state.pop_flags ViewportFocused
-
-proc on_focus_entered(self: GUI) {.gdsync, name: "_on_focus_entered".} =
-  state.push_flags ViewportFocused
-
-proc on_focus_exited(self: GUI) {.gdsync, name: "_on_focus_exited".} =
-  state.pop_flags ViewportFocused
 
 proc on_settings_opened(self: GUI) {.gdsync, name: "_on_settings_opened".} =
   state.push_flags SettingsVisible

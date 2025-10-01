@@ -474,7 +474,7 @@ method main_thread_joined*(self: Build) =
   #       self.remove
 
   state.local_flags.watch:
-    if Hover in self.local_flags and ViewportFocused in state.local_flags:
+    if Hover in self.local_flags:
       if PrimaryDown.added:
         state.draw_unit_id = self.id
         self.fire

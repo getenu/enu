@@ -237,8 +237,6 @@ method process*(self: PlayerNode, delta: float64) {.gdsync.} =
 
   if LoadingLevel notin state.global_flags:
     self.update_raycast()
-  else:
-    print("[PLAYER] Skipping raycast update - LoadingLevel flag is set")
 
 method unhandled_input*(self: PlayerNode, event: gdref InputEvent) {.gdsync.} =
   let time = get_mono_time()
