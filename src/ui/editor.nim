@@ -198,7 +198,7 @@ method ready*(self: EnuEditor) {.gdsync.} =
   assert ?self.code_edit, "CodeEdit node not found in Editor scene"
 
   # Start hidden until opened
-  # self.set_visible(false)
+  self.set_visible(false)
   print("[UI] Editor initialized (hidden by default)")
   # Find other UI elements - some may not exist in current scene
   # self.scroll_container = self.find("ScrollContainer", ScrollContainer)
@@ -219,10 +219,6 @@ method ready*(self: EnuEditor) {.gdsync.} =
   self.configure_highlighting()
 
   self.add_theme_font_size_override("font_size", 30)
-
-  self.open_editor()
-
-  # return
 
   # Connect signals for editor functionality
   if not self.code_edit.has_signal("text_changed"):
@@ -258,12 +254,6 @@ method ready*(self: EnuEditor) {.gdsync.} =
 
   # Start watching state changes
   self.watch_states()
-
-  # self.visible = true
-
-  self.add_theme_font_size_override("font_size", 30)
-
-  self.open_editor()
 
   print("[UI] Editor configured with CodeEdit!")
 
