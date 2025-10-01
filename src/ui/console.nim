@@ -2,7 +2,7 @@ import gdext
 import
   gdext/classes/[
     gdrichtextlabel, gdcontrol, gdnode, gdinputevent, gdinputeventjoypadbutton,
-    gdinputeventmousebutton, gdvscrollbar, gdtween, gdviewport,
+    gdinputeventmousebutton, gdvscrollbar, gdtween, gdviewport, gdmethodtweener,
   ]
 # GD4: Fixed Tween import (was SceneTreeTween in Godot 3)
 import core, gdcore, types, models/states
@@ -35,14 +35,14 @@ proc show_console(self: Console) =
   assert ?self.tween, "Failed to create tween for console animation"
 
   # Slide in from left with proper EXPO easing
-  discard self.tween[].tween_method(
+  let tweener = self.tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(-1.0),
     variant(0.0),
     animation_duration,
   )
-  discard self.tween[].setTrans(transExpo)
-  discard self.tween[].setEase(easeInOut)
+  discard tweener[].setTrans(transExpo)
+  discard tweener[].setEase(easeInOut)
   print("[UI] Console opened with slide-in animation (EXPO/EASE_IN_OUT)")
 
 proc hide_console(self: Console) =
@@ -58,14 +58,14 @@ proc hide_console(self: Console) =
   assert ?self.tween, "Failed to create tween for console animation"
 
   # Slide out to the left with proper EXPO easing
-  discard self.tween[].tween_method(
+  let tweener = self.tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(0.0),
     variant(-1.0),
     animation_duration,
   )
-  discard self.tween[].setTrans(transExpo)
-  discard self.tween[].setEase(easeInOut)
+  discard tweener[].setTrans(transExpo)
+  discard tweener[].setEase(easeInOut)
   # Hide console after animation completes
   discard self.tween[].tween_callback(
     callable(self, new_string_name("set_visible")).bind(variant(false))
