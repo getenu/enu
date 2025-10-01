@@ -41,16 +41,13 @@ proc run*(self: ScriptCtx): bool =
   self.exit_code = none(int)
 
   try:
-    info "VM: Loading module", file_name = self.file_name, code_length = self.code.len
     self.interpreter.load_module(self.file_name, self.code, self.pass_context)
-    info "VM: Module loaded successfully", file_name = self.file_name
 
     result = false
   except VMPause:
     private_access ScriptCtx
     result = self.exit_code.is_none
   except Exception as e:
-    info "VM: Exception during module loading", error = e.msg, file_name = self.file_name
     self.running = false
     self.exit_code = some(99)
     raise VMQuit.new_exception("Unhandled err", e)
