@@ -1,7 +1,7 @@
 import gdext/buildconf
 import std/strutils
 
-let setting = BuildSettings(name: "EnuGame")
+let setting = BuildSettings(name: "Enu", extpath: "/dev/null")
 
 configure(setting)
 

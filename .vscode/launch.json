@@ -22,7 +22,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Client: Build & Debug",
-      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.arm64",
+      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.dev.arm64",
       "env": {
         "ENU_CONNECT_ADDRESS": "127.0.0.1",
         "ENU_METRICS_PORT": "8001"
@@ -30,7 +30,9 @@
       "windows": {
         "program": "${workspaceFolder}/vendor/godot/bin/godot.windows.opt.tools.64"
       },
-      "args": [],
+      "args": [
+        "components/Editor.tscn"
+      ],
       "cwd": "${workspaceFolder}/app",
       "preLaunchTask": "Build enu",
       "presentation": {
@@ -41,7 +43,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Host: Build & Debug",
-      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.arm64",
+      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.dev.arm64",
       "env": {
         "ENU_LISTEN_ADDRESS": "0.0.0.0",
         "ENU_METRICS_PORT": "8000"
@@ -60,7 +62,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Client: Debug",
-      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.arm64",
+      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.dev.arm64",
       "env": {
         "ENU_CONNECT_ADDRESS": "127.0.0.1",
         "ENU_METRICS_PORT": "8001"
@@ -78,7 +80,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Host: Debug",
-      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.arm64",
+      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.dev.arm64",
       "env": {
         "ENU_LISTEN_ADDRESS": "0.0.0.0",
         "ENU_METRICS_PORT": "8000"
@@ -96,7 +98,7 @@
       "type": "lldb",
       "request": "launch",
       "name": "Enu: Debug",
-      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.arm64",
+      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.dev.arm64",
       "windows": {
         "program": "${workspaceFolder}/vendor/godot/bin/godot.windows.opt.tools.64"
       },
@@ -110,11 +112,13 @@
       "type": "lldb",
       "request": "launch",
       "name": "Enu: Build & Debug",
-      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.arm64",
+      "program": "${workspaceFolder}/vendor/godot/bin/godot.macos.editor.dev.arm64",
       "windows": {
         "program": "${workspaceFolder}/vendor/godot/bin/godot.windows.opt.tools.64"
       },
-      "args": [],
+      // "args": [
+      //   "components/Editor.tscn"
+      // ],
       "cwd": "${workspaceFolder}/app",
       "preLaunchTask": "Build enu",
       "presentation": {

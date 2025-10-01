@@ -4,10 +4,10 @@ from dotenv import nil
 import gdext
 import
   gdext/classes/[
-    gdinput, gdinputevent, gdos, gdnode, gdnode3d, gdscenetree, gdpackedscene, gdcontrol,
-    gdviewport, gdperformance, gdlabel, gdtheme, gdfont, gdresourceloader,
-    gdprojectsettings, gdinputmap, gdinputeventaction, gdinputeventkey,
-    gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
+    gdinput, gdinputevent, gdos, gdnode, gdnode3d, gdscenetree, gdpackedscene,
+    gdcontrol, gdviewport, gdperformance, gdlabel, gdtheme, gdfont,
+    gdresourceloader, gdprojectsettings, gdinputmap, gdinputeventaction,
+    gdinputeventkey, gdinputeventmousebutton, gdscrollcontainer, gdenvironment,
     gdworldenvironment, gddisplayserver, gdviewport, gdsubviewport, gdimage,
     gdviewporttexture, gdtexture2d, gdsubviewportcontainer, gdengine,
     gdoptionbutton, gdpopupmenu, gdbutton,
@@ -418,6 +418,10 @@ method on_init*(self: Game) {.gdsync.} =
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init
 
+  # TEMPORARY: Run property corruption test
+  if ?($OS.get_environment("TEST_CORRUPTION")):
+    print("[GAME] TEST_CORRUPTION env var set, will run test in ready()")
+
   save_user_config(uc)
 
 # GD4: TODO - Fix panel width calculation for Godot 4
@@ -446,6 +450,9 @@ proc set_font_size(self: Game, size: int) =
   # Apply font size overrides to all relevant controls
   # Find and update all labels, buttons, line edits, etc.
   proc apply_font_size_to_node(node: Node) =
+    if node.is_nil:
+      return
+
     if node.is_class("Label"):
       node.as(Control).add_theme_font_size_override("font_size", actual_size)
     elif node.is_class("Button"):
@@ -462,11 +469,16 @@ proc set_font_size(self: Game, size: int) =
       rtl.add_theme_font_size_override("bold_font_size", actual_size)
       rtl.add_theme_font_size_override("italics_font_size", actual_size)
     elif node.is_class("CodeEdit"):
+      print "!!! CODEEDIT"
+      echo "!!! ", node.get_class()
+      # CodeEdit inherits from Control, so cast to Control to call the method
       node.as(Control).add_theme_font_size_override("font_size", actual_size)
 
     # Recursively apply to children
     for i in 0 ..< node.get_child_count():
-      apply_font_size_to_node(node.get_child(i))
+      let child = node.get_child(i)
+      if not child.is_nil:
+        apply_font_size_to_node(child)
 
   # Apply to the entire scene tree starting from root
   apply_font_size_to_node(self.get_tree().get_current_scene())
@@ -579,7 +591,6 @@ method ready*(self: Game) {.gdsync.} =
   if Engine.is_editor_hint():
     info "Running in editor mode - skipping game initialization"
     return
-
 
   # GD4: added by claude. Do we need this?
   self.set_process_unhandled_input(true)
@@ -857,7 +868,13 @@ method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
 
   # Only log for key events to avoid spam
   if event of InputEventKey and event.as(InputEventKey).is_pressed():
-    print("[INPUT] Key pressed - Current tool: ", state.current_tool, " (", int(state.current_tool), ")")
+    print(
+      "[INPUT] Key pressed - Current tool: ",
+      state.current_tool,
+      " (",
+      int(state.current_tool),
+      ")",
+    )
 
   if state.current_tool != Disabled:
     if event.is_action_pressed("toggle_code_mode"):
@@ -894,7 +911,6 @@ method unhandled_input*(self: Game, event: gdref InputEvent) {.gdsync.} =
   else:
     print("[INPUT] Tool switching disabled - current_tool is Disabled")
 
-# GD4: is this working?
 proc on_meta_clicked(self: Game, url: string) {.gdsync.} =
   if url.starts_with("nim://"):
     assert ?state.open_sign

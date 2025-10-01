@@ -1,3 +1,3 @@
 set -e
 cd app
-../vendor/godot/bin/godot.macos.editor.arm64 --headless --quit-after 600 scenes/game.tscn
+../vendor/godot/bin/godot.macos.editor.dev.arm64 --headless --quit-after 600 scenes/game.tscn

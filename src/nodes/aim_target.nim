@@ -30,21 +30,22 @@ method ready*(self: AimTarget) {.gdsync.} =
   # TODO: Restore signal binding when character encoding is fixed
   # self.bind_signals "collider_exiting"
   # Initialize visibility based on BlockTargetVisible flag (matching Godot 3)
-  self.set_visible(BlockTargetVisible in state.local_flags)
+  if not state.is_nil:
+    self.set_visible(BlockTargetVisible in state.local_flags)
 
-  state.local_flags.changes:
-    if BlockTargetVisible.added:
-      self.set_visible(true)
-    elif BlockTargetVisible.removed:
-      self.set_visible(false)
+    state.local_flags.changes:
+      if BlockTargetVisible.added:
+        self.set_visible(true)
+      elif BlockTargetVisible.removed:
+        self.set_visible(false)
 
-  state.current_tool_value.changes:
-    # tool changed. Retarget.
-    if ?self.target_model:
-      self.target_model.local_flags -= Hover
-      self.target_model.target_point = vector3()
-      self.target_model.target_normal = vector3()
-      self.target_model = nil
+    state.current_tool_value.changes:
+      # tool changed. Retarget.
+      if ?self.target_model:
+        self.target_model.local_flags -= Hover
+        self.target_model.target_point = vector3()
+        self.target_model.target_normal = vector3()
+        self.target_model = nil
 
 proc update*(self: AimTarget, ray: RayCast3D) =
   if ray.is_nil:
@@ -79,28 +80,49 @@ proc update*(self: AimTarget, ray: RayCast3D) =
   if unit != self.target_model:
     if ?self.target_model:
       self.target_model.local_flags -= Hover
-      state.pop_flag BlockTargetVisible
+      if not state.is_nil:
+        state.pop_flag BlockTargetVisible
     self.target_model = unit
 
     # Restore Godot 3 hover logic
-    if unit != nil:
-      # Handle Ground models separately since they don't inherit from Unit
-      if unit of Ground:
-        unit.local_flags += Hover
-        state.push_flag BlockTargetVisible
-      else:
-        # Handle Unit models (Bot, Build, Sign) with Godot 3 logic
-        let should_hide = (
-          (unit of Sign and Sign(unit).more == "") or (
-            God notin state.local_flags and (unit of Bot or unit of Build) and
-            Lock in Unit(unit).find_root.global_flags
-          )
-        )
-
-        if not should_hide:
+    if ?unit:
+      # Add additional safety checks before type checking
+      # Check if the unit has valid local_flags before proceeding
+      if ?unit.local_flags:
+        # Handle Ground models separately since they don't inherit from Unit
+        # Use safe type checking by avoiding `of` operator entirely
+        # Instead, check the type name directly
+        let unit_type_name = $unit.type
+        if unit_type_name.contains("Ground"):
           unit.local_flags += Hover
-          if unit of Build:
+          if not state.is_nil:
             state.push_flag BlockTargetVisible
+        else:
+          # For other model types, be more conservative with type checking
+          # Only proceed if we can safely check the type without crashes
+          if unit_type_name.contains("Sign"):
+            # Handle Sign models - cast to Sign type first
+            let sign_unit = Sign(unit)
+            if ?sign_unit and ?sign_unit.more and sign_unit.more == "":
+              # Skip hover for empty signs
+              discard
+            else:
+              unit.local_flags += Hover
+          elif unit_type_name.contains("Bot") or unit_type_name.contains("Build"):
+            # Handle Bot and Build models with lock checking
+            let should_hide = (
+              not state.is_nil and God notin state.local_flags and
+              ?Unit(unit).find_root and ?Unit(unit).find_root.global_flags and
+              Lock in Unit(unit).find_root.global_flags
+            )
+
+            if not should_hide:
+              unit.local_flags += Hover
+              if unit_type_name.contains("Build") and not state.is_nil:
+                state.push_flag BlockTargetVisible
+          else:
+            # Unknown or other model type - just add hover safely
+            unit.local_flags += Hover
 
   # Position the aim target at collision point with proper orientation and snapping
   if ?collider:
@@ -173,7 +195,8 @@ proc update*(self: AimTarget, ray: RayCast3D) =
     self.look_at(align_normal, self.transform.basis.get_column_x())
 
     # Only show the aim target if BlockTargetVisible flag is set (matching Godot 3 logic)
-    self.set_visible(BlockTargetVisible in state.local_flags)
+    if not state.is_nil:
+      self.set_visible(BlockTargetVisible in state.local_flags)
 
     # Update target model if we have one
     if ?unit:
@@ -186,7 +209,8 @@ proc update*(self: AimTarget, ray: RayCast3D) =
   else:
     # No collision - hide the target
     self.set_visible(false)
-    state.skip_block_paint = false
+    if not state.is_nil:
+      state.skip_block_paint = false
 
 # TODO: Restore when signal binding works
 # method on_collider_exiting*(self: AimTarget, collider: Node3D) {.gdsync.} =

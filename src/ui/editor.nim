@@ -5,19 +5,23 @@ import
     gdmargincontainer, gdcodeedit, gdinputevent, gdinputeventkey,
     gdinputeventmousebutton, gdcontrol, gdnode, gdvscrollbar, gdtween,
     gdstyleboxflat, gdbutton, gdinput, gdviewport, gdmethodtweener,
+    gdcodehighlighter,
   ]
 import core, gdcore, types, models/[states, units]
-# import nim_highlighter  # GD4: Re-enable when CodeHighlighter API is fixedxx
+import nim_highlighter
+
+var tween {.threadvar.}: gdref Tween
 
 type EnuEditor* {.gdsync.} =
   ptr object of MarginContainer
     code_edit*: CodeEdit
     # scroll_container: ScrollContainer
     left_panel: Control
-    tween: gdref Tween
+    #ween: gdref Tween
     og_bg_color: Color
     selection_color: Color
     caret_color: Color
+    code_highlighter: gdref CodeHighlighter  # Kept to prevent GC
 
 proc configure_highlighting*(self: EnuEditor) =
   # Configure syntax highlighting for Nim - Godot 4 version
@@ -28,17 +32,17 @@ proc configure_highlighting*(self: EnuEditor) =
   code_edit.set_draw_tabs(true)
   code_edit.set_draw_spaces(false)
 
-  # GD4: Set up Nim syntax highlighting with ir_black colors
-  # TODO: Fix CodeHighlighter method signatures in gdext
-  # Tried: result.highlighter.addKeywordColor(keyword.gdstring, color)
-  # Error: type mismatch - expects method call syntax but generates function call
-  # let nim_hl = create_nim_highlighter()
-  # if not nim_hl.highlighter.is_nil:
-  #   code_edit.set_syntax_highlighter(nim_hl.highlighter)
-  #   print("[UI] Applied Nim syntax highlighting with ir_black colors")
-  # else:
-  #   print("[UI] Warning: Could not apply syntax highlighting - highlighter is nil")
-  print("[UI] Nim syntax highlighting temporarily disabled for build fix")
+  # Set up Nim syntax highlighting with ir_black colors
+  self.code_highlighter = create_nim_highlighter()
+  if ?self.code_highlighter:
+    # Store the CodeHighlighter reference to prevent garbage collection (that was the bug!)
+    # Use GdRef cast to convert to parent type
+    let syntax_hl = cast[gdref SyntaxHighlighter](self.code_highlighter)
+    code_edit.setSyntaxHighlighter(syntax_hl)
+    print("[UI] Applied Nim syntax highlighting with ir_black colors")
+  else:
+    print("[UI] Warning: Could not apply syntax highlighting - highlighter is nil")
+
   # Enable line folding
   code_edit.set_line_folding_enabled(true)
   code_edit.set_draw_fold_gutter(true)
@@ -46,14 +50,6 @@ proc configure_highlighting*(self: EnuEditor) =
   # Enable gutters for debugging features
   code_edit.set_draw_bookmarks_gutter(true) # For error highlighting
   code_edit.set_draw_executing_lines_gutter(true) # For execution tracking
-
-  # Add color regions for syntax highlighting (equivalent to Godot 3)
-  # Strings
-  code_edit.add_string_delimiter("\"", "\"", false)
-  code_edit.add_string_delimiter("\"\"\"", "\"\"\"", false)
-  # Comments
-  code_edit.add_comment_delimiter("#", "", true) # Line comments
-  code_edit.add_comment_delimiter("#[", "]#", false) # Block comments
 
 proc get_text*(self: EnuEditor): string =
   return $self.code_edit.get_text()
@@ -94,23 +90,22 @@ proc open_editor(self: EnuEditor) =
 
   # Start editor off-screen (hidden to the left)
   self.set_modulate(gdext.color(1.0, 1.0, 1.0, 0.0))
-  self.offset_x(-1.0)  # Start off-screen
+  self.offset_x(-1.0) # Start off-screen
   self.set_visible(true)
 
   # Create tween for smooth slide-in animation (matches Godot 3 behavior)
-  self.tween = self.create_tween()
-  assert ?self.tween, "Failed to create tween for editor animation"
+  tween = self.create_tween()
+  assert ?tween, "Failed to create tween for editor animation"
 
   # Immediate fade in (like Godot 3 tween_property with 0.0 duration)
-  discard self.tween[].tween_property(
-    self, new_node_path("modulate:a"), variant(1.0), 0.0
-  )
+  discard
+    tween[].tween_property(self, new_node_path("modulate:a"), variant(1.0), 0.0)
   # Slide in from left with proper EXPO easing
-  let tweener = self.tween[].tween_method(
+  let tweener = tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(-1.0),
     variant(0.0),
-    animation_duration
+    animation_duration,
   )
   discard tweener[].setTrans(transExpo)
   discard tweener[].setEase(easeInOut)
@@ -125,22 +120,22 @@ proc close_editor(self: EnuEditor) =
   self.set_position(vector2(0, self.get_position().y))
 
   # Create tween for smooth slide-out animation (matches Godot 3 behavior)
-  if ?self.tween:
-    self.tween[].kill()  # Kill existing tween
-  self.tween = self.create_tween()
-  assert ?self.tween, "Failed to create tween for editor animation"
+  if ?tween:
+    tween[].kill() # Kill existing tween
+  tween = self.create_tween()
+  assert ?tween, "Failed to create tween for editor animation"
 
   # Slide out to the left with proper EXPO easing
-  let tweener = self.tween[].tween_method(
+  let tweener = tween[].tween_method(
     callable(self, new_string_name("offset_x")),
     variant(0.0),
     variant(-1.0),
-    animation_duration
+    animation_duration,
   )
   discard tweener[].setTrans(transExpo)
   discard tweener[].setEase(easeInOut)
   # Hide editor after animation completes
-  discard self.tween[].tween_callback(
+  discard tween[].tween_callback(
     callable(self, new_string_name("set_visible")).bind(variant(false))
   )
   print("[UI] Editor closed with slide-out animation (EXPO/EASE_IN_OUT)")
@@ -206,7 +201,7 @@ method ready*(self: EnuEditor) {.gdsync.} =
   assert ?self.code_edit, "CodeEdit node not found in Editor scene"
 
   # Start hidden until opened
-  self.set_visible(false)
+  # self.set_visible(false)
   print("[UI] Editor initialized (hidden by default)")
   # Find other UI elements - some may not exist in current scene
   # self.scroll_container = self.find("ScrollContainer", ScrollContainer)
@@ -225,6 +220,12 @@ method ready*(self: EnuEditor) {.gdsync.} =
 
   # Configure the code editor
   self.configure_highlighting()
+
+  self.add_theme_font_size_override("font_size", 30)
+
+  self.open_editor()
+
+  # return
 
   # Connect signals for editor functionality
   if not self.code_edit.has_signal("text_changed"):
@@ -258,7 +259,13 @@ method ready*(self: EnuEditor) {.gdsync.} =
   # Start watching state changes
   self.watch_states()
 
-  print("[UI] Editor configured with CodeEdit")
+  # self.visible = true
+
+  self.add_theme_font_size_override("font_size", 30)
+
+  self.open_editor()
+
+  print("[UI] Editor configured with CodeEdit!")
 
 proc on_text_changed(self: EnuEditor) =
   # Handle text changes for auto-save, validation, etc.
@@ -290,12 +297,34 @@ proc on_run(self: EnuEditor) {.gdsync.} =
     # TODO: Force code execution when Code.init is fixed
     # state.open_unit.code = Code.init(self.code_edit.get_text())
 
-
-
 proc indent_new_line*(self: EnuEditor) =
-  # Smart indentation for new lines - simplified for compilation
-  # TODO: Implement proper indentation when string conversion is fixed
-  self.code_edit.insert_text_at_caret("\n")
+  # Smart indentation for new lines (ported from Godot 3)
+  let column = int(self.code_edit.get_caret_column()) - 1
+  if column > 0:
+    let
+      current_line = self.code_edit.get_caret_line()
+      line_text = $self.code_edit.get_line(current_line)
+      line_segment = line_text[0 .. column]
+      stripped = line_segment.strip()
+
+    if stripped.len > 0:
+      let last_char = $stripped[stripped.high]
+
+      if (stripped in ["var", "let", "const", "type"]) or last_char in [
+        ":", "="
+      ]:
+        let spaces = " ".repeat(line_segment.indentation + 2)
+        self.code_edit.insert_text_at_caret("\n" & spaces)
+        self.get_viewport().set_input_as_handled()
+      else:
+        # Just insert a normal newline
+        self.code_edit.insert_text_at_caret("\n")
+    else:
+      # Just insert a normal newline
+      self.code_edit.insert_text_at_caret("\n")
+  else:
+    # Just insert a normal newline
+    self.code_edit.insert_text_at_caret("\n")
 
 method unhandled_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
   # Handle editor-specific input events

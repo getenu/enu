@@ -22,14 +22,15 @@ const
   nim_dlls = ["pcre64.dll"]
   godot_opts = "target=editor"
 
-version = "0.2.2"
+version = "0.2.95"
 author = "Scott Wadden"
 description = "Logo-like DSL for Godot"
 license = "MIT"
 install_files = @["enu.nim"]
-bin_dir = "app"
-src_dir = "src"
+bin_dir = "app/extension/lib"
+src_dir = "app/extension"
 bin = @["enu" & lib_ext]
+package_name = "enu"
 
 requires "https://github.com/dsrw/Nim#7483e78",
   "https://github.com/getenu/model_citizen 0.19.6",
@@ -78,7 +79,7 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
     let str =
-      &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts}"
+      &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} dev_build=yes"
     echo "building: ", str
     exec str
 
@@ -265,7 +266,7 @@ task generate_bindings, "Generate Godot extension API bindings":
   with_dir(generated_dir):
     exec &"{godot_bin()} --headless --dump-extension-api"
 
-  exec &"nimbledeps/bin/coronation --apisource:{generated_dir}/{extension_api_json} --outdir:{generated_dir}"
+  exec &"nimbledeps/bin/coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
 
 task start_headless, "Run Enu":
   build_extension_task()

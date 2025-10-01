@@ -1,0 +1,9 @@
+[configuration]
+
+entry_symbol = "init_library"
+compatibility_minimum = 4.5
+reloadable = true
+
+[libraries]
+
+macos.debug = "res://./extension/lib/enu.dylib"

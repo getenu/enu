@@ -8,7 +8,8 @@
       "command": "nimble",
       "args": [
         "build",
-        "--debugger:native"
+        "--debugger:native",
+        "--stacktrace:off"
       ],
       "options": {
         "cwd": "${workspaceRoot}"
