@@ -33,9 +33,6 @@ type BuildNode* {.gdsync.} =
 
 proc prepare_materials(self: BuildNode) =
   if ?self.model:
-    info "[MATERIAL] Preparing materials for build",
-      build_id = self.model.id
-
     # Clone the entire mesher and library to get per-build materials
     let mesher = self.get_mesher()
     if ?mesher:
@@ -51,7 +48,6 @@ proc prepare_materials(self: BuildNode) =
 
               # Clone materials to get per-build shader materials
               let models = library_copy[].get_models()
-              info "[MATERIAL] Cloning library with models", count = models.size()
               for i in 0 ..< models.size():
                 let model = models[i].as(gdref VoxelBlockyModel)
                 if ?model:
@@ -68,8 +64,6 @@ proc prepare_materials(self: BuildNode) =
 
               # Apply the cloned mesher to this BuildNode
               self.set_mesher(mesher_copy.as(gdref VoxelMesher))
-              info "[MATERIAL] Applied cloned mesher",
-                build_id = self.model.id
 
 proc draw(self: BuildNode, location: Vector3, color: colors.Color) =
   let voxel_tool = self.get_voxel_tool()

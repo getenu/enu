@@ -709,7 +709,6 @@ method process*(self: Settings, delta: float) {.gdsync.} =
 
 method gui_input*(self: Settings, event: gdref InputEvent) {.gdsync.} =
   if event[] of InputEventMouseButton:
-    debug "pushing SettingsFocused", topics = "state"
     state.push_flags SettingsFocused
 
 method unhandled_input*(self: Settings, event: gdref InputEvent) {.gdsync.} =

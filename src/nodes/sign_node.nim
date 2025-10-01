@@ -52,8 +52,6 @@ proc expand(self: SignNode) =
   self.shape.set_scale(vector3(self.model.width, self.model.width * ratio, 1))
 
 proc setup*(self: SignNode) =
-  info "[SIGN] Setting up sign", sign = self.model.id
-
   var mesh = self.get_node("MeshInstance").as(MeshInstance3D)
   self.viewport = self.get_node("Viewport").as(SubViewport)
   assert ?self.viewport
@@ -82,8 +80,6 @@ proc setup*(self: SignNode) =
             control.set_scale(vector2(0, 0))
 
   proc resize() =
-    info "[SIGN] Resizing sign", sign = self.model.id
-
     var
       ratio = self.model.width / self.model.height
       size = vector2(viewport_x.float, viewport_y.float / ratio)
@@ -125,11 +121,6 @@ proc setup*(self: SignNode) =
     else:
       BaseMaterial3D_BillboardMode.billboardDisabled
   )
-
-  info "[SIGN] Setting text",
-    sign = self.model.id,
-    text_only = self.model.text_only,
-    message_length = self.model.message.len
 
   if self.model.text_only:
     text_edit.set_text(self.model.message)
@@ -191,8 +182,8 @@ method process*(self: SignNode, delta: float64) {.gdsync.} =
         self.look_at(camera_origin, UP)
 
 method ready*(self: SignNode) {.gdsync.} =
-  info "[SIGN] SignNode ready - initializing Godot 4 sign system"
   # Setup will be called externally after model is assigned
+  discard
 
 var sign_scene {.threadvar.}: gdref PackedScene
 proc init*(_: type SignNode): SignNode =

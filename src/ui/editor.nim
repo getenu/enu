@@ -322,7 +322,6 @@ method unhandled_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
 
 method gui_input*(self: EnuEditor, event: gdref InputEvent) {.gdsync.} =
   if event[] of InputEventMouseButton:
-    debug "pushing EditorFocused", topics = "state"
     state.push_flags EditorFocused
 
   if event[] of InputEventKey and EditorFocused in state.local_flags:

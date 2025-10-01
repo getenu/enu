@@ -155,7 +155,6 @@ proc on_close(self: Console) {.gdsync, name: "_on_close".} =
 
 method gui_input*(self: Console, event: gdref InputEvent) {.gdsync.} =
   if event[] of InputEventMouseButton:
-    debug "pushing ConsoleFocused", topics = "state"
     state.push_flags ConsoleFocused
 
 method unhandled_input*(self: Console, event: gdref InputEvent) {.gdsync.} =

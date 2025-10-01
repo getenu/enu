@@ -35,5 +35,4 @@ type SelectionArea* {.gdsync.} =
     bot*: BotNode
 
 method ready*(self: SelectionArea) {.gdsync.} =
-  print "[BOT!!]"
   self.bot = self.get_parent.as(BotNode)
