@@ -8,7 +8,7 @@ import
     gdvoxelstream, gdvoxelstreammemory, gdvoxelgenerator, gdvoxelgeneratorflat,
     gdvoxelblockymodel, gdvoxelblockymodelcube, gdvoxelblockymodelempty,
     gdvoxelbuffer, gdpackedscene, gdresourceloader, gdraycast3d,
-    gdshadermaterial, gdshader,
+    gdshadermaterial, gdmaterial,
   ]
 import ./queries
 
@@ -19,8 +19,6 @@ const
   error_flash_time = 0.5.seconds
 
 var build_scene {.threadvar.}: gdref PackedScene
-var shader {.threadvar.}: gdref Shader
-var hidden_shader {.threadvar.}: gdref Shader
 
 # BuildNode for Godot 4 using complete custom Godot bindings with voxel support
 type BuildNode* {.gdsync.} =
@@ -32,42 +30,46 @@ type BuildNode* {.gdsync.} =
     chunks_zid: ZID
     toggle_error_highlight_at: MonoTime
     error_highlight_on: bool
-    update_at: MonoTime
-
-method on_init*(self: BuildNode) =
-  # Constructor-like initialization - equivalent to gdobj's init
-  self.default_view_distance = self.get_max_view_distance().int
 
 proc prepare_materials(self: BuildNode) =
-  if ?self.model and self.model.shared.materials.len == 0:
-    # Generate our own copy of the library materials, so we can manipulate
-    # them without impacting other builds.
+  if ?self.model:
+    info "[MATERIAL] Preparing materials for build",
+      build_id = self.model.id
+
+    # Clone the entire mesher and library to get per-build materials
     let mesher = self.get_mesher()
     if ?mesher:
-      let blocky_mesher = mesher.as(gdref VoxelMesherBlocky)
-      if ?blocky_mesher:
-        let library = blocky_mesher[].get_library()
+      let mesher_copy = mesher[].duplicate(false).as(gdref VoxelMesherBlocky)
+      if ?mesher_copy:
+        let library = mesher_copy[].get_library()
         if ?library:
-          let materials = library[].get_materials()
-          for i in 0 ..< materials.size():
-            let m = materials[i]
-            if ?m:
-              discard
-              # GD4: Get emission colors - using default color for now
-              # let m_copy = m[].duplicate().as(gdref ShaderMaterial)
-              # m_copy[].set_shader_parameter("emission_energy", variant(default_glow))
-              # GD4: Get emission colors - using default color for now
-              # TODO: Fix Variant to Color conversion when gdext API is clearer
-              # self.model.shared.emission_colors.add(gdext.color(0.0, 0.0, 0.0, 1.0))
+          let blocky_library = library.as(gdref VoxelBlockyLibrary)
+          if ?blocky_library:
+            let library_copy = blocky_library[].duplicate(false).as(gdref VoxelBlockyLibrary)
+            if ?library_copy:
+              mesher_copy[].set_library(library_copy.as(gdref VoxelBlockyLibraryBase))
 
-              # GD4: Fix material type mismatch - GdRef vs ShaderMaterial
-              # TODO: Fix materials type - may need to change seq type to handle gdref
-              # self.model.shared.materials.add(m_copy)
+              # Clone materials to get per-build shader materials
+              let models = library_copy[].get_models()
+              info "[MATERIAL] Cloning library with models", count = models.size()
+              for i in 0 ..< models.size():
+                let model = models[i].as(gdref VoxelBlockyModel)
+                if ?model:
+                  let mat = model[].get_material_override(0)
+                  if ?mat:
+                    # Clone the material for this build
+                    let mat_copy = mat[].duplicate(false).as(gdref ShaderMaterial)
+                    if ?mat_copy:
+                      # Set default glow
+                      mat_copy[].set_shader_parameter("emission_energy".to_string_name(), variant(default_glow))
+                      model[].set_material_override(0, mat_copy.as(gdref Material))
+                      # Store material reference so we can modify it later
+                      self.model.shared.materials.add(mat_copy)
 
-    # Note: In Godot 4, VoxelTerrain only has set_material_override for entire terrain
-    # Individual material management is done through the VoxelMesher/Library
-    # for i, material in self.model.shared.materials:
-    #   self.set_material(i, material)
+              # Apply the cloned mesher to this BuildNode
+              self.set_mesher(mesher_copy.as(gdref VoxelMesher))
+              info "[MATERIAL] Applied cloned mesher",
+                build_id = self.model.id
 
 proc draw(self: BuildNode, location: Vector3, color: colors.Color) =
   let voxel_tool = self.get_voxel_tool()
@@ -82,14 +84,30 @@ proc draw_block(self: BuildNode, voxels: Chunk) =
     self.draw(loc, info.color)
 
 proc set_glow(self: BuildNode, glow: float) =
-  # GD4: Implement glow setting for Godot 4 - simplified for now
-  # TODO: Re-implement when VoxelTerrain API is better understood
-  discard
+  if ?self.model and self.model.shared.materials.len > 0:
+    for i, material in self.model.shared.materials:
+      if ?material:
+        material[].set_shader_parameter("emission_energy".to_string_name(), variant(glow))
 
 proc set_highlight(self: BuildNode) =
-  # GD4: Implement highlighting for Godot 4 - simplified for now
-  # TODO: Re-implement when VoxelTerrain API is better understood
-  discard
+  if ?self.model and self.model.shared.materials.len > 0:
+    let glow_value = if Highlight in self.model.local_flags or
+        (HighlightError in self.model.global_flags and self.error_highlight_on):
+      highlight_glow
+    else:
+      self.model.glow
+
+    for i, material in self.model.shared.materials:
+      if ?material:
+        # Set emission color for error highlighting
+        if self.error_highlight_on:
+          material[].set_shader_parameter("emission".to_string_name(), variant(action_colors[Colors.Red]))
+        # Note: We can't easily restore original color since it varies per material
+        # For now, error highlighting overrides color. To fully restore, we'd need
+        # to store original emission colors per material.
+
+        # Set glow intensity
+        material[].set_shader_parameter("emission_energy".to_string_name(), variant(glow_value))
 
 proc track_chunk(self: BuildNode, chunk_id: Vector3) =
   if ?self.model and chunk_id in self.model.chunks:
@@ -105,34 +123,29 @@ proc track_chunk(self: BuildNode, chunk_id: Vector3) =
   else:
     self.active_chunks[chunk_id] = empty_zid
 
-# GD4: VoxelTerrain block signals don't exist in Godot 4 - API changed
-# TODO: Find alternative approach for chunk tracking in Godot 4 VoxelTerrain
-# method on_block_loaded(self: BuildNode, chunk_id: Vector3) {.gdsync.} =
-#   if ?self.model:
-#     self.track_chunk(chunk_id)
+proc on_block_loaded(self: BuildNode, chunk_id: Vector3i) {.gdsync.} =
+  if ?self.model:
+    let v3 = vector3(chunk_id.x.float, chunk_id.y.float, chunk_id.z.float)
+    self.track_chunk(v3)
 
-# method on_block_unloaded(self: BuildNode, chunk_id: Vector3) {.gdsync.} =
-#   if ?self.model:
-#     let zid = self.active_chunks.get_or_default(chunk_id, empty_zid)
-#     if zid != empty_zid:
-#       self.model.chunks[chunk_id].untrack(zid)
-#     self.active_chunks.del(chunk_id)
-
-proc set_shader_type(self: BuildNode, normal: bool) =
-  # GD4: Set shader type (normal or hidden) on materials - simplified for now
-  # TODO: Re-implement when VoxelTerrain API is better understood
-  discard
+proc on_block_unloaded(self: BuildNode, chunk_id: Vector3i) {.gdsync.} =
+  if ?self.model:
+    let v3 = vector3(chunk_id.x.float, chunk_id.y.float, chunk_id.z.float)
+    let zid = self.active_chunks.get_or_default(v3, empty_zid)
+    if zid != empty_zid:
+      self.model.chunks[v3].untrack(zid)
+    self.active_chunks.del(v3)
 
 proc set_visibility(self: BuildNode) =
   if ?self.model:
     if Visible in self.model.global_flags:
       self.visible = true
-      # GD4: Set normal shader
-      self.set_shader_type(normal = true)
+      # GD4: Shader switching requires per-instance materials
+      # For now, just toggle visibility
     elif Visible notin self.model.global_flags and God in state.local_flags:
       self.visible = true
-      # GD4: Set hidden shader
-      self.set_shader_type(normal = false)
+      # GD4: Hidden shader requires per-instance materials
+      # For now, just show normally in God mode
     else:
       self.visible = false
 
@@ -160,8 +173,6 @@ proc track_changes(self: BuildNode) =
     if added:
       self.set_glow(change.item)
 
-  echo "bounds: ", ?self.model.bounds_value
-
   self.set_bounds(self.model.bounds)
   self.model.bounds_value.watch:
     if added:
@@ -177,11 +188,13 @@ proc track_changes(self: BuildNode) =
       self.set_visibility()
     elif Resetting.added:
       self.untrack_chunks()
-      # GD4: Reset VoxelTerrain - fix gdref nil reference
-      # TODO: Fix gdref nil construction syntax for VoxelTerrain reset
-      # self.set_generator(gdref VoxelGenerator())
-      # self.set_stream(gdref VoxelStream())
+      # Clear generator and stream during reset
+      self.set_generator(default(gdref VoxelGenerator))
+      self.set_stream(default(gdref VoxelStream))
     elif Resetting.removed:
+      # Restore generator and stream after reset
+      let stream = instantiate(VoxelStreamMemory)
+      self.set_stream(stream.as(gdref VoxelStream))
       let generator = instantiate(VoxelGeneratorFlat)
       self.set_generator(generator.as(gdref VoxelGenerator))
       self.track_chunks()
@@ -245,44 +258,6 @@ proc setup*(self: BuildNode) =
     self.model.sight_ray = sight_ray
   self.prepare_materials()
 
-proc create_test_voxels*(self: BuildNode) {.gdsync.} =
-  ## Create some test voxels using real VoxelTerrain functionality
-
-  print(
-    "[VOXEL] Creating test voxels with properly initialized VoxelTerrain..."
-  )
-
-  # Get voxel tool for editing
-  let voxel_tool = self.get_voxel_tool()
-
-  print("[VOXEL] VoxelTool acquired, testing area editability...")
-
-  # Test if the area we want to edit is editable
-  let test_area = aabb(vector3(0, 0, 0), vector3(3, 3, 3))
-  let is_editable = voxel_tool[].is_area_editable(test_area)
-  print("[VOXEL] Area (0,0,0) to (3,3,3) editable: ", is_editable)
-
-  if not is_editable:
-    print("[VOXEL] ✗ Area not editable - this is the problem!")
-    print("[VOXEL] → Stream: ", self.get_stream())
-    print("[VOXEL] → Generator: ", self.get_generator())
-    print("[VOXEL] → Max view distance: ", self.get_max_view_distance())
-    print("[VOXEL] → Data block size: ", self.get_data_block_size())
-    return
-
-  print("[VOXEL] ✓ Area is editable, creating 3x3x3 cube...")
-
-  # Create a simple 3x3x3 cube of different colored blocks
-  for x in 0 .. 2:
-    for y in 0 .. 2:
-      for z in 0 .. 2:
-        let pos = vector3i(x.int32, y.int32, z.int32)
-        # Alternate between different voxel types (1-6 for different colors)
-        let voxel_type = (x + y + z) mod 6 + 1
-        voxel_tool[].set_voxel(pos, 1.uint64)
-
-  print("[VOXEL] Test voxels created - 3x3x3 cube with mixed colors")
-
 method process*(self: BuildNode, delta: float64) {.gdsync.} =
   if ?self.model:
     if self.model.code.owner == state.worker_ctx_name:
@@ -294,43 +269,18 @@ method process*(self: BuildNode, delta: float64) {.gdsync.} =
       self.toggle_error_highlight_at = get_mono_time() + error_flash_time
       self.set_highlight()
 
-  # Test voxel creation (temporary)
-  if self.update_at < get_mono_time() and self.update_at != MonoTime.high:
-    # Only run once by setting to a far future time
-    self.update_at = MonoTime.high
-    self.create_test_voxels()
-
 method ready*(self: BuildNode) {.gdsync.} =
-  print(
-    "[VOXEL] BuildNode ready - checking VoxelTerrain configuration from .tscn..."
-  )
-  self.update_at = get_mono_time() + init_duration(seconds = 2)
-    # Give terrain time to initialize
   self.toggle_error_highlight_at = MonoTime.high
-
-  # Initialize based on on_init equivalent
   self.default_view_distance = self.get_max_view_distance().int
 
-  # Debug: Check if components from .tscn are properly loaded
-  print("[VOXEL] Stream: ", self.get_stream())
-  print("[VOXEL] Generator: ", self.get_generator())
-  print("[VOXEL] Mesher: ", self.get_mesher())
-  print("[VOXEL] Bounds: ", self.get_bounds())
-  print(
-    "[VOXEL] VoxelTerrain initialized - waiting 2 seconds for area loading..."
-  )
+  # Connect VoxelTerrain signals for chunk loading/unloading
+  discard self.connect("block_loaded", self.callable("on_block_loaded"))
+  discard self.connect("block_unloaded", self.callable("on_block_unloaded"))
 
 proc init*(_: type BuildNode): BuildNode =
   if not ?build_scene:
     build_scene = ResourceLoader.load("res://components/BuildNode.tscn").as(
         gdref PackedScene
       )
-    # GD4: Load shaders for Godot 4
-    shader = ResourceLoader.load("res://shaders/terrain_voxel.gdshader").as(
-        gdref Shader
-      )
-    hidden_shader = ResourceLoader
-      .load("res://shaders/terrain_voxel_hidden.gdshader")
-      .as(gdref Shader)
 
   result = build_scene[].instantiate().as(BuildNode)

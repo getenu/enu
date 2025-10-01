@@ -130,8 +130,7 @@ type
 
   Shared* = ref object of RootObj
     id*: string
-    materials*: seq[ShaderMaterial]
-    emission_colors*: seq[gdext.Color]
+    materials*: seq[gdref ShaderMaterial]
     edits*: ZenTable[string, ZenTable[Vector3, VoxelInfo]]
 
   ScriptErrors* =

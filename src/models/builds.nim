@@ -108,11 +108,10 @@ proc expand_bounds_to_chunk(self: Build, chunk_id: Vector3) =
   let range = chunk_id * ChunkSize
   let min = range - ChunkSize - vector3(1, 1, 1)
   let max = range + ChunkSize
-  # GD4: fixme
-  # if max notin self.bounds:
-  #   self.bounds = self.bounds.expand(max)
-  # if min notin self.bounds:
-  #   self.bounds = self.bounds.expand(min)
+  if not self.bounds.has_point(max):
+    self.bounds = self.bounds.expand(max)
+  if not self.bounds.has_point(min):
+    self.bounds = self.bounds.expand(min)
 
 proc reset_bounds*(self: Build) =
   self.bounds = aabb(vector3(0, 0, 0), vector3(-1, -1, -1))
@@ -265,23 +264,21 @@ method on_begin_move*(
   if move:
     let steps = steps.float
     var duration = 0.0
-    # GD4: fixme
-    # let
-    #   moving = self.transform.basis.xform(direction) / self.scale
-    #   finish = self.transform.origin + moving * steps
-    #   finish_time = 1.0 / self.speed * steps
+    let
+      moving = self.transform.basis * direction / self.scale
+      finish = self.transform.origin + moving * steps
+      finish_time = 1.0 / self.speed * steps
 
     result = proc(delta: float, _: MonoTime): TaskStates =
-      discard
-    #   duration += delta
-    #   if duration >= finish_time:
-    #     self.transform_value.origin = finish
-    #     return Done
-    #   else:
-    #     self.transform_value.origin =
-    #       self.transform.origin + (moving * self.speed * delta)
+      duration += delta
+      if duration >= finish_time:
+        self.transform_value.origin = finish
+        return Done
+      else:
+        self.transform_value.origin =
+          self.transform.origin + (moving * self.speed * delta)
 
-    #     return Running
+        return Running
   else:
     if self.speed == 0:
       self.voxels_per_frame = float.high
@@ -291,20 +288,18 @@ method on_begin_move*(
     var count = 0
 
     result = proc(delta: float, timeout: MonoTime): TaskStates =
-      discard
-      # GD4: fixme
-      # while count.float < steps and self.voxels_remaining_this_frame >= 1 and
-      #     get_mono_time() < timeout:
-      #   if steps < 1:
-      #     self.draw_transform =
-      #       self.draw_transform.translated(direction * steps)
-      #   else:
-      #     self.draw_transform = self.draw_transform.translated(direction)
-      #   inc count
-      #   self.voxels_remaining_this_frame -= 1
-      #   self.drop_block()
+      while count.float < steps and self.voxels_remaining_this_frame >= 1 and
+          get_mono_time() < timeout:
+        if steps < 1:
+          self.draw_transform =
+            self.draw_transform.translated(direction * steps)
+        else:
+          self.draw_transform = self.draw_transform.translated(direction)
+        inc count
+        self.voxels_remaining_this_frame -= 1
+        self.drop_block()
 
-      # if count.float >= steps: NextTask else: Running
+      if count.float >= steps: NextTask else: Running
 
 method on_begin_turn*(
     self: Build, axis: Vector3, degrees: float, lean: bool, move_mode: int
@@ -329,22 +324,19 @@ method on_begin_turn*(
   if move:
     self.voxels_per_frame = 0
     var duration = 0.0
-    # GD4: fixme
-    # let axis = self.transform.basis.orthonormalized.xform(axis)
-    let axis = vector3(0, 0, 0)
+    let axis = self.transform.basis.orthonormalized() * axis
     let scale = self.scale
     var final_transform = self.transform
-    # GD4: fixme
-    # final_transform.basis = final_transform.basis
-    #   .rotated(axis, deg_to_rad(degrees)).orthonormalized
-    #   .scaled(Vector3(scale, scale, scale))
+    final_transform.basis = final_transform.basis
+      .rotated(axis, deg_to_rad(degrees))
+      .orthonormalized()
+      .scaled(vector3(scale, scale, scale))
 
     result = proc(delta: float, _: MonoTime): TaskStates =
       duration += delta
-      # GD4: fixme
-      # self.transform_value.basis = self.transform.basis.rotated(
-      #   axis, deg_to_rad(degrees * delta * self.speed)
-      # )
+      self.transform_value.basis = self.transform.basis.rotated(
+        axis, deg_to_rad(degrees * delta * self.speed)
+      )
 
       if duration <= 1.0 / self.speed:
         Running
@@ -352,20 +344,18 @@ method on_begin_turn*(
         self.transform = final_transform
         Done
   else:
-    discard
-    # GD4: fixme
-    # let axis = self.draw_transform.basis.xform(axis)
-    # self.draw_transform_value.basis =
-    #   self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
+    let axis = self.draw_transform.basis * axis
+    self.draw_transform_value.basis =
+      self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
 
-    # self.draw_transform = self.draw_transform.orthonormalized()
+    self.draw_transform = self.draw_transform.orthonormalized()
 
 proc reset_state*(self: Build) =
   self.init_shared
   self.draw_transform = Transform3D.init
   self.transform = self.start_transform
 
-method reset*(self: Build) =
+method reset*(self: Build) {.gcsafe.} =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
