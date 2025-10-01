@@ -12,7 +12,7 @@ const
         ("macos", ".dylib", "")
     else:
       ("x11", ".so", "")
-  cpu = if host_cpu == "arm64": "arm64" else: "64"
+  cpu = if host_cpu == "arm64": "arm64" else: "x86_64"
   generated_dir = "generated/godotapi"
   api_json = "api.json"
   generator = "tools/build_helpers"
