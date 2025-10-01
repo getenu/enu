@@ -11,7 +11,7 @@ const
       else:
         ("macos", ".dylib", "")
     else:
-      ("x11", ".so", "")
+      ("linuxbsd", ".so", "")
   cpu = if host_cpu == "arm64": "arm64" else: "x86_64"
   generated_dir = "generated/godotapi"
   api_json = "api.json"
@@ -45,8 +45,6 @@ let git_version = static_exec("git describe --tags HEAD").strip
 proc godot_bin(target = target): string =
   result =
     this_dir() & &"/vendor/godot/bin/godot.{target}.editor.{cpu}{exe_ext}"
-  if target == "server":
-    result = result.replace("godot.server", "godot_server.x11")
 
 var generator_path = ""
 proc gen(): string =
@@ -95,7 +93,7 @@ task build_godot, "Build godot":
   build_godot()
 
 task build_headless, "build headless godot":
-  build_godot(target = "server use_static_cpp=no")
+  build_godot(target = "linuxbsd use_static_cpp=no")
 
 task test, "run godot tests":
   exec "nim c tests/godot/tnode_factories"
@@ -275,14 +273,14 @@ proc code_sign(id, path: string) =
 
 task dist_prereqs, "Build godot debug and release versions, and download fonts":
   p "Buiding distribution prereqs..."
-  if target == "x11":
-    build_godot(target = "server")
+  if target == "linuxbsd":
+    build_godot(target = "linuxbsd")
   else:
     build_godot()
   download_fonts()
 
   let release_opts = "target=release tools=no"
-  build_godot(cpu = "64", opts = release_opts)
+  build_godot(cpu = "x86_64", opts = release_opts)
   when host_os == "macosx":
     build_godot(cpu = "arm64", opts = release_opts)
 
@@ -382,7 +380,7 @@ task dist_package, "Build distribution binaries":
 
         exec &"xcrun altool --notarize-app --primary-bundle-id 'com.getenu.enu'  --username '{username}' --password '{password}' --file dist/{package_name}"
   elif host_os == "linux":
-    gen_binding_and_copy_stdlib("server")
+    gen_binding_and_copy_stdlib("linuxbsd")
     let release_bin = &"vendor/godot/bin/godot.{target}.opt.{cpu}{exe_ext}"
     let root = &"dist/enu-{git_version}"
     mk_dir root & "/bin"
@@ -395,7 +393,7 @@ task dist_package, "Build distribution binaries":
     exec "chmod +x " & root & "/bin/enu"
     exec &"{gen()} write_export_presets --enu_version {git_version}"
     let pck_path = this_dir() & "/" & root & "/enu.pck"
-    exec &"{godot_bin(\"server\")} --verbose --path app --export-pack \"x11\" " &
+    exec &"{godot_bin(\"linuxbsd\")} --verbose --path app --export-pack \"linuxbsd\" " &
       pck_path
     with_dir "dist":
       exec &"tar -czvf enu-{git_version}-linux-x64.tar.gz enu-{git_version}"
