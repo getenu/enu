@@ -1,6 +1,5 @@
 name: Build on Windows
-# Temporarily disabled - switch back to 'on: push' when Windows build is fixed
-on: workflow_dispatch
+on: push
 
 jobs:
   build:
