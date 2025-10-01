@@ -1,3 +1,6 @@
+# NOTE: New file for Godot 4 - provides gdext-specific helpers and initialization.
+# Separates Godot 4-specific code from core.nim which remains engine-agnostic.
+
 import std/[strformat]
 import gdext
 import
