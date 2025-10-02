@@ -77,7 +77,7 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
     when host_os == "macosx":
-      exec &"{scons} custom_modules=../modules platform={target} arch={cpu} macos_deployment_target=10.15 {opts} dev_build=yes"
+      exec &"{scons} custom_modules=../modules platform={target} arch={cpu} macos_deployment_target=10.15 use_volk=yes {opts} dev_build=yes"
     else:
       exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} dev_build=yes"
 
@@ -357,6 +357,27 @@ task dist_package, "Build distribution binaries":
 
     copy_vmlib "vmlib", "dist/Enu.app/Contents/Resources/vmlib"
 
+    # Copy MoltenVK dylib for dynamic Vulkan loading (use_volk)
+    let vulkan_sdk = get_env("VULKAN_SDK", "/usr/local")
+    let mvk_framework = vulkan_sdk / "macOS/lib/MoltenVK.xcframework"
+
+    if dir_exists(mvk_framework):
+      # Try universal binary first
+      let universal_lib = mvk_framework / "macos-arm64_x86_64/libMoltenVK.dylib"
+      if file_exists(universal_lib):
+        cp_file universal_lib, "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
+      else:
+        # Fall back to separate architectures and combine with lipo
+        let x86_lib = mvk_framework / "macos-x86_64/libMoltenVK.dylib"
+        let arm_lib = mvk_framework / "macos-arm64/libMoltenVK.dylib"
+
+        if file_exists(x86_lib) and file_exists(arm_lib):
+          exec &"lipo -create {x86_lib} {arm_lib} -output dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
+        elif file_exists(x86_lib):
+          cp_file x86_lib, "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
+        elif file_exists(arm_lib):
+          cp_file arm_lib, "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
+
     if config["sign"].get_bool:
       let id = config["id"].get_str
       if "keychain" in config:
@@ -364,6 +385,8 @@ task dist_package, "Build distribution binaries":
         let password = config["keychain-password"].get_str
         exec &"security unlock-keychain -p \"{password}\" {keychain}"
       code_sign(id, "dist/Enu.app/Contents/Frameworks/enu.dylib")
+      if file_exists("dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"):
+        code_sign(id, "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib")
       code_sign(id, "dist/Enu.app")
 
     let package_name = &"enu-{git_version}.dmg"
