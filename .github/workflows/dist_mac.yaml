@@ -43,6 +43,8 @@ jobs:
 
       - name: Install build deps
         run: brew install nim scons yasm
+      - name: Set macOS deployment target
+        run: echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> $GITHUB_ENV
       - name: Update path
         run: echo "$HOME/.nimble/bin" >> $GITHUB_PATH
       - name: Install nimble deps
