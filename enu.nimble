@@ -21,6 +21,7 @@ const
   gcc_dlls = ["libgcc_s_seh-1.dll", "libwinpthread-1.dll"]
   nim_dlls = ["pcre64.dll"]
   godot_opts = "target=editor"
+  is_ci = get_env("CI") != "" or get_env("GITHUB_ACTIONS") != ""
 
 version = "0.2.95"
 author = "Scott Wadden"
@@ -42,9 +43,22 @@ requires "https://github.com/dsrw/Nim#7483e78",
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
-proc godot_bin(target = target): string =
-  result =
-    this_dir() & &"/vendor/godot/bin/godot.{target}.editor.{cpu}{exe_ext}"
+# Track which build mode was used for the editor binary
+var editor_built_with_dev = not is_ci
+
+proc make_godot_bin_path(platform: string, build_target: string, arch: string, use_dev: bool): string =
+  let dev_suffix = if use_dev: ".dev" else: ""
+  let opt_suffix = if build_target == "template_release": ".opt" else: ""
+  result = &"vendor/godot/bin/godot.{platform}.{build_target}{opt_suffix}{dev_suffix}.{arch}{exe_ext}"
+
+proc godot_bin(target = target, use_dev = editor_built_with_dev): string =
+  # Try the specified dev mode first, then fallback to the opposite
+  let primary_path = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, use_dev)
+  if file_exists(primary_path):
+    result = primary_path
+  else:
+    # Fallback to opposite dev mode
+    result = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, not use_dev)
 
 var generator_path = ""
 proc gen(): string =
@@ -65,7 +79,7 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
-proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
+proc build_godot(target = target, cpu = cpu, opts = godot_opts, use_dev_build = not is_ci) =
   p "Building Godot..."
   exec "git submodule update --init --recursive"
   when host_os == "macosx":
@@ -75,11 +89,14 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   let scons = find_exe "scons"
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
+
+  let dev_flag = if use_dev_build: " dev_build=yes" else: ""
+
   with_dir "vendor/godot":
     when host_os == "macosx":
-      exec &"{scons} custom_modules=../modules platform={target} arch={cpu} macos_deployment_target=10.15 use_volk=yes {opts} dev_build=yes"
+      exec &"{scons} custom_modules=../modules platform={target} arch={cpu} macos_deployment_target=10.15 use_volk=yes {opts}{dev_flag}"
     else:
-      exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} dev_build=yes"
+      exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts}{dev_flag}"
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
@@ -276,16 +293,21 @@ proc code_sign(id, path: string) =
 
 task dist_prereqs, "Build godot debug and release versions, and download fonts":
   p "Buiding distribution prereqs..."
+  let use_dev = not is_ci
+
   if target == "linuxbsd":
-    build_godot(target = "linuxbsd")
+    build_godot(target = "linuxbsd", use_dev_build = use_dev)
   else:
-    build_godot()
+    build_godot(use_dev_build = use_dev)
+  editor_built_with_dev = use_dev
+
   download_fonts()
 
   let release_opts = "target=template_release"
-  build_godot(cpu = "x86_64", opts = release_opts)
+  # Release templates never use dev_build
+  build_godot(cpu = "x86_64", opts = release_opts, use_dev_build = false)
   when host_os == "macosx":
-    build_godot(cpu = "arm64", opts = release_opts)
+    build_godot(cpu = "arm64", opts = release_opts, use_dev_build = false)
 
 proc copy_vmlib(src, dest: string) =
   cp_dir src, dest
@@ -298,7 +320,7 @@ task dist_package, "Build distribution binaries":
 
   when host_os == "windows":
     gen_binding_and_copy_stdlib()
-    let release_bin = &"vendor/godot/bin/godot.{target}.opt.{cpu}{exe_ext}"
+    let release_bin = make_godot_bin_path(target, "template_release", cpu, false)
     let root = &"dist/enu-{git_version}"
     mk_dir root
     exec "strip " & release_bin
@@ -333,11 +355,11 @@ task dist_package, "Build distribution binaries":
     exec &"{gen()} write_export_presets --enu_version {git_version}"
     exec &"{gen()} write_info_plist --enu_version {git_version}"
 
-    var release_bin = &"vendor/godot/bin/godot.{target}.opt.64{exe_ext}"
+    var release_bin = make_godot_bin_path(target, "template_release", "x86_64", false)
     exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.x86_64"
     nim_build "x86_64", "amd64"
 
-    release_bin = &"vendor/godot/bin/godot.{target}.opt.arm64{exe_ext}"
+    release_bin = make_godot_bin_path(target, "template_release", "arm64", false)
     exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.arm64"
     nim_build "arm64", "arm64"
 
@@ -407,7 +429,7 @@ task dist_package, "Build distribution binaries":
         exec &"xcrun altool --notarize-app --primary-bundle-id 'com.getenu.enu'  --username '{username}' --password '{password}' --file dist/{package_name}"
   elif host_os == "linux":
     gen_binding_and_copy_stdlib("linuxbsd")
-    let release_bin = &"vendor/godot/bin/godot.{target}.opt.{cpu}{exe_ext}"
+    let release_bin = make_godot_bin_path(target, "template_release", cpu, false)
     let root = &"dist/enu-{git_version}"
     mk_dir root & "/bin"
     mk_dir root & "/lib"
