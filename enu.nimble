@@ -279,7 +279,7 @@ task dist_prereqs, "Build godot debug and release versions, and download fonts":
     build_godot()
   download_fonts()
 
-  let release_opts = "target=release tools=no"
+  let release_opts = "target=template_release"
   build_godot(cpu = "x86_64", opts = release_opts)
   when host_os == "macosx":
     build_godot(cpu = "arm64", opts = release_opts)
