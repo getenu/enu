@@ -42,12 +42,7 @@ jobs:
           xcrun notarytool store-credentials "$NOTARIZATION_PROFILE" --apple-id "$NOTARIZATION_APPLE_ID" --team-id "$NOTARIZATION_TEAM_ID" --password "$NOTARIZATION_PWD"
 
       - name: Install build deps
-        run: brew install nim scons yasm
-      - name: Install nim
-        run: |
-          curl -LO https://nim-lang.org/download/nim-2.2.4-macosx_x64.tar.xz
-          tar xf nim-2.2.4-macosx_x64.tar.xz
-          echo "$(pwd)/nim-2.2.4/bin" >> $GITHUB_PATH
+        run: brew install nim@2.2 scons yasm
       - name: Update path
         run: echo "$HOME/.nimble/bin" >> $GITHUB_PATH
       - name: Install nimble deps
