@@ -10,3 +10,6 @@
 	path = vendor/pcre
 	url = https://github.com/luvit/pcre
 	ignore = dirty
+[submodule "vendor/nim"]
+	path = vendor/nim
+	url = https://github.com/dsrw/Nim

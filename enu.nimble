@@ -34,13 +34,12 @@ src_dir = "app/extension"
 bin = @["enu" & lib_ext]
 package_name = "enu"
 
-requires "https://github.com/dsrw/Nim#7483e78",
-  "https://github.com/getenu/model_citizen 0.19.6",
+requires "https://github.com/getenu/model_citizen 0.19.6",
   "https://github.com/dsrw/nanoid.nim 0.2.1",
   "https://github.com/godot-nim/gdext-nim 0.15.0",
   "https://github.com/godot-nim/gdext-nim?subdir=coronation 0.1.0",
   "https://github.com/treeform/pretty", "cligen", "chroma", "markdown",
-  "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
+  "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy", "nph"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
@@ -477,3 +476,35 @@ task export_docs, "Build docs and copy them to ../enu-site/docs":
   docs_task()
   exec "rm -rf ../enu-site/docs"
   exec "cp -r dist/docs ../enu-site"
+
+task format, "Format code with nph (skip src/eval.nim)":
+  p "Formatting code with nph..."
+
+  # Format src directory (except eval.nim)
+  exec "find src -name '*.nim' ! -name 'eval.nim' -exec nph {} +"
+
+  # Format vmlib/enu
+  exec "find vmlib/enu -name '*.nim' -exec nph {} +"
+
+  # Format vmlib/worlds
+  exec "find vmlib/worlds -name '*.nim' -exec nph {} +"
+
+  p "Formatting complete!"
+
+task screenshot, "Take a screenshot of Enu":
+  start_task("--screenshot")
+
+task build_all, "Complete build: setup, prereqs, import_assets, build":
+  p "Running complete build..."
+  setup_task()
+  prereqs_task()
+  import_assets_task()
+  build_task()
+  p "Build complete!"
+
+task dist_all, "Complete distribution build: setup, dist_prereqs, dist_package":
+  p "Running complete distribution build..."
+  setup_task()
+  dist_prereqs_task()
+  dist_package_task()
+  p "Distribution build complete!"

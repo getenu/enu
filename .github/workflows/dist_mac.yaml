@@ -1,6 +1,9 @@
 name: Build on macOS
 on: push
 
+env:
+  CACHE_VERSION: v1
+
 jobs:
   build:
     runs-on: macos-13
@@ -9,6 +12,8 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: recursive
+
       - name: Install certificates. Write dist_config.json.
         env:
           DIST_CONFIG: ${{ secrets.PROD_MACOS_DIST_CONFIG }}
@@ -42,28 +47,43 @@ jobs:
           xcrun notarytool store-credentials "$NOTARIZATION_PROFILE" --apple-id "$NOTARIZATION_APPLE_ID" --team-id "$NOTARIZATION_TEAM_ID" --password "$NOTARIZATION_PWD"
 
       - name: Install build deps
-        run: brew install nim scons yasm
+        run: brew install scons yasm
+
       - name: Set macOS deployment target
         run: echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> $GITHUB_ENV
-      - name: Update path
-        run: echo "$HOME/.nimble/bin" >> $GITHUB_PATH
-      - name: Install nimble deps
-        run: nimble setup -y
-      - name: Save SHAs of submodules
-        run: "git submodule status > .submodules.tmp"
-      - name: prereq cache
-        id: prereq-cache
+
+      - name: Get submodule SHAs
+        id: submodule-shas
+        run: |
+          echo "nim_sha=$(git -C vendor/nim rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "godot_sha=$(git -C vendor/godot rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "voxel_sha=$(git -C vendor/modules/voxel rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Cache Nim build
+        uses: actions/cache@v3
+        with:
+          path: |
+            vendor/nim/bin
+            .build_state/nim_built
+          key: ${{ runner.os }}-nim-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.nim_sha }}
+
+      - name: Cache nimble dependencies
+        uses: actions/cache@v3
+        with:
+          path: nimbledeps
+          key: ${{ runner.os }}-nimbledeps-${{ env.CACHE_VERSION }}-${{ hashFiles('nimble.lock') }}
+
+      - name: Cache Godot build
         uses: actions/cache@v3
         with:
           path: |
             vendor/godot/bin
             fonts
-          key: ${{ runner.os }}-prereq-cache-v2-${{ hashFiles('.submodules.tmp') }}
-      - name: build prereqs
-        run: nimble dist_prereqs
-        if: steps.prereq-cache.outputs.cache-hit != 'true'
-      - name: Dist
-        run: nimble dist_package
+          key: ${{ runner.os }}-godot-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.godot_sha }}-${{ steps.submodule-shas.outputs.voxel_sha }}
+
+      - name: Build distribution
+        run: ./build.sh dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: Enu macOS Distribution

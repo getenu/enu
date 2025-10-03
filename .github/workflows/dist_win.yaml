@@ -1,6 +1,9 @@
 name: Build on Windows
 on: push
 
+env:
+  CACHE_VERSION: v1
+
 jobs:
   build:
     runs-on: windows-2022
@@ -9,53 +12,66 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: Install Nim
-        run: |
-          cd ${HOME}
-          C:\msys64\usr\bin\wget.exe https://nim-lang.org/download/nim-2.2.4_x64.zip
-          7z.exe x nim-2.2.4_x64.zip -y
-      - name: Install build deps
-        run: choco install yasm innosetup rcedit zip reshack
-      - name: Install scons
-        run: python -m pip install scons
-      - name: Update path
-        run: echo "${HOME}/.nimble/bin;${HOME}/nim-2.2.4/bin;C:\msys64\mingw64\bin;C:\Program Files (x86)\Resource Hacker" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Install nimble deps
-        run: nimble setup -y
-      - name: Save SHAs of submodules
-        run: 'git submodule status > .submodules.tmp'
+          submodules: recursive
+
+      - name: Install build tools
+        run: choco install yasm innosetup rcedit reshack
+
       - name: Prep dist config
         run: cp dist_config.example.json dist_config.json
 
-      - name: prereq cache
-        id: prereq-cache
+      - name: Get submodule SHAs
+        id: submodule-shas
+        run: |
+          echo "nim_sha=$(git -C vendor/nim rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+          echo "godot_sha=$(git -C vendor/godot rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+          echo "voxel_sha=$(git -C vendor/modules/voxel rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache Nim build
+        uses: actions/cache@v3
+        with:
+          path: |
+            vendor/nim/bin
+            .build_state/nim_built
+          key: ${{ runner.os }}-nim-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.nim_sha }}
+
+      - name: Cache nimble dependencies
+        uses: actions/cache@v3
+        with:
+          path: nimbledeps
+          key: ${{ runner.os }}-nimbledeps-${{ env.CACHE_VERSION }}-${{ hashFiles('nimble.lock') }}
+
+      - name: Cache Godot build
+        id: godot-cache
         uses: actions/cache@v3
         with:
           path: |
             vendor/godot/bin
             fonts
-          key: ${{ runner.os }}-prereq-cache-v4-${{ hashFiles('.submodules.tmp') }}
-      - name: build prereqs
-        run: nimble dist_prereqs
-        if: steps.prereq-cache.outputs.cache-hit != 'true'
+          key: ${{ runner.os }}-godot-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.godot_sha }}-${{ steps.submodule-shas.outputs.voxel_sha }}
+
+      - name: Cache build environment
+        uses: actions/cache@v3
+        with:
+          path: build_env
+          key: ${{ runner.os }}-buildenv-${{ env.CACHE_VERSION }}
+
       - name: Download and copy mesa
         # github runner doesn't have a GPU, so we need to link to mesa
         # to start godot
         run: |
-          md -f vendor/godot/bin
+          md -Force vendor/godot/bin
           md mesa
           cd mesa
           C:\msys64\usr\bin\wget.exe https://github.com/pal1000/mesa-dist-win/releases/download/19.2.5/mesa3d-19.2.5-release-mingw.7z
           7z.exe e mesa3d-19.2.5-release-mingw.7z -y -o"..\vendor\godot\bin" x64/opengl32.dll
           cd ..
           rm mesa -Recurse
-        if: steps.prereq-cache.outputs.cache-hit != 'true'
+        if: steps.godot-cache.outputs.cache-hit != 'true'
 
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
+      - name: Build distribution
+        run: ./build.bat dist
 
-      - name: Dist
-        run: nimble dist_package
       - uses: actions/upload-artifact@v4
         with:
           name: Enu Windows Distribution

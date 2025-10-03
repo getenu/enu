@@ -46,3 +46,5 @@ nimbledeps/
 
 *.previous
 *.log
+/.build_state/
+/build_env/
