@@ -21,6 +21,7 @@ const
   gcc_dlls = ["libgcc_s_seh-1.dll", "libwinpthread-1.dll"]
   nim_dlls = ["pcre64.dll"]
   godot_opts = "target=editor"
+  # CI builds without dev_build for smaller, optimized binaries
   is_ci = get_env("CI") != "" or get_env("GITHUB_ACTIONS") != ""
 
 version = "0.2.95"
@@ -43,22 +44,23 @@ requires "https://github.com/dsrw/Nim#7483e78",
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
-# Track which build mode was used for the editor binary
-var editor_built_with_dev = not is_ci
-
 proc make_godot_bin_path(platform: string, build_target: string, arch: string, use_dev: bool): string =
   let dev_suffix = if use_dev: ".dev" else: ""
   let opt_suffix = if build_target == "template_release": ".opt" else: ""
   result = &"vendor/godot/bin/godot.{platform}.{build_target}{opt_suffix}{dev_suffix}.{arch}{exe_ext}"
 
-proc godot_bin(target = target, use_dev = editor_built_with_dev): string =
-  # Try the specified dev mode first, then fallback to the opposite
-  let primary_path = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, use_dev)
-  if file_exists(primary_path):
-    result = primary_path
+proc godot_bin(target = target): string =
+  # Try dev build first (local), then non-dev (CI)
+  let dev_path = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, true)
+  let non_dev_path = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, false)
+
+  if file_exists(dev_path):
+    result = dev_path
+  elif file_exists(non_dev_path):
+    result = non_dev_path
   else:
-    # Fallback to opposite dev mode
-    result = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, not use_dev)
+    # Return expected path for better error messages
+    result = if is_ci: non_dev_path else: dev_path
 
 var generator_path = ""
 proc gen(): string =
@@ -79,7 +81,7 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
-proc build_godot(target = target, cpu = cpu, opts = godot_opts, use_dev_build = not is_ci) =
+proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   p "Building Godot..."
   exec "git submodule update --init --recursive"
   when host_os == "macosx":
@@ -90,7 +92,8 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts, use_dev_build = 
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
 
-  let dev_flag = if use_dev_build: " dev_build=yes" else: ""
+  # Local builds use dev_build for debug symbols, CI uses optimized builds
+  let dev_flag = if not is_ci: " dev_build=yes" else: ""
 
   with_dir "vendor/godot":
     when host_os == "macosx":
@@ -293,21 +296,20 @@ proc code_sign(id, path: string) =
 
 task dist_prereqs, "Build godot debug and release versions, and download fonts":
   p "Buiding distribution prereqs..."
-  let use_dev = not is_ci
 
+  # Build editor (with dev_build locally, without in CI)
   if target == "linuxbsd":
-    build_godot(target = "linuxbsd", use_dev_build = use_dev)
+    build_godot(target = "linuxbsd")
   else:
-    build_godot(use_dev_build = use_dev)
-  editor_built_with_dev = use_dev
+    build_godot()
 
   download_fonts()
 
+  # Build release templates (never use dev_build for clean, optimized binaries)
   let release_opts = "target=template_release"
-  # Release templates never use dev_build
-  build_godot(cpu = "x86_64", opts = release_opts, use_dev_build = false)
+  build_godot(cpu = "x86_64", opts = release_opts)
   when host_os == "macosx":
-    build_godot(cpu = "arm64", opts = release_opts, use_dev_build = false)
+    build_godot(cpu = "arm64", opts = release_opts)
 
 proc copy_vmlib(src, dest: string) =
   cp_dir src, dest
