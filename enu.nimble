@@ -1,4 +1,4 @@
-import std/[strformat, strutils, strscans, os, json, os]
+import std/[strformat, strutils, strscans, os, json, os, sequtils]
 
 const
   (target, lib_ext, exe_ext) =
@@ -23,6 +23,7 @@ const
   godot_opts = "target=editor"
   # CI builds without dev_build for smaller, optimized binaries
   is_ci = get_env("CI") != "" or get_env("GITHUB_ACTIONS") != ""
+  build_state_dir = ".build_state"
 
 version = "0.2.95"
 author = "Scott Wadden"
@@ -43,15 +44,20 @@ requires "https://github.com/getenu/model_citizen 0.19.6",
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
-proc make_godot_bin_path(platform: string, build_target: string, arch: string, use_dev: bool): string =
+proc make_godot_bin_path(
+    platform: string, build_target: string, arch: string, use_dev: bool
+): string =
   let dev_suffix = if use_dev: ".dev" else: ""
   let opt_suffix = if build_target == "template_release": ".opt" else: ""
-  result = &"vendor/godot/bin/godot.{platform}.{build_target}{opt_suffix}{dev_suffix}.{arch}{exe_ext}"
+  result =
+    &"vendor/godot/bin/godot.{platform}.{build_target}{opt_suffix}{dev_suffix}.{arch}{exe_ext}"
 
 proc godot_bin(target = target): string =
   # Try dev build first (local), then non-dev (CI)
-  let dev_path = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, true)
-  let non_dev_path = this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, false)
+  let dev_path =
+    this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, true)
+  let non_dev_path =
+    this_dir() & "/" & make_godot_bin_path(target, "editor", cpu, false)
 
   if file_exists(dev_path):
     result = dev_path
@@ -80,7 +86,73 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
+proc get_submodule_sha(submodule_path: string): string =
+  ## Get the current commit SHA of a git submodule
+  gorge(&"git -C {submodule_path} rev-parse HEAD").strip
+
+proc get_godot_build_state_key(target, cpu, opts: string): string =
+  ## Generate a unique state key for a Godot build configuration
+  let godot_sha = get_submodule_sha("vendor/godot")
+  let voxel_sha = get_submodule_sha("vendor/modules/voxel")
+  let dev_flag = if not is_ci: "dev" else: "nodev"
+  result = &"{godot_sha}-{voxel_sha}-{target}-{cpu}-{opts}-{dev_flag}"
+
+proc get_godot_state_file(target, cpu, opts: string): string =
+  &"{build_state_dir}/godot_{target}_{cpu}_{opts.replace('=', '_').replace(' ', '_')}"
+
+proc needs_godot_build(target, cpu, opts: string): bool =
+  let state_file = get_godot_state_file(target, cpu, opts)
+  let bin_path =
+    make_godot_bin_path(
+      target,
+      if opts.contains("template_release"): "template_release" else: "editor",
+      cpu,
+      not is_ci,
+    )
+
+  # Need build if binary doesn't exist
+  if not file_exists(bin_path):
+    return true
+
+  # Need build if state file doesn't exist
+  if not file_exists(state_file):
+    return true
+
+  # Need build if state has changed
+  let current_state = get_godot_build_state_key(target, cpu, opts)
+  let saved_state = read_file(state_file).strip
+  return current_state != saved_state
+
+proc save_godot_build_state(target, cpu, opts: string) =
+  mk_dir build_state_dir
+  let state_file = get_godot_state_file(target, cpu, opts)
+  let state_key = get_godot_build_state_key(target, cpu, opts)
+  write_file(state_file, state_key)
+
+proc needs_fonts_download(): bool =
+  let state_file = &"{build_state_dir}/fonts_downloaded"
+
+  # Check if fonts directory exists and has content
+  if not dir_exists("fonts"):
+    return true
+
+  # Check if state file exists
+  if not file_exists(state_file):
+    return true
+
+  # Could check specific files exist, but for now just trust the state file
+  return false
+
+proc save_fonts_state() =
+  mk_dir build_state_dir
+  write_file(&"{build_state_dir}/fonts_downloaded", "done")
+
 proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
+  # Check if build is needed
+  if not needs_godot_build(target, cpu, opts):
+    p &"Godot already built for {target}/{cpu} ({opts}), skipping..."
+    return
+
   p "Building Godot..."
   exec "git submodule update --init --recursive"
   when host_os == "macosx":
@@ -99,6 +171,9 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
       exec &"{scons} custom_modules=../modules platform={target} arch={cpu} macos_deployment_target=10.15 use_volk=yes {opts}{dev_flag}"
     else:
       exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts}{dev_flag}"
+
+  # Save state after successful build
+  save_godot_build_state(target, cpu, opts)
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
@@ -175,6 +250,10 @@ proc copy_fonts() =
     cp_file "Font Awesome 6 Free-Solid-900.otf", dest / "icons.otf"
 
 proc download_fonts() =
+  if not needs_fonts_download():
+    p "Fonts already downloaded, skipping..."
+    return
+
   p "Downloading fonts..."
   rm_dir "fonts"
   mk_dir "fonts"
@@ -197,6 +276,9 @@ proc download_fonts() =
 
     exec "curl -OJL https://github.com/FortAwesome/Font-Awesome/releases/download/6.7.2/fontawesome-free-6.7.2-desktop.zip"
     exec "unzip -o fontawesome-free-6.7.2-desktop.zip"
+
+  # Save state after successful download
+  save_fonts_state()
 
 proc mingw_path(): string =
   var pre, match: string
@@ -246,15 +328,15 @@ task edit_then_quit, "Edit project in Godot":
 task edit, "Edit project in Godot":
   exec godot_bin() & " app/project.godot &"
 
+proc start(args = "") =
+  cd "app"
+  exec(godot_bin() & " --verbose --quit-after 500 scenes/game.tscn " & args)
+
 task start, "Run Enu":
   cd "app"
   var cmd = godot_bin() & " --verbose --quit-after 500 scenes/game.tscn"
-  # Support passing additional arguments to start task
-  # Usage: nimble start --headless --quit-after 1
-  for arg in command_line_params():
-    if arg.startsWith("--"):
-      cmd = cmd & " " & arg
-  exec cmd
+  let args = command_line_params().filter_it(it.starts_with("--")).join(" ")
+  start(args)
 
 task build_and_start, "Build and start":
   exec "nimble build"
@@ -321,7 +403,8 @@ task dist_package, "Build distribution binaries":
 
   when host_os == "windows":
     gen_binding_and_copy_stdlib()
-    let release_bin = make_godot_bin_path(target, "template_release", cpu, false)
+    let release_bin =
+      make_godot_bin_path(target, "template_release", cpu, false)
     let root = &"dist/enu-{git_version}"
     mk_dir root
     exec "strip " & release_bin
@@ -356,11 +439,13 @@ task dist_package, "Build distribution binaries":
     exec &"{gen()} write_export_presets --enu_version {git_version}"
     exec &"{gen()} write_info_plist --enu_version {git_version}"
 
-    var release_bin = make_godot_bin_path(target, "template_release", "x86_64", false)
+    var release_bin =
+      make_godot_bin_path(target, "template_release", "x86_64", false)
     exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.x86_64"
     nim_build "x86_64", "amd64"
 
-    release_bin = make_godot_bin_path(target, "template_release", "arm64", false)
+    release_bin =
+      make_godot_bin_path(target, "template_release", "arm64", false)
     exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.arm64"
     nim_build "arm64", "arm64"
 
@@ -388,7 +473,8 @@ task dist_package, "Build distribution binaries":
       # Try universal binary first
       let universal_lib = mvk_framework / "macos-arm64_x86_64/libMoltenVK.dylib"
       if file_exists(universal_lib):
-        cp_file universal_lib, "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
+        cp_file universal_lib,
+          "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
       else:
         # Fall back to separate architectures and combine with lipo
         let x86_lib = mvk_framework / "macos-x86_64/libMoltenVK.dylib"
@@ -430,7 +516,8 @@ task dist_package, "Build distribution binaries":
         exec &"xcrun altool --notarize-app --primary-bundle-id 'com.getenu.enu'  --username '{username}' --password '{password}' --file dist/{package_name}"
   elif host_os == "linux":
     gen_binding_and_copy_stdlib("linuxbsd")
-    let release_bin = make_godot_bin_path(target, "template_release", cpu, false)
+    let release_bin =
+      make_godot_bin_path(target, "template_release", cpu, false)
     let root = &"dist/enu-{git_version}"
     mk_dir root & "/bin"
     mk_dir root & "/lib"
@@ -492,19 +579,19 @@ task format, "Format code with nph (skip src/eval.nim)":
   p "Formatting complete!"
 
 task screenshot, "Take a screenshot of Enu":
-  start_task("--screenshot")
+  start("--screenshot")
 
 task build_all, "Complete build: setup, prereqs, import_assets, build":
   p "Running complete build..."
-  setup_task()
+  exec nimble_exe & " setup"
   prereqs_task()
   import_assets_task()
-  build_task()
+  exec nimble_exe & " build"
   p "Build complete!"
 
 task dist_all, "Complete distribution build: setup, dist_prereqs, dist_package":
   p "Running complete distribution build..."
-  setup_task()
+  exec nimble_exe & " setup"
   dist_prereqs_task()
   dist_package_task()
   p "Distribution build complete!"
