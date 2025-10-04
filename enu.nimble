@@ -1,4 +1,4 @@
-import std/[strformat, strutils, strscans, os, json, os, sequtils]
+import std/[strformat, strutils, strscans, os, json, sequtils]
 
 const
   (target, lib_ext, exe_ext) =
