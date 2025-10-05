@@ -108,7 +108,9 @@ proc save_fonts_state() =
 proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   # Check if build is needed
   if not needs_godot_build(target, cpu, opts):
+    let state_file = get_godot_state_file(target, cpu, opts)
     p &"Godot already built for {target}/{cpu} ({opts}), skipping..."
+    echo &"  To force rebuild: rm {state_file}"
     return
 
   p "Building Godot..."
@@ -186,6 +188,7 @@ proc copy_fonts() =
 proc download_fonts() =
   if not needs_fonts_download():
     p "Fonts already downloaded, skipping..."
+    echo &"  To force re-download: rm {build_state_dir}/fonts_downloaded"
     return
 
   p "Downloading fonts..."
