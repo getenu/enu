@@ -60,13 +60,12 @@ proc get_godot_state_file(target, cpu, opts: string): string =
 
 proc needs_godot_build(target, cpu, opts: string): bool =
   let state_file = get_godot_state_file(target, cpu, opts)
-  let bin_path =
-    make_godot_bin_path(
-      target,
-      if opts.contains("template_release"): "template_release" else: "editor",
-      cpu,
-      not is_ci,
-    )
+  let bin_path = make_godot_bin_path(
+    target,
+    if opts.contains("template_release"): "template_release" else: "editor",
+    cpu,
+    not is_ci,
+  )
 
   # Need build if binary doesn't exist
   if not file_exists(bin_path):
@@ -110,7 +109,10 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   if not needs_godot_build(target, cpu, opts):
     let state_file = get_godot_state_file(target, cpu, opts)
     p &"Godot already built for {target}/{cpu} ({opts}), skipping..."
-    echo &"  To force rebuild: rm {state_file}"
+    when host_os != "windows":
+      echo "\e[00m  To force rebuild: rm " & state_file
+    else:
+      echo "  To force rebuild: rm " & state_file
     return
 
   p "Building Godot..."
@@ -188,7 +190,10 @@ proc copy_fonts() =
 proc download_fonts() =
   if not needs_fonts_download():
     p "Fonts already downloaded, skipping..."
-    echo &"  To force re-download: rm {build_state_dir}/fonts_downloaded"
+    when host_os != "windows":
+      echo &"\e[00m  To force re-download: rm {build_state_dir}/fonts_downloaded"
+    else:
+      echo &"  To force re-download: rm {build_state_dir}/fonts_downloaded"
     return
 
   p "Downloading fonts..."
@@ -254,7 +259,7 @@ proc verify_envrc_paths() =
   # Parse .envrc for PATH_add lines
   for line in envrc_content.split_lines():
     if line.strip.starts_with("PATH_add "):
-      let path_to_add = line.strip[9..^1].strip
+      let path_to_add = line.strip[9 ..^ 1].strip
       let full_path = project_dir / path_to_add
 
       # Check if this path is in the current PATH
