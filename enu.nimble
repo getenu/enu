@@ -306,7 +306,45 @@ proc gen_godot_bindings() =
   p "Generating complete Godot bindings from custom Godot build..."
   exec "nim r tools/generate_godot_bindings.nim"
 
+proc verify_envrc_paths() =
+  ## Verify that paths from .envrc are in PATH
+  if not file_exists(".envrc"):
+    quit "*** .envrc not found. Please ensure .envrc exists and has been loaded with direnv. ***"
+
+  let envrc_content = read_file(".envrc")
+  let project_dir = this_dir()
+  var missing_paths: seq[string]
+
+  # Parse .envrc for PATH_add lines
+  for line in envrc_content.split_lines():
+    if line.strip.starts_with("PATH_add "):
+      let path_to_add = line.strip[9..^1].strip
+      let full_path = project_dir / path_to_add
+
+      # Check if this path is in the current PATH
+      let current_path = get_env("PATH")
+      if full_path notin current_path:
+        missing_paths.add(full_path)
+
+  if missing_paths.len > 0:
+    echo ""
+    echo "*** ERROR: Required paths not found in PATH ***"
+    echo ""
+    echo "The following paths from .envrc are missing:"
+    for path in missing_paths:
+      echo "  - " & path
+    echo ""
+    echo "Please ensure direnv is installed and configured:"
+    echo "  1. Install direnv: brew install direnv (macOS) or your package manager"
+    echo "  2. Add to your shell config (~/.zshrc or ~/.bashrc):"
+    echo "       eval \"$(direnv hook bash)\"  # or zsh, fish, etc."
+    echo "  3. Run: direnv allow"
+    echo "  4. Reload your shell or run: cd . && cd -"
+    echo ""
+    quit 1
+
 task prereqs, "Build godot, download fonts, generate bindings and stdlib":
+  verify_envrc_paths()
   build_godot()
   download_fonts()
   copy_fonts()
@@ -376,6 +414,7 @@ proc code_sign(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"
 
 task dist_prereqs, "Build godot debug and release versions, and download fonts":
+  verify_envrc_paths()
   p "Buiding distribution prereqs..."
 
   # Build editor (with dev_build locally, without in CI)
