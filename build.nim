@@ -110,9 +110,9 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
     let state_file = get_godot_state_file(target, cpu, opts)
     p &"Godot already built for {target}/{cpu} ({opts}), skipping..."
     when host_os != "windows":
-      echo "\e[00m  To force rebuild: rm " & state_file
+      echo "\e[00m  To force rebuild: rm " & state_file & "\n"
     else:
-      echo "  To force rebuild: rm " & state_file
+      echo "  To force rebuild: rm " & state_file & "\n"
     return
 
   p "Building Godot..."
@@ -191,9 +191,9 @@ proc download_fonts() =
   if not needs_fonts_download():
     p "Fonts already downloaded, skipping..."
     when host_os != "windows":
-      echo &"\e[00m  To force re-download: rm {build_state_dir}/fonts_downloaded"
+      echo &"\e[00m  To force re-download: rm {build_state_dir}/fonts_downloaded\n"
     else:
-      echo &"  To force re-download: rm {build_state_dir}/fonts_downloaded"
+      echo &"  To force re-download: rm {build_state_dir}/fonts_downloaded\n"
     return
 
   p "Downloading fonts..."
@@ -271,17 +271,12 @@ proc verify_envrc_paths() =
     echo ""
     echo "*** ERROR: Required paths not found in PATH ***"
     echo ""
-    echo "The following paths from .envrc are missing:"
+    echo "The following paths are missing from your PATH:"
     for path in missing_paths:
       echo "  - " & path
     echo ""
-    echo "Please ensure direnv is installed and configured:"
-    echo "  1. Install direnv: brew install direnv (macOS) or your package manager"
-    echo "  2. Add to your shell config (~/.zshrc or ~/.bashrc):"
-    echo "       eval \"$(direnv hook bash)\"  # or zsh, fish, etc."
-    echo "  3. Run: direnv allow"
-    echo "  4. Reload your shell or run: cd . && cd -"
-    echo ""
+    echo "Please add these paths to your PATH, or use direnv to manage them automatically."
+    echo "For direnv installation and setup, see: https://direnv.net/docs/installation.html\n\n"
     quit 1
 
 proc start(args = "") =
