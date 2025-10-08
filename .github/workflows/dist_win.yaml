@@ -56,19 +56,6 @@ jobs:
           path: build_env
           key: ${{ runner.os }}-buildenv-${{ env.CACHE_VERSION }}
 
-      - name: Download and copy mesa
-        # github runner doesn't have a GPU, so we need to link to mesa
-        # to start godot
-        run: |
-          md -Force vendor/godot/bin
-          md mesa
-          cd mesa
-          C:\msys64\usr\bin\wget.exe https://github.com/pal1000/mesa-dist-win/releases/download/19.2.5/mesa3d-19.2.5-release-mingw.7z
-          7z.exe e mesa3d-19.2.5-release-mingw.7z -y -o"..\vendor\godot\bin" x64/opengl32.dll
-          cd ..
-          rm mesa -Recurse
-        if: steps.godot-cache.outputs.cache-hit != 'true'
-
       - name: Build distribution
         run: ./build.bat dist
 

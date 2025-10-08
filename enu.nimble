@@ -54,7 +54,7 @@ task test, "run godot tests":
 task import_assets,
   "Import Godot assets. Only required if you're not using the Godot editor":
   p "Importing assets..."
-  exec godot_bin() & " app/project.godot --editor --quit"
+  exec godot_bin() & " --headless app/project.godot --editor --quit"
 
 task clean, "Remove files produced by build":
   let s = settings()

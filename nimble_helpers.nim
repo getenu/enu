@@ -299,25 +299,6 @@ proc copy_nim_stdlib*() =
   for file in @["system.nim", "stdlib.nimble", "system" / "compilation.nim"]:
     cp_file join_path(stdlib, file), join_path(destination, file)
 
-proc gen_binding_and_copy_stdlib*(target = "") =
-  ## Godot 3 specific - generates GDNative bindings and copies stdlib
-  ## This is kept for backwards compatibility but not used in Godot 4
-  ## NOTE: The generate_api command no longer exists in dist_helpers
-  let s = settings()
-  let actual_target = if target == "": s.target else: target
-
-  if host_os == "windows":
-    # Assumes mingw
-    find_and_copy_dlls mingw_path(), "app", s.gcc_dlls
-    find_and_copy_dlls get_current_compiler_exe().parent_dir,
-      join_path("vendor", "godot", "bin"), s.nim_dlls
-  mk_dir s.generated_dir
-  let api_json_path = join_path(s.generated_dir, s.api_json)
-  exec &"{godot_bin(actual_target)} --headless --verbose --gdnative-generate-json-api {api_json_path}"
-  # Note: generate_api was removed from dist_helpers - this won't work
-  # exec &"{gen()} generate_api -d={s.generated_dir} -j={api_json_path}"
-  copy_nim_stdlib()
-
 proc gen_godot_bindings*() =
   p "Generating complete Godot bindings from custom Godot build..."
   exec "nim r tools/generate_godot_bindings.nim"
@@ -380,7 +361,6 @@ proc nim_build_mac*(target, cpu: string) =
 
 proc dist_package_windows*() =
   let s = settings()
-  gen_binding_and_copy_stdlib()
   let release_bin = godot_bin(build_target = "template_release", use_dev = "false")
   let root = &"dist/enu-{s.git_version}"
   mk_dir root
@@ -406,7 +386,6 @@ proc dist_package_windows*() =
 
 proc dist_package_macos*() =
   let s = settings()
-  gen_binding_and_copy_stdlib()
 
   exec "cp -r installer/Enu.app dist/Enu.app"
   exec "mkdir -p dist/Enu.app/Contents/MacOS"
@@ -493,7 +472,6 @@ proc dist_package_macos*() =
 
 proc dist_package_linux*() =
   let s = settings()
-  gen_binding_and_copy_stdlib("linuxbsd")
   let release_bin = godot_bin(build_target = "template_release", use_dev = "false")
   let root = &"dist/enu-{s.git_version}"
   mk_dir root & "/bin"
