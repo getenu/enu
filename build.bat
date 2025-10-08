@@ -131,6 +131,27 @@ goto :main
     if errorlevel 1 call :error "Failed to extract %archive%"
     goto :eof
 
+:: Download 7zip standalone if needed
+:setup_7zip
+    set "SEVENZ_EXE=%BUILD_ENV_DIR%\7za.exe"
+    if exist "%SEVENZ_EXE%" (
+        goto :eof
+    )
+
+    mkdir "%BUILD_ENV_DIR%" 2>nul
+    call :info "Downloading 7zip standalone..."
+    set "SEVENZ_URL=https://www.7-zip.org/a/7za920.zip"
+    set "SEVENZ_ZIP=%BUILD_ENV_DIR%\7za.zip"
+    call :download_file "%SEVENZ_URL%" "%SEVENZ_ZIP%"
+
+    :: Extract using PowerShell (zip is natively supported)
+    powershell -Command "& {Expand-Archive -Path '%SEVENZ_ZIP%' -DestinationPath '%BUILD_ENV_DIR%' -Force}"
+    if errorlevel 1 (
+        call :error "Failed to extract 7zip"
+        exit /b 1
+    )
+    goto :eof
+
 :: Setup MinGW
 :setup_mingw
     if exist "%MINGW_DIR%\bin\gcc.exe" (
@@ -142,14 +163,21 @@ goto :main
 
     mkdir "%BUILD_ENV_DIR%" 2>nul
 
+    :: Ensure 7zip is available
+    call :setup_7zip
+    if errorlevel 1 exit /b 1
+
     set "MINGW_ARCHIVE=%BUILD_ENV_DIR%\mingw.7z"
     call :download_file "%MINGW_URL%" "%MINGW_ARCHIVE%"
 
-    :: Extract using tar (built into Windows 10+)
+    :: Extract using 7zip standalone
     call :info "Extracting MinGW..."
     mkdir "%MINGW_DIR%" 2>nul
-    tar -xf "%MINGW_ARCHIVE%" -C "%BUILD_ENV_DIR%"
-    if errorlevel 1 call :error "Failed to extract MinGW"
+    "%SEVENZ_EXE%" x "%MINGW_ARCHIVE%" -o"%BUILD_ENV_DIR%" -y >nul
+    if errorlevel 1 (
+        call :error "Failed to extract MinGW"
+        exit /b 1
+    )
 
     call :success "MinGW installed to %MINGW_DIR%"
     goto :eof
