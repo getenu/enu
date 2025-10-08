@@ -110,7 +110,10 @@ goto :main
     if errorlevel 1 (
         :: Fallback to tar which is built into Windows 10+
         tar -xf "%archive%" -C "%dest%"
-        if errorlevel 1 call :error "Failed to extract %archive%"
+        if errorlevel 1 (
+            call :error "Failed to extract %archive%"
+            exit /b 1
+        )
     )
     goto :eof
 
@@ -194,6 +197,7 @@ goto :main
     if errorlevel 1 (
         popd
         call :error "Failed to build Nim"
+        exit /b 1
     )
 
     :: Record the built SHA
@@ -228,15 +232,20 @@ goto :main
 
     :: Setup build environment
     call :setup_mingw
+    if errorlevel 1 exit /b 1
+
     call :setup_python
+    if errorlevel 1 exit /b 1
 
     :: Check and initialize nim submodule
     call :check_nim_submodule
+    if errorlevel 1 exit /b 1
 
     :: Build nim if needed
     call :needs_nim_build
     if "!NEEDS_BUILD!"=="1" (
         call :build_nim
+        if errorlevel 1 exit /b 1
     ) else (
         call :get_nim_sha
         call :success "Nim compiler already built (!NIM_SHA:~0,7!)"
@@ -248,7 +257,10 @@ goto :main
     :: Run nimble task
     call :info "Running nimble !NIMBLE_TASK!..."
     nimble !NIMBLE_TASK! -y
-    if errorlevel 1 call :error "Nimble task failed"
+    if errorlevel 1 (
+        call :error "Nimble task failed"
+        exit /b 1
+    )
 
     call :success "Build completed successfully!"
 

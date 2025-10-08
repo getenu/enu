@@ -22,7 +22,7 @@ requires "https://github.com/getenu/Nim#" & nim_sha,
   "https://github.com/dsrw/nanoid.nim 0.2.1",
   "https://github.com/godot-nim/gdext-nim 0.15.0",
   "https://github.com/godot-nim/gdext-nim?subdir=coronation 0.1.0",
-  "https://github.com/treeform/pretty", "cligen", "chroma", "markdown",
+  "https://github.com/treeform/pretty", "cligen 1.9.1", "chroma", "markdown",
   "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy", "nph#c6e0316"
 
 # Tasks
