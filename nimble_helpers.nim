@@ -70,8 +70,8 @@ proc godot_bin*(
   let actual_use_dev = if use_dev == "": use_dev_build else: use_dev == "true"
 
   let dev_suffix = if actual_use_dev: ".dev" else: ""
-  let opt_suffix = if build_target == "template_release": ".opt" else: ""
-  let path = &"vendor/godot/bin/godot.{actual_target}.{build_target}{opt_suffix}{dev_suffix}.{actual_cpu}{s.exe_ext}"
+  # Note: Godot 4 doesn't use .opt suffix (that was Godot 3)
+  let path = &"vendor/godot/bin/godot.{actual_target}.{build_target}{dev_suffix}.{actual_cpu}{s.exe_ext}"
   result = enu_root() & "/" & path
 
 proc p*(msg: varargs[string, `$`]) =

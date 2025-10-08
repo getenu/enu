@@ -162,6 +162,10 @@ main() {
     # Verify environment
     verify_environment
 
+    # Setup nimble dependencies
+    info "Setting up nimble dependencies..."
+    nimble setup -y
+
     # Run nimble task
     info "Running nimble $NIMBLE_TASK..."
     nimble $NIMBLE_TASK -y

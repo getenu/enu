@@ -200,11 +200,25 @@ goto :main
 
     call :extract_zip "%PYTHON_ARCHIVE%" "%PYTHON_DIR%"
 
+    :: Enable pip support in embedded Python by uncommenting 'import site' in ._pth file
+    for %%f in ("%PYTHON_DIR%\python*._pth") do (
+        powershell -Command "(Get-Content '%%f') -replace '^#import site', 'import site' | Set-Content '%%f'"
+    )
+
     :: Install pip and scons
     call :info "Installing scons..."
     powershell -Command "& {Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%PYTHON_DIR%\get-pip.py'}"
     "%PYTHON_DIR%\python.exe" "%PYTHON_DIR%\get-pip.py" --no-warn-script-location
+    if errorlevel 1 (
+        call :error "Failed to install pip"
+        exit /b 1
+    )
+
     "%PYTHON_DIR%\python.exe" -m pip install scons --no-warn-script-location
+    if errorlevel 1 (
+        call :error "Failed to install scons"
+        exit /b 1
+    )
 
     call :success "Python and scons installed"
     goto :eof
@@ -281,6 +295,14 @@ goto :main
 
     :: Setup PATH
     call :setup_path
+
+    :: Setup nimble dependencies
+    call :info "Setting up nimble dependencies..."
+    nimble setup -y
+    if errorlevel 1 (
+        call :error "Nimble setup failed"
+        exit /b 1
+    )
 
     :: Run nimble task
     call :info "Running nimble !NIMBLE_TASK!..."

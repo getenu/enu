@@ -14,8 +14,8 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install build tools
-        run: choco install yasm innosetup rcedit reshack
+      - name: Install distribution tools
+        run: choco install innosetup reshack
 
       - name: Prep dist config
         run: cp dist_config.example.json dist_config.json

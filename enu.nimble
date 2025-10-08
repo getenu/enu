@@ -27,6 +27,13 @@ requires "https://github.com/getenu/Nim#" & nim_sha,
 
 # Tasks
 
+task build_extension, "Build Enu extension library":
+  let s = settings()
+  let output = "app/extension/lib/enu" & s.lib_ext
+  let flags = if defined(release): "-d:release" else: ""
+  let dist_flag = if defined(dist): "-d:dist" else: ""
+  exec &"nim c {flags} {dist_flag} --app:lib -o:{output} app/extension/enu.nim"
+
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
     exec "./configure  --host=arm-apple-darwin10 --target=arm-apple-darwin10"
@@ -131,12 +138,12 @@ task format, "Format code with nph (skip src/eval.nim)":
 task screenshot, "Take a screenshot of Enu":
   start("--screenshot")
 
-task build_all, "Complete build: setup, prereqs, import_assets, build":
+task build_all, "Complete build: setup, prereqs, import_assets, build_extension":
   p "Running complete build..."
   exec nimble_exe & " setup"
   prereqs_task()
   import_assets_task()
-  exec nimble_exe & " build"
+  exec nimble_exe & " build_extension"
   p "Build complete!"
 
 task dist_all, "Complete distribution build: setup, dist_prereqs, dist_package":

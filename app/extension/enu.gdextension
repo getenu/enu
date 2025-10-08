@@ -7,3 +7,5 @@ reloadable = true
 [libraries]
 
 macos.debug = "res://./extension/lib/enu.dylib"
+windows.debug = "res://./extension/lib/enu.dll"
+linux.debug = "res://./extension/lib/enu.so"
