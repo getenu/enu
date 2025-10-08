@@ -313,7 +313,7 @@ proc gen_binding_and_copy_stdlib*(target = "") =
       join_path("vendor", "godot", "bin"), s.nim_dlls
   mk_dir s.generated_dir
   let api_json_path = join_path(s.generated_dir, s.api_json)
-  exec &"{godot_bin(actual_target)} --verbose --gdnative-generate-json-api {api_json_path}"
+  exec &"{godot_bin(actual_target)} --headless --verbose --gdnative-generate-json-api {api_json_path}"
   # Note: generate_api was removed from dist_helpers - this won't work
   # exec &"{gen()} generate_api -d={s.generated_dir} -j={api_json_path}"
   copy_nim_stdlib()
@@ -390,7 +390,10 @@ proc dist_package_windows*() =
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
 
   let pck_path = &"{enu_root()}/{root}/enu.pck"
-  exec &"{godot_bin()} --verbose --path app --export-pack \"win\" " & pck_path
+  when host_os == "windows":
+    exec &"{godot_bin()} --verbose --path app --export-pack \"win\" " & pck_path
+  else:
+    exec &"{godot_bin()} --headless --verbose --path app --export-pack \"win\" " & pck_path
 
   exec "nimble build -d:release -d:dist"
   cp_file "app/enu.dll", root & "/enu.dll"
@@ -425,7 +428,10 @@ proc dist_package_macos*() =
   let config = read_file("dist_config.json").parse_json
   let pck_path = enu_root() & "/dist/Enu.app/Contents/Resources/Enu.pck"
 
-  exec &"{godot_bin()} --path app --export-pack \"mac\" " & pck_path
+  when host_os == "macosx":
+    exec &"{godot_bin()} --path app --export-pack \"mac\" " & pck_path
+  else:
+    exec &"{godot_bin()} --headless --path app --export-pack \"mac\" " & pck_path
 
   exec "lipo -create dist/Enu.app/Contents/Frameworks/enu.dylib.x86_64 dist/Enu.app/Contents/Frameworks/enu.dylib.arm64 -output dist/Enu.app/Contents/Frameworks/enu.dylib"
   exec "rm dist/Enu.app/Contents/Frameworks/enu.dylib.*"
@@ -500,7 +506,7 @@ proc dist_package_linux*() =
   exec "chmod +x " & root & "/bin/enu"
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
   let pck_path = enu_root() & "/" & root & "/enu.pck"
-  exec &"{godot_bin(\"linuxbsd\")} --verbose --path app --export-pack \"linuxbsd\" " &
+  exec &"{godot_bin(\"linuxbsd\")} --headless --verbose --path app --export-pack \"linuxbsd\" " &
     pck_path
   with_dir "dist":
     exec &"tar -czvf enu-{s.git_version}-linux-x64.tar.gz enu-{s.git_version}"
