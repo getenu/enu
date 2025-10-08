@@ -23,7 +23,6 @@ type
     gcc_dlls*: seq[string]
     nim_dlls*: seq[string]
     godot_opts*: string
-    is_ci*: bool
     build_state_dir*: string
     git_version*: string
 
@@ -42,7 +41,6 @@ proc settings*(): Settings =
       ("linuxbsd", ".so", "")
 
   let cpu = if host_cpu == "arm64": "arm64" else: "x86_64"
-  let is_ci = get_env("CI") != "" or get_env("GITHUB_ACTIONS") != ""
 
   result = Settings(
     target: target,
@@ -55,40 +53,26 @@ proc settings*(): Settings =
     gcc_dlls: @["libgcc_s_seh-1.dll", "libwinpthread-1.dll"],
     nim_dlls: @["pcre64.dll"],
     godot_opts: "target=editor",
-    is_ci: is_ci,
     build_state_dir: ".build_state",
     git_version: static_exec("git describe --tags HEAD").strip
   )
 
-proc make_godot_bin_path*(
-    platform: string, build_target: string, arch: string, use_dev: bool
+proc godot_bin*(
+    target = "",
+    build_target = "editor",
+    cpu = "",
+    use_dev = ""  # Empty string means "use default based on GODOT_DEV_BUILD env var"
 ): string =
   let s = settings()
-  let dev_suffix = if use_dev: ".dev" else: ""
-  let opt_suffix = if build_target == "template_release": ".opt" else: ""
-  result =
-    &"vendor/godot/bin/godot.{platform}.{build_target}{opt_suffix}{dev_suffix}.{arch}{s.exe_ext}"
-
-proc godot_bin*(target = ""): string =
-  # Try dev build first (local), then non-dev (CI)
-  let s = settings()
   let actual_target = if target == "": s.target else: target
+  let actual_cpu = if cpu == "": s.cpu else: cpu
+  let use_dev_build = get_env("GODOT_DEV_BUILD") != ""
+  let actual_use_dev = if use_dev == "": use_dev_build else: use_dev == "true"
 
-  # Use enu_root() to get the project root directory (works even inside with_dir blocks)
-  let base_dir = enu_root()
-
-  let dev_path =
-    base_dir & "/" & make_godot_bin_path(actual_target, "editor", s.cpu, true)
-  let non_dev_path =
-    base_dir & "/" & make_godot_bin_path(actual_target, "editor", s.cpu, false)
-
-  if file_exists(dev_path):
-    result = dev_path
-  elif file_exists(non_dev_path):
-    result = non_dev_path
-  else:
-    # Return expected path for better error messages
-    result = if s.is_ci: non_dev_path else: dev_path
+  let dev_suffix = if actual_use_dev: ".dev" else: ""
+  let opt_suffix = if build_target == "template_release": ".opt" else: ""
+  let path = &"vendor/godot/bin/godot.{actual_target}.{build_target}{opt_suffix}{dev_suffix}.{actual_cpu}{s.exe_ext}"
+  result = enu_root() & "/" & path
 
 proc p*(msg: varargs[string, `$`]) =
   let msg = msg.join
@@ -111,7 +95,8 @@ proc get_godot_build_state_key*(target, cpu, opts: string): string =
   let s = settings()
   let godot_sha = get_submodule_sha("vendor/godot")
   let voxel_sha = get_submodule_sha("vendor/modules/voxel")
-  let dev_flag = if not s.is_ci: "dev" else: "nodev"
+  let use_dev_build = get_env("GODOT_DEV_BUILD") != ""
+  let dev_flag = if use_dev_build: "dev" else: "nodev"
   result = &"{godot_sha}-{voxel_sha}-{target}-{cpu}-{opts}-{dev_flag}"
 
 proc get_godot_state_file*(target, cpu, opts: string): string =
@@ -121,12 +106,8 @@ proc get_godot_state_file*(target, cpu, opts: string): string =
 proc needs_godot_build*(target, cpu, opts: string): bool =
   let s = settings()
   let state_file = get_godot_state_file(target, cpu, opts)
-  let bin_path = make_godot_bin_path(
-    target,
-    if opts.contains("template_release"): "template_release" else: "editor",
-    cpu,
-    not s.is_ci,
-  )
+  let build_target = if opts.contains("template_release"): "template_release" else: "editor"
+  let bin_path = godot_bin(target, build_target, cpu)
 
   # Need build if binary doesn't exist
   if not file_exists(bin_path):
@@ -194,14 +175,23 @@ proc build_godot*(target = "", cpu = "", opts = "") =
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {s.godot_build_url} ***"
 
-  # Local builds use dev_build for debug symbols, CI uses optimized builds
-  let dev_flag = if not s.is_ci: " dev_build=yes" else: ""
+  # Dev builds use dev_build for debug symbols (set GODOT_DEV_BUILD=1 to enable)
+  let use_dev_build = get_env("GODOT_DEV_BUILD") != ""
+  let dev_flag = if use_dev_build: " dev_build=yes" else: ""
 
   with_dir "vendor/godot":
     when host_os == "macosx":
-      exec &"{scons} custom_modules=../modules platform={actual_target} arch={actual_cpu} macos_deployment_target=10.15 {actual_opts}{dev_flag}"
+      exec &"{scons} custom_modules=../modules platform={actual_target} arch={actual_cpu} macos_deployment_target=10.15 use_volk=yes {actual_opts}{dev_flag}"
     else:
       exec &"{scons} custom_modules=../modules platform={actual_target} arch={actual_cpu} {actual_opts}{dev_flag}"
+
+  # Copy MoltenVK dylib for dynamic Vulkan loading (use_volk)
+  when host_os == "macosx":
+    # Find the latest installed Vulkan SDK
+    let sdk_versions = list_dirs(get_env("HOME") / "VulkanSDK")
+    let latest_sdk = sdk_versions[^1]  # Last one (sorted alphabetically = newest version)
+    let mvk_dylib = latest_sdk / "macOS/lib/libMoltenVK.dylib"
+    cp_file mvk_dylib, "vendor/godot/bin/libMoltenVK.dylib"
 
   # Save state after successful build
   save_godot_build_state(actual_target, actual_cpu, actual_opts)
@@ -293,14 +283,7 @@ proc download_fonts*() =
   save_fonts_state()
 
 proc mingw_path*(): string =
-  var pre, match: string
-  let shim_help = gorge_ex("gcc --shimgen-help")
-  # chocolatey uses shim exes, so we need to parse shimgen-help to find the real gcc path
-  if shim_help.exit_code < 1 and
-      shim_help.output.scanf("$+Target: '$+'", pre, match):
-    match.parent_dir
-  else:
-    find_exe("gcc").parent_dir
+  find_exe("gcc").parent_dir
 
 proc copy_nim_stdlib*() =
   p "Copying Nim stdlib to vmlib..."
@@ -378,7 +361,7 @@ proc verify_envrc_paths*() =
 
 proc start*(args = "") =
   cd "app"
-  exec(godot_bin() & " --verbose --quit-after 500 scenes/game.tscn " & args)
+  exec(godot_bin() & " --verbose scenes/game.tscn " & args)
 
 proc code_sign*(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"
@@ -398,8 +381,7 @@ proc nim_build_mac*(target, cpu: string) =
 proc dist_package_windows*() =
   let s = settings()
   gen_binding_and_copy_stdlib()
-  let release_bin =
-    make_godot_bin_path(s.target, "template_release", s.cpu, false)
+  let release_bin = godot_bin(build_target = "template_release", use_dev = "false")
   let root = &"dist/enu-{s.git_version}"
   mk_dir root
   exec "strip " & release_bin
@@ -429,18 +411,16 @@ proc dist_package_macos*() =
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
   exec &"nim r tools/write_info_plist.nim {s.git_version}"
 
-  var release_bin =
-    make_godot_bin_path(s.target, "template_release", "x86_64", false)
+  var release_bin = godot_bin(build_target = "template_release", cpu = "x86_64", use_dev = "false")
   exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.x86_64"
   nim_build_mac "x86_64", "amd64"
 
-  release_bin =
-    make_godot_bin_path(s.target, "template_release", "arm64", false)
+  release_bin = godot_bin(build_target = "template_release", cpu = "arm64", use_dev = "false")
   exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.arm64"
   nim_build_mac "arm64", "arm64"
 
-  if not "dist_config.json".file_exists:
-    exec &"cp dist_config.example.json dist_config.json"
+  if not file_exists("dist_config.json"):
+    exec "cp dist_config.example.json dist_config.json"
 
   let config = read_file("dist_config.json").parse_json
   let pck_path = enu_root() & "/dist/Enu.app/Contents/Resources/Enu.pck"
@@ -508,8 +488,7 @@ proc dist_package_macos*() =
 proc dist_package_linux*() =
   let s = settings()
   gen_binding_and_copy_stdlib("linuxbsd")
-  let release_bin =
-    make_godot_bin_path(s.target, "template_release", s.cpu, false)
+  let release_bin = godot_bin(build_target = "template_release", use_dev = "false")
   let root = &"dist/enu-{s.git_version}"
   mk_dir root & "/bin"
   mk_dir root & "/lib"

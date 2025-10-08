@@ -18,7 +18,7 @@ Note that some of these are broken during the Godot 3 -> 4 migration. If you nee
 - `nimble generate_bindings` - Generate Nim bindings. The `gdext` package we depend on also includes Godot bindings, but because our Godot is build with the voxel module it has ~70 additional classes.
 - `./build.sh` - build Enu.
 - `nimble edit` - Open project in Godot.
-- `./start.sh` - Launch Enu
+- `nimble start` - Launch Enu
 
 ### Distribution and Packaging
 - `nimble dist` - Build complete distribution package for current platform
@@ -114,6 +114,44 @@ This project follows specific naming conventions inherited from the `model_citiz
 - Use `init_hash_set()` instead of `initHashSet()`
 - Use `to_flatty()` instead of `toFlatty()`
 - Use `join_path()` instead of `joinPath()`
+
+### Return Values and Implicit Returns
+Use implicit returns for functions with a single top-level expression, even if that expression spans multiple lines. Use explicit `result =` when there are multiple top-level statements. Use `return` only for early returns.
+
+```nim
+# Good - single expression (implicit return)
+proc get_path(): string =
+  enu_root() / "some" / "path"
+
+# Good - single expression spanning multiple lines (implicit return)
+proc calculate(): int =
+  if condition:
+    42
+  else:
+    100
+
+# Good - single block expression (implicit return)
+proc process(): string =
+  block:
+    let x = compute()
+    let y = transform(x)
+    format(y)
+
+# Good - multiple statements (explicit result)
+proc complex_work(): string =
+  let s = settings()
+  let path = compute_path(s)
+  result = enu_root() / path
+
+# Good - early return
+proc validate(x: int): bool =
+  if x < 0:
+    return false
+
+  result = x > 10
+```
+
+**Rule**: Single top-level expression → implicit return. Multiple top-level statements → `result =`. Early exit → `return`.
 
 ### Custom `?` Operator (Presence/Truth Testing)
 The project uses a custom `?` operator from `model_citizen` for consistent presence checking:
