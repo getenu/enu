@@ -51,8 +51,13 @@ jobs:
             fonts
           key: ${{ runner.os }}-godot-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.godot_sha }}-${{ steps.submodule-shas.outputs.voxel_sha }}
 
+      - name: Setup direnv
+        run: |
+          curl -sfL https://direnv.net/install.sh | bash
+          direnv allow
+
       - name: Build distribution
-        run: ./build.sh dist
+        run: eval "$(direnv export bash)" && ./build.sh dist
 
       - uses: actions/upload-artifact@v4
         with:

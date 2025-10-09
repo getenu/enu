@@ -122,12 +122,6 @@ verify_environment() {
     esac
 }
 
-# Setup PATH
-setup_path() {
-    export PATH="$NIM_DIR/bin:$PROJECT_ROOT/nimbledeps/bin:$PATH"
-    info "PATH updated with Nim and nimble dependencies"
-}
-
 # Main build logic
 main() {
     local build_type="${1:-dev}"
@@ -155,9 +149,6 @@ main() {
     else
         success "Nim compiler already built ($(get_nim_sha | cut -c1-7))"
     fi
-
-    # Setup PATH
-    setup_path
 
     # Verify environment
     verify_environment

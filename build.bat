@@ -262,10 +262,11 @@ goto :main
     call :success "Nim compiler built successfully"
     goto :eof
 
-:: Setup PATH
+:: Setup PATH for build tools (MinGW and Python only)
+:: Nim and nimbledeps should already be in PATH from direnv or workflow setup
 :setup_path
-    set "PATH=%NIM_DIR%\bin;%PROJECT_ROOT%nimbledeps\bin;%MINGW_DIR%\bin;%PYTHON_DIR%;%PYTHON_DIR%\Scripts;%PATH%"
-    call :info "PATH updated with Nim, nimble dependencies, MinGW, and Python"
+    set "PATH=%MINGW_DIR%\bin;%PYTHON_DIR%;%PYTHON_DIR%\Scripts;%PATH%"
+    call :info "PATH updated with MinGW and Python"
     goto :eof
 
 :: Main build logic
