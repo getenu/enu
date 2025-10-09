@@ -262,13 +262,6 @@ goto :main
     call :success "Nim compiler built successfully"
     goto :eof
 
-:: Setup PATH for build tools (MinGW and Python only)
-:: Nim and nimbledeps should already be in PATH from direnv or workflow setup
-:setup_path
-    set "PATH=%MINGW_DIR%\bin;%PYTHON_DIR%;%PYTHON_DIR%\Scripts;%PATH%"
-    call :info "PATH updated with MinGW and Python"
-    goto :eof
-
 :: Main build logic
 :main
     set "BUILD_TYPE=%~1"
@@ -304,9 +297,6 @@ goto :main
         call :get_nim_sha
         call :success "Nim compiler already built (!NIM_SHA:~0,7!)"
     )
-
-    :: Setup PATH
-    call :setup_path
 
     :: Setup nimble dependencies
     call :info "Setting up nimble dependencies..."

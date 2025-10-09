@@ -59,10 +59,13 @@ jobs:
       - name: Configure git for nimble
         run: git config --global core.autocrlf false
 
-      - name: Setup PATH for Nim and nimble dependencies
+      - name: Setup PATH for all build dependencies
         run: |
           echo "${{ github.workspace }}\vendor\nim\bin" >> $env:GITHUB_PATH
           echo "${{ github.workspace }}\nimbledeps\bin" >> $env:GITHUB_PATH
+          echo "${{ github.workspace }}\build_env\mingw64\bin" >> $env:GITHUB_PATH
+          echo "${{ github.workspace }}\build_env\python" >> $env:GITHUB_PATH
+          echo "${{ github.workspace }}\build_env\python\Scripts" >> $env:GITHUB_PATH
 
       - name: Build distribution
         run: ./build.bat dist
