@@ -242,33 +242,15 @@ goto :main
         exit /b 1
     )
 
-    :: Build finish.exe and run it non-interactively for Windows-specific setup
-    call :info "Running koch wintools for Windows-specific setup..."
-    bin\nim.exe c koch
-    koch wintools
-    if exist "tools\finish.exe" (
-        call :info "Running finish.exe for PATH and MingW setup..."
-        tools\finish.exe -y
-    )
-
-    :: Download CA certificates for SSL support
-    call :info "Downloading SSL certificates..."
-    set "CACERT_URL=https://curl.se/ca/cacert.pem"
-    set "CACERT_DEST=%NIM_DIR%\bin\cacert.pem"
-    if not exist "%CACERT_DEST%" (
-        call :download_file "%CACERT_URL%" "%CACERT_DEST%"
-    )
-
-    :: Copy OpenSSL DLLs from Git for Windows if available
-    call :info "Setting up OpenSSL DLLs..."
-    for %%G in (git.exe) do set "GIT_EXE=%%~$PATH:G"
-    if defined GIT_EXE (
-        for %%G in ("!GIT_EXE!") do set "GIT_DIR=%%~dpG"
-        if exist "!GIT_DIR!..\mingw64\bin\libssl-1_1-x64.dll" (
-            copy /y "!GIT_DIR!..\mingw64\bin\libssl-1_1-x64.dll" "%NIM_DIR%\bin\" >nul 2>&1
-            copy /y "!GIT_DIR!..\mingw64\bin\libcrypto-1_1-x64.dll" "%NIM_DIR%\bin\" >nul 2>&1
-            call :success "Copied OpenSSL DLLs from Git for Windows"
-        )
+    :: Download and install Windows DLLs and certificates from nim-lang.org
+    call :info "Downloading Windows DLLs and certificates..."
+    set "DLLS_URL=https://nim-lang.org/download/dlls.zip"
+    set "DLLS_ZIP=%BUILD_ENV_DIR%\dlls.zip"
+    if not exist "%NIM_DIR%\bin\cacert.pem" (
+        call :download_file "%DLLS_URL%" "%DLLS_ZIP%"
+        call :info "Extracting DLLs to Nim bin directory..."
+        call :extract_zip "%DLLS_ZIP%" "%NIM_DIR%\bin"
+        call :success "Windows DLLs and certificates installed"
     )
 
     :: Record the built SHA

@@ -7,5 +7,14 @@ reloadable = true
 [libraries]
 
 macos.debug = "res://./extension/lib/enu.dylib"
+macos.debug.x86_64 = "res://./extension/lib/enu.dylib"
+macos.debug.arm64 = "res://./extension/lib/enu.dylib"
+macos.release = "res://./extension/lib/enu.release.dylib"
+macos.release.x86_64 = "res://./extension/lib/enu.release.x86_64.dylib"
+macos.release.arm64 = "res://./extension/lib/enu.release.arm64.dylib"
+
 windows.debug = "res://./extension/lib/enu.dll"
+windows.release = "res://./extension/lib/enu.release.dll"
+
 linux.debug = "res://./extension/lib/enu.so"
+linux.release = "res://./extension/lib/enu.release.so"

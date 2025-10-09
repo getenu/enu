@@ -305,40 +305,11 @@ proc gen_godot_bindings*() =
 
 proc verify_envrc_paths*() =
   ## Verify that paths from .envrc are in PATH
-  ## This check is skipped when running via nimble tasks since nimble may run from temp dir
-  when defined(nimscript):
-    # Skip this check when running in nimble - the build.sh script already handles PATH setup
-    discard
+  ## Calls the appropriate shell script for the platform
+  when host_os == "windows":
+    exec enu_root() / "tools/verify_envrc.bat"
   else:
-    if not file_exists(".envrc"):
-      quit "*** .envrc not found. Please ensure .envrc exists and has been loaded with direnv. ***"
-
-    let envrc_content = read_file(".envrc")
-    let proj_dir = enu_root()
-    var missing_paths: seq[string]
-
-    # Parse .envrc for PATH_add lines
-    for line in envrc_content.split_lines():
-      if line.strip.starts_with("PATH_add "):
-        let path_to_add = line.strip[9 ..^ 1].strip
-        let full_path = proj_dir / path_to_add
-
-        # Check if this path is in the current PATH
-        let current_path = get_env("PATH")
-        if full_path notin current_path:
-          missing_paths.add(full_path)
-
-    if missing_paths.len > 0:
-      echo ""
-      echo "*** ERROR: Required paths not found in PATH ***"
-      echo ""
-      echo "The following paths are missing from your PATH:"
-      for path in missing_paths:
-        echo "  - " & path
-      echo ""
-      echo "Please add these paths to your PATH, or use direnv to manage them automatically."
-      echo "For direnv installation and setup, see: https://direnv.net/docs/installation.html\n\n"
-      quit 1
+    exec enu_root() / "tools/verify_envrc.sh"
 
 proc start*(args = "") =
   cd "app"
@@ -350,14 +321,17 @@ proc code_sign*(id, path: string) =
 proc copy_vmlib*(src, dest: string) =
   cp_dir src, dest
 
-# Helper proc for macOS dist package
 proc nim_build_mac*(target, cpu: string) =
   rm_dir ".nim_cache"
+  # Build to app/extension/lib for gdextension compatibility
+  let output_path = &"app/extension/lib/enu.release.{target}.dylib"
   let cmd =
     &"nim c --cpu:{cpu} -l:'-target {target}-apple-macos11' " &
     &"-t:'-target {target}-apple-macos11' -d:release -d:dist " &
-    &"-o:dist/Enu.app/Contents/Frameworks/enu.dylib.{target} src/enu.nim"
+    &"--app:lib -o:{output_path} app/extension/enu.nim"
   exec cmd
+  # Also copy to dist location for bundling
+  cp_file output_path, &"dist/Enu.app/Contents/Frameworks/enu.dylib.{target}"
 
 proc dist_package_windows*() =
   let s = settings()
@@ -375,8 +349,10 @@ proc dist_package_windows*() =
   else:
     exec &"{godot_bin()} --headless --verbose --path app --export-pack \"win\" " & pck_path
 
-  exec "nimble build -d:release -d:dist"
-  cp_file "app/enu.dll", root & "/enu.dll"
+  # Build release extension for Windows
+  let nim_compiler = get_current_compiler_exe()
+  exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.release.dll app/extension/enu.nim"
+  cp_file "app/extension/lib/enu.release.dll", root & "/enu.dll"
   find_and_copy_dlls mingw_path(), root, s.gcc_dlls
   find_and_copy_dlls get_current_compiler_exe().parent_dir, root, s.nim_dlls
   copy_vmlib "vmlib", root & "/vmlib"
@@ -412,6 +388,8 @@ proc dist_package_macos*() =
   else:
     exec &"{godot_bin()} --headless --path app --export-pack \"mac\" " & pck_path
 
+  # Create universal binary for extension lib and copy to dist
+  exec "lipo -create app/extension/lib/enu.release.x86_64.dylib app/extension/lib/enu.release.arm64.dylib -output app/extension/lib/enu.release.dylib"
   exec "lipo -create dist/Enu.app/Contents/Frameworks/enu.dylib.x86_64 dist/Enu.app/Contents/Frameworks/enu.dylib.arm64 -output dist/Enu.app/Contents/Frameworks/enu.dylib"
   exec "rm dist/Enu.app/Contents/Frameworks/enu.dylib.*"
 
@@ -476,10 +454,12 @@ proc dist_package_linux*() =
   let root = &"dist/enu-{s.git_version}"
   mk_dir root & "/bin"
   mk_dir root & "/lib"
-  exec "nimble build -d:release -d:dist"
+  # Build release extension for Linux
+  let nim_compiler = get_current_compiler_exe()
+  exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.release.so app/extension/enu.nim"
   exec "strip " & release_bin
   cp_file release_bin, root & "/bin/enu"
-  cp_file "app/enu.so", root & "/lib/enu.so"
+  cp_file "app/extension/lib/enu.release.so", root & "/lib/enu.so"
   copy_vmlib "vmlib", root & "/lib/vmlib"
   exec "chmod +x " & root & "/bin/enu"
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
