@@ -298,7 +298,7 @@ goto :main
 
     :: Setup nimble dependencies
     call :info "Setting up nimble dependencies..."
-    nimble setup -y --nolockfile
+    nimble setup -y
     if errorlevel 1 (
         call :error "Nimble setup failed"
         exit /b 1

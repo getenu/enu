@@ -56,6 +56,9 @@ jobs:
           path: build_env
           key: ${{ runner.os }}-buildenv-${{ env.CACHE_VERSION }}
 
+      - name: Configure git for nimble
+        run: git config --global core.autocrlf false
+
       - name: Build distribution
         run: ./build.bat dist
 
