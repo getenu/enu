@@ -227,17 +227,13 @@ goto :main
 :build_nim
     call :info "Building Nim compiler from source..."
 
-    pushd "%NIM_DIR%"
+    :: Note: We don't clean previous builds automatically to preserve DLLs and certs
+    :: If a clean build is needed, manually delete bin/, csources/, and dist/ directories
 
-    :: Clean previous build if exists
-    if exist "bin\nim.exe" (
-        rmdir /s /q bin csources dist 2>nul
-    )
-
-    :: Build nim using build_all.bat
-    call build_all.bat
+    :: Build nim using build_all.bat (must be run from nim directory)
+    :: We use cmd /c to create a subshell with proper working directory
+    cmd /c "cd /d "%NIM_DIR%" && build_all.bat"
     if errorlevel 1 (
-        popd
         call :error "Failed to build Nim"
         exit /b 1
     )
@@ -246,19 +242,20 @@ goto :main
     call :info "Downloading Windows DLLs and certificates..."
     set "DLLS_URL=https://nim-lang.org/download/dlls.zip"
     set "DLLS_ZIP=%BUILD_ENV_DIR%\dlls.zip"
-    if not exist "%NIM_DIR%\bin\cacert.pem" (
-        call :download_file "%DLLS_URL%" "%DLLS_ZIP%"
-        call :info "Extracting DLLs to Nim bin directory..."
-        call :extract_zip "%DLLS_ZIP%" "%NIM_DIR%\bin"
-        call :success "Windows DLLs and certificates installed"
+    call :download_file "%DLLS_URL%" "%DLLS_ZIP%"
+    call :info "Extracting DLLs to Nim bin directory..."
+    powershell -Command "& {Expand-Archive -Path '%DLLS_ZIP%' -DestinationPath '%NIM_DIR%\bin' -Force}"
+    if errorlevel 1 (
+        call :error "Failed to extract DLLs"
+        exit /b 1
     )
+    call :success "Windows DLLs and certificates installed"
 
     :: Record the built SHA
     if not exist "%BUILD_STATE_DIR%" mkdir "%BUILD_STATE_DIR%"
     call :get_nim_sha
     echo !NIM_SHA!> "%NIM_STATE_FILE%"
 
-    popd
     call :success "Nim compiler built successfully"
     goto :eof
 
@@ -276,6 +273,10 @@ goto :main
     )
 
     call :info "Starting %BUILD_TYPE% build..."
+
+    :: Verify required paths are in PATH
+    call "%PROJECT_ROOT%tools\verify_paths.bat"
+    if errorlevel 1 exit /b 1
 
     :: Setup build environment
     call :setup_mingw

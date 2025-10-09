@@ -2,7 +2,7 @@ name: Build on Linux
 on: push
 
 env:
-  CACHE_VERSION: v1
+  CACHE_VERSION: v2
 
 jobs:
   build:

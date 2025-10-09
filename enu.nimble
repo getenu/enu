@@ -98,7 +98,7 @@ task start_headless, "Run Enu":
   start("--headless --quit-after 1")
 
 task prereqs, "Build godot, download fonts, generate bindings and stdlib":
-  verify_envrc_paths()
+  verify_paths()
   build_godot()
   download_fonts()
   copy_fonts()

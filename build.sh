@@ -140,6 +140,9 @@ main() {
 
     info "Starting $build_type build..."
 
+    # Verify required paths are in PATH
+    "$PROJECT_ROOT/tools/verify_paths.sh"
+
     # Check and initialize nim submodule
     check_nim_submodule
 

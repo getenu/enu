@@ -1,21 +1,13 @@
 @echo off
-rem Verify that paths from .envrc are in PATH
-rem This script can be called by both build.bat and nimble tasks
+rem Verify that required project paths are in PATH
+rem Called by build.bat to ensure build environment is set up correctly
 
 setlocal enabledelayedexpansion
 
-rem Get project root
-set "PROJECT_ROOT=%~dp0.."
-cd /d "%PROJECT_ROOT%"
-
-if not exist ".envrc" (
-    echo *** ERROR: .envrc not found ***
-    echo.
-    echo Please ensure .envrc exists and has been loaded with direnv.
-    echo For direnv installation and setup, see: https://direnv.net/docs/installation.html
-    echo.
-    exit /b 1
-)
+rem Get project root (resolve the path to avoid .. in comparisons)
+pushd "%~dp0.."
+set "PROJECT_ROOT=%CD%"
+popd
 
 set "missing_paths="
 set "has_missing=0"
@@ -35,7 +27,7 @@ for %%p in ("!required_paths:;=" "!") do (
     set "full_path=%PROJECT_ROOT%\!rel_path!"
 
     rem Check if this path is in the current PATH
-    echo ;%PATH%; | find /i ";!full_path!;" >nul
+    echo ";!PATH!;" | find /i ";!full_path!;" >nul
     if errorlevel 1 (
         if "!missing_paths!"=="" (
             set "missing_paths=!full_path!"

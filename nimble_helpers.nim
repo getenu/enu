@@ -303,13 +303,13 @@ proc gen_godot_bindings*() =
   p "Generating complete Godot bindings from custom Godot build..."
   exec "nim r tools/generate_godot_bindings.nim"
 
-proc verify_envrc_paths*() =
-  ## Verify that paths from .envrc are in PATH
+proc verify_paths*() =
+  ## Verify that required project paths are in PATH
   ## Calls the appropriate shell script for the platform
   when host_os == "windows":
-    exec enu_root() / "tools/verify_envrc.bat"
+    exec enu_root() / "tools/verify_paths.bat"
   else:
-    exec enu_root() / "tools/verify_envrc.sh"
+    exec enu_root() / "tools/verify_paths.sh"
 
 proc start*(args = "") =
   cd "app"
@@ -482,7 +482,7 @@ proc dist_package_linux*() =
 
 proc do_dist_prereqs*() =
   let s = settings()
-  verify_envrc_paths()
+  verify_paths()
   p "Building distribution prereqs..."
 
   # Build editor (with dev_build locally, without in CI)
