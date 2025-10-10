@@ -35,11 +35,6 @@ jobs:
             .build_state/nim_built
           key: ${{ runner.os }}-nim-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.nim_sha }}
 
-      - name: Cache nimble dependencies
-        uses: actions/cache@v3
-        with:
-          path: nimbledeps
-          key: ${{ runner.os }}-nimbledeps-${{ env.CACHE_VERSION }}-${{ hashFiles('nimble.lock') }}
 
       - name: Cache Godot build
         id: godot-cache
@@ -59,16 +54,13 @@ jobs:
       - name: Configure git for nimble
         run: git config --global core.autocrlf false
 
-      - name: Clear nimbledeps if lockfile verification fails
+      - name: Manually clone cligen for debugging
         run: |
-          if (Test-Path nimbledeps/pkgs2) {
-            $pkgCount = (Get-ChildItem nimbledeps/pkgs2 | Measure-Object).Count
-            Write-Host "Found $pkgCount packages in cached nimbledeps"
-            if ($pkgCount -lt 30) {
-              Write-Host "Package count suspiciously low, clearing cache..."
-              Remove-Item -Recurse -Force nimbledeps
-            }
-          }
+          New-Item -ItemType Directory -Force -Path debug_packages
+          git clone https://github.com/c-blake/cligen.git debug_packages/cligen
+          cd debug_packages/cligen
+          git rev-parse HEAD
+          git log -1 --format="%H %s"
 
       - name: Setup PATH for all build dependencies
         run: |
@@ -83,12 +75,23 @@ jobs:
         run: ./build.bat dist
         continue-on-error: true
 
-      - name: Upload nimbledeps on failure
+      - name: Get nimble cache location
+        if: steps.build.outcome == 'failure'
+        id: cache-paths
+        run: |
+          echo "userprofile_cache=$env:USERPROFILE\.nimble\pkgcache" >> $env:GITHUB_OUTPUT
+          echo "localappdata_cache=$env:LOCALAPPDATA\nimble\pkgcache" >> $env:GITHUB_OUTPUT
+
+      - name: Upload debug info on failure
         if: steps.build.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: nimbledeps-debug
-          path: nimbledeps/
+          name: nimble-debug
+          path: |
+            nimbledeps/
+            debug_packages/
+            ${{ steps.cache-paths.outputs.userprofile_cache }}
+            ${{ steps.cache-paths.outputs.localappdata_cache }}
 
       - name: Fail if build failed
         if: steps.build.outcome == 'failure'
