@@ -20,10 +20,17 @@ let nim_sha = static_exec("git -C vendor/nim rev-parse HEAD").strip()
 requires "https://github.com/getenu/Nim#" & nim_sha,
   "https://github.com/getenu/model_citizen 0.19.6",
   "https://github.com/dsrw/nanoid.nim 0.2.1",
-  "https://github.com/godot-nim/gdext-nim 0.15.0",
-  "https://github.com/godot-nim/gdext-nim?subdir=coronation 0.1.0",
-  "https://github.com/treeform/pretty", "cligen 1.9.1", "chroma", "markdown",
-  "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy", "nph#c6e0316"
+  "gdext 0.15.0",
+  "https://github.com/treeform/pretty",
+  "cligen",
+  "chroma",
+  "markdown",
+  "chronicles",
+  "dotenv",
+  "nimibook",
+  "metrics#51f1227",
+  "zippy",
+  "nph#c6e0316"
 
 # Tasks
 
@@ -83,16 +90,7 @@ task build_and_start, "Build and start":
   start_task()
 
 task generate_bindings, "Generate Godot extension API bindings":
-  p "Generating Godot extension API bindings..."
-  let extension_api_json = "extension_api.json"
-  let generated_dir = "generated"
-  rm_dir generated_dir
-  mk_dir generated_dir
-
-  with_dir(generated_dir):
-    exec &"{godot_bin()} --headless --dump-extension-api"
-
-  exec &"coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+  generate_bindings()
 
 task start_headless, "Run Enu":
   start("--headless --quit-after 1")

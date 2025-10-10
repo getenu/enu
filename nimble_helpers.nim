@@ -11,20 +11,19 @@ proc enu_root*(): string =
   ## Derives from the .nimble file location
   current_source_path().parent_dir()
 
-type
-  Settings* = object
-    target*: string
-    lib_ext*: string
-    exe_ext*: string
-    cpu*: string
-    generated_dir*: string
-    api_json*: string
-    godot_build_url*: string
-    gcc_dlls*: seq[string]
-    nim_dlls*: seq[string]
-    godot_opts*: string
-    build_state_dir*: string
-    git_version*: string
+type Settings* = object
+  target*: string
+  lib_ext*: string
+  exe_ext*: string
+  cpu*: string
+  generated_dir*: string
+  api_json*: string
+  godot_build_url*: string
+  gcc_dlls*: seq[string]
+  nim_dlls*: seq[string]
+  godot_opts*: string
+  build_state_dir*: string
+  git_version*: string
 
 proc settings*(): Settings =
   ## Build and return settings object
@@ -49,29 +48,35 @@ proc settings*(): Settings =
     cpu: cpu,
     generated_dir: "generated/godotapi",
     api_json: "api.json",
-    godot_build_url: "https://docs.godotengine.org/en/stable/development/compiling/index.html",
+    godot_build_url:
+      "https://docs.godotengine.org/en/stable/development/compiling/index.html",
     gcc_dlls: @["libgcc_s_seh-1.dll", "libwinpthread-1.dll"],
     nim_dlls: @["pcre64.dll"],
     godot_opts: "target=editor",
     build_state_dir: ".build_state",
-    git_version: static_exec("git describe --tags HEAD").strip
+    git_version: static_exec("git describe --tags HEAD").strip,
   )
 
 proc godot_bin*(
     target = "",
     build_target = "editor",
     cpu = "",
-    use_dev = ""  # Empty string means "use default based on GODOT_DEV_BUILD env var"
+    use_dev = "", # Empty string means "use default based on GODOT_DEV_BUILD env var"
 ): string =
   let s = settings()
   let actual_target = if target == "": s.target else: target
   let actual_cpu = if cpu == "": s.cpu else: cpu
   let use_dev_build = get_env("GODOT_DEV_BUILD") != ""
-  let actual_use_dev = if use_dev == "": use_dev_build else: use_dev == "true"
+  let actual_use_dev =
+    if use_dev == "":
+      use_dev_build
+    else:
+      use_dev == "true"
 
   let dev_suffix = if actual_use_dev: ".dev" else: ""
   # Note: Godot 4 doesn't use .opt suffix (that was Godot 3)
-  let path = &"vendor/godot/bin/godot.{actual_target}.{build_target}{dev_suffix}.{actual_cpu}{s.exe_ext}"
+  let path =
+    &"vendor/godot/bin/godot.{actual_target}.{build_target}{dev_suffix}.{actual_cpu}{s.exe_ext}"
   result = enu_root() & "/" & path
 
 proc p*(msg: varargs[string, `$`]) =
@@ -106,7 +111,8 @@ proc get_godot_state_file*(target, cpu, opts: string): string =
 proc needs_godot_build*(target, cpu, opts: string): bool =
   let s = settings()
   let state_file = get_godot_state_file(target, cpu, opts)
-  let build_target = if opts.contains("template_release"): "template_release" else: "editor"
+  let build_target =
+    if opts.contains("template_release"): "template_release" else: "editor"
   let bin_path = godot_bin(target, build_target, cpu)
 
   # Need build if binary doesn't exist
@@ -189,7 +195,7 @@ proc build_godot*(target = "", cpu = "", opts = "") =
   when host_os == "macosx":
     # Find the latest installed Vulkan SDK
     let sdk_versions = list_dirs(get_env("HOME") / "VulkanSDK")
-    let latest_sdk = sdk_versions[^1]  # Last one (sorted alphabetically = newest version)
+    let latest_sdk = sdk_versions[^1] # Last one (sorted alphabetically = newest version)
     let mvk_dylib = latest_sdk / "macOS/lib/libMoltenVK.dylib"
     cp_file mvk_dylib, "vendor/godot/bin/libMoltenVK.dylib"
 
@@ -306,6 +312,41 @@ proc copy_nim_stdlib*() =
   for file in @["system.nim", "stdlib.nimble", "system" / "compilation.nim"]:
     cp_file join_path(stdlib, file), join_path(destination, file)
 
+proc generate_bindings*() =
+  ## Generate Godot extension API bindings using coronation
+  p "Generating Godot extension API bindings..."
+
+  # Install coronation from the same gdext-nim repo/revision as gdext
+  p "Installing coronation..."
+
+  # Get gdext package info using our tool (parse for URL= and VCS_REVISION= lines)
+  let gdext_info = gorge("nim r tools/get_package_info.nim gdext")
+
+  # Parse the output, looking for our markers (filters out Nim compiler hints)
+  var url, vcs_revision: string
+  for line in gdext_info.split_lines():
+    let trimmed = line.strip()
+    if trimmed.starts_with("URL="):
+      url = trimmed[4 ..^ 1]
+    elif trimmed.starts_with("VCS_REVISION="):
+      vcs_revision = trimmed[13 ..^ 1]
+
+  if url == "" or vcs_revision == "":
+    quit "Failed to parse gdext package info"
+
+  # Install coronation using the discovered @ syntax for CLI
+  exec &"nimble install -y \"{url}?subdir=coronation@#{vcs_revision}\""
+
+  let extension_api_json = "extension_api.json"
+  let generated_dir = "generated"
+  rm_dir generated_dir
+  mk_dir generated_dir
+
+  with_dir(generated_dir):
+    exec &"{godot_bin()} --headless --dump-extension-api"
+
+  exec &"coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+
 proc gen_godot_bindings*() =
   p "Generating complete Godot bindings from custom Godot build..."
   exec "nim r tools/generate_godot_bindings.nim"
@@ -354,7 +395,8 @@ proc dist_package_windows*() =
   when host_os == "windows":
     exec &"{godot_bin()} --verbose --path app --export-pack \"win\" " & pck_path
   else:
-    exec &"{godot_bin()} --headless --verbose --path app --export-pack \"win\" " & pck_path
+    exec &"{godot_bin()} --headless --verbose --path app --export-pack \"win\" " &
+      pck_path
 
   # Build release extension for Windows
   let nim_compiler = get_current_compiler_exe()
@@ -376,11 +418,13 @@ proc dist_package_macos*() =
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
   exec &"nim r tools/write_info_plist.nim {s.git_version}"
 
-  var release_bin = godot_bin(build_target = "template_release", cpu = "x86_64", use_dev = "false")
+  var release_bin =
+    godot_bin(build_target = "template_release", cpu = "x86_64", use_dev = "false")
   exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.x86_64"
   nim_build_mac "x86_64", "amd64"
 
-  release_bin = godot_bin(build_target = "template_release", cpu = "arm64", use_dev = "false")
+  release_bin =
+    godot_bin(build_target = "template_release", cpu = "arm64", use_dev = "false")
   exec &"cp {release_bin} dist/Enu.app/Contents/MacOS/Enu.arm64"
   nim_build_mac "arm64", "arm64"
 
@@ -413,8 +457,7 @@ proc dist_package_macos*() =
     # Try universal binary first
     let universal_lib = mvk_framework / "macos-arm64_x86_64/libMoltenVK.dylib"
     if file_exists(universal_lib):
-      cp_file universal_lib,
-        "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
+      cp_file universal_lib, "dist/Enu.app/Contents/Frameworks/libMoltenVK.dylib"
     else:
       # Fall back to separate architectures and combine with lipo
       let x86_lib = mvk_framework / "macos-x86_64/libMoltenVK.dylib"
