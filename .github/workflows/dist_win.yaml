@@ -52,7 +52,24 @@ jobs:
           key: ${{ runner.os }}-buildenv-${{ env.CACHE_VERSION }}
 
       - name: Configure git for nimble
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Dump git configuration
+        run: |
+          Write-Host "Git executable path:"
+          (Get-Command git).Source
+          Write-Host "`nGit version:"
+          git --version
+          Write-Host "`n=== ALL GIT CONFIGURATION (with origins) ==="
+          git config --list --show-origin
+          Write-Host "`n=== SYSTEM CONFIG ONLY ==="
+          git config --system --list
+          Write-Host "`n=== GLOBAL CONFIG ONLY ==="
+          git config --global --list
+          Write-Host "`n=== LOCAL CONFIG ONLY ==="
+          git config --local --list
 
       - name: Manually clone cligen for debugging
         run: |
