@@ -320,7 +320,10 @@ proc generate_bindings*() =
   p "Installing coronation..."
 
   # Get gdext package info using our tool (parse for URL= and VCS_REVISION= lines)
-  let gdext_info = gorge("nim r tools/get_package_info.nim gdext")
+  let gdext_info = when host_os == "windows":
+    gorge("cmd /c nim r tools/get_package_info.nim gdext")
+  else:
+    gorge("nim r tools/get_package_info.nim gdext")
 
   # Parse the output, looking for our markers (filters out Nim compiler hints)
   var url, vcs_revision: string
@@ -344,8 +347,16 @@ proc generate_bindings*() =
 
   with_dir(generated_dir):
     exec &"{godot_bin()} --headless --dump-extension-api"
-
-  exec &"coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+  when host_os == "windows":
+    # On Windows, use wrapper script that sets PATH for c2nim
+    let wrapper = enu_root() / "tools/run_coronation.bat"
+    let cmd = &"{wrapper} --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+    echo "Running: ", cmd
+    exec cmd
+  else:
+    let cmd = &"coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+    echo "Running: ", cmd
+    exec cmd
 
 proc gen_godot_bindings*() =
   p "Generating complete Godot bindings from custom Godot build..."

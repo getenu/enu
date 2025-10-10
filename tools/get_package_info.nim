@@ -12,9 +12,13 @@ proc main() =
   let pkg_name = param_str(1)
 
   # Run nimble dump and get JSON output
-  let (output, exit_code) = exec_cmd_ex(&"nimble dump {pkg_name} --json 2>&1")
+  let cmd = when defined(windows):
+    &"cmd /c nimble dump {pkg_name} --json 2>&1"
+  else:
+    &"nimble dump {pkg_name} --json 2>&1"
+  let (output, exit_code) = exec_cmd_ex(cmd)
   if exit_code != 0:
-    quit(&"Failed to run nimble dump {pkg_name} --json")
+    quit(&"Failed to run nimble dump {pkg_name} --json: {output}")
 
   # Extract JSON portion (skip warning lines)
   let json_start = output.find("{")
