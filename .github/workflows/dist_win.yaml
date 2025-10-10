@@ -2,7 +2,7 @@ name: Build on Windows
 on: push
 
 env:
-  CACHE_VERSION: v2
+  CACHE_VERSION: v3
 
 jobs:
   build:
@@ -58,6 +58,17 @@ jobs:
 
       - name: Configure git for nimble
         run: git config --global core.autocrlf false
+
+      - name: Clear nimbledeps if lockfile verification fails
+        run: |
+          if (Test-Path nimbledeps/pkgs2) {
+            $pkgCount = (Get-ChildItem nimbledeps/pkgs2 | Measure-Object).Count
+            Write-Host "Found $pkgCount packages in cached nimbledeps"
+            if ($pkgCount -lt 30) {
+              Write-Host "Package count suspiciously low, clearing cache..."
+              Remove-Item -Recurse -Force nimbledeps
+            }
+          }
 
       - name: Setup PATH for all build dependencies
         run: |
