@@ -1,7 +1,12 @@
 import gdext/buildconf
-import std/strutils
+import std/[strutils, os]
 
-let setting = BuildSettings(name: "Enu", extpath: "/dev/null")
+# we don't actually want the generated gdextension. Just dump it in `generated`.
+let setting = BuildSettings(
+  name: "Enu",
+  extpath: current_source_path().parent_dir() &
+    "/../../generated/generated.gdextension"
+)
 
 configure(setting)
 

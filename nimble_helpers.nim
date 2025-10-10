@@ -3,13 +3,63 @@
 ##
 ## NOTE: This file is designed to work specifically in nimscript context (from nimble)
 
-import std/[strformat, strutils, strscans, os, json]
+import std/[strformat, strutils, strscans, os, json, sequtils]
 
 proc enu_root*(): string =
   ## Get the Enu project root directory
   ## Works reliably even when nimble runs from temp cache
   ## Derives from the .nimble file location
   current_source_path().parent_dir()
+
+proc exec_command*(cmd: string): (string, int) {.discardable.} =
+  ## Execute a command reliably across platforms.
+  ##
+  ## On Windows:
+  ## - Uses cmd /c to ensure .cmd/.bat wrappers are found
+  ## - Parses nimbledeps/bin/*.cmd files to add package directories to PATH
+  ## - This ensures tools like c2nim are accessible when spawned by other tools
+  ##
+  ## On Unix: Executes directly without modification
+  ##
+  ## Returns (output, exitCode) tuple, but result is discardable if not needed.
+  ##
+  ## Usage:
+  ##   exec_command "coronation --help"  # Discard result
+  ##   let (output, code) = exec_command("nimble dump gdext --json")  # Capture result
+  when defined(windows):
+    # Parse .cmd files in nimbledeps/bin to find package directories
+    var pkg_dirs: seq[string] = @[]
+    let nimble_bin = enu_root() / "nimbledeps/bin"
+
+    if dir_exists(nimble_bin):
+      for cmd_file in list_files(nimble_bin):
+        if cmd_file.ends_with(".cmd"):
+          let content = read_file(cmd_file)
+          # Parse line like: @"%~dp0\..\pkgs2\c2nim-0.9.19-...\c2nim.exe" %*
+          for line in content.split_lines():
+            if line.contains("pkgs2\\") and line.contains(".exe"):
+              # Extract the package directory path
+              let start_idx = line.find("pkgs2\\")
+              if start_idx > 0:
+                let rest = line[start_idx .. ^1]
+                let end_idx = rest.find("\\", 6)  # Find next \ after "pkgs2\"
+                if end_idx > 0:
+                  let pkg_name = rest[0 ..< end_idx]
+                  let pkg_path = enu_root() / "nimbledeps" / pkg_name
+                  if not pkg_dirs.contains(pkg_path):
+                    pkg_dirs.add(pkg_path)
+
+    # Build PATH with all package directories
+    var path_additions = pkg_dirs.join(";")
+    if path_additions.len > 0:
+      path_additions = path_additions & ";" & nimble_bin & ";" & get_env("PATH")
+    else:
+      path_additions = nimble_bin & ";" & get_env("PATH")
+
+    # Execute with enhanced PATH
+    gorgeEx(&"cmd /c \"set PATH={path_additions} && {cmd}\"")
+  else:
+    gorgeEx(cmd)
 
 type Settings* = object
   target*: string
@@ -320,10 +370,10 @@ proc generate_bindings*() =
   p "Installing coronation..."
 
   # Get gdext package info using our tool (parse for URL= and VCS_REVISION= lines)
-  let gdext_info = when host_os == "windows":
-    gorge("cmd /c nim r tools/get_package_info.nim gdext")
-  else:
-    gorge("nim r tools/get_package_info.nim gdext")
+  let tool_path = enu_root() / "tools/get_package_info.nim"
+  let (gdext_info, info_exit) = exec_command(&"nim r {tool_path} gdext")
+  if info_exit != 0:
+    quit &"Failed to get gdext package info: {gdext_info}"
 
   # Parse the output, looking for our markers (filters out Nim compiler hints)
   var url, vcs_revision: string
@@ -347,16 +397,10 @@ proc generate_bindings*() =
 
   with_dir(generated_dir):
     exec &"{godot_bin()} --headless --dump-extension-api"
-  when host_os == "windows":
-    # On Windows, use wrapper script that sets PATH for c2nim
-    let wrapper = enu_root() / "tools/run_coronation.bat"
-    let cmd = &"{wrapper} --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
-    echo "Running: ", cmd
-    exec cmd
-  else:
-    let cmd = &"coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
-    echo "Running: ", cmd
-    exec cmd
+
+  let cmd = &"coronation --apisource:{generated_dir}/{extension_api_json} --ifcesource:vendor/godot/core/extension/gdextension_interface.h --outdir:{generated_dir}"
+  echo "Running: ", cmd
+  exec_command cmd
 
 proc gen_godot_bindings*() =
   p "Generating complete Godot bindings from custom Godot build..."
