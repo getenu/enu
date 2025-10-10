@@ -273,11 +273,18 @@ proc download_fonts*() =
     else:
       exec "curl -Lo Roboto.zip \"https://github.com/mobiledesres/Google-UI-fonts/blob/main/zip/Roboto.zip?raw=true\""
       exec "curl -Lo RobotoMono.zip \"https://github.com/mobiledesres/Google-UI-fonts/blob/main/zip/Roboto%20Mono.zip?raw=true\""
-      exec "unzip Roboto.zip"
-      exec "unzip -o RobotoMono.zip"
+      when host_os == "windows":
+        exec "powershell -Command \"Expand-Archive -Path Roboto.zip -DestinationPath . -Force\""
+        exec "powershell -Command \"Expand-Archive -Path RobotoMono.zip -DestinationPath . -Force\""
+      else:
+        exec "unzip Roboto.zip"
+        exec "unzip -o RobotoMono.zip"
 
     exec "curl -OJL https://github.com/FortAwesome/Font-Awesome/releases/download/6.7.2/fontawesome-free-6.7.2-desktop.zip"
-    exec "unzip -o fontawesome-free-6.7.2-desktop.zip"
+    when host_os == "windows":
+      exec "powershell -Command \"Expand-Archive -Path fontawesome-free-6.7.2-desktop.zip -DestinationPath . -Force\""
+    else:
+      exec "unzip -o fontawesome-free-6.7.2-desktop.zip"
 
   # Save state after successful download
   save_fonts_state()

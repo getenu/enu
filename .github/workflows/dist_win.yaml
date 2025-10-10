@@ -68,9 +68,23 @@ jobs:
           echo "${{ github.workspace }}\build_env\python\Scripts" >> $env:GITHUB_PATH
 
       - name: Build distribution
+        id: build
         run: ./build.bat dist
+        continue-on-error: true
+
+      - name: Upload nimbledeps on failure
+        if: steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nimbledeps-debug
+          path: nimbledeps/
+
+      - name: Fail if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
 
       - uses: actions/upload-artifact@v4
+        if: steps.build.outcome == 'success'
         with:
           name: Enu Windows Distribution
           path: |

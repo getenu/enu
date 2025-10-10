@@ -301,7 +301,7 @@ goto :main
 
     :: Setup nimble dependencies
     call :info "Setting up nimble dependencies..."
-    nimble setup -y
+    nimble setup -y --verbose
     if errorlevel 1 (
         call :error "Nimble setup failed"
         exit /b 1
