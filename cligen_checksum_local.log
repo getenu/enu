@@ -1,0 +1,521 @@
+[CHECKSUM DEBUG] Calculating checksum for directory: C:\Users\scott\AppData\Local\Temp\nimble_21724\githubcom_cblakecligengit_1.9.1_79f1566ee77f696b2ee85ef56f9c14c68c93d089
+[CHECKSUM DEBUG] Found 165 files
+[CHECKSUM DEBUG] First 10 files:
+[CHECKSUM DEBUG]   .gitattributes
+[CHECKSUM DEBUG]   .github/workflows/gh-pages.yml
+[CHECKSUM DEBUG]   .github/workflows/test.yml
+[CHECKSUM DEBUG]   .gitignore
+[CHECKSUM DEBUG]   GNUmakefile
+[CHECKSUM DEBUG]   LICENSE
+[CHECKSUM DEBUG]   MOTIVATION.md
+[CHECKSUM DEBUG]   README.md
+[CHECKSUM DEBUG]   RELEASE-NOTES.md
+[CHECKSUM DEBUG]   TODO.md
+[CHECKSUM DEBUG]   ... and 155 more
+[CHECKSUM DEBUG] Processing file: .gitattributes
+[CHECKSUM DEBUG]   Size: 29 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 9AE7EEE4DA37960A6E787840C63521643D0FE5E4
+[CHECKSUM DEBUG] Processing file: .github/workflows/gh-pages.yml
+[CHECKSUM DEBUG]   Size: 1444 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F357DC32765CC5D27DAFB4C6F3F18BCDFF349F04
+[CHECKSUM DEBUG] Processing file: .github/workflows/test.yml
+[CHECKSUM DEBUG]   Size: 1102 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 55D67B1862866CCB6D5E75DF0C911F74F7C4F736
+[CHECKSUM DEBUG] Processing file: .gitignore
+[CHECKSUM DEBUG]   Size: 1329 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 8250F290082C5F19FC957FC8514EF76A075629F5
+[CHECKSUM DEBUG] Processing file: GNUmakefile
+[CHECKSUM DEBUG]   Size: 2159 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 3C47714701DE8914C765DC4D81BCF215B48BD366
+[CHECKSUM DEBUG] Processing file: LICENSE
+[CHECKSUM DEBUG]   Size: 765 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E2D0AEF3958AF1B678AF65E56CBA47E6431551D1
+[CHECKSUM DEBUG] Processing file: MOTIVATION.md
+[CHECKSUM DEBUG]   Size: 2445 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 3035722316F0DB9696AA0E0745161D1D4BCC3EBA
+[CHECKSUM DEBUG] Processing file: README.md
+[CHECKSUM DEBUG]   Size: 12756 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 6757BB64D5C19E914FB34CF77CC94221176C765F
+[CHECKSUM DEBUG] Processing file: RELEASE-NOTES.md
+[CHECKSUM DEBUG]   Size: 80026 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B8511CC13FC2A4809A8BACE4B3D97F667B82093F
+[CHECKSUM DEBUG] Processing file: TODO.md
+[CHECKSUM DEBUG]   Size: 1765 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E1B1FE67244CE57038CF3725948EA994EE82B648
+[CHECKSUM DEBUG] Processing file: cligen.nim
+[CHECKSUM DEBUG]   Size: 67550 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5F459B6591DDD90E936D8A5422F8502F7E8AE3B0
+[CHECKSUM DEBUG] Processing file: cligen.nim.cfg
+[CHECKSUM DEBUG]   Size: 11 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 325ACCFBEE39AA514C721E19C1822861D157183F
+[CHECKSUM DEBUG] Processing file: cligen.nimble
+[CHECKSUM DEBUG]   Size: 506 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 998D628EFFAA8A791D22076BB48E3C03119F3200
+[CHECKSUM DEBUG] Processing file: cligen/abbrev.nim
+[CHECKSUM DEBUG]   Size: 14037 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 3A43E30CE8B0080CA6423B86E2FA524F69273BD4
+[CHECKSUM DEBUG] Processing file: cligen/argcvt.nim
+[CHECKSUM DEBUG]   Size: 20852 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 362219B65920B3EE01832065003FDC58B7ABF25E
+[CHECKSUM DEBUG] Processing file: cligen/cfUt.nim
+[CHECKSUM DEBUG]   Size: 1889 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E9D3D2FC86457537F46887BFFD5763A09742F327
+[CHECKSUM DEBUG] Processing file: cligen/clCfgInit.nim
+[CHECKSUM DEBUG]   Size: 7751 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 400C8076017A66121319C516AB89E1755093E438
+[CHECKSUM DEBUG] Processing file: cligen/clCfgToml.nim
+[CHECKSUM DEBUG]   Size: 6202 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 9C24CE5B82D99FFE205453AFD55E83AF0D96E3DB
+[CHECKSUM DEBUG] Processing file: cligen/colorScl.nim
+[CHECKSUM DEBUG]   Size: 7607 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 4CE5BC7854521F689CC6D9F41C20386C749AD5D4
+[CHECKSUM DEBUG] Processing file: cligen/conncomp.nim
+[CHECKSUM DEBUG]   Size: 2967 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 334C356C72AA1D8C5760C4CFC6D7559B96EAEDD4
+[CHECKSUM DEBUG] Processing file: cligen/dents.nim
+[CHECKSUM DEBUG]   Size: 20566 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: BB79417285776C565C29451524CDE838EF5DD7F2
+[CHECKSUM DEBUG] Processing file: cligen/fileUt.nim
+[CHECKSUM DEBUG]   Size: 3033 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B38331FFF2516AA444221375F71DEC3AA59C5C4B
+[CHECKSUM DEBUG] Processing file: cligen/gcarc.nim
+[CHECKSUM DEBUG]   Size: 142 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FADB4530E85C8771C8252EBF35AA0F4BD4F4E526
+[CHECKSUM DEBUG] Processing file: cligen/helpTmpl.nim
+[CHECKSUM DEBUG]   Size: 945 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5B9546C28BBD5CFAAE035B95B5D3097E09FE5E67
+[CHECKSUM DEBUG] Processing file: cligen/humanUt.nim
+[CHECKSUM DEBUG]   Size: 14894 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 39DBA541F9B96672063F87A3D1898959A3B79047
+[CHECKSUM DEBUG] Processing file: cligen/macUt.nim
+[CHECKSUM DEBUG]   Size: 7589 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 767A1EE6350F54531A23664F63C76C275F2348DE
+[CHECKSUM DEBUG] Processing file: cligen/magic.nim
+[CHECKSUM DEBUG]   Size: 4838 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E92D8D20D0DADE668C7F09986704C354D4647960
+[CHECKSUM DEBUG] Processing file: cligen/mergeCfgEnv.nim
+[CHECKSUM DEBUG]   Size: 1731 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 61A373AB13A49556F0DF07A5CED53300FCD48DF7
+[CHECKSUM DEBUG] Processing file: cligen/mergeCfgEnvMulMul.nim
+[CHECKSUM DEBUG]   Size: 1846 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B532D4E9BA1FB5FEDA55E4E99146841E962AD26F
+[CHECKSUM DEBUG] Processing file: cligen/mergeCfgEnvMulti.nim
+[CHECKSUM DEBUG]   Size: 1731 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 8AC7B0686E628E67BEF303045E99B511ECD74D04
+[CHECKSUM DEBUG] Processing file: cligen/mfile.nim
+[CHECKSUM DEBUG]   Size: 15622 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0D19EA776F3D89EDF029B1746300C0FBD15226C5
+[CHECKSUM DEBUG] Processing file: cligen/mslice.nim
+[CHECKSUM DEBUG]   Size: 39999 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: A007AE2898CEBDECF2226D992C4DE99F1714F4F9
+[CHECKSUM DEBUG] Processing file: cligen/osUt.nim
+[CHECKSUM DEBUG]   Size: 26235 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FBD3D453D7289FAE892182F7479C0ACD69F771D7
+[CHECKSUM DEBUG] Processing file: cligen/parseopt3.nim
+[CHECKSUM DEBUG]   Size: 15966 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 18224F0A722DA6228A9A5C794C54C922CB393523
+[CHECKSUM DEBUG] Processing file: cligen/posixUt.nim
+[CHECKSUM DEBUG]   Size: 31947 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 7E5B0D90B8C2577968514D8271808F04862BABED
+[CHECKSUM DEBUG] Processing file: cligen/prefetch.nim
+[CHECKSUM DEBUG]   Size: 697 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B1717AF214F425E10470488F06A07C922CAA44B9
+[CHECKSUM DEBUG] Processing file: cligen/print.nim
+[CHECKSUM DEBUG]   Size: 3038 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 9D68E2DFDF2701B20EE18BF34705F05CAE733D3D
+[CHECKSUM DEBUG] Processing file: cligen/procpool.nim
+[CHECKSUM DEBUG]   Size: 12654 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 9BDA68C9691961D06C5C7E08BE62AAF7C8705450
+[CHECKSUM DEBUG] Processing file: cligen/puSig.nim
+[CHECKSUM DEBUG]   Size: 3465 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 824F4DF897F121F45BD01C4A309938F1F9BC8296
+[CHECKSUM DEBUG] Processing file: cligen/statx.nim
+[CHECKSUM DEBUG]   Size: 12899 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 20ECDDCA54B81C2E79C1F38A03060FA38CA2088A
+[CHECKSUM DEBUG] Processing file: cligen/strUt.nim
+[CHECKSUM DEBUG]   Size: 38504 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 2F9DAF59F161E1AB8781A3FB8CF93E4D014C8FB8
+[CHECKSUM DEBUG] Processing file: cligen/syntaxHelp.nim
+[CHECKSUM DEBUG]   Size: 3223 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: CE2F71AA5CC1E0F3CCB7130D4D91128F7C56902A
+[CHECKSUM DEBUG] Processing file: cligen/sysUt.nim
+[CHECKSUM DEBUG]   Size: 5873 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D4C7019BA9DAA4584C2EAA8FA2F7C35097B4065C
+[CHECKSUM DEBUG] Processing file: cligen/tab.nim
+[CHECKSUM DEBUG]   Size: 5791 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 7D334BA49315AEE05AEAE32184E889AEBD0E5B4E
+[CHECKSUM DEBUG] Processing file: cligen/tern.nim
+[CHECKSUM DEBUG]   Size: 10633 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D8EA4E453EBFF4B791DF96C115D8D352D39C47D1
+[CHECKSUM DEBUG] Processing file: cligen/textUt.nim
+[CHECKSUM DEBUG]   Size: 23530 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D139EC9AE7AB93CC5D9104A95F60A8ED9206FBFD
+[CHECKSUM DEBUG] Processing file: cligen/trie.nim
+[CHECKSUM DEBUG]   Size: 12885 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 4BBD74BBFCDAA62F9DBF5E67C4B7B44193C7BB73
+[CHECKSUM DEBUG] Processing file: cligen/unixUt.nim
+[CHECKSUM DEBUG]   Size: 1156 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 13E6A5134DC0C46362D178461CCF5CFD268F9DD7
+[CHECKSUM DEBUG] Processing file: cligen/unsafeAddr.nim
+[CHECKSUM DEBUG]   Size: 388 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: BCC35A5DF0211DDCEC74FD3A1035FE18189EC30C
+[CHECKSUM DEBUG] Processing file: configs/README.md
+[CHECKSUM DEBUG]   Size: 770 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5022C285E6050E2C39C6C65AD7A09F543B9CFFC9
+[CHECKSUM DEBUG] Processing file: configs/config
+[CHECKSUM DEBUG]   Size: 4618 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 7D9D9FAC69EB232C612BA0EF381A7C2E3BF18F2B
+[CHECKSUM DEBUG] Processing file: configs/config.toml
+[CHECKSUM DEBUG]   Size: 2705 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F41E3CE6B5AEF2830573BE62FA50988E45026813
+[CHECKSUM DEBUG] Processing file: docs/index.html
+[CHECKSUM DEBUG]   Size: 4540 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: BB43940ABFA3BB12316CA8B01D6B9427B97D7510
+[CHECKSUM DEBUG] Processing file: examples/chom.nim
+[CHECKSUM DEBUG]   Size: 3940 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 3CDD2E47DE02D76E7FAF360456FF67556E06CF06
+[CHECKSUM DEBUG] Processing file: examples/cols.nim
+[CHECKSUM DEBUG]   Size: 1853 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5D5AFA0F9798CE9CC6BA9EBAA5C70D815780E992
+[CHECKSUM DEBUG] Processing file: examples/crp.nim
+[CHECKSUM DEBUG]   Size: 6049 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0BF45E1272C955ED7B7A1ADC72C5B42E4145BCE1
+[CHECKSUM DEBUG] Processing file: examples/dirq.nim
+[CHECKSUM DEBUG]   Size: 2850 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D976A337CC848EC3D660AAC04B956CBEE42FFEED
+[CHECKSUM DEBUG] Processing file: examples/dirt.nim
+[CHECKSUM DEBUG]   Size: 3198 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 04D89546360A60BD1CA98644D43C94B9D398BD83
+[CHECKSUM DEBUG] Processing file: examples/du.nim
+[CHECKSUM DEBUG]   Size: 6253 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B97A313705D85790B226BF8FF2010F1A52B3DB50
+[CHECKSUM DEBUG] Processing file: examples/dups.nim
+[CHECKSUM DEBUG]   Size: 10103 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 4A118CA42B1908B43BB00B391554A26F4FC0A369
+[CHECKSUM DEBUG] Processing file: examples/fkindc.nim
+[CHECKSUM DEBUG]   Size: 1932 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 004AB7E5221C25BC45EC2B30BF36431981F67F08
+[CHECKSUM DEBUG] Processing file: examples/gl.nim
+[CHECKSUM DEBUG]   Size: 1535 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E16302D0F915590B07C871C625FB2651FE05DC8A
+[CHECKSUM DEBUG] Processing file: examples/grl.nim
+[CHECKSUM DEBUG]   Size: 1597 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 519FFC6231FB20940CC67DAD894D52DE8D995B0E
+[CHECKSUM DEBUG] Processing file: examples/linect.nim
+[CHECKSUM DEBUG]   Size: 2155 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D879B5C7D39AC3FC8B08D51D5F24B0CF0AC7626E
+[CHECKSUM DEBUG] Processing file: examples/linect.nims
+[CHECKSUM DEBUG]   Size: 208 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 684D26E2AACED46307EF12CE2102BA5C738D34F8
+[CHECKSUM DEBUG] Processing file: examples/newest.nim
+[CHECKSUM DEBUG]   Size: 2756 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E64D38ACAF1CBC2CB797ABD8D3D783E22DBEA5CD
+[CHECKSUM DEBUG] Processing file: examples/nim.cfg
+[CHECKSUM DEBUG]   Size: 12 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 2FD7035D25AD1560B451A1AEE836FABDED47B49E
+[CHECKSUM DEBUG] Processing file: examples/only.nim
+[CHECKSUM DEBUG]   Size: 4322 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 995961E510568E0F31EA7F897A398FEEC8DD1D60
+[CHECKSUM DEBUG] Processing file: examples/part.nim
+[CHECKSUM DEBUG]   Size: 1859 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0A1204560AB5ED107A45FDC25E8F90C2A8963403
+[CHECKSUM DEBUG] Processing file: examples/piPar.nim
+[CHECKSUM DEBUG]   Size: 2259 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5137B8C14E3561EC17A251E0BABF8E62A0E02A18
+[CHECKSUM DEBUG] Processing file: examples/ppBench.nim
+[CHECKSUM DEBUG]   Size: 1402 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 382B2E344E59E2072B92ADC66162DB57C680D537
+[CHECKSUM DEBUG] Processing file: examples/rp.nim
+[CHECKSUM DEBUG]   Size: 5812 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: EADE7CDDAA9377EE83F9AB0754A2CF687A20E997
+[CHECKSUM DEBUG] Processing file: examples/rr.nim
+[CHECKSUM DEBUG]   Size: 1237 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C6C01A6B10AC322EF3568D9B3A3DC5FE0D38E6C7
+[CHECKSUM DEBUG] Processing file: examples/tmpl.nim
+[CHECKSUM DEBUG]   Size: 2564 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D9147D577A4207A1DE145C736B44E3D49F2FFA1D
+[CHECKSUM DEBUG] Processing file: python/cg.md
+[CHECKSUM DEBUG]   Size: 3848 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B6E744EFE87AEBE79DEEE631211953ACA2A2EACD
+[CHECKSUM DEBUG] Processing file: python/cg.py
+[CHECKSUM DEBUG]   Size: 11933 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 26287C3155433B6BC58241E46BFA2C3B33A15A9E
+[CHECKSUM DEBUG] Processing file: python/pq
+[CHECKSUM DEBUG]   Size: 5070 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FDC333CFDFAD9BA09A4E9614C9D248177F2DC6D7
+[CHECKSUM DEBUG] Processing file: python/pqCgPyDemo.png
+[CHECKSUM DEBUG]   Size: 244724 bytes, Line endings: CRLF
+[CHECKSUM DEBUG]   Individual file hash: D110AE83B278FB824D249A4C784611CA5E8AEBC9
+[CHECKSUM DEBUG] Processing file: python/testPq.sh
+[CHECKSUM DEBUG]   Size: 455 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FD86F56D5C8ECF87CA1D32A4DD2724BB4E44471B
+[CHECKSUM DEBUG] Processing file: screenshots/dirqHelpNight.png
+[CHECKSUM DEBUG]   Size: 65215 bytes, Line endings: CRLF
+[CHECKSUM DEBUG]   Individual file hash: EB35A35D85D1D030B04FE6FCF0DCC316557AB93E
+[CHECKSUM DEBUG] Processing file: screenshots/dupsHelpDay.png
+[CHECKSUM DEBUG]   Size: 166470 bytes, Line endings: CRLF
+[CHECKSUM DEBUG]   Individual file hash: 0E3010F8406B14E300F533140010625590B01CDD
+[CHECKSUM DEBUG] Processing file: test.sh
+[CHECKSUM DEBUG]   Size: 949 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B0D86C9806E8D197B61B44F6F988531889FD0973
+[CHECKSUM DEBUG] Processing file: test/AllSeqTypes.nim
+[CHECKSUM DEBUG]   Size: 1675 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E4C2C8FB514BE4D95B0D158726DEEDF67CC6169B
+[CHECKSUM DEBUG] Processing file: test/AllSetTypes.nim
+[CHECKSUM DEBUG]   Size: 839 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E4A2449459B6231F69E7BE2300FF8C7CDD5EAD90
+[CHECKSUM DEBUG] Processing file: test/AllTypes.nim
+[CHECKSUM DEBUG]   Size: 1037 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 552B140FA771BD1C9BF7D400515513711386C8E9
+[CHECKSUM DEBUG] Processing file: test/BlockedShort.nim
+[CHECKSUM DEBUG]   Size: 509 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 8CC7747EE597A38B34F775460A478AB51D1634AB
+[CHECKSUM DEBUG] Processing file: test/CustomCmdName.nim
+[CHECKSUM DEBUG]   Size: 583 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 86E07EAD71695EA0EBD6291BEF03781E6F3FD6E2
+[CHECKSUM DEBUG] Processing file: test/CustomType.nim
+[CHECKSUM DEBUG]   Size: 884 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: D555716F9235C51CC1D74A52DF6A73876123C796
+[CHECKSUM DEBUG] Processing file: test/DetectSet.nim
+[CHECKSUM DEBUG]   Size: 1408 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5382C1887F83C1A4335F5F4362E65D61287973BE
+[CHECKSUM DEBUG] Processing file: test/DistinctInt.nim
+[CHECKSUM DEBUG]   Size: 351 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: CE12B5FEACE2F81C6DCB95BEAA6930215470EBEB
+[CHECKSUM DEBUG] Processing file: test/DupShort.nim
+[CHECKSUM DEBUG]   Size: 494 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 83F75159F69666F590F33AAA40DF047D56AA0EE2
+[CHECKSUM DEBUG] Processing file: test/EarlySeq.nim
+[CHECKSUM DEBUG]   Size: 564 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C534DBE8E4D02FB90D0ADE94C60F0323178B2717
+[CHECKSUM DEBUG] Processing file: test/EchoResult.nim
+[CHECKSUM DEBUG]   Size: 160 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: EFC7A6ADB778BF1E28D3CA71CCC74CF4C89FACC1
+[CHECKSUM DEBUG] Processing file: test/Enums.nim
+[CHECKSUM DEBUG]   Size: 533 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FABD5FE4626758A07AE3E0D09DB4D1255EB07800
+[CHECKSUM DEBUG] Processing file: test/External.nim
+[CHECKSUM DEBUG]   Size: 62 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 992FE8B97DC2F142D4ACE62F69BE9642714217BD
+[CHECKSUM DEBUG] Processing file: test/FancyRepeats.nim
+[CHECKSUM DEBUG]   Size: 1518 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 675E3F6582EED79FAC62B8189E6C93D15BAD4321
+[CHECKSUM DEBUG] Processing file: test/FancyRepeats2.nim
+[CHECKSUM DEBUG]   Size: 1518 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 143E0E5B32A47B788EC126C8456434CBC52899BD
+[CHECKSUM DEBUG] Processing file: test/FullyAutoMulti.cf
+[CHECKSUM DEBUG]   Size: 587 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 6DE3D3C30D01EF05F8293CAD6802EF1710968A9A
+[CHECKSUM DEBUG] Processing file: test/FullyAutoMulti.nim
+[CHECKSUM DEBUG]   Size: 2630 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C43D9CA2AAA8A0DC881259E7CCEB6F09DFA82880
+[CHECKSUM DEBUG] Processing file: test/HashSets.nim
+[CHECKSUM DEBUG]   Size: 1136 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: CD664FFCFAD9CD1843BF265793824EE436AC3322
+[CHECKSUM DEBUG] Processing file: test/HelpTabCols.nim
+[CHECKSUM DEBUG]   Size: 795 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C7F99887BA0B517C81667D609564CF1203348727
+[CHECKSUM DEBUG] Processing file: test/ImplicitDefault.nim
+[CHECKSUM DEBUG]   Size: 561 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0AEE273D20DFDC1D788C32B9CCC60211441C50A6
+[CHECKSUM DEBUG] Processing file: test/InitOb.nim
+[CHECKSUM DEBUG]   Size: 1073 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F60E4C13B85A3D92D0A995A081482F5EE2395BE6
+[CHECKSUM DEBUG] Processing file: test/InitObPtr.nim
+[CHECKSUM DEBUG]   Size: 1127 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FF07A89FE86C9A127B2B1DDF92536990E315D4CE
+[CHECKSUM DEBUG] Processing file: test/InitObRef.nim
+[CHECKSUM DEBUG]   Size: 1077 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 7E6C4F4914F20B02E630D5B11E84947484C0A5BB
+[CHECKSUM DEBUG] Processing file: test/InitTup.nim
+[CHECKSUM DEBUG]   Size: 951 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C4454FB33C77CE8C2FD6AD406B408CB55D287563
+[CHECKSUM DEBUG] Processing file: test/ListDecl.nim
+[CHECKSUM DEBUG]   Size: 454 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F1C90D9E57AF17B7AC17B356613FC604940BD0C2
+[CHECKSUM DEBUG] Processing file: test/Mandatory.nim
+[CHECKSUM DEBUG]   Size: 567 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: CECC5A32F8E5B6526BF8225E65BB55105A404BA9
+[CHECKSUM DEBUG] Processing file: test/MandatoryNoPos.nim
+[CHECKSUM DEBUG]   Size: 497 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0527516C0955219B8B1B66BA6002F8845166A9EA
+[CHECKSUM DEBUG] Processing file: test/ManualMulti.nim
+[CHECKSUM DEBUG]   Size: 2133 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C20D523A53277A032C70CFEE1178A9EFB7D801A8
+[CHECKSUM DEBUG] Processing file: test/MultMultMult.nim
+[CHECKSUM DEBUG]   Size: 2395 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B9964DDA37D19CABAF8695280BA6C1F9AAB706FF
+[CHECKSUM DEBUG] Processing file: test/MultiFlag.nim
+[CHECKSUM DEBUG]   Size: 332 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 56ABE92DFBC6547E983BC825BBF51C6D6B9EA263
+[CHECKSUM DEBUG] Processing file: test/MultiMulti.nim
+[CHECKSUM DEBUG]   Size: 2068 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 92237F72D0CAA7E39AB2A2325B19A918207B2B41
+[CHECKSUM DEBUG] Processing file: test/NoPositional.nim
+[CHECKSUM DEBUG]   Size: 490 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: ECACF884A2508967632D3CD852D3796726659DCD
+[CHECKSUM DEBUG] Processing file: test/NoShort.nim
+[CHECKSUM DEBUG]   Size: 491 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0722F021A40F9A83B79DDDF72A887E57644B2E21
+[CHECKSUM DEBUG] Processing file: test/OmitInHelpTable.nim
+[CHECKSUM DEBUG]   Size: 852 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 328AA20250D0CC7E74BB8C1D2015F6DBB5713794
+[CHECKSUM DEBUG] Processing file: test/OneCharLong.nim
+[CHECKSUM DEBUG]   Size: 1050 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 3F9CF2F745FAAF70BF972B46A1FA4C7BF984E23F
+[CHECKSUM DEBUG] Processing file: test/OneCharParams.nim
+[CHECKSUM DEBUG]   Size: 273 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: CC970C41F18E48C29589703691A26B43141F7D31
+[CHECKSUM DEBUG] Processing file: test/OptionT.nim
+[CHECKSUM DEBUG]   Size: 1183 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: A5C6E589EC13723434EA1D90DC659EF0A669A221
+[CHECKSUM DEBUG] Processing file: test/ParseOnly.nim
+[CHECKSUM DEBUG]   Size: 2428 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: CA299B3EC17D6F8BE1B5A5143ADECD9E0E8D22AA
+[CHECKSUM DEBUG] Processing file: test/PassValues.nim
+[CHECKSUM DEBUG]   Size: 1296 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: A1959FB10AFEF484F29591B732CF21038926491F
+[CHECKSUM DEBUG] Processing file: test/PassValuesMulti.nim
+[CHECKSUM DEBUG]   Size: 2593 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 449C21FAF2A9BE4C7A2BA453CEF3E954A419E99D
+[CHECKSUM DEBUG] Processing file: test/PerParam.nim
+[CHECKSUM DEBUG]   Size: 712 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5EFA1E2ADBFE03FCEBE0842DAFA855DA45A0FD72
+[CHECKSUM DEBUG] Processing file: test/QualifiedMulti.nim
+[CHECKSUM DEBUG]   Size: 196 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: EC593B1476D938E0C620A7F5C9305ECFCE3DBDBA
+[CHECKSUM DEBUG] Processing file: test/QualifiedSym.nim
+[CHECKSUM DEBUG]   Size: 67 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: FC0BF8171D01057E8CABD07D53D806BF8C4CC13E
+[CHECKSUM DEBUG] Processing file: test/RangeTypes.nim
+[CHECKSUM DEBUG]   Size: 974 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 174687F3E622B9625FE5EF8C009669EF4B5CE91C
+[CHECKSUM DEBUG] Processing file: test/ResultInt.nim
+[CHECKSUM DEBUG]   Size: 300 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 2336C1A4A5E3566842ACBB7DA1B4F195D54B8818
+[CHECKSUM DEBUG] Processing file: test/ReturnEmpty.nim
+[CHECKSUM DEBUG]   Size: 547 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 843DE27E213172521816831A1C8C6613ECD7A2F7
+[CHECKSUM DEBUG] Processing file: test/ReturnInt.nim
+[CHECKSUM DEBUG]   Size: 564 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 4A7FA86BEC2EA944E7EF6A24EDAC9CFD6A81B1D1
+[CHECKSUM DEBUG] Processing file: test/ReturnNonInt.nim
+[CHECKSUM DEBUG]   Size: 569 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0295EDFF1FF4E7BEC2DFA68C0CED63054DDA1D54
+[CHECKSUM DEBUG] Processing file: test/ReturnNonIntNoAuto.nim
+[CHECKSUM DEBUG]   Size: 586 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 8F18F4F34A74BCB412FFC3F0F64AC4F40D4FAC64
+[CHECKSUM DEBUG] Processing file: test/ReturnString.nim
+[CHECKSUM DEBUG]   Size: 688 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 16C18915848B15F002BE017A50412182A92A2CF8
+[CHECKSUM DEBUG] Processing file: test/SemiAutoMulti.nim
+[CHECKSUM DEBUG]   Size: 3071 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 73B4BEC2FC724F4F33431008741469D7AAC18D8E
+[CHECKSUM DEBUG] Processing file: test/SemiMultMult.nim
+[CHECKSUM DEBUG]   Size: 3620 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 297446C0A6F93B8BA0CC5EE90A2466B1D8E3B37A
+[CHECKSUM DEBUG] Processing file: test/SeqInt.nim
+[CHECKSUM DEBUG]   Size: 494 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 7CB8FFB6A4A93334A5B212566C1E898E4646CA7C
+[CHECKSUM DEBUG] Processing file: test/SetByParse.nim
+[CHECKSUM DEBUG]   Size: 686 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 846A59A8103A77362597AD504B072A8480D97635
+[CHECKSUM DEBUG] Processing file: test/SpecifiedOverload.nim
+[CHECKSUM DEBUG]   Size: 97 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B80656102FE48F0000961BB368073DABF3CD3C25
+[CHECKSUM DEBUG] Processing file: test/StroppedParams.nim
+[CHECKSUM DEBUG]   Size: 321 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 204DF2FC857FDBB91EBF0B35BF50F4F548A993CA
+[CHECKSUM DEBUG] Processing file: test/SubScope.nim
+[CHECKSUM DEBUG]   Size: 175 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 5AB5CFCB8E5F8BB6DDABDC7F54E2F10872E8E370
+[CHECKSUM DEBUG] Processing file: test/Suppress.nim
+[CHECKSUM DEBUG]   Size: 676 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 341E29DF53EEFB908260F6B4F7823B74D46FA75F
+[CHECKSUM DEBUG] Processing file: test/TwoNondefaultedSeq.nim
+[CHECKSUM DEBUG]   Size: 313 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B564F51A50B1B5FF831F814BEFD8456B7A83E79F
+[CHECKSUM DEBUG] Processing file: test/TwoNondefaultedSeqSwap.nim
+[CHECKSUM DEBUG]   Size: 393 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 0F26A920E895BD3638950893EADA4BC414567810
+[CHECKSUM DEBUG] Processing file: test/UserAliases.cf
+[CHECKSUM DEBUG]   Size: 41 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B820D1356BAD26FCCDCD0842B33C1EC98C01EC8F
+[CHECKSUM DEBUG] Processing file: test/UserAliases.nim
+[CHECKSUM DEBUG]   Size: 859 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 4F7BE6C90F4954507705CFAD17FB3BBED38D4C9F
+[CHECKSUM DEBUG] Processing file: test/UserDispIdCollide.nim
+[CHECKSUM DEBUG]   Size: 384 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 2859E4966C053E1EA051BF48A50E11F86F7D5A61
+[CHECKSUM DEBUG] Processing file: test/UserError.nim
+[CHECKSUM DEBUG]   Size: 614 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 96D4A363DE8330D7130739756C5CA96EA97C4565
+[CHECKSUM DEBUG] Processing file: test/Vars.nim
+[CHECKSUM DEBUG]   Size: 661 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 01B7632661E9C18151F534DA6BFF7EF7EFE49705
+[CHECKSUM DEBUG] Processing file: test/Version.cf
+[CHECKSUM DEBUG]   Size: 520 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 66693CCBFE7FD7EDCC2EF2CF7D68B56585B14D18
+[CHECKSUM DEBUG] Processing file: test/Version.nim
+[CHECKSUM DEBUG]   Size: 1163 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 791CC771BA5BC38F67B9DBAFADF6BDB2C1CF97FE
+[CHECKSUM DEBUG] Processing file: test/nim.cfg
+[CHECKSUM DEBUG]   Size: 156 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 8B274741B99FB2B65678A9B4BDDAE569C1EFF161
+[CHECKSUM DEBUG] Processing file: test/ref
+[CHECKSUM DEBUG]   Size: 44218 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F26F16F91386D30F27EDC3DB0FFCDFD055588413
+[CHECKSUM DEBUG] Processing file: test/toimport.nim
+[CHECKSUM DEBUG]   Size: 515 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F74B3A645014116E109A2E3BCCE6BE5468956D7A
+[CHECKSUM DEBUG] Processing file: util/complgen.nim
+[CHECKSUM DEBUG]   Size: 3965 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: BF88926DFDC2B65E3D86985A088EE8943940B06C
+[CHECKSUM DEBUG] Processing file: util/exsz
+[CHECKSUM DEBUG]   Size: 610 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 43C9DF5094EB4B2EF35EF8E4302CFDFE57DBB2CE
+[CHECKSUM DEBUG] Processing file: util/help2manFilter.patch
+[CHECKSUM DEBUG]   Size: 1318 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: A385E9A1BED69FE065607404172055B0AA1BA277
+[CHECKSUM DEBUG] Processing file: util/sgr2troff
+[CHECKSUM DEBUG]   Size: 1079 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: E987967FB6BAD0EF6594F0894EF5F1153DA0CCA7
+[CHECKSUM DEBUG] Processing file: util/size-prof/base/f.nim
+[CHECKSUM DEBUG]   Size: 8 bytes, Line endings: binary/none
+[CHECKSUM DEBUG]   Individual file hash: EAC639BCAB6A254411E395F653DE66C66C249C65
+[CHECKSUM DEBUG] Processing file: util/size-prof/base/f.nims
+[CHECKSUM DEBUG]   Size: 27 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 247AACDBC6F783EA0EE62997113A84A1E77D4757
+[CHECKSUM DEBUG] Processing file: util/size-prof/build.sh
+[CHECKSUM DEBUG]   Size: 1702 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: B93DBC871DD01F2769AA0712847768BF78E50863
+[CHECKSUM DEBUG] Processing file: util/size-prof/empty.nim
+[CHECKSUM DEBUG]   Size: 0 bytes, Line endings: binary/none
+[CHECKSUM DEBUG]   Individual file hash: B8CF30038202ED2BCA5D5E7A99B07D1C9B6D0717
+[CHECKSUM DEBUG] Processing file: util/size-prof/f.nim
+[CHECKSUM DEBUG]   Size: 47 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: F300A2AC2860CC72EE520EB25ED946E8ADDAB5D3
+[CHECKSUM DEBUG] Processing file: util/size-prof/f.nims
+[CHECKSUM DEBUG]   Size: 67 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: AD2B0FA7281574FBD225CF8B2882936647F9EBF5
+[CHECKSUM DEBUG] Processing file: util/size-prof/ostrut.nim
+[CHECKSUM DEBUG]   Size: 48 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: C8DE7E64B423540C4A31557C11D7CF23D6559C8A
+[CHECKSUM DEBUG] Processing file: util/size-prof/popt3.nim
+[CHECKSUM DEBUG]   Size: 76 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: A03C6D0C2563D527EDEB868D272EAF8B7F02988D
+[CHECKSUM DEBUG] Processing file: util/size-prof/shelp.nim
+[CHECKSUM DEBUG]   Size: 23 bytes, Line endings: LF
+[CHECKSUM DEBUG]   Individual file hash: 462E7CC4E46D473C712BB0E8F8954DBBFDFDFBA3
+[CHECKSUM DEBUG] Final directory checksum: d8ac5294dee6679ce8837b9a9e22ff1194907701
+[CHECKSUM DEBUG] =========================================
+[CHECKSUM DEBUG] =========================================
+[CHECKSUM DEBUG] Calculating checksum for directory: C:\Users\scott\AppData\Local\Temp\nimble_21724\githubcom_cblakecligengit_1.9.1_79f1566ee77f696b2ee85ef56f9c14c68c93d089
+[CHECKSUM DEBUG] Found 165 files
+[CHECKSUM DEBUG] First 10 files:
+[CHECKSUM DEBUG]   .gitattributes
+[CHECKSUM DEBUG]   .github/workflows/gh-pages.yml
+[CHECKSUM DEBUG]   .github/workflows/test.yml
+[CHECKSUM DEBUG]   .gitignore
+[CHECKSUM DEBUG]   GNUmakefile
+[CHECKSUM DEBUG]   LICENSE
