@@ -301,14 +301,21 @@ goto :main
 
     :: Install debug version of nimble with checksum logging
     call :info "Installing debug version of nimble..."
-    nimble install -y https://github.com/dsrw/nimble@#f81d5f2949c746ce33cb2ff408f30bf608e421aa
+
+    :: Remove any existing nimble installation to force reinstall
+    if exist "%PROJECT_ROOT%nimbledeps\pkgs2\nimble-*" (
+        call :info "Removing existing nimble installations..."
+        rmdir /s /q "%PROJECT_ROOT%nimbledeps\pkgs2\nimble-*"
+    )
+
+    nimble install -y https://github.com/dsrw/nimble@#debug-checksums
     if errorlevel 1 (
         call :error "Failed to install debug nimble"
         exit /b 1
     )
 
-    :: Use the debug nimble from nimbledeps
-    set "DEBUG_NIMBLE=%PROJECT_ROOT%nimbledeps\bin\nimble"
+    :: Use the debug nimble from nimbledeps (use .cmd on Windows)
+    set "DEBUG_NIMBLE=%PROJECT_ROOT%nimbledeps\bin\nimble.cmd"
 
     :: Setup nimble dependencies with debug logging
     call :info "Setting up nimble dependencies (with debug logging)..."
