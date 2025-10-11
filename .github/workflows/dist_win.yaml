@@ -107,6 +107,7 @@ jobs:
           path: |
             nimbledeps/
             debug_packages/
+            nimble_setup_debug.log
             ${{ steps.cache-paths.outputs.userprofile_cache }}
             ${{ steps.cache-paths.outputs.localappdata_cache }}
 
