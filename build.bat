@@ -314,8 +314,9 @@ goto :main
         exit /b 1
     )
 
-    :: Use the debug nimble from nimbledeps (use .cmd on Windows)
-    set "DEBUG_NIMBLE=%PROJECT_ROOT%nimbledeps\bin\nimble.cmd"
+    :: Use the debug nimble from nimbledeps
+    :: Find the actual nimble.exe path (the .cmd wrapper doesn't propagate exit codes)
+    for /d %%i in ("%PROJECT_ROOT%nimbledeps\pkgs2\nimble-*") do set "DEBUG_NIMBLE=%%i\nimble.exe"
 
     :: Setup nimble dependencies with debug logging
     call :info "Setting up nimble dependencies (with debug logging)..."
