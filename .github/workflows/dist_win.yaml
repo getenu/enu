@@ -15,7 +15,7 @@ jobs:
           submodules: recursive
 
       - name: Install distribution tools
-        run: choco install innosetup reshack
+        run: choco install -y innosetup reshack
 
       - name: Prep dist config
         run: cp dist_config.example.json dist_config.json
@@ -87,6 +87,8 @@ jobs:
           echo "${{ github.workspace }}\build_env\mingw64\bin" >> $env:GITHUB_PATH
           echo "${{ github.workspace }}\build_env\python" >> $env:GITHUB_PATH
           echo "${{ github.workspace }}\build_env\python\Scripts" >> $env:GITHUB_PATH
+          echo "C:\Program Files (x86)\Inno Setup 6" >> $env:GITHUB_PATH
+          echo "C:\Program Files (x86)\Resource Hacker" >> $env:GITHUB_PATH
 
       - name: Build distribution
         id: build
