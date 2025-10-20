@@ -156,20 +156,13 @@ main() {
     # Verify environment
     verify_environment
 
-    # Install debug version of nimble with checksum logging
-    info "Installing debug version of nimble..."
-    nimble install -y https://github.com/dsrw/nimble@#debug-checksums
-
-    # Use the debug nimble from nimbledeps
-    DEBUG_NIMBLE="$PROJECT_ROOT/nimbledeps/bin/nimble"
-
     # Setup nimble dependencies
-    info "Setting up nimble dependencies (with debug logging)..."
-    "$DEBUG_NIMBLE" setup -y
+    info "Setting up nimble dependencies..."
+    nimble setup -y
 
     # Run nimble task
     info "Running nimble $NIMBLE_TASK..."
-    "$DEBUG_NIMBLE" $NIMBLE_TASK -y
+    nimble $NIMBLE_TASK -y
 
     success "Build completed successfully!"
 }

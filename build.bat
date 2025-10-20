@@ -299,40 +299,17 @@ goto :main
         call :success "Nim compiler already built (!NIM_SHA:~0,7!)"
     )
 
-    :: Install debug version of nimble with checksum logging
-    call :info "Installing debug version of nimble..."
-
-    :: Remove any existing nimble installation to force reinstall
-    if exist "%PROJECT_ROOT%nimbledeps\pkgs2\nimble-*" (
-        call :info "Removing existing nimble installations..."
-        rmdir /s /q "%PROJECT_ROOT%nimbledeps\pkgs2\nimble-*"
-    )
-
-    nimble install -y https://github.com/dsrw/nimble@#debug-checksums
+    :: Setup nimble dependencies
+    call :info "Setting up nimble dependencies..."
+    nimble setup -y
     if errorlevel 1 (
-        call :error "Failed to install debug nimble"
+        call :error "Nimble setup failed"
         exit /b 1
     )
-
-    :: Use the debug nimble from nimbledeps
-    :: Find the actual nimble.exe path (the .cmd wrapper doesn't propagate exit codes)
-    for /d %%i in ("%PROJECT_ROOT%nimbledeps\pkgs2\nimble-*") do set "DEBUG_NIMBLE=%%i\nimble.exe"
-
-    :: Setup nimble dependencies with debug logging
-    call :info "Setting up nimble dependencies (with debug logging)..."
-    "%DEBUG_NIMBLE%" setup -y --verbose > "%PROJECT_ROOT%nimble_setup_debug.log" 2>&1
-    if errorlevel 1 (
-        call :error "Nimble setup failed - see nimble_setup_debug.log"
-        type "%PROJECT_ROOT%nimble_setup_debug.log"
-        exit /b 1
-    )
-
-    :: Also display the log
-    type "%PROJECT_ROOT%nimble_setup_debug.log"
 
     :: Run nimble task
     call :info "Running nimble !NIMBLE_TASK!..."
-    "%DEBUG_NIMBLE%" !NIMBLE_TASK! -y
+    nimble !NIMBLE_TASK! -y
     if errorlevel 1 (
         call :error "Nimble task failed"
         exit /b 1
