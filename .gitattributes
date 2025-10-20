@@ -1,0 +1,18 @@
+# Ensure shell scripts always use LF line endings
+*.sh text eol=lf
+.envrc text eol=lf
+
+# Nim source files should use LF
+*.nim text eol=lf
+*.nims text eol=lf
+*.nimble text eol=lf
+
+# Windows batch files must use CRLF
+*.bat text eol=crlf
+
+# YAML files use LF
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Markdown and documentation use LF
+*.md text eol=lf
