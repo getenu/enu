@@ -597,6 +597,8 @@ proc do_dist_prereqs*() =
     build_godot()
 
   download_fonts()
+  copy_nim_stdlib()
+  generate_bindings()
 
   # Build release templates (never use dev_build for clean, optimized binaries)
   let release_opts = "target=template_release"
