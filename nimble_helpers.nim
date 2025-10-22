@@ -444,7 +444,6 @@ proc dist_package_windows*() =
   exec "strip " & release_bin
   cp_file release_bin, root & "/enu.exe"
   exec &"ResourceHacker -open {root}/enu.exe -save {root}/enu.exe -action addoverwrite -res media/enu_icon.ico -mask ICONGROUP,GODOT_ICON"
-  exec &"nim r tools/write_export_presets.nim {s.git_version}"
 
   let pck_path = &"{enu_root()}/{root}/enu.pck"
   when host_os == "windows":
@@ -470,7 +469,6 @@ proc dist_package_macos*() =
   exec "cp -r installer/Enu.app dist/Enu.app"
   exec "mkdir -p dist/Enu.app/Contents/MacOS"
   exec "mkdir -p dist/Enu.app/Contents/Frameworks"
-  exec &"nim r tools/write_export_presets.nim {s.git_version}"
   exec &"nim r tools/write_info_plist.nim {s.git_version}"
 
   var release_bin =
@@ -567,7 +565,6 @@ proc dist_package_linux*() =
   cp_file "app/extension/lib/enu.release.so", root & "/lib/enu.so"
   copy_vmlib "vmlib", root & "/lib/vmlib"
   exec "chmod +x " & root & "/bin/enu"
-  exec &"nim r tools/write_export_presets.nim {s.git_version}"
   let pck_path = enu_root() & "/" & root & "/enu.pck"
   exec &"{godot_bin(\"linuxbsd\")} --headless --verbose --path app --export-pack \"x11\" " &
     pck_path
@@ -587,6 +584,15 @@ proc dist_package_linux*() =
 
 proc do_dist_prereqs*() =
   let s = settings()
+
+  # Generate export presets early to catch any issues before long Godot builds
+  p "Generating export presets..."
+  p "[DEBUG] Starting compilation of write_export_presets..."
+  exec &"nim c --verbosity:2 tools/write_export_presets.nim"
+  p "[DEBUG] Compilation complete, starting execution..."
+  exec &"tools/write_export_presets{s.exe_ext} {s.git_version}"
+  p "[DEBUG] Export presets written to app/export_presets.cfg"
+
   verify_paths()
   p "Building distribution prereqs..."
 
