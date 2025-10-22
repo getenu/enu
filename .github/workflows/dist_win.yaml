@@ -57,29 +57,6 @@ jobs:
           git config --global core.eol lf
           git config --global core.symlinks false
 
-      - name: Dump git configuration
-        run: |
-          Write-Host "Git executable path:"
-          (Get-Command git).Source
-          Write-Host "`nGit version:"
-          git --version
-          Write-Host "`n=== ALL GIT CONFIGURATION (with origins) ==="
-          git config --list --show-origin
-          Write-Host "`n=== SYSTEM CONFIG ONLY ==="
-          git config --system --list
-          Write-Host "`n=== GLOBAL CONFIG ONLY ==="
-          git config --global --list
-          Write-Host "`n=== LOCAL CONFIG ONLY ==="
-          git config --local --list
-
-      - name: Manually clone cligen for debugging
-        run: |
-          New-Item -ItemType Directory -Force -Path debug_packages
-          git clone https://github.com/c-blake/cligen.git debug_packages/cligen
-          cd debug_packages/cligen
-          git rev-parse HEAD
-          git log -1 --format="%H %s"
-
       - name: Setup PATH for all build dependencies
         run: |
           echo "${{ github.workspace }}\vendor\nim\bin" >> $env:GITHUB_PATH
@@ -91,35 +68,9 @@ jobs:
           echo "C:\Program Files (x86)\Resource Hacker" >> $env:GITHUB_PATH
 
       - name: Build distribution
-        id: build
         run: ./build.bat dist
-        continue-on-error: true
-
-      - name: Get nimble cache location
-        if: steps.build.outcome == 'failure'
-        id: cache-paths
-        run: |
-          echo "userprofile_cache=$env:USERPROFILE\.nimble\pkgcache" >> $env:GITHUB_OUTPUT
-          echo "localappdata_cache=$env:LOCALAPPDATA\nimble\pkgcache" >> $env:GITHUB_OUTPUT
-
-      - name: Upload debug info on failure
-        if: steps.build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: nimble-debug
-          path: |
-            nimbledeps/
-            debug_packages/
-            nimble_setup_debug.log
-            ${{ steps.cache-paths.outputs.userprofile_cache }}
-            ${{ steps.cache-paths.outputs.localappdata_cache }}
-
-      - name: Fail if build failed
-        if: steps.build.outcome == 'failure'
-        run: exit 1
 
       - uses: actions/upload-artifact@v4
-        if: steps.build.outcome == 'success'
         with:
           name: Enu Windows Distribution
           path: |

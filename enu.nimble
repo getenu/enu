@@ -50,7 +50,7 @@ task ios_prereqs, "Build godot for ios":
 task ios, "Build ios":
   let s = settings()
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
-  exec &"{godot_bin()} --path app --export-pack \"ios\" " & "ios"
+  exec &"{godot_bin()} --headless --path app --export-pack \"ios\" " & "ios"
 
 task build_godot, "Build godot":
   build_godot()
@@ -74,9 +74,6 @@ task clean, "Remove files produced by build":
   let s = settings()
   rm_dir s.generated_dir
   rm_dir ".nimcache"
-
-task edit_then_quit, "Edit project in Godot":
-  exec godot_bin() & " --verbose --quit-after 500 app/project.godot &"
 
 task edit, "Edit project in Godot":
   exec godot_bin() & " app/project.godot &"
