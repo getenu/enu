@@ -458,7 +458,9 @@ proc dist_package_windows*() =
   exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.release.dll app/extension/enu.nim"
   cp_file "app/extension/lib/enu.release.dll", root & "/enu.dll"
   find_and_copy_dlls mingw_path(), root, s.gcc_dlls
-  find_and_copy_dlls get_current_compiler_exe().parent_dir, root, s.nim_dlls
+  # Copy Nim DLLs from vendor/nim/bin (where build.bat downloads them)
+  # instead of from nimble-installed Nim which doesn't include DLLs
+  find_and_copy_dlls enu_root() / "vendor/nim/bin", root, s.nim_dlls
   copy_vmlib "vmlib", root & "/vmlib"
   exec &"iscc /DVersion={s.git_version} installer/enu.iss"
   with_dir "dist":

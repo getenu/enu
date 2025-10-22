@@ -79,6 +79,8 @@ jobs:
           path: |
             vendor/godot/bin
             fonts
+            .build_state/godot_*
+            .build_state/fonts_downloaded
           key: ${{ runner.os }}-godot-${{ env.CACHE_VERSION }}-${{ steps.submodule-shas.outputs.godot_sha }}-${{ steps.submodule-shas.outputs.voxel_sha }}
 
       - name: Setup direnv
