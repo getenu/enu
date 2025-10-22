@@ -4,14 +4,14 @@
 [preset.0]
 
 name="mac"
-platform="Mac OSX"
+platform="macOS"
 runnable=true
 custom_features=""
 export_filter="all_resources"
 include_filter=""
 exclude_filter=""
 export_path=""
-patch_list=PoolStringArray(  )
+patch_list=PackedStringArray()
 script_export_mode=1
 script_encryption_key=""
 
@@ -44,7 +44,7 @@ export_filter="all_resources"
 include_filter=""
 exclude_filter=""
 export_path=""
-patch_list=PoolStringArray(  )
+patch_list=PackedStringArray()
 script_export_mode=1
 script_encryption_key=""
 
@@ -67,7 +67,7 @@ codesign/timestamp=true
 codesign/timestamp_server_url=""
 codesign/digest_algorithm=1
 codesign/description=""
-codesign/custom_options=PoolStringArray(  )
+codesign/custom_options=PackedStringArray()
 application/icon="res://media/enu_icon.png"
 application/file_version="$version"
 application/product_version="$version"
@@ -87,7 +87,7 @@ export_filter="all_resources"
 include_filter=""
 exclude_filter=""
 export_path=""
-patch_list=PoolStringArray(  )
+patch_list=PackedStringArray()
 script_export_mode=1
 script_encryption_key=""
 

@@ -569,7 +569,7 @@ proc dist_package_linux*() =
   exec "chmod +x " & root & "/bin/enu"
   exec &"nim r tools/write_export_presets.nim {s.git_version}"
   let pck_path = enu_root() & "/" & root & "/enu.pck"
-  exec &"{godot_bin(\"linuxbsd\")} --headless --verbose --path app --export-pack \"linuxbsd\" " &
+  exec &"{godot_bin(\"linuxbsd\")} --headless --verbose --path app --export-pack \"x11\" " &
     pck_path
   with_dir "dist":
     exec &"tar -czvf enu-{s.git_version}-linux-x64.tar.gz enu-{s.git_version}"
