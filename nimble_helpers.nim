@@ -464,7 +464,7 @@ proc dist_package_windows*() =
   copy_vmlib "vmlib", root & "/vmlib"
   exec &"iscc /DVersion={s.git_version} installer/enu.iss"
   with_dir "dist":
-    exec &"zip -r enu-{s.git_version}-windows-x64.zip enu-{s.git_version}"
+    exec &"powershell -Command \"Compress-Archive -Path enu-{s.git_version} -DestinationPath enu-{s.git_version}-windows-x64.zip -Force\""
 
 proc dist_package_macos*() =
   let s = settings()
