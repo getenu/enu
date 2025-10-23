@@ -427,7 +427,7 @@ proc copy_vmlib*(src, dest: string) =
 proc nim_build_mac*(target, cpu: string) =
   rm_dir ".nim_cache"
   # Build to app/extension/lib for gdextension compatibility
-  let output_path = &"app/extension/lib/enu.release.{target}.dylib"
+  let output_path = &"app/extension/lib/enu.{target}.dylib"
   let cmd =
     &"nim c --cpu:{cpu} -l:'-target {target}-apple-macos11' " &
     &"-t:'-target {target}-apple-macos11' -d:release -d:dist " &
@@ -455,8 +455,8 @@ proc dist_package_windows*() =
 
   # Build release extension for Windows
   let nim_compiler = get_current_compiler_exe()
-  exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.release.dll app/extension/enu.nim"
-  cp_file "app/extension/lib/enu.release.dll", root & "/enu.dll"
+  exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.dll app/extension/enu.nim"
+  cp_file "app/extension/lib/enu.dll", root & "/enu.dll"
   find_and_copy_dlls mingw_path(), root, s.gcc_dlls
   # Copy Nim DLLs from vendor/nim/bin (where build.bat downloads them)
   # instead of from nimble-installed Nim which doesn't include DLLs
@@ -497,7 +497,7 @@ proc dist_package_macos*() =
     exec &"{godot_bin()} --headless --path app --export-pack \"mac\" " & pck_path
 
   # Create universal binary for extension lib and copy to dist
-  exec "lipo -create app/extension/lib/enu.release.x86_64.dylib app/extension/lib/enu.release.arm64.dylib -output app/extension/lib/enu.release.dylib"
+  exec "lipo -create app/extension/lib/enu.x86_64.dylib app/extension/lib/enu.arm64.dylib -output app/extension/lib/enu.dylib"
   exec "lipo -create dist/Enu.app/Contents/Frameworks/enu.dylib.x86_64 dist/Enu.app/Contents/Frameworks/enu.dylib.arm64 -output dist/Enu.app/Contents/Frameworks/enu.dylib"
   exec "rm dist/Enu.app/Contents/Frameworks/enu.dylib.*"
 
@@ -563,10 +563,10 @@ proc dist_package_linux*() =
   mk_dir root & "/lib"
   # Build release extension for Linux
   let nim_compiler = get_current_compiler_exe()
-  exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.release.so app/extension/enu.nim"
+  exec &"{nim_compiler} c -d:release -d:dist --app:lib -o:app/extension/lib/enu.so app/extension/enu.nim"
   exec "strip " & release_bin
   cp_file release_bin, root & "/bin/enu"
-  cp_file "app/extension/lib/enu.release.so", root & "/lib/enu.so"
+  cp_file "app/extension/lib/enu.so", root & "/lib/enu.so"
   copy_vmlib "vmlib", root & "/lib/vmlib"
   exec "chmod +x " & root & "/bin/enu"
   exec &"nim r tools/write_export_presets.nim {s.git_version}"

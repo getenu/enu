@@ -36,7 +36,9 @@ requires "https://github.com/getenu/Nim#" & nim_sha,
 
 task build_extension, "Build Enu extension library":
   let s = settings()
-  let output = "app/extension/lib/enu" & s.lib_ext
+  # Debug builds get .debug suffix, release builds get no suffix
+  let suffix = if defined(release): "" else: ".debug"
+  let output = "app/extension/lib/enu" & suffix & s.lib_ext
   let flags = if defined(release): "-d:release" else: ""
   let dist_flag = if defined(dist): "-d:dist" else: ""
   exec &"nim c {flags} {dist_flag} --app:lib -o:{output} app/extension/enu.nim"
