@@ -195,7 +195,26 @@ proc gen_binding_and_copy_stdlib(target = target) =
   exec &"{gen()} generate_api -d={generated_dir} -j={api_json}"
   exec &"{gen()} copy_stdlib -d=vmlib/stdlib"
 
+task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
+  when host_os == "windows":
+    p "Extracting Nim DLLs..."
+    let
+      nim_bin = get_current_compiler_exe().parent_dir
+      dlls_url = "https://nim-lang.org/download/dlls.zip"
+      dlls_zip = "dlls.zip"
+
+    with_dir nim_bin:
+      exec &"curl -Lo {dlls_zip} {dlls_url}"
+      exec &"unzip -o {dlls_zip}"
+      rm_file dlls_zip
+
+    echo &"DLLs extracted to: {nim_bin}"
+  else:
+    echo "extract_dlls is only needed on Windows"
+
 task prereqs, "Build godot, download fonts, generate binding and stdlib":
+  when host_os == "windows":
+    extract_dlls_task()
   build_godot()
   download_fonts()
   copy_fonts()
@@ -229,6 +248,8 @@ proc code_sign(id, path: string) =
 
 task dist_prereqs, "Build godot debug and release versions, and download fonts":
   p "Buiding distribution prereqs..."
+  when host_os == "windows":
+    extract_dlls_task()
   if target == "x11":
     build_godot(target = "server")
   else:

@@ -12,14 +12,19 @@ jobs:
       - name: Install Nim
         run: |
           cd ${HOME}
-          C:\msys64\usr\bin\wget.exe https://nim-lang.org/download/nim-2.2.0_x64.zip
-          7z.exe x nim-2.2.0_x64.zip -y
+          C:\msys64\usr\bin\wget.exe https://nim-lang.org/download/nim-2.2.4_x64.zip
+          7z.exe x nim-2.2.4_x64.zip -y
       - name: Install build deps
         run: choco install yasm innosetup rcedit zip reshack
       - name: Install scons
         run: python -m pip install scons
       - name: Update path
-        run: echo "${HOME}/.nimble/bin;${HOME}/nim-2.2.0/bin;C:\msys64\mingw64\bin;C:\Program Files (x86)\Resource Hacker" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        run: echo "${HOME}/.nimble/bin;${HOME}/nim-2.2.4/bin;C:\msys64\mingw64\bin;C:\Program Files (x86)\Resource Hacker" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Configure git for nimble
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.symlinks false
       - name: Install nimble deps
         run: nimble setup -y
       - name: Save SHAs of submodules
@@ -56,9 +61,31 @@ jobs:
 
       - name: Dist
         run: nimble dist_package
-      - uses: actions/upload-artifact@v4
+
+      # Upload unsigned artifacts for SignPath
+      - name: Upload unsigned artifacts
+        uses: actions/upload-artifact@v4
+        id: upload-unsigned
         with:
-          name: Enu Windows Distribution
-          path: |
-            dist/*.exe
-            dist/*.zip
+          name: unsigned-dist
+          path: dist/
+
+      # Submit to SignPath for code signing
+      - name: Submit to SignPath
+        uses: SignPath/github-action-submit-signing-request@v1
+        id: signpath
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist-signed
+
+      # Upload signed artifacts as final build output
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Enu Windows Distribution (Signed)
+          path: dist-signed/
