@@ -268,6 +268,13 @@ task dist_prereqs, "Build godot debug and release versions, and download fonts":
 proc copy_vmlib(src, dest: string) =
   cp_dir src, dest
 
+task build_installer, "Build Windows installer (requires dist files to exist)":
+  when host_os == "windows":
+    p "Building installer..."
+    exec &"iscc /DVersion={git_version} installer/enu.iss"
+  else:
+    echo "build_installer is only available on Windows"
+
 task dist_package, "Build distribution binaries":
   p "Packaging distribution..."
   copy_fonts()
@@ -292,7 +299,6 @@ task dist_package, "Build distribution binaries":
     find_and_copy_dlls mingw_path(), root, gcc_dlls
     find_and_copy_dlls get_current_compiler_exe().parent_dir, root, nim_dlls
     copy_vmlib "vmlib", root & "/vmlib"
-    exec &"iscc /DVersion={git_version} installer/enu.iss"
     with_dir "dist":
       exec &"zip -r enu-{git_version}-windows-x64.zip enu-{git_version}"
   elif host_os == "macosx":
