@@ -9,6 +9,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: recursive
       - name: Install Nim
         run: |
           cd ${HOME}
@@ -62,30 +63,100 @@ jobs:
       - name: Dist
         run: nimble dist_package
 
-      # Upload unsigned artifacts for SignPath
-      - name: Upload unsigned artifacts
-        uses: actions/upload-artifact@v4
-        id: upload-unsigned
-        with:
-          name: unsigned-dist
-          path: dist/
+      # Checksum unsigned files
+      - name: Checksum unsigned files (before signing)
+        run: |
+          echo "=== BEFORE SIGNING ==="
+          $version = (git describe --tags HEAD).Trim()
+          $distDir = "dist/enu-$version"
+          echo "Unsigned enu.exe:"
+          (Get-FileHash "$distDir/enu.exe" -Algorithm SHA256).Hash
+          echo "Unsigned enu.dll:"
+          (Get-FileHash "$distDir/enu.dll" -Algorithm SHA256).Hash
 
-      # Submit to SignPath for code signing
-      - name: Submit to SignPath
+      # Upload unsigned dist for zip signing
+      - name: Upload unsigned dist for zip signing
+        uses: actions/upload-artifact@v4
+        id: upload-unsigned-zip
+        with:
+          name: unsigned-dist-zip
+          path: dist/*.zip
+
+      # Sign the zip file (deep signs exe/dll inside)
+      - name: Submit zip to SignPath for signing
         uses: SignPath/github-action-submit-signing-request@v1
-        id: signpath
+        id: signpath-zip
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
           project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
-          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          artifact-configuration-slug: enu-zip
+          github-artifact-id: ${{ steps.upload-unsigned-zip.outputs.artifact-id }}
           wait-for-completion: true
-          output-artifact-directory: dist-signed
+          output-artifact-directory: dist-signed-zip
 
-      # Upload signed artifacts as final build output
-      - name: Upload signed artifacts
+      # Extract signed exe/dll from the signed zip
+      - name: Extract signed exe/dll and verify
+        run: |
+          echo "=== EXTRACTING SIGNED FILES FROM ZIP ==="
+          $version = (git describe --tags HEAD).Trim()
+          $signedZip = Get-ChildItem dist-signed-zip/*.zip | Select-Object -First 1
+          echo "Extracting from: $signedZip"
+
+          # Extract to temp location
+          Expand-Archive -Path $signedZip -DestinationPath temp-signed -Force
+
+          # Show checksums of signed files
+          echo "=== AFTER SIGNING ==="
+          echo "Signed enu.exe:"
+          (Get-FileHash "temp-signed/enu-$version/enu.exe" -Algorithm SHA256).Hash
+          echo "Signed enu.dll:"
+          (Get-FileHash "temp-signed/enu-$version/enu.dll" -Algorithm SHA256).Hash
+
+          # Replace unsigned files with signed ones
+          echo "=== REPLACING UNSIGNED FILES WITH SIGNED VERSIONS ==="
+          Copy-Item "temp-signed/enu-$version/enu.exe" "dist/enu-$version/enu.exe" -Force
+          Copy-Item "temp-signed/enu-$version/enu.dll" "dist/enu-$version/enu.dll" -Force
+
+          # Verify replacement
+          echo "=== VERIFICATION: Files in dist directory ==="
+          echo "Replaced enu.exe:"
+          (Get-FileHash "dist/enu-$version/enu.exe" -Algorithm SHA256).Hash
+          echo "Replaced enu.dll:"
+          (Get-FileHash "dist/enu-$version/enu.dll" -Algorithm SHA256).Hash
+
+      # Rebuild installer with signed files
+      - name: Rebuild installer with signed files
+        run: nimble build_installer
+
+      # Upload unsigned installer for signing
+      - name: Upload unsigned installer for signing
+        uses: actions/upload-artifact@v4
+        id: upload-unsigned-installer
+        with:
+          name: unsigned-installer
+          path: dist/*-installer.exe
+
+      # Sign the installer
+      - name: Submit installer to SignPath for signing
+        uses: SignPath/github-action-submit-signing-request@v1
+        id: signpath-installer
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: enu-installer
+          github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist-signed-installer
+
+      # Upload final signed artifacts
+      - name: Upload final signed artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Enu Windows Distribution (Signed)
-          path: dist-signed/
+          path: |
+            dist-signed-zip/*.zip
+            dist-signed-installer/*.exe
