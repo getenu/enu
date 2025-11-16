@@ -285,16 +285,142 @@ mouse_filter = 2
 columns = 2
 
 [node name="Label" type="Label" parent="GridContainer"]
-margin_right = 1054.0
+margin_right = 1118.0
 margin_bottom = 516.0
 size_flags_horizontal = 3
 size_flags_vertical = 1
 
 [node name="Settings" parent="GridContainer" instance=ExtResource( 12 )]
-margin_left = 1058.0
+margin_left = 1122.0
 margin_top = 0.0
 margin_right = 1920.0
 margin_bottom = 516.0
+
+[node name="Window" parent="GridContainer/Settings" index="0"]
+margin_right = 798.0
+
+[node name="MainContainer" parent="GridContainer/Settings/Window" index="0"]
+margin_right = 778.0
+
+[node name="RowContainer" parent="GridContainer/Settings/Window/MainContainer" index="0"]
+margin_right = 748.0
+
+[node name="VFlowContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="0"]
+margin_right = 748.0
+
+[node name="Close" parent="GridContainer/Settings/Window/MainContainer/RowContainer/VFlowContainer" index="0"]
+margin_left = 708.0
+margin_right = 748.0
+
+[node name="SettingsContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="2"]
+margin_right = 748.0
+
+[node name="LevelLabel" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="0"]
+margin_right = 145.0
+
+[node name="Levels" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="1"]
+margin_left = 165.0
+margin_right = 364.0
+
+[node name="Label8" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="2"]
+margin_left = 384.0
+margin_right = 529.0
+
+[node name="PlayerColors" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="3"]
+margin_left = 549.0
+margin_right = 748.0
+
+[node name="Label4" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="4"]
+margin_right = 145.0
+
+[node name="Environments" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="5"]
+margin_left = 165.0
+margin_right = 364.0
+
+[node name="Label3" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="6"]
+margin_left = 384.0
+margin_right = 529.0
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="7"]
+margin_left = 549.0
+margin_right = 748.0
+
+[node name="MegapixelsUp" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer" index="1"]
+margin_right = 139.0
+theme_type_variation = "IconButton"
+
+[node name="MegapixelsDown" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer" index="2"]
+margin_left = 159.0
+margin_right = 199.0
+theme_type_variation = "IconButton"
+
+[node name="Label9" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="8"]
+margin_right = 145.0
+
+[node name="HBoxContainer3" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="9"]
+margin_left = 165.0
+margin_right = 364.0
+
+[node name="FontSizeUp" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3" index="1"]
+margin_right = 139.0
+theme_type_variation = "IconButton"
+
+[node name="FontSizeDown" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer3" index="2"]
+margin_left = 159.0
+margin_right = 199.0
+theme_type_variation = "IconButton"
+
+[node name="Label2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="10"]
+margin_left = 384.0
+margin_right = 529.0
+
+[node name="HBoxContainer2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="11"]
+margin_left = 549.0
+margin_right = 748.0
+
+[node name="ToolbarSizeUp" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2" index="1"]
+margin_right = 139.0
+theme_type_variation = "IconButton"
+
+[node name="ToolbarSizeDown" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer/HBoxContainer2" index="2"]
+margin_left = 159.0
+margin_right = 199.0
+theme_type_variation = "IconButton"
+
+[node name="FullScreenLabel" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="12"]
+margin_right = 145.0
+
+[node name="FullScreen" parent="GridContainer/Settings/Window/MainContainer/RowContainer/SettingsContainer" index="13"]
+margin_left = 165.0
+margin_right = 208.0
+theme_type_variation = "IconButton"
+
+[node name="RemoteContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer" index="3"]
+margin_right = 748.0
+
+[node name="VBoxContainer2" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer" index="0"]
+margin_right = 748.0
+
+[node name="Label11" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2" index="0"]
+margin_right = 748.0
+
+[node name="HBoxContainer" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2" index="1"]
+margin_right = 748.0
+
+[node name="LeftSeparator" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="0"]
+margin_right = 114.0
+
+[node name="ServerAddress" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="1"]
+margin_left = 134.0
+margin_right = 363.0
+
+[node name="Connect" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="2"]
+margin_left = 383.0
+margin_right = 613.0
+
+[node name="RightSeparator" parent="GridContainer/Settings/Window/MainContainer/RowContainer/RemoteContainer/VBoxContainer2/HBoxContainer" index="3"]
+margin_left = 633.0
+margin_right = 748.0
 
 [node name="Reticle" type="Control" parent="."]
 visible = false
