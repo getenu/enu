@@ -93,7 +93,11 @@ gdobj GUI of Control:
     state.pop_flag ViewportFocused
 
   method handle_player_input*(event: InputEvent) =
+    if not ?self:
+      return
     let player = state.nodes.player as PlayerNode
+    if not ?player:
+      return
     let time = get_mono_time()
 
     if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
