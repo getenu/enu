@@ -57,22 +57,8 @@ jobs:
           rm mesa -Recurse
         if: steps.prereq-cache.outputs.cache-hit != 'true'
 
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3
-
       - name: Dist
         run: nimble dist_package
-
-      # Checksum unsigned files
-      - name: Checksum unsigned files (before signing)
-        run: |
-          echo "=== BEFORE SIGNING ==="
-          $version = (git describe --tags HEAD).Trim()
-          $distDir = "dist/enu-$version"
-          echo "Unsigned enu.exe:"
-          (Get-FileHash "$distDir/enu.exe" -Algorithm SHA256).Hash
-          echo "Unsigned enu.dll:"
-          (Get-FileHash "$distDir/enu.dll" -Algorithm SHA256).Hash
 
       # Upload unsigned dist for zip signing
       - name: Upload unsigned dist for zip signing
@@ -97,34 +83,15 @@ jobs:
           output-artifact-directory: dist-signed-zip
 
       # Extract signed exe/dll from the signed zip
-      - name: Extract signed exe/dll and verify
+      - name: Extract signed exe/dll
         run: |
-          echo "=== EXTRACTING SIGNED FILES FROM ZIP ==="
           $version = (git describe --tags HEAD).Trim()
           $signedZip = Get-ChildItem dist-signed-zip/*.zip | Select-Object -First 1
-          echo "Extracting from: $signedZip"
 
-          # Extract to temp location
+          # Extract signed files and replace unsigned versions
           Expand-Archive -Path $signedZip -DestinationPath temp-signed -Force
-
-          # Show checksums of signed files
-          echo "=== AFTER SIGNING ==="
-          echo "Signed enu.exe:"
-          (Get-FileHash "temp-signed/enu-$version/enu.exe" -Algorithm SHA256).Hash
-          echo "Signed enu.dll:"
-          (Get-FileHash "temp-signed/enu-$version/enu.dll" -Algorithm SHA256).Hash
-
-          # Replace unsigned files with signed ones
-          echo "=== REPLACING UNSIGNED FILES WITH SIGNED VERSIONS ==="
           Copy-Item "temp-signed/enu-$version/enu.exe" "dist/enu-$version/enu.exe" -Force
           Copy-Item "temp-signed/enu-$version/enu.dll" "dist/enu-$version/enu.dll" -Force
-
-          # Verify replacement
-          echo "=== VERIFICATION: Files in dist directory ==="
-          echo "Replaced enu.exe:"
-          (Get-FileHash "dist/enu-$version/enu.exe" -Algorithm SHA256).Hash
-          echo "Replaced enu.dll:"
-          (Get-FileHash "dist/enu-$version/enu.dll" -Algorithm SHA256).Hash
 
       # Rebuild installer with signed files
       - name: Rebuild installer with signed files
