@@ -189,6 +189,8 @@ gdobj PlayerNode of KinematicBody:
         self.velocity = change.item
 
   method process*(delta: float) =
+    if not ?self.model:
+      return
     self.model.velocity_value.pause self.velocity_zid:
       self.model.velocity = self.velocity
     #if EditorVisible notin state.local_flags or CommandMode in state.local_flags:
@@ -289,6 +291,8 @@ gdobj PlayerNode of KinematicBody:
         return true
 
   proc update_raycast*() =
+    if not ?self.camera or not ?self.aim_target:
+      return
     let ray_length = if state.tool == CodeMode: 200.0 else: 100.0
     if MouseCaptured notin state.local_flags:
       let
