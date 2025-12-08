@@ -11,6 +11,31 @@ var
 worker_lock.init_lock
 work_done.init_cond
 
+proc handle_catchable_error(
+    self: Worker, unit: Unit, e: ref CatchableError
+) =
+  ## Convert CatchableError to VMQuit and display in console with stack trace
+  let ctx = unit.script_ctx
+  let info = if ?ctx: ctx.current_line else: TLineInfo()
+  let loc = if ?ctx and ?ctx.file_name and info.line > 0:
+    \"{ctx.file_name}({int info.line},{int info.col})"
+  else:
+    ""
+  # Add error to unit.errors for console display (similar to error_hook)
+  unit.errors.add (e.msg, info, loc, false)
+  if ?ctx:
+    ctx.exit_code = error_code
+    ctx.running = false
+  let vm_error = (ref VMQuit)(
+    info: info,
+    kind: Unknown,
+    msg: e.msg,
+    location: loc
+  )
+  if ?ctx:
+    self.interpreter.reset_module(ctx.module_name)
+  self.script_error(unit, vm_error)
+
 proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
   let ctx = unit.script_ctx
   if ?ctx and ctx.running:
@@ -56,6 +81,8 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
     except VMQuit as e:
       self.interpreter.reset_module(unit.script_ctx.module_name)
       self.script_error(unit, e)
+    except CatchableError as e:
+      self.handle_catchable_error(unit, e)
     finally:
       self.active_unit = nil
 
@@ -329,6 +356,15 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       let timeout = frame_start + max_time
       let wait_until = frame_start + min_time
 
+      var to_process: seq[Unit]
+      state.units.value.walk_tree proc(unit: Unit) =
+        if ?unit.script_ctx:
+          if unit.script_ctx.running:
+            unit.global_flags += ScriptRunning
+          else:
+            unit.global_flags -= ScriptRunning
+        to_process.add unit
+
       Zen.thread_ctx.boop
       run_deferred()
 
@@ -345,10 +381,6 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         if Server notin state.local_flags:
           state.push_flag(NeedsRestart)
           break
-
-      var to_process: seq[Unit]
-      state.units.value.walk_tree proc(unit: Unit) =
-        to_process.add unit
       to_process.shuffle
 
       var batched: HashSet[Unit]
@@ -365,7 +397,10 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
               to_process.add(unit)
 
       for unit in batched:
-        unit.apply_changes
+        try:
+          unit.apply_changes
+        except CatchableError as e:
+          worker.handle_catchable_error(unit, e)
 
       let now = get_mono_time()
 

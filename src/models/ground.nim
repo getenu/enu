@@ -1,4 +1,5 @@
 import godotapi/spatial
+import std/[monotimes, times]
 import core, states, bots, builds
 
 var add_to {.threadvar.}: Build
@@ -7,7 +8,13 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
   let point = (self.target_point - vec3(0.5, 0, 0.5)).trunc
   if state.tool notin {Disabled, CodeMode, PlaceBot}:
     if not append:
-      add_to = state.units.find_first(point.surrounding)
+      # Check if we should stick to the last modified build (within 500ms)
+      let now = get_mono_time()
+      let time_since_last = (now - last_placement_time).in_milliseconds
+      if ?current_build and time_since_last <= 500:
+        add_to = current_build
+      else:
+        add_to = state.units.find_first(point.surrounding)
     if ?add_to:
       let local = point.local_to(add_to)
       add_to.draw(local, (Manual, state.selected_color))
@@ -31,13 +38,15 @@ proc init*(_: type Ground, node: Spatial): Ground =
 
   state.local_flags.changes:
     if PrimaryDown.added and Hover in self.local_flags:
+      dont_join = true
       self.fire(append = false)
     if PrimaryDown.removed or SecondaryDown.removed:
+      dont_join = false
       state.draw_unit_id = ""
 
   self.local_flags.changes:
     if PrimaryDown in state.local_flags and state.draw_unit_id == "ground":
-      if change.item == TargetMoved:
+      if change.item == TargetMoved and state.tool != PlaceBot:
         self.fire(append = true)
 
   result = self
