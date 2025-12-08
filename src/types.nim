@@ -315,6 +315,7 @@ type
     failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
+    initial_load_done*: bool
 
   NodeController* = ref object
 

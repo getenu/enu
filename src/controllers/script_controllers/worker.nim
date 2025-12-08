@@ -406,10 +406,12 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
       if now > save_at:
         save_level(state.config.level_dir)
+        Zen.thread_ctx.tick_keepalives()
         save_at = now + auto_save_interval
 
       if now > backup_at:
         backup_level(state.config.level_dir)
+        Zen.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
 
       if now < wait_until:
