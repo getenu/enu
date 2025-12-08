@@ -219,7 +219,10 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
       self.interpreter.reset_module(other.script_ctx.module_name)
 
   debug "loading unit", unit_id = unit.id
-  self.load_script(unit)
+  # Use longer timeout for first script load (system.nim compilation can be slow)
+  let timeout = if not self.initial_load_done: initial_script_timeout else: script_timeout
+  self.load_script(unit, timeout)
+  self.initial_load_done = true
 
   for other in units_to_reload:
     if other != unit:

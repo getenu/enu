@@ -33,7 +33,7 @@ bin = @["enu" & lib_ext]
 
 requires "https://github.com/getenu/Nim#7483e78",
   "https://github.com/getenu/godot-nim#1ea2447",
-  "https://github.com/getenu/model_citizen 0.19.7",
+  "https://github.com/getenu/model_citizen 0.19.8",
   "https://github.com/getenu/nanoid.nim >= 0.2.1",
   "https://github.com/treeform/pretty >= 0.2.0", "cligen 1.6.17", "chroma", "markdown",
   "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
