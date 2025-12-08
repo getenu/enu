@@ -1,11 +1,15 @@
 import
   std/[
     tables, sets, options, sequtils, math, wrapnils, monotimes, sugar, deques,
-    macros, base64,
+    macros, base64, strformat,
   ]
 import godotapi/spatial
 import core, models/[states, bots, colors, units]
-const ChunkSize = vec3(16, 16, 16)
+
+const
+  ChunkSize = vec3(16, 16, 16)
+  MAX_BLOCK_COUNT = 100_000
+  CHECK_INTERVAL = 1_000
 
 include "build_code_template.nim.nimf"
 
@@ -14,6 +18,7 @@ const default_color = action_colors[Blue]
 var
   current_build* {.threadvar.}: Build
   previous_build* {.threadvar.}: Build
+  last_placement_time* {.threadvar.}: MonoTime
   dont_join*: bool
   skip_point = vec3()
   last_point: Vector3
@@ -62,6 +67,12 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
         return first
 
 proc add_build(self, source: Build) =
+  # Check if merging would exceed limit
+  if self.block_count + source.block_count > MAX_BLOCK_COUNT:
+    raise (ref ResourceLimitError)(
+      msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
+    )
+
   dont_join = true
   for chunk_id, chunk in source.chunks:
     for position, info in chunk:
@@ -81,6 +92,7 @@ proc maybe_join_previous_build(
   if self != current_build:
     previous_build = current_build
     current_build = self
+    last_placement_time = get_mono_time()
 
   if ?previous_build and previous_build != self:
     var partner = previous_build
@@ -119,6 +131,16 @@ proc reset_bounds*(self: Build) =
   for chunk_id, chunk in self.chunks:
     self.expand_bounds_to_chunk(chunk_id)
 
+proc verify_block_count(self: Build) =
+  var actual_count = 0
+  for chunk_id, chunk in self.chunks:
+    for position, info in chunk:
+      if info.kind != Hole:
+        inc actual_count
+
+  if actual_count != self.block_count:
+    raise_assert &"Block count mismatch for {self.id}: counter={self.block_count}, actual={actual_count}"
+
 proc add_voxel(self: Build, position: Vector3, voxel: VoxelInfo) =
   let buffer = position.buffer
 
@@ -126,17 +148,46 @@ proc add_voxel(self: Build, position: Vector3, voxel: VoxelInfo) =
     self.chunks[buffer] = Chunk.init
     self.expand_bounds_to_chunk(buffer)
 
+  # Check if voxel exists in either current chunks or batched voxels
+  let exists_in_chunks = position in self.chunks[buffer]
+  let exists_in_batched = self.batching and
+                          buffer in self.batched_voxels and
+                          position in self.batched_voxels[buffer]
+
   if self.batching:
     if position notin self.chunks[buffer] or
         self.chunks[buffer][position] != voxel:
       if buffer notin self.batched_voxels:
         self.batched_voxels[buffer] = init_table[Vector3, VoxelInfo]()
+
+      # Check limit before adding new voxel
+      if not exists_in_chunks and not exists_in_batched:
+        if self.block_count >= MAX_BLOCK_COUNT:
+          raise (ref ResourceLimitError)(
+            msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
+          )
+        inc self.block_count
+        when defined(debug):
+          if self.block_count mod CHECK_INTERVAL == 0:
+            self.verify_block_count()
+
       self.batched_voxels[buffer][position] = voxel
   else:
+    if not exists_in_chunks:
+      if self.block_count >= MAX_BLOCK_COUNT:
+        raise (ref ResourceLimitError)(
+          msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
+        )
+      inc self.block_count
+      when defined(debug):
+        if self.block_count mod CHECK_INTERVAL == 0:
+          self.verify_block_count()
     self.chunks[buffer][position] = voxel
 
 proc del_voxel(self: Build, position: Vector3) =
   let buffer = position.buffer
+  if buffer in self.chunks and position in self.chunks[buffer]:
+    dec self.block_count
   self.chunks[buffer].del position
 
 proc restore_edits*(self: Build) =
@@ -252,8 +303,10 @@ method batch_changes*(self: Build): bool =
 
 method apply_changes*(self: Build) =
   if self.batching:
+    # Block counting now handled in add_voxel
     for buffer, chunk in self.batched_voxels:
       self.chunks[buffer] += chunk
+
     self.batched_voxels.clear
     self.batching = false
 
@@ -439,7 +492,8 @@ method main_thread_joined*(self: Build) =
         state.skip_block_paint = false
       elif (
         state.draw_unit_id == self.id and self.target_normal == draw_normal and
-        length <= 5 and self.target_point != skip_point
+        length <= 5 and self.target_point != skip_point and
+        state.tool != PlaceBot
       ):
         if SecondaryDown in state.local_flags:
           self.remove

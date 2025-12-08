@@ -1,4 +1,4 @@
-import std/[math, sugar]
+import std/[math, sugar, monotimes]
 from std/times import `+`
 import pkg/godot except print
 import

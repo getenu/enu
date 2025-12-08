@@ -15,6 +15,7 @@ export lineinfos.`==`
 
 type
   EnuError* = object of CatchableError
+  ResourceLimitError* = object of CatchableError
   LocalStateFlags* = enum
     CommandMode
     EditorVisible
@@ -63,6 +64,7 @@ type
     Lock
     Ready
     ScriptInitializing
+    ScriptRunning
     Dirty
     Resetting
     HighlightError
@@ -182,7 +184,7 @@ type
   VoxelKind* = enum
     Hole
     Manual
-    Computed
+    Computed 
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
 
@@ -200,6 +202,7 @@ type
     bot_collisions*: bool
     batching*: bool
     batched_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
+    block_count*: int
 
   Config* = object
     font_size*: int

@@ -99,6 +99,12 @@ gdobj BotNode of KinematicBody:
       ) or ScriptInitializing.removed:
         self.set_visibility
 
+      if self.model of Bot:
+        if ScriptRunning.added:
+          self.set_process(true)
+        elif ScriptRunning.removed:
+          self.set_process(false)
+
     self.model.local_flags.watch:
       if Highlight.added:
         self.highlight()
@@ -165,6 +171,9 @@ gdobj BotNode of KinematicBody:
     self.set_color(self.model.color)
     self.track_changes
     self.model.sight_ray = self.get_node("SightRay") as RayCast
+
+    if self.model of Bot:
+      self.set_process(ScriptRunning in self.model.global_flags)
 
   method process(delta: float) =
     if ?self.model:
