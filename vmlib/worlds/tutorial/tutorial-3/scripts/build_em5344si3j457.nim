@@ -1,3 +1,5 @@
+player = nil
+
 loop:
   if Player.hit as p:
     player = p
