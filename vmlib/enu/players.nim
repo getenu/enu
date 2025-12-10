@@ -15,3 +15,14 @@ bridged_to_host:
   proc `coding=`*(self: Player, value: Unit)
   proc open_sign*(self: Player): Sign
   proc `open_sign=`*(self: Player, value: Sign)
+  proc executing_player*(): Player
+
+template player*(): Player =
+  executing_player()
+
+proc number*(self: Player): int =
+  for i, player in all_players():
+    if player == self:
+      return i + 1
+
+  raise newException(ValueError, "Player not found in player list")

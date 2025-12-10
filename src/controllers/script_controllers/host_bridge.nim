@@ -528,6 +528,21 @@ proc open_sign(self: Unit): Sign =
 proc `open_sign=`(self: Unit, value: Sign) =
   state.open_sign = value
 
+proc executing_player(worker: Worker): Player =
+  let active = worker.active_unit
+  if active of Player:
+    return Player(active)
+
+  let owner_id = \"player-{active.code.owner}"
+  for unit in state.units.value:
+    if unit of Player:
+      let player = Player(unit)
+      if player.id == owner_id:
+        player.ensure_exists(worker)
+        return player
+
+  return nil
+
 # World bindings
 
 proc environment(_: PNode): string =
@@ -660,7 +675,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`, coding,
-    `coding=`, running, `running=`, open_sign, `open_sign=`
+    `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player
 
   result.bridged_from_vm "worlds",
     environment, `environment=`, megapixels, `megapixels=`

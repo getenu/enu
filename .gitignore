@@ -43,3 +43,4 @@ nimbledeps/
 .submodules.tmp
 
 *.previous
+.claude/
