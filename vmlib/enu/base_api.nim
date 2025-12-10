@@ -619,6 +619,9 @@ proc all*(_: type Unit): Query[seq[Unit]] =
 proc len*[T: Unit](self: Query[seq[T]]): int =
   self.result.len
 
+proc `[]`*[T: Unit](self: Query[seq[T]], index: int): T =
+  self.result[index]
+
 proc first*[T: Unit](_: type T): T =
   for player in T.all.result:
     return player

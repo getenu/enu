@@ -1,0 +1,18 @@
+{
+  "id": "build_station_2",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [70.0, 1.0, -20.0]
+  },
+  "start_color": "Red",
+  "edits": {
+    "build_station_2": [
+      [[0.0, 0.0, 0.0], [1, "Black"]],
+      [[-10.0, 0.0, 0.0], [0, "Black"]]
+    ]
+  }
+}
