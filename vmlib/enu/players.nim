@@ -17,7 +17,8 @@ bridged_to_host:
   proc `open_sign=`*(self: Player, value: Sign)
   proc executing_player*(): Player
 
-template player*(): Player =
+var player*: Player = Player.first
+template runner*(): Player =
   executing_player()
 
 proc number*(self: Player): int =

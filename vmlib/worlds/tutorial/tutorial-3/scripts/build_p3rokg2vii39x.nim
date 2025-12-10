@@ -1,9 +1,7 @@
-var player*: Player = nil
-
 name inky(charge_player = false)
 move me
 
-- explore:
+-explore:
   speed = 3
   glow = 0
   scale = 1
@@ -14,7 +12,7 @@ move me
     turn -180 .. 180
   forward 5 .. 10
 
-- attack:
+-attack:
   speed = 50
   position = position.fuzzed(2, 0, 2)
   turn player
@@ -25,12 +23,12 @@ move me
   scale = cycle(1.5, 1.8)
   glow = cycle(0, 1)
 
-- charge:
+-charge:
   scale = 1
   speed = 20
   go player
 
-- hunt:
+-hunt:
   speed = 15
   if 1 in 10:
     turn player
@@ -38,7 +36,7 @@ move me
     turn -180 .. 180
   forward 5 .. 10
 
-- win_game:
+-win_game:
   player.position = win_spot
   player.turn end_sign
   position = spin_spot
@@ -50,7 +48,7 @@ move me
   player.playing = false
   player = nil
 
-- lose_game:
+-lose_game:
   player.position = lose_spot
   player.turn end_sign
   player.playing = false
