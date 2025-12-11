@@ -6,7 +6,7 @@
 import std/[os, strutils, sequtils, algorithm]
 import core
 import libs/[interpreters, eval]
-import pkg/compiler/vm
+import pkg/compiler/[vm, ast]
 
 type
   TestResult = object
@@ -45,6 +45,21 @@ proc setup_mock_functions(interp: Interpreter) =
     proc(args: VmArgs) =
       discard
 
+  # Mock action_running getter
+  interp.implement_routine pkg, "base_bridge_private", "action_running_impl",
+    proc(args: VmArgs) =
+      args.set_result(BiggestInt(0))  # false - not running
+
+  # Mock action_running setter
+  interp.implement_routine pkg, "base_bridge_private", "action_running_set_impl",
+    proc(args: VmArgs) =
+      discard  # ignore setting action_running in tests
+
+  # Mock sleep_impl - the bridged_to_host macro creates sleep_impl_impl
+  interp.implement_routine pkg, "base_bridge_private", "sleep_impl_impl",
+    proc(args: VmArgs) =
+      discard  # sleep is a no-op in tests
+
   # Mock write_stack_trace
   interp.implement_routine pkg, "base_bridge", "write_stack_trace_impl",
     proc(args: VmArgs) =
@@ -55,6 +70,22 @@ proc setup_mock_functions(interp: Interpreter) =
     proc(args: VmArgs) =
       let code = args.get_int(0)
       echo "  [VM] Exit called with code: ", code
+
+  # Mock register_template_node - called when types like Player, Bot, etc are registered
+  interp.implement_routine pkg, "base_bridge", "register_template_node_impl",
+    proc(args: VmArgs) =
+      discard
+
+  # Note: register_active_impl is NOT mocked - let the stub set current_active_unit
+
+  # Mock get_last_error for error checking - returns ErrorData tuple (id: int, msg: string)
+  interp.implement_routine pkg, "vm_bridge_utils", "get_last_error_impl",
+    proc(args: VmArgs) =
+      # Return (0, "") - no error
+      var result_node = nkTupleConstr.new_tree
+      result_node.add new_int_node(nkIntLit, 0)
+      result_node.add new_str_node(nkStrLit, "")
+      args.set_result(result_node)
 
 proc run_test_script(script_path: string): TestResult =
   result.name = script_path.extract_filename.change_file_ext("")

@@ -95,6 +95,7 @@ task build_headless, "build headless godot":
 
 task unit_tests, "run unit tests":
   exec "nimble c -r tests/unit/script_ctx_test"
+  exec "nimble c -r tests/unit/serializers_test"
 
 task vm_tests, "run VM script tests":
   exec "nimble c -r tests/vm/runner"
