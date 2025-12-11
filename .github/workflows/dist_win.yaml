@@ -60,7 +60,10 @@ jobs:
           cd ..
           rm mesa -Recurse
         if: steps.prereq-cache.outputs.cache-hit != 'true'
-
+      - name: Build Enu
+        run: nimble build
+      - name: Run world tests
+        run: nimble world_tests
       - name: Dist
         run: nimble dist_package
 

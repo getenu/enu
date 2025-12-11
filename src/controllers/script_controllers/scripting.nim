@@ -46,6 +46,13 @@ proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
   unit.global_flags -= ScriptInitializing
   unit.ensure_visible
 
+  # In test mode, track script errors for exit code
+  if TestMode in state.local_flags:
+    if state.test_exit_code < 0:
+      state.test_exit_code = 1
+    else:
+      inc state.test_exit_code
+
 proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   private_access ScriptCtx
 

@@ -41,6 +41,9 @@ jobs:
       - name: build prereqs
         run: nimble dist_prereqs
         if: steps.prereq-cache.outputs.cache-hit != 'true'
+      - name: Build Enu
+        run: nimble build
+      # Note: world_tests skipped on Linux - server build doesn't support rendering
       - name: Dist
         run: nimble dist_package
       - uses: actions/upload-artifact@v4

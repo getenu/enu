@@ -402,6 +402,18 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         except CatchableError as e:
           worker.handle_catchable_error(unit, e)
 
+      # In test mode, exit when all scripts have finished
+      if TestMode in state.local_flags:
+        var any_running = false
+        state.units.value.walk_tree proc(unit: Unit) =
+          if ?unit.script_ctx and unit.script_ctx.running:
+            any_running = true
+        if not any_running:
+          let exit_code = if state.test_exit_code < 0: 0 else: state.test_exit_code
+          info "Test mode: all scripts finished", exit_code
+          state.push_flag Quitting
+          state.test_exit_code = exit_code
+
       let now = get_mono_time()
 
       if now > save_at:
