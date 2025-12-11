@@ -35,8 +35,8 @@ requires "https://github.com/getenu/Nim#7483e78",
   "https://github.com/getenu/godot-nim#1ea2447",
   "https://github.com/getenu/model_citizen 0.19.8",
   "https://github.com/getenu/nanoid.nim >= 0.2.1",
-  "https://github.com/treeform/pretty >= 0.2.0", "cligen 1.6.17", "chroma", "markdown",
-  "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
+  "https://github.com/treeform/pretty >= 0.2.0", "cligen 1.6.17", "chroma",
+  "markdown", "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
@@ -187,11 +187,7 @@ proc mingw_path(): string =
 proc gen_binding_and_copy_stdlib(target = target) =
   if host_os == "windows":
     # Assumes mingw
-<<<<<<< HEAD
-    find_and_copy_dlls mingw_path(), join_path("app", "_dlls"), gcc_dlls
-=======
     find_and_copy_dlls mingw_path(), "app", gcc_dlls
->>>>>>> 5a4aac60 (wip)
     find_and_copy_dlls get_current_compiler_exe().parent_dir,
       join_path("vendor", "godot", "bin"), nim_dlls
   mk_dir generated_dir
