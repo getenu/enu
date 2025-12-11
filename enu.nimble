@@ -36,7 +36,8 @@ requires "https://github.com/getenu/Nim#7483e78",
   "https://github.com/getenu/model_citizen 0.19.8",
   "https://github.com/getenu/nanoid.nim >= 0.2.1",
   "https://github.com/treeform/pretty >= 0.2.0", "cligen 1.6.17", "chroma",
-  "markdown", "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy"
+  "markdown", "chronicles", "dotenv", "nimibook", "metrics#51f1227", "zippy",
+  "unittest2"
 
 let git_version = static_exec("git describe --tags HEAD").strip
 
@@ -92,11 +93,21 @@ task build_godot, "Build godot":
 task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
 
-task test, "run godot tests":
+task unit_tests, "run unit tests":
+  exec "nimble c -r tests/unit/script_ctx_test"
+
+task vm_tests, "run VM script tests":
+  exec "nimble c -r tests/vm/runner"
+
+task godot_tests, "run godot tests":
   exec "nimble c tests/godot/tnode_factories"
   cd "tests/godot/app"
   exec this_dir() /
     &"vendor/godot/bin/godot_server.osx.opt.tools.{cpu} --quiet --script tests/tests.gdns"
+
+task test, "run all tests":
+  unit_tests_task()
+  vm_tests_task()
 
 proc find_and_copy_dlls(dep_path, dest: string, dlls: varargs[string]) =
   for dep in dlls:
