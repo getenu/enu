@@ -2,12 +2,6 @@ import std/[macros, strutils, sequtils, base64]
 import types
 import base_api, macro_helpers
 
-const private_props = ["lock"]
-const public_props = [
-  "position", "start_position", "speed", "scale", "glow", "global", "seed",
-  "color", "height", "show", "sign"
-]
-
 proc params_to_assignments(nodes: seq[NimNode]): NimNode =
   result = new_stmt_list()
   for node in nodes:
@@ -169,12 +163,22 @@ proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
 
   type_def[0][2][0][2] = params_to_properties(params)
   let accessors = params_to_accessors(type_name, params)
+
+  # Generate alias templates for custom class parameters
+  var param_aliases = new_stmt_list()
+  for param in params:
+    let prop = param[0]
+    if prop.str_val notin ["global", "speed", "color"]:
+      param_aliases.add quote do:
+        template `prop`*: untyped = me.`prop`
+
   result.add quote do:
     `type_def`
     `accessors`
     let me {.inject.} = `type_name`(name: `name_str`)
     var enu_target {.inject.} = me
     include loops
+    `param_aliases`
 
     register_active(me)
     let home {.inject.} = PositionOffset(position: me.local_position)
@@ -194,45 +198,6 @@ proc pop_name_node(ast: NimNode): tuple[start: NimNode, name_node: NimNode] =
     result.start.add node
   for i, node in result.start:
     ast.del(i)
-
-proc visit_tree(
-    parent: NimNode,
-    convert: open_array[string],
-    receiver: string,
-    alias: ptr seq[NimNode],
-) =
-  for i, node in parent:
-    if node.kind in [nnkProcDef, nnkBlockStmt, nnkIfExpr, nnkIfStmt]:
-      # The alias list should only live as long as a scope. We need to make a
-      # new copy each time a scope is opened. The above list needs to be
-      # expanded.
-      var alias = alias[]
-      visit_tree(node, convert, receiver, addr alias)
-    else:
-      if node.kind == nnkIdent:
-        if $node in convert and parent.kind == nnkIdentDefs:
-          if i == 0:
-            alias[].add node
-          elif i == 2 and node notin alias[]:
-            parent[i] = new_dot_expr(ident receiver, node)
-        elif $node in convert and node notin alias[] and
-            parent.kind != nnk_expr_eq_expr and
-            not (parent.kind == nnk_dot_expr and i == 1):
-          parent[i] = new_dot_expr(ident receiver, node)
-      visit_tree(node, convert, receiver, alias)
-
-# Converts variable access to property access. Ex. `speed = 1` -> `me.speed = 1`
-# Anything for `enu_target` must work for all units. `me` can be class specific.
-# This tries to take aliasing into account. If a variable called `speed` is
-# created, anywhere it's in scope won't get `me` prefixed.
-proc auto_insert_receiver(
-    ast: NimNode, class_specific_props: open_array[string]
-): NimNode =
-  var alias: seq[NimNode] = @[]
-  visit_tree(ast, class_specific_props, "me", addr alias)
-  visit_tree(ast, private_props, "me", addr alias)
-  visit_tree(ast, public_props, "enu_target", addr alias)
-  result = ast
 
 proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
   let (name, params, vars) = sig.parse_sig(return_type)
@@ -266,9 +231,7 @@ macro load_enu_script*(
     base64_code: string,
     file_name: string,
     base_type: untyped,
-    class_specific_props: varargs[untyped],
 ): untyped =
-  var class_specific_props = class_specific_props.map_it($it)
   let file_name = file_name.str_val
   # `static_read` has been disabled for security, so we can't read the code
   # ourselves. Instead it's passed to us, but because this coming from a nim
@@ -284,18 +247,13 @@ macro load_enu_script*(
   var (script_start, name_node) = pop_name_node(ast)
   result = new_stmt_list()
   var inner = new_stmt_list()
-  script_start = script_start.auto_insert_receiver(class_specific_props)
   if name_node.kind != nnkNilLit:
     let (name, params) = extract_class_info(name_node)
-    for param in params:
-      class_specific_props.add($param[0])
-    ast = ast.auto_insert_receiver(class_specific_props)
     result.add build_class(name_node, base_type)
     let assignments = params_to_assignments(params)
     inner.add quote do:
       `assignments`
   else:
-    ast = ast.auto_insert_receiver(class_specific_props)
     result.add quote do:
       let me {.inject.} = `base_type`()
       var enu_target {.inject.} = me

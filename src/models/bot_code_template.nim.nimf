@@ -4,6 +4,7 @@ import system except echo, quit
 import std / [strutils]
 import types, class_macros, worlds, players, state_machine, base_api, bots,
   builds, signs, bots_private
+include aliases
 
 let instance_global_by_default = true
 var move_mode = 1
