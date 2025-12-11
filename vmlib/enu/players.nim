@@ -17,9 +17,14 @@ bridged_to_host:
   proc `open_sign=`*(self: Player, value: Sign)
   proc executing_player*(): Player
 
-var player*: Player = Player.first
+var player*: Player
 template runner*(): Player =
   executing_player()
+
+register_state_init(
+  proc() =
+    player = Player.first
+)
 
 proc number*(self: Player): int =
   for i, player in all_players():

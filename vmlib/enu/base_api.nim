@@ -5,6 +5,15 @@ import types, state_machine, base_bridge, base_bridge_private
 
 export base_bridge
 
+var state_init_callbacks: seq[proc()] = @[]
+
+proc register_state_init*(callback: proc()) =
+  state_init_callbacks.add(callback)
+
+proc initialize_state*() =
+  for callback in state_init_callbacks:
+    callback()
+
 proc echo*(args: varargs[string, `$`]) =
   echo_console(args.join)
 

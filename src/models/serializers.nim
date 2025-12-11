@@ -3,6 +3,7 @@ import pkg/zippy/ziparchives_v1
 import core except to_json
 import models
 import controllers/script_controllers/scripting
+import libs/eval
 
 var load_chunks {.threadvar.}: bool
 
@@ -305,12 +306,29 @@ proc load_level*(worker: Worker, level_dir: string) =
     except Exception as e:
       error "Failed to load level", error = e[]
 
+  let init_proc =
+    worker.interpreter.select_routine("initialize_state", "base_api")
+
+  assert not init_proc.is_nil,
+    "initialize_state routine not found in base_api module. " &
+      "Ensure base_api defines and exports initialize_state()."
+
+  # Set player as active unit so VM hooks work correctly during initialization
+  assert worker.active_unit.is_nil, "active_unit should be nil at this point"
+  worker.active_unit = state.player
+
+  {.gcsafe.}:
+    discard worker.interpreter.call_routine(init_proc, [])
+
+  worker.active_unit = nil
+
   dont_join = true
   worker.retry_failures = true
   load_units(nil)
   worker.retry_failed_scripts()
   worker.retry_failures = false
   dont_join = false
+
   for unit in state.units:
     unit.global_flags -= Dirty
   state.pop_flag LoadingScript
