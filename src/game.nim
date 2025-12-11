@@ -154,6 +154,9 @@ gdobj Game of Node:
 
     var connect_address = ""
     var listen_address = ""
+    var level_dir_override = ""
+    var test_mode = false
+
     if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
       connect_address = args[i + 1]
       args.delete(i .. i + 1)
@@ -164,6 +167,12 @@ gdobj Game of Node:
       else:
         listen_address = "0.0.0.0"
         args.delete(i)
+    if (let i = args.find("--level-dir"); i) > -1 and args.len > i + 1:
+      level_dir_override = args[i + 1]
+      args.delete(i .. i + 1)
+    if (let i = args.find("--enu-test"); i) > -1:
+      test_mode = true
+      args.delete(i)
 
     if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address:
       listen_address = get_env("ENU_LISTEN_ADDRESS")
@@ -229,6 +238,21 @@ gdobj Game of Node:
     if ?connect_address:
       state.config_value.value:
         connect_address = connect_address
+
+    if ?level_dir_override:
+      let level_file = level_dir_override / "level.json"
+      if not file_exists(level_file):
+        fail "Level not found: " & level_dir_override & " (no level.json)"
+      let parts = level_dir_override.split_path
+      let world_dir_path = parts.head
+      state.config_value.value:
+        level_dir = level_dir_override
+        level = parts.tail
+        world_dir = world_dir_path
+        world = world_dir_path.split_path.tail
+
+    if test_mode:
+      state.push_flag TestMode
 
     state.set_flag(God, uc.god_mode ||= false)
 
@@ -394,7 +418,11 @@ gdobj Game of Node:
         # to a server, it won't pop the flag, so we force it after a timeout.
         self.force_quit_at = get_mono_time() + 2.seconds
       elif Quitting.removed:
-        self.get_tree().quit()
+        let exit_code = if TestMode in state.local_flags and state.test_exit_code >= 0:
+          state.test_exit_code
+        else:
+          0
+        self.get_tree().quit(exit_code)
 
       if NeedsRestart.removed:
         saved_state.transform = state.player.transform

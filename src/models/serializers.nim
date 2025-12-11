@@ -160,7 +160,7 @@ proc save*(unit: Unit) =
       unit.save
 
 proc save_level*(level_dir: string, save_all = false) =
-  if Server in state.local_flags:
+  if Server in state.local_flags and TestMode notin state.local_flags:
     debug "saving level"
     let level = LevelInfo(enu_version: enu_version, format_version: "v0.9.2")
     write_file level_dir / "level.json", jsonutils.to_json(level).pretty

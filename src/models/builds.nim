@@ -38,18 +38,30 @@ proc buffer(position: Vector3): Vector3 =
 
 proc contains*(self: Build, position: Vector3): bool =
   let buf = position.buffer
-  result = buf in self.chunks and position in self.chunks[buf]
+  # Check both committed chunks and batched voxels
+  if buf in self.chunks and position in self.chunks[buf]:
+    return true
+  if self.batching and buf in self.batched_voxels and
+      position in self.batched_voxels[buf]:
+    return true
 
 proc voxel_info*(self: Build, position: Vector3): VoxelInfo =
-  self.chunks[position.buffer][position]
+  let buf = position.buffer
+  # Check batched voxels first (they may override committed chunks)
+  if self.batching and buf in self.batched_voxels and
+      position in self.batched_voxels[buf]:
+    return self.batched_voxels[buf][position]
+  self.chunks[buf][position]
 
 proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
   let buf = position.buffer
-  result =
-    if buf in self:
-      some(self.chunks[buf][position])
-    else:
-      none(VoxelInfo)
+  # Check batched voxels first
+  if self.batching and buf in self.batched_voxels and
+      position in self.batched_voxels[buf]:
+    return some(self.batched_voxels[buf][position])
+  if buf in self.chunks and position in self.chunks[buf]:
+    return some(self.chunks[buf][position])
+  none(VoxelInfo)
 
 proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
   for unit in units:

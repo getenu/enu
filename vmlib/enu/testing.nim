@@ -2,6 +2,8 @@
 ## Follows unittest API but works in NimScript/VM mode
 
 import std/strutils
+import base_bridge
+export signal_test_complete
 
 var
   current_suite: string
@@ -42,6 +44,7 @@ proc test_summary*() =
   echo ""
   echo "=== Summary ==="
   echo total_tests, " tests run: ", passed_tests, " passed, ", failed_tests, " failed"
+  signal_test_complete(failed_tests)
 
 proc tests_failed*(): bool =
   failed_tests > 0

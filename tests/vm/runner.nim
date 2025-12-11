@@ -76,6 +76,22 @@ proc setup_mock_functions(interp: Interpreter) =
     proc(args: VmArgs) =
       discard
 
+  # Mock signal_test_complete - called by testing framework
+  interp.implement_routine pkg, "base_bridge", "signal_test_complete_impl",
+    proc(args: VmArgs) =
+      let exit_code = args.get_int(0)
+      echo "  [VM] Test complete with exit code: ", exit_code
+
+  # Mock has_block_at - returns false (no blocks in test environment)
+  interp.implement_routine pkg, "builds", "has_block_at_impl",
+    proc(args: VmArgs) =
+      args.set_result(false)
+
+  # Mock block_color_at - returns 0 (Eraser) since no blocks exist
+  interp.implement_routine pkg, "builds", "block_color_at_impl",
+    proc(args: VmArgs) =
+      args.set_result(BiggestInt(0))
+
   # Note: register_active_impl is NOT mocked - let the stub set current_active_unit
 
   # Mock get_last_error for error checking - returns ErrorData tuple (id: int, msg: string)

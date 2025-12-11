@@ -106,9 +106,67 @@ task godot_tests, "run godot tests":
   exec this_dir() /
     &"vendor/godot/bin/godot_server.osx.opt.tools.{cpu} --quiet --script tests/tests.gdns"
 
+task world_tests,
+  "run in-world tests (--headless for server build, --dist for dist build)":
+  let
+    test_level = this_dir() / "vmlib/worlds/tests/unit-tests"
+    params = command_line_params()
+    headless = "--headless" in params
+    use_dist = "--dist" in params
+
+  let bin =
+    if use_dist:
+      case host_os
+      of "macosx":
+        this_dir() / "dist/Enu.app/Contents/MacOS/Enu"
+      of "linux":
+        this_dir() / &"dist/enu-{git_version}/bin/enu"
+      of "windows":
+        this_dir() / &"dist/enu-{git_version}/enu.exe"
+      else:
+        quit &"--dist not supported on {host_os}"
+    elif headless:
+      case host_os
+      of "linux":
+        godot_bin("server")
+      else:
+        quit "Headless tests are only supported on Linux (Godot 4 will support all platforms)"
+    else:
+      godot_bin()
+
+  if use_dist:
+    exec bin & " --level-dir " & test_level & " --enu-test"
+  else:
+    cd "app"
+    exec bin & " --level-dir " & test_level & " --enu-test scenes/game.tscn"
+
 task test, "run all tests":
-  unit_tests_task()
-  vm_tests_task()
+  var failed: seq[string]
+
+  echo "\n=== Running unit tests ===\n"
+  let unit_result = gorge_ex("nimble unit_tests")
+  echo unit_result.output
+  if unit_result.exit_code != 0:
+    failed.add "unit_tests"
+
+  echo "\n=== Running VM tests ===\n"
+  let vm_result = gorge_ex("nimble vm_tests")
+  echo vm_result.output
+  if vm_result.exit_code != 0:
+    failed.add "vm_tests"
+
+  echo "\n=== Running world tests ===\n"
+  let world_result = gorge_ex("nimble world_tests")
+  echo world_result.output
+  if world_result.exit_code != 0:
+    failed.add "world_tests"
+
+  echo "\n=== Test Summary ===\n"
+  if failed.len > 0:
+    echo "FAILED: " & failed.join(", ")
+    quit 1
+  else:
+    echo "All tests passed!"
 
 proc find_and_copy_dlls(dep_path, dest: string, dlls: varargs[string]) =
   for dep in dlls:

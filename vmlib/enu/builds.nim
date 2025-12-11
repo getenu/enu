@@ -9,6 +9,8 @@ bridged_to_host:
   proc restore*(self: Build, name = "default")
   proc draw_position*(self: Build): Vector3
   proc `draw_position=`*(self: Build, value: Vector3)
+  proc has_block_at*(position: Vector3): bool
+  proc block_color_at*(position: Vector3): Colors
 
 proc `draw_position=`*(self: Build, unit: Unit) =
   self.draw_position = unit.position

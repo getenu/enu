@@ -640,6 +640,38 @@ proc coding(self: Worker, unit: Unit): Unit =
 proc `coding=`(self: Unit, value: Unit) =
   state.open_unit = value
 
+proc signal_test_complete(self: Worker, exit_code: int) =
+  state.test_exit_code = exit_code
+
+proc find_block_at(position: Vector3): Option[VoxelInfo] =
+  for unit in state.units.value:
+    if unit of Build:
+      let build = Build(unit)
+      let local_pos = position.local_to(build)
+      if local_pos in build:
+        let info = build.voxel_info(local_pos)
+        if info.kind != Hole and info.color != action_colors[Eraser]:
+          return some(info)
+    for child in unit.units.value:
+      if child of Build:
+        let build = Build(child)
+        let local_pos = position.local_to(build)
+        if local_pos in build:
+          let info = build.voxel_info(local_pos)
+          if info.kind != Hole and info.color != action_colors[Eraser]:
+            return some(info)
+  none(VoxelInfo)
+
+proc has_block_at(position: Vector3): bool =
+  find_block_at(position).is_some
+
+proc block_color_at(position: Vector3): Colors =
+  let block_info = find_block_at(position)
+  if block_info.is_some:
+    action_index(block_info.get.color)
+  else:
+    Eraser
+
 # End of bindings
 
 proc bridge_to_vm*(worker: Worker) =
@@ -656,7 +688,7 @@ proc bridge_to_vm*(worker: Worker) =
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
-    all_bots, all_signs, all_units
+    all_bots, all_signs, all_units, signal_test_complete
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,
@@ -667,7 +699,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, draw_position,
-    draw_position_set
+    draw_position_set, has_block_at, block_color_at
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,

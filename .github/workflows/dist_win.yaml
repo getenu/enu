@@ -28,10 +28,6 @@ jobs:
           git config --global core.symlinks false
       - name: Install nimble deps
         run: nimble setup -y
-      - name: Run unit tests
-        run: nimble unit_tests
-      - name: Run VM tests
-        run: nimble vm_tests
       - name: Save SHAs of submodules
         run: 'git submodule status > .submodules.tmp'
       - name: Prep dist config
@@ -60,9 +56,14 @@ jobs:
           cd ..
           rm mesa -Recurse
         if: steps.prereq-cache.outputs.cache-hit != 'true'
-
       - name: Dist
         run: nimble dist_package
+      - name: Run unit tests
+        run: nimble unit_tests
+      - name: Run VM tests
+        run: nimble vm_tests
+      - name: Run world tests
+        run: nimble world_tests --dist
 
       # Upload unsigned dist for zip signing
       - name: Upload unsigned dist for zip signing

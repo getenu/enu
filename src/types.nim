@@ -48,6 +48,7 @@ type
     FullWidthPanels
     EditorOpening
     EditorClosing
+    TestMode
 
   GlobalStateFlags* = enum
     LoadingLevel
@@ -114,6 +115,7 @@ type
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
+    test_exit_code*: int  # -1 = not set, 0 = success, 1+ = failure count
 
   Model* = ref object of RootObj
     id*: string

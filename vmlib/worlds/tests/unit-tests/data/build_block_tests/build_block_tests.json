@@ -1,0 +1,15 @@
+{
+  "id": "build_block_tests",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [10.0, 0.0, 0.0]
+  },
+  "start_color": "Blue",
+  "edits": {
+    
+  }
+}

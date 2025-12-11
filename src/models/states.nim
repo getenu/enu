@@ -159,6 +159,7 @@ proc init*(_: type GameState): GameState =
     queued_action_value: ~("", flags),
     status_message_value: ~("", flags),
     voxel_tasks_value: ~(0, flags),
+    test_exit_code: -1,
   )
 
   self.init_logger

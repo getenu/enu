@@ -52,10 +52,6 @@ jobs:
         run: echo "$HOME/.nimble/bin" >> $GITHUB_PATH
       - name: Install nimble deps
         run: nimble setup -y
-      - name: Run unit tests
-        run: nimble unit_tests
-      - name: Run VM tests
-        run: nimble vm_tests
       - name: Save SHAs of submodules
         run: "git submodule status > .submodules.tmp"
       - name: prereq cache
@@ -71,6 +67,12 @@ jobs:
         if: steps.prereq-cache.outputs.cache-hit != 'true'
       - name: Dist
         run: nimble dist_package
+      - name: Run unit tests
+        run: nimble unit_tests
+      - name: Run VM tests
+        run: nimble vm_tests
+      - name: Run world tests
+        run: nimble world_tests --dist
       - uses: actions/upload-artifact@v4
         with:
           name: Enu macOS Distribution

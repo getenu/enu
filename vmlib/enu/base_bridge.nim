@@ -66,3 +66,4 @@ bridged_to_host:
   proc wake*(self: Unit)
   proc create_new*(self: Unit)
   proc frame_count*(): int
+  proc signal_test_complete*(exit_code: int)
