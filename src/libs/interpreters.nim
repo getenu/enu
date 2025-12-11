@@ -18,7 +18,7 @@ proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
   let source_paths = std_paths & join_path(vmlib, "enu") & @[script_dir]
   {.gcsafe.}:
     result = create_interpreter(
-      "base_api.nim",
+      "main.nim",
       source_paths,
       defines = @{"nimscript": "true", "nimconfig": "true"},
     )
