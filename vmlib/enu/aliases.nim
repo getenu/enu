@@ -3,17 +3,18 @@
 ## Not exported to avoid conflicts with procs of the same name in base_bridge
 
 # Public properties -> enu_target
-template position: untyped = enu_target.position
-template start_position: untyped = enu_target.start_position
-template speed: untyped = enu_target.speed
-template scale: untyped = enu_target.scale
-template glow: untyped = enu_target.glow
-template global: untyped = enu_target.global
-template seed: untyped = enu_target.seed
-template color: untyped = enu_target.color
-template height: untyped = enu_target.height
-template show: untyped = enu_target.show
-template sign: untyped = enu_target.sign
+# Trying explicit float return type
+template position: Vector3 = enu_target.position
+template start_position: Vector3 = enu_target.start_position
+template speed: float = enu_target.speed
+template scale: typed = enu_target.scale
+template glow: typed = enu_target.glow
+template global: typed = enu_target.global
+template seed: typed = enu_target.seed
+template color: typed = enu_target.color
+template height: typed = enu_target.height
+template show: typed = enu_target.show
+template sign: typed = enu_target.sign
 
 # Private properties -> me
-template lock: untyped = me.lock
+template lock: typed = me.lock
