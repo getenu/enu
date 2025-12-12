@@ -8,26 +8,31 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 
 ## Build Commands
 
+### Setup
+- `atlas install && atlas rep` - Install dependencies (first-time setup)
+- `nim prereqs` - Build Godot, download fonts, generate API bindings and stdlib
+
 ### Core Development Commands
-- `nimble build` - Build the main application (required after code changes)
-- `nimble prereqs` - Build Godot, download fonts, generate API bindings and stdlib (first-time setup)
-- `nimble start` - Run Enu in development mode
-- `nimble build_and_start` - Build and run in one command
-- `nimble edit` - Open project in Godot editor
+- `nim build` - Build the main application (required after code changes)
+- `nim start` - Run Enu in development mode
+- `nim build_and_start` - Build and run in one command
+- `nim edit` - Open project in Godot editor
 
 ### Distribution and Packaging
-- `nimble dist` - Build complete distribution package for current platform
-- `nimble dist_prereqs` - Build debug/release Godot versions and fonts
-- `nimble dist_package` - Package distribution binaries
+- `nim dist` - Build complete distribution package for current platform
+- `nim dist_prereqs` - Build debug/release Godot versions and fonts
+- `nim dist_package` - Package distribution binaries
 
 ### Testing and Documentation
-- `nimble test` - Run Godot-based tests
-- `nimble docs` - Build documentation using nimibook
-- `nimble clean` - Remove build artifacts
+- `nim test` - Run all tests
+- `nim unit_tests` - Run unit tests
+- `nim vm_tests` - Run VM script tests
+- `nim docs` - Build documentation using nimibook
+- `nim clean` - Remove build artifacts
 
 ### Platform-Specific
-- `nimble ios` - Build iOS package
-- `nimble ios_prereqs` - Build Godot for iOS (requires macOS)
+- `nim ios` - Build iOS package
+- `nim ios_prereqs` - Build Godot for iOS (requires macOS)
 
 ## Architecture
 
@@ -78,7 +83,7 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 ### Important Notes
 
 - Always use `snake_case` for naming (despite generated bindings using `camelCase`)
-- Use `nimble build` to verify changes compile correctly
+- Use `nim build` to verify changes compile correctly
 - The project uses ZenContext for metrics and threading
 - Scripts are Logo-inspired but use Nim syntax
 - World data is stored as JSON with accompanying Nim scripts

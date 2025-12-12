@@ -12,16 +12,16 @@ jobs:
       - name: Install Nim
         run: |
           cd $HOME &&
-          curl -O https://nim-lang.org/download/nim-2.2.0-linux_x64.tar.xz &&
-          tar xf nim-2.2.0-linux_x64.tar.xz
-      - name: Install Nim and build deps
+          curl -O https://nim-lang.org/download/nim-2.2.6-linux_x64.tar.xz &&
+          tar xf nim-2.2.6-linux_x64.tar.xz
+      - name: Install build deps
         run: |
           sudo apt-get update
           sudo apt-get install build-essential scons pkg-config libx11-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev libglu-dev libasound2-dev libpulse-dev libudev-dev libxi-dev libxrandr-dev libfuse2
       - name: Update path
-        run: echo "$HOME/.nimble/bin:$HOME/nim-2.2.0/bin" >> $GITHUB_PATH
-      - name: Install nimble deps
-        run: nimble setup -y
+        run: echo "$HOME/nim-2.2.6/bin" >> $GITHUB_PATH
+      - name: Install dependencies
+        run: atlas install && atlas rep
       - name: Save SHAs of submodules
         run: 'git submodule status > .submodules.tmp'
       - name: Prep dist config
@@ -35,16 +35,16 @@ jobs:
             fonts
           key: ${{ runner.os }}-prereq-cache-v4-${{ hashFiles('.submodules.tmp') }}
       - name: build prereqs
-        run: nimble dist_prereqs
+        run: nim dist_prereqs
         if: steps.prereq-cache.outputs.cache-hit != 'true'
       - name: Dist
-        run: nimble dist_package
+        run: nim dist_package
       - name: Run unit tests
-        run: nimble unit_tests
+        run: nim unit_tests
       - name: Run VM tests
-        run: nimble vm_tests
+        run: nim vm_tests
       - name: Run world tests
-        run: nimble world_tests --dist
+        run: nim world_tests headless
       - uses: actions/upload-artifact@v4
         with:
           name: Enu Linux Distribution

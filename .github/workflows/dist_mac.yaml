@@ -42,16 +42,14 @@ jobs:
           xcrun notarytool store-credentials "$NOTARIZATION_PROFILE" --apple-id "$NOTARIZATION_APPLE_ID" --team-id "$NOTARIZATION_TEAM_ID" --password "$NOTARIZATION_PWD"
 
       - name: Install build deps
-        run: brew install nim scons yasm
+        run: brew install scons yasm
       - name: Install nim
         run: |
-          curl -LO https://github.com/nim-lang/nightlies/releases/download/2024-10-02-version-2-2-78983f1876726a49c69d65629ab433ea1310ece1/nim-2.2.0-macosx_x64.tar.xz
-          tar xzf nim-2.2.0-macosx_x64.tar.xz
-          echo "$(pwd)/nim-2.2.0/bin" >> $GITHUB_PATH
-      - name: Update path
-        run: echo "$HOME/.nimble/bin" >> $GITHUB_PATH
-      - name: Install nimble deps
-        run: nimble setup -y
+          curl -LO https://github.com/nim-lang/nightlies/releases/download/2025-10-31-version-2-2-ab00c56904e3126ad826bb520d243513a139436a/nim-2.2.6-macosx_arm64.tar.xz
+          tar xzf nim-2.2.6-macosx_arm64.tar.xz
+          echo "$(pwd)/nim-2.2.6/bin" >> $GITHUB_PATH
+      - name: Install dependencies
+        run: atlas install && atlas rep
       - name: Save SHAs of submodules
         run: "git submodule status > .submodules.tmp"
       - name: prereq cache
@@ -61,18 +59,18 @@ jobs:
           path: |
             vendor/godot/bin
             fonts
-          key: ${{ runner.os }}-prereq-cache-v2-${{ hashFiles('.submodules.tmp') }}
+          key: ${{ runner.os }}-prereq-cache-v4-${{ hashFiles('.submodules.tmp') }}
       - name: build prereqs
-        run: nimble dist_prereqs
+        run: nim dist_prereqs
         if: steps.prereq-cache.outputs.cache-hit != 'true'
       - name: Dist
-        run: nimble dist_package
+        run: nim dist_package
       - name: Run unit tests
-        run: nimble unit_tests
+        run: nim unit_tests
       - name: Run VM tests
-        run: nimble vm_tests
+        run: nim vm_tests
       - name: Run world tests
-        run: nimble world_tests --dist
+        run: nim world_tests dist
       - uses: actions/upload-artifact@v4
         with:
           name: Enu macOS Distribution
