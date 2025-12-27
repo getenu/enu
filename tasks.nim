@@ -48,9 +48,10 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
-proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
+proc build_godot(target = target, cpu = cpu, opts = godot_opts, force = false) =
   p "Building Godot..."
-  exec "git submodule update --init"
+  if force or not file_exists("vendor/godot/.git"):
+    exec "git submodule update --init"
   let
     scons = find_exe "scons"
     cores = gorge(gen() & " core_count")
@@ -77,8 +78,8 @@ task build, "Build enu":
     extra = if params.len > 0: " " & params.join(" ") else: ""
   exec &"nim c -o:{output}{extra} src/enu.nim"
 
-task build_godot, "Build godot":
-  build_godot()
+task build_godot, "Build godot. Use --force to re-init submodules":
+  build_godot(force = "--force" in command_line_params())
 
 task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
@@ -272,10 +273,10 @@ task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   else:
     echo "extract_dlls is only needed on Windows"
 
-task prereqs, "Build godot, download fonts, generate binding and stdlib":
+task prereqs, "Build godot, download fonts, generate binding and stdlib. Use --force to re-init submodules":
   when host_os == "windows":
     extract_dlls_task()
-  build_godot()
+  build_godot(force = "--force" in command_line_params())
   download_fonts()
   copy_fonts()
   gen_binding_and_copy_stdlib()

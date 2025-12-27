@@ -73,7 +73,7 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 
 **VM Integration**: User scripts run in the Nim VM, isolated from the main application. The VM has access to a curated API through `vmlib/enu/`.
 
-**Godot Binding**: Uses nim-godot with auto-generated bindings from Godot 3.5 API. Generated code uses `camelCase` but project convention is `snake_case`.
+**Godot Binding**: Uses nim-godot with auto-generated bindings from Godot 3.5 API. Use `snake_case` when calling these bindings.
 
 **Model-View Architecture**:
 - Models handle data and state (using model_citizen library)
@@ -82,7 +82,7 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 
 ### Important Notes
 
-- Always use `snake_case` for naming (despite generated bindings using `camelCase`)
+- **Always use `snake_case` for identifiers.** Nim's identifier normalization means `snake_case` and `camelCase` are equivalent, but this project strictly uses `snake_case`. Only use `lowerCamelCase` when `snake_case` doesn't work, which should only happen with third-party macros that don't properly normalize identifiers.
 - Use `nim build` to verify changes compile correctly
 - The project uses ZenContext for metrics and threading
 - Scripts are Logo-inspired but use Nim syntax

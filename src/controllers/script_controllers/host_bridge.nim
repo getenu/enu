@@ -319,6 +319,9 @@ proc `lock=`(self: Unit, value: bool) =
   else:
     self.global_flags -= Lock
 
+proc position(self: Unit): Vector3 =
+  units.position(self)
+
 proc local_position(self: Unit): Vector3 =
   self.transform.origin
 
