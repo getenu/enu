@@ -330,7 +330,10 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   state.local_flags.changes:
     if Quitting.added:
       save_level(state.config.level_dir)
-      state.pop_flag Quitting
+      # In test mode, don't pop the flag - let the main thread's force_quit_at
+      # timeout handle it. This ensures test_exit_code has time to propagate.
+      if TestMode notin state.local_flags:
+        state.pop_flag Quitting
       running = false
     elif NeedsRestart.added:
       running = false
@@ -347,8 +350,10 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   const min_time = (1.0 / 120.0).seconds
   const auto_save_interval = 30.seconds
   const backup_interval = 15.minutes
+  const test_timeout = 5.minutes
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
+  var test_started_at = MonoTime.high
 
   try:
     while running:
@@ -403,15 +408,32 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
       # In test mode, exit when all scripts have finished
       if TestMode in state.local_flags:
+        if test_started_at == MonoTime.high:
+          test_started_at = get_mono_time()
+          echo "=== Test mode: started ==="
+
         var any_running = false
+        var running_scripts: seq[string]
         state.units.value.walk_tree proc(unit: Unit) =
           if ?unit.script_ctx and unit.script_ctx.running:
             any_running = true
+            running_scripts.add unit.id
+
+        let elapsed = get_mono_time() - test_started_at
+        # Log progress every 30 seconds
+        if elapsed.in_seconds.int mod 30 == 0 and elapsed.in_seconds.int > 0 and
+            elapsed.in_milliseconds.int mod 1000 < 100:
+          echo "=== Test mode: still running after ", elapsed, " scripts=", running_scripts, " ==="
+
         if not any_running:
           let exit_code = if state.test_exit_code < 0: 0 else: state.test_exit_code
-          info "Test mode: all scripts finished", exit_code
-          state.push_flag Quitting
+          echo "=== Test mode: all scripts finished, exit_code=", exit_code, " elapsed=", elapsed, " ==="
           state.test_exit_code = exit_code
+          state.push_flag Quitting
+        elif elapsed > test_timeout:
+          echo "=== Test mode: TIMEOUT after ", elapsed, " scripts=", running_scripts, " ==="
+          state.test_exit_code = 1
+          state.push_flag Quitting
 
       inc state.frame_count
 

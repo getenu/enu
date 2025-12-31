@@ -46,3 +46,4 @@ fonts/
 deps/
 nimbledeps/
 nim.cfg
+.build_arch

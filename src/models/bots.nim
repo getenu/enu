@@ -36,13 +36,15 @@ method on_begin_turn*(
   # move mode param is ignored
   let degrees = degrees * -axis.x
   var duration = 0.0
-  var final_basis = self.transform.basis.rotated(UP, deg_to_rad(degrees))
+  let
+    start_basis = self.transform.basis
+    final_basis = start_basis.rotated(UP, deg_to_rad(degrees))
   result = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
-    self.transform_value.basis =
-      self.transform.basis.rotated(UP, deg_to_rad(degrees * delta * self.speed))
-
     if duration <= 1.0 / self.speed:
+      # Use start_basis for incremental rotation to avoid compounding rotations
+      self.transform_value.basis =
+        start_basis.rotated(UP, deg_to_rad(degrees * duration * self.speed))
       Running
     else:
       self.transform_value.basis = final_basis

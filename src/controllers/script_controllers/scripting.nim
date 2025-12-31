@@ -51,7 +51,7 @@ proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
     if state.test_exit_code < 0:
       state.test_exit_code = 1
     else:
-      inc state.test_exit_code
+      state.test_exit_code = state.test_exit_code + 1
 
 proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   private_access ScriptCtx

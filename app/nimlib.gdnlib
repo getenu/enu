@@ -10,6 +10,7 @@ reloadable=false
 OSX.64="res://enu.dylib"
 Windows.64="res://enu.dll"
 X11.64="res://enu.so"
+Server.64="res://enu.so"
 iOS.arm64="res://libenu.a"
 
 [dependencies]
@@ -17,4 +18,5 @@ iOS.arm64="res://libenu.a"
 OSX.64=[  ]
 Windows.64=[  ]
 X11.64=[  ]
+Server.64=[  ]
 iOS.arm64=[  ]

@@ -10,10 +10,11 @@ reloadable=true
 OSX.64="res://enu-test.dylib"
 Windows.64="res://enu-test.dll"
 X11.64="res://enu-test.so"
-Server.64="res://enu-test.dylib"
+Server.64="res://enu-test.so"
 
 [dependencies]
 
 OSX.64=[  ]
 Windows.64=[  ]
 X11.64=[  ]
+Server.64=[  ]

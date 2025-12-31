@@ -124,6 +124,7 @@ gdobj Game of Node:
         erase_action(action)
 
   proc init*() =
+    echo "=== Enu game.init() starting ==="
     self.process_priority = -100
 
     let screen_scale =
@@ -252,6 +253,7 @@ gdobj Game of Node:
         world = world_dir_path.split_path.tail
 
     if test_mode:
+      echo "=== Enu: TestMode enabled ==="
       state.push_flag TestMode
 
     state.set_flag(God, uc.god_mode ||= false)
@@ -285,6 +287,7 @@ gdobj Game of Node:
     self.script_controller = ScriptController.init
 
     save_user_config(uc)
+    echo "=== Enu game.init() complete ==="
 
   proc set_panel_width() =
     let
@@ -416,7 +419,11 @@ gdobj Game of Node:
         # flag, giving it a chance to save and cleanup. If the worker thread is
         # stuck, killed, or hasn't fully started because it's trying to connect
         # to a server, it won't pop the flag, so we force it after a timeout.
-        self.force_quit_at = get_mono_time() + 2.seconds
+        if TestMode in state.local_flags:
+          # In test mode, pop immediately - test_exit_code is a ZenValue so it syncs with the flag
+          state.pop_flag Quitting
+        else:
+          self.force_quit_at = get_mono_time() + 2.seconds
       elif Quitting.removed:
         let exit_code = if TestMode in state.local_flags and state.test_exit_code >= 0:
           state.test_exit_code

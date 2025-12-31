@@ -1,4 +1,4 @@
-import std/[strformat, strutils, strscans, os, json, os]
+import std/[strformat, strutils, strscans, os, json, sequtils]
 
 const
   (target, lib_ext, exe_ext) =
@@ -12,7 +12,62 @@ const
         ("osx", ".dylib", "")
     else:
       ("x11", ".so", "")
-  cpu = if host_cpu == "arm64": "arm64" else: "64"
+  arch_file = ".build_arch"
+
+let machine_arch = gorge("uname -m").strip
+
+proc parse_arch_arg(): string =
+  for arg in command_line_params():
+    if arg in ["amd64", "x86_64", "x64", "64", "arm64", "aarch64"]:
+      return arg
+  ""
+
+proc get_persisted_arch(): string =
+  if file_exists(arch_file):
+    read_file(arch_file).strip
+  else:
+    ""
+
+proc save_arch(arch: string) =
+  write_file(arch_file, arch)
+
+proc determine_cpu(): string =
+  # Only apply arch logic on Linux
+  if host_os != "linux":
+    return if host_cpu == "arm64": "arm64" else: "64"
+
+  let arg_arch = parse_arch_arg()
+  if arg_arch != "":
+    # Normalize arch names
+    if arg_arch in ["amd64", "x86_64", "x64", "64"]:
+      return "64"
+    elif arg_arch in ["arm64", "aarch64"]:
+      return "arm64"
+    else:
+      return arg_arch
+
+  let persisted = get_persisted_arch()
+  if persisted != "":
+    return persisted
+
+  # Default to native arch
+  if machine_arch == "aarch64":
+    "arm64"
+  else:
+    "64"
+
+let
+  cpu = determine_cpu()
+  cross_compile = host_os == "linux" and machine_arch == "aarch64" and cpu == "64"
+  cross_compile_opts =
+    if cross_compile: "CC=x86_64-linux-gnu-gcc CXX=x86_64-linux-gnu-g++ module_webm_enabled=no "
+    else: ""
+
+# Set PKG_CONFIG_PATH for cross-compilation
+if cross_compile:
+  put_env("PKG_CONFIG_PATH", "/usr/lib/x86_64-linux-gnu/pkgconfig")
+
+let
   generated_dir = "generated/godotapi"
   api_json = "api.json"
   generator = "tools/build_helpers"
@@ -58,7 +113,7 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts, force = false) =
   if scons == "":
     quit &"*** scons not found on path, and is required to build Godot. See {godot_build_url} ***"
   with_dir "vendor/godot":
-    exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {opts} -j{cores}"
+    exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {cross_compile_opts}{opts} -j{cores}"
 
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
@@ -71,12 +126,22 @@ task ios, "Build ios":
   exec &"{gen()} write_export_presets --enu_version {git_version}"
   exec &"{godot_bin()} --path app --export-pack \"ios\" " & "ios"
 
+const arch_args = ["amd64", "x86_64", "x64", "64", "arm64", "aarch64"]
+
 task build, "Build enu":
+  when host_os == "linux":
+    echo &"Target architecture: {cpu}" & (if cross_compile: " (cross-compiling)" else: "")
   let
     output = "app/enu" & lib_ext
-    params = command_line_params()[1..^1]
+    params = command_line_params()[1..^1].filterIt(it notin arch_args)
     extra = if params.len > 0: " " & params.join(" ") else: ""
-  exec &"nim c -o:{output}{extra} src/enu.nim"
+    cross_opts =
+      if cross_compile:
+        " --cpu:amd64 --gcc.exe:x86_64-linux-gnu-gcc --gcc.linkerexe:x86_64-linux-gnu-gcc"
+      elif cpu == "arm64" and target == "x11":
+        " --cpu:arm64"
+      else: ""
+  exec &"nim c -o:{output}{cross_opts}{extra} src/enu.nim"
 
 task build_godot, "Build godot. Use --force to re-init submodules":
   build_godot(force = "--force" in command_line_params())
@@ -131,10 +196,7 @@ task world_tests,
     else:
       "cd app && " & bin & " --level-dir " & test_level & " --enu-test scenes/game.tscn"
 
-  let result = gorge_ex(cmd)
-  echo result.output
-  if result.exit_code != 0:
-    quit result.exit_code
+  exec cmd
 
 task test, "run all tests":
   var failed: seq[string]
@@ -278,7 +340,12 @@ task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   else:
     echo "extract_dlls is only needed on Windows"
 
-task prereqs, "Build godot, download fonts, generate binding and stdlib. Use --force to re-init submodules":
+task prereqs, "Build godot, download fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
+  # Persist arch if specified
+  when host_os == "linux":
+    if parse_arch_arg() != "":
+      save_arch(cpu)
+    echo &"Target architecture: {cpu}" & (if cross_compile: " (cross-compiling)" else: "")
   when host_os == "windows":
     extract_dlls_task()
   build_godot(force = "--force" in command_line_params())
