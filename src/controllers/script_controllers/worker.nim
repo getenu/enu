@@ -365,10 +365,6 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
             unit.global_flags -= ScriptRunning
         to_process.add unit
 
-      Zen.thread_ctx.boop
-      run_deferred()
-
-      inc state.frame_count
       for ctx_name in Zen.thread_ctx.unsubscribed:
         var i = 0
         while i < state.units.len:
@@ -402,6 +398,9 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         except CatchableError as e:
           worker.handle_catchable_error(unit, e)
 
+      Zen.thread_ctx.boop
+      run_deferred()
+
       # In test mode, exit when all scripts have finished
       if TestMode in state.local_flags:
         var any_running = false
@@ -413,6 +412,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           info "Test mode: all scripts finished", exit_code
           state.push_flag Quitting
           state.test_exit_code = exit_code
+
+      inc state.frame_count
 
       let now = get_mono_time()
 
