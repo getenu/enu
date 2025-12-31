@@ -125,11 +125,16 @@ task world_tests,
     else:
       godot_bin()
 
-  if use_dist:
-    exec bin & " --level-dir " & test_level & " --enu-test"
-  else:
-    cd "app"
-    exec bin & " --level-dir " & test_level & " --enu-test scenes/game.tscn"
+  let cmd =
+    if use_dist:
+      bin & " --level-dir " & test_level & " --enu-test"
+    else:
+      "cd app && " & bin & " --level-dir " & test_level & " --enu-test scenes/game.tscn"
+
+  let result = gorge_ex(cmd)
+  echo result.output
+  if result.exit_code != 0:
+    quit result.exit_code
 
 task test, "run all tests":
   var failed: seq[string]

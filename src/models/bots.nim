@@ -17,14 +17,14 @@ method on_begin_move*(
   var duration = 0.0
   let
     moving = -self.transform.basis.z
+    finish = self.transform.origin + moving * steps
     finish_time = 1.0 / self.speed * steps
 
   result = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
     if duration >= finish_time:
       self.velocity_value.touch(vec3())
-      self.transform_value.origin =
-        self.transform.origin.snapped(vec3(0.1, 0.1, 0.1))
+      self.transform_value.origin = finish.snapped(vec3(0.1, 0.1, 0.1))
       return Done
     else:
       self.velocity_value.touch(moving * self.speed)
