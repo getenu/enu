@@ -57,7 +57,8 @@ jobs:
           path: |
             vendor/godot/bin
             fonts
-          key: ${{ runner.os }}-prereq-cache-v4-${{ hashFiles('.submodules.tmp') }}
+            deps
+          key: ${{ runner.os }}-prereq-cache-v5-${{ hashFiles('.submodules.tmp', 'atlas.lock') }}
       - name: build prereqs
         run: nim dist_prereqs
         if: steps.prereq-cache.outputs.cache-hit != 'true'

@@ -383,6 +383,8 @@ proc code_sign(id, path: string) =
 
 task dist_prereqs, "Build godot debug and release versions, and download fonts":
   p "Buiding distribution prereqs..."
+  exec "atlas install"
+  exec "atlas rep"
   when host_os == "windows":
     extract_dlls_task()
   if target == "x11":
