@@ -46,6 +46,8 @@ jobs:
         run: nim unit_tests
       - name: Run VM tests
         run: nim vm_tests
+      - name: Rebuild for headless tests
+        run: nim build
       - name: Run world tests
         run: nim world_tests headless
       - uses: actions/upload-artifact@v4
