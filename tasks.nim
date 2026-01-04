@@ -346,6 +346,8 @@ task prereqs, "Build godot, download fonts, generate binding and stdlib. Use 'am
     if parse_arch_arg() != "":
       save_arch(cpu)
     echo &"Target architecture: {cpu}" & (if cross_compile: " (cross-compiling)" else: "")
+  exec "atlas install"
+  exec "atlas rep"
   when host_os == "windows":
     extract_dlls_task()
   build_godot(force = "--force" in command_line_params())

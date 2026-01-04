@@ -48,8 +48,6 @@ jobs:
           curl -LO https://github.com/nim-lang/nightlies/releases/download/2025-10-31-version-2-2-ab00c56904e3126ad826bb520d243513a139436a/nim-2.2.6-macosx_arm64.tar.xz
           tar xzf nim-2.2.6-macosx_arm64.tar.xz
           echo "$(pwd)/nim-2.2.6/bin" >> $GITHUB_PATH
-      - name: Install dependencies
-        run: atlas install && atlas rep
       - name: Save SHAs of submodules
         run: "git submodule status > .submodules.tmp"
       - name: prereq cache

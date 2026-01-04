@@ -95,6 +95,8 @@ gdobj GUI of Control:
   method handle_player_input*(event: InputEvent) =
     if not ?self:
       return
+    if TestMode in state.local_flags:
+      return
     let player = state.nodes.player as PlayerNode
     if not ?player:
       return
@@ -209,6 +211,8 @@ gdobj GUI of Control:
       state.pop_flag SecondaryDown
 
   method unhandled_input*(event: InputEvent) =
+    if TestMode in state.local_flags:
+      return
     if CommandMode notin state.local_flags and
         event.is_action_pressed("ui_cancel") and
         ViewportFocused in state.local_flags:
@@ -233,6 +237,8 @@ gdobj GUI of Control:
   #   self.accept_event()
 
   method gui_input*(event: InputEvent) =
+    if TestMode in state.local_flags:
+      return
     template touch_controls() =
       if TouchControls in state.local_flags:
         let index = byte(event.index)

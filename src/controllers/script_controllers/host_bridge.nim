@@ -369,27 +369,18 @@ proc `show=`(self: Unit, value: bool) =
     self.global_flags -= Visible
 
 proc rotation(self: Unit): float =
-  #  :(  fix this
-  proc nm(f: float): float =
-    if f.is_equal_approx(0):
-      return 0
-    elif f < 0:
-      return f + (2 * PI)
-    else:
-      return f
-
-  proc nm(v: Vector3): Vector3 =
-    vec3(v.x.nm, v.y.nm, v.z.nm)
-
   if self of Player:
     result = Player(self).rotation
   else:
     let e = self.transform.basis.orthonormalized.get_euler
-
-    let n = e.nm
-    let v = vec3(nm(n.x).rad_to_deg, nm(n.y).rad_to_deg, nm(n.z).rad_to_deg)
-    let m = if v.z > 0: 1.0 else: -1.0
-    result = (v.x - v.y) * m
+    # Y-axis rotation (yaw) in radians, convert to degrees
+    # Normalize to -180..180 range
+    var degrees = rad_to_deg(e.y)
+    while degrees > 180.0:
+      degrees -= 360.0
+    while degrees < -180.0:
+      degrees += 360.0
+    result = degrees
 
 proc `rotation=`(self: Unit, degrees: float) =
   var t = Transform.init

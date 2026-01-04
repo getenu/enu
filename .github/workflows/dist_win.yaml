@@ -26,8 +26,6 @@ jobs:
           git config --global core.autocrlf false
           git config --global core.eol lf
           git config --global core.symlinks false
-      - name: Install dependencies
-        run: atlas install && atlas rep
       - name: Save SHAs of submodules
         run: 'git submodule status > .submodules.tmp'
       - name: Prep dist config
@@ -62,8 +60,9 @@ jobs:
         run: nim unit_tests
       - name: Run VM tests
         run: nim vm_tests
-      - name: Run world tests
-        run: nim world_tests dist
+      # world_tests disabled on Windows - no headless support until Godot 4
+      # - name: Run world tests
+      #   run: nim world_tests dist
 
       # Upload unsigned dist for zip signing
       - name: Upload unsigned dist for zip signing
