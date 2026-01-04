@@ -59,6 +59,8 @@ jobs:
           cd ..
           rm mesa -Recurse
         if: steps.prereq-cache.outputs.cache-hit != 'true'
+      - name: Setup package paths
+        run: atlas rep
       - name: Dist
         run: nim dist_package
       - name: Run unit tests
