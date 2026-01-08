@@ -5,7 +5,7 @@
   "tasks": [
     {
       "label": "Build enu",
-      "command": "nimble",
+      "command": "nim",
       "args": [
         "build",
         "--debugger:native"

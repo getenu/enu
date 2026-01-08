@@ -4,7 +4,7 @@ import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
 import pkg/[model_citizen]
-import models/colors, libs/[eval]
+import models/[colors, packed_chunks], libs/[eval]
 
 from pkg/godot import NimGodotObject
 
@@ -106,6 +106,7 @@ type
     paused*: bool
     frame_count*: int
     skip_block_paint*: bool
+    disable_packed_chunks*: bool  # Runtime toggle for packed chunk format
     open_sign_value*: ZenValue[Sign]
     queued_action_value*: ZenValue[string]
     scale_factor*: float
@@ -116,6 +117,9 @@ type
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
     test_exit_code_value*: ZenValue[int]  # -1 = not set, 0 = success, 1+ = failure count
+    net_bytes_sent_value*: ZenValue[int64]
+    net_bytes_received_value*: ZenValue[int64]
+    net_connections_value*: ZenValue[int]
 
   Model* = ref object of RootObj
     id*: string
@@ -192,19 +196,38 @@ type
 
   Chunk* = ZenTable[Vector3, VoxelInfo]
 
-  Build* = ref object of Unit
+  VoxelStore* = ref object of RootObj
+    id*: string
+    disable_packed* {.zen_ignore.}: bool
+    ctx* {.zen_ignore.}: ZenContext
+
+    # Core storage
     chunks*: ZenTable[Vector3, Chunk]
+    block_count*: int
+
+    # Packed format fields (used when state.disable_packed_chunks = false)
+    packed_chunks*: ZenTable[Vector3, SnapshotData]
+    chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
+    dirty_chunks* {.zen_ignore.}: HashSet[Vector3]
+    last_snapshot* {.zen_ignore.}: Table[Vector3, Table[Vector3, PackedVoxel]]
+
+    # Batching
+    batching* {.zen_ignore.}: bool
+    batched_voxels* {.zen_ignore.}: Table[Vector3, Table[Vector3, VoxelInfo]]
+
+    # Callbacks for Build integration
+    on_chunk_created* {.zen_ignore.}: proc(chunk_id: Vector3) {.gcsafe.}
+
+  Build* = ref object of Unit
+    voxels*: VoxelStore
     draw_transform_value*: ZenValue[Transform]
-    voxels_per_frame*: float
-    voxels_remaining_this_frame*: float
-    drawing*: bool
-    save_points*:
+    voxels_per_frame* {.zen_ignore.}: float
+    voxels_remaining_this_frame* {.zen_ignore.}: float
+    drawing* {.zen_ignore.}: bool
+    save_points* {.zen_ignore.}:
       Table[string, tuple[position: Transform, color: Color, drawing: bool]]
     bounds_value*: ZenValue[AABB]
-    bot_collisions*: bool
-    batching*: bool
-    batched_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
-    block_count*: int
+    bot_collisions* {.zen_ignore.}: bool
 
   Config* = object
     font_size*: int
@@ -341,7 +364,40 @@ proc from_flatty*(s: string, i: var int, n: var ScriptCtx) =
 proc to_flatty*(s: var string, n: ScriptCtx) =
   discard
 
+proc from_flatty*(s: string, i: var int, n: var ZenContext) =
+  discard
+
+proc to_flatty*(s: var string, n: ZenContext) =
+  discard
+
+proc from_flatty*(s: string, i: var int, p: var SnapshotData) =
+  var len: int
+  from_flatty(s, i, len)
+  p.data = newSeq[byte](len)
+  for j in 0 ..< len:
+    p.data[j] = s[i].uint8
+    inc i
+
+proc to_flatty*(s: var string, p: SnapshotData) =
+  to_flatty(s, p.data.len)
+  for b in p.data:
+    s.add char(b)
+
+proc from_flatty*(s: string, i: var int, d: var DeltaUpdate) =
+  var len: int
+  from_flatty(s, i, len)
+  d.data = newSeq[byte](len)
+  for j in 0 ..< len:
+    d.data[j] = s[i].uint8
+    inc i
+
+proc to_flatty*(s: var string, d: DeltaUpdate) =
+  to_flatty(s, d.data.len)
+  for b in d.data:
+    s.add char(b)
+
 Zen.register(Player)
+Zen.register(VoxelStore)
 Zen.register(Build)
 Zen.register(Sign)
 Zen.register(Bot)

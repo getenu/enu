@@ -160,6 +160,9 @@ proc init*(_: type GameState): GameState =
     status_message_value: ~("", flags),
     voxel_tasks_value: ~(0, flags),
     test_exit_code_value: ~(-1, flags),
+    net_bytes_sent_value: ~(0'i64, flags),
+    net_bytes_received_value: ~(0'i64, flags),
+    net_connections_value: ~(0, flags),
   )
 
   self.init_logger

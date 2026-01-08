@@ -1,4 +1,4 @@
-import std/[monotimes, os, json, math, random, net]
+import std/[monotimes, os, json, math, random, net, strformat]
 import pkg/[godot, metrics, metrics/stdlib_httpserver]
 from dotenv import nil
 import
@@ -20,6 +20,26 @@ when defined(metrics):
   set_system_metrics_automatic_update(false)
 
 ZenContext.init_metrics "main", "worker"
+
+proc format_bytes(bytes: SomeNumber): string =
+  let b = bytes.float
+  if b < 1024:
+    fmt"{b.int} B"
+  elif b < 1024 * 1024:
+    fmt"{(b / 1024):.1f} KB"
+  else:
+    fmt"{(b / 1024 / 1024):.2f} MB"
+
+proc get_network_stats(): string =
+  ## Get network bytes sent/received stats from worker thread via GameState
+  let conn_count = state.net_connections
+  let bytes_sent = state.net_bytes_sent
+  let bytes_recv = state.net_bytes_received
+
+  if conn_count == 0:
+    result = fmt"net: no conn (sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)})"
+  else:
+    result = fmt"net: {conn_count} conn, sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)}"
 
 # saved state when restarting worker thread
 const savable_flags =
@@ -72,6 +92,7 @@ gdobj Game of Node:
         units: {unit_count}
         zen objects: {Zen.thread_ctx.len}
         level: {state.level_name}
+        {get_network_stats()}
         {get_stats()}
         """
     state.voxel_tasks =

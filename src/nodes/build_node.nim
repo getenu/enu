@@ -88,16 +88,16 @@ gdobj BuildNode of VoxelTerrain:
           m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
   proc track_chunk(chunk_id: Vector3) =
-    if chunk_id in self.model.chunks:
-      self.draw_block(self.model.chunks[chunk_id])
-      self.active_chunks[chunk_id] = self.model.chunks[chunk_id].watch:
+    if chunk_id in self.model.voxels.chunks:
+      self.draw_block(self.model.voxels.chunks[chunk_id])
+      self.active_chunks[chunk_id] = self.model.voxels.chunks[chunk_id].watch:
         # `and not modified` isn't required, but the block will be
         # replaced on the next iteration anyway.
         if removed and not modified:
           self.draw(change.item.key, action_colors[Eraser])
         elif added:
           self.draw(change.item.key, change.item.value.color)
-      self.draw_block(self.model.chunks[chunk_id])
+      self.draw_block(self.model.voxels.chunks[chunk_id])
     else:
       self.active_chunks[chunk_id] = empty_zid
 
@@ -109,7 +109,7 @@ gdobj BuildNode of VoxelTerrain:
     if ?self.model:
       let zid = self.active_chunks[chunk_id]
       if zid != empty_zid:
-        self.model.chunks[chunk_id].untrack(zid)
+        self.model.voxels.chunks[chunk_id].untrack(zid)
       self.active_chunks.del(chunk_id)
 
   proc set_visibility() =
@@ -127,7 +127,7 @@ gdobj BuildNode of VoxelTerrain:
       self.visible = false
 
   proc track_chunks() =
-    self.chunks_zid = self.model.chunks.watch:
+    self.chunks_zid = self.model.voxels.chunks.watch:
       let id = change.item.key
       if id in self.active_chunks:
         if added:

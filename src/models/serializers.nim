@@ -109,11 +109,8 @@ proc `$`(self: Color): string =
 proc `$`(self: VoxelInfo): string =
   \"[{self.kind.ord}, \"{self.color}\"]"
 
-proc `$`(self: Vector3): string =
-  \"[{self.x}, {self.y}, {self.z}]"
-
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
-  \"[{self.voxel}, [{int self.info.kind}, {self.info.color}]]"
+  \"[{$[self.voxel.x, self.voxel.y, self.voxel.z]}, [{int self.info.kind}, {self.info.color}]]"
 
 proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   let edits = collect:
@@ -127,7 +124,8 @@ proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
-  let elements = self.start_transform.basis.elements.map_it($it).join(",\n")
+  let elements = self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
+  let origin = self.start_transform.origin
   let edits = $self.shared.edits
   result =
     \"""
@@ -137,7 +135,7 @@ proc `$`(self: Unit): string =
     "basis": [
 {elements.indent(6)}
     ],
-    "origin": {$self.start_transform.origin}
+    "origin": {$[origin.x, origin.y, origin.z]}
   }},
   "start_color": {self.start_color},
   "edits": {{

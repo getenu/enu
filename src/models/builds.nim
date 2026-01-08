@@ -4,16 +4,18 @@ import
     macros, base64, strformat,
   ]
 import godotapi/spatial
-import core, models/[states, bots, colors, units]
+import core, models/[states, bots, colors, units, packed_chunks, voxel_store]
 
-const
-  ChunkSize = vec3(16, 16, 16)
-  MAX_BLOCK_COUNT = 100_000
-  CHECK_INTERVAL = 1_000
+# Re-export constants from voxel_store
+export ChunkSize, MAX_BLOCK_COUNT, MAX_DELTA_UPDATES
 
 include "build_code_template.nim.nimf"
 
 const default_color = action_colors[Blue]
+
+proc packed_chunks_enabled*(): bool =
+  ## Check if packed chunks are enabled. Handles nil state.
+  result = state.isNil or not state.disable_packed_chunks
 
 var
   current_build* {.threadvar.}: Build
@@ -25,6 +27,8 @@ var
   draw_normal = vec3()
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
+proc flush_packed_chunks*(self: Build) {.gcsafe.}
+proc verify_packed_chunks*(self: Build) {.gcsafe.}
 
 method code_template*(self: Build, imports: string): string =
   result = build_code_template(
@@ -39,28 +43,28 @@ proc buffer(position: Vector3): Vector3 =
 proc contains*(self: Build, position: Vector3): bool =
   let buf = position.buffer
   # Check both committed chunks and batched voxels
-  if buf in self.chunks and position in self.chunks[buf]:
+  if buf in self.voxels.chunks and position in self.voxels.chunks[buf]:
     return true
-  if self.batching and buf in self.batched_voxels and
-      position in self.batched_voxels[buf]:
+  if self.voxels.batching and buf in self.voxels.batched_voxels and
+      position in self.voxels.batched_voxels[buf]:
     return true
 
 proc voxel_info*(self: Build, position: Vector3): VoxelInfo =
   let buf = position.buffer
   # Check batched voxels first (they may override committed chunks)
-  if self.batching and buf in self.batched_voxels and
-      position in self.batched_voxels[buf]:
-    return self.batched_voxels[buf][position]
-  self.chunks[buf][position]
+  if self.voxels.batching and buf in self.voxels.batched_voxels and
+      position in self.voxels.batched_voxels[buf]:
+    return self.voxels.batched_voxels[buf][position]
+  self.voxels.chunks[buf][position]
 
 proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
   let buf = position.buffer
   # Check batched voxels first
-  if self.batching and buf in self.batched_voxels and
-      position in self.batched_voxels[buf]:
-    return some(self.batched_voxels[buf][position])
-  if buf in self.chunks and position in self.chunks[buf]:
-    return some(self.chunks[buf][position])
+  if self.voxels.batching and buf in self.voxels.batched_voxels and
+      position in self.voxels.batched_voxels[buf]:
+    return some(self.voxels.batched_voxels[buf][position])
+  if buf in self.voxels.chunks and position in self.voxels.chunks[buf]:
+    return some(self.voxels.chunks[buf][position])
   none(VoxelInfo)
 
 proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
@@ -71,7 +75,7 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
       for position in positions:
         var loc = position - offset
         if loc in unit:
-          var info = unit.chunks[loc.buffer][loc]
+          var info = unit.voxels.chunks[loc.buffer][loc]
           if info.kind != Hole and info.color != action_colors[Eraser]:
             return unit
       let first = unit.units.find_first(positions)
@@ -80,13 +84,13 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
 
 proc add_build(self, source: Build) =
   # Check if merging would exceed limit
-  if self.block_count + source.block_count > MAX_BLOCK_COUNT:
+  if self.voxels.block_count + source.voxels.block_count > MAX_BLOCK_COUNT:
     raise (ref ResourceLimitError)(
       msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
     )
 
   dont_join = true
-  for chunk_id, chunk in source.chunks:
+  for chunk_id, chunk in source.voxels.chunks:
     for position, info in chunk:
       var position = position.global_from(source)
       position = position.local_to(self)
@@ -140,67 +144,72 @@ proc expand_bounds_to_chunk(self: Build, chunk_id: Vector3) =
 proc reset_bounds*(self: Build) =
   self.bounds = init_aabb(vec3(), vec3(-1, -1, -1))
 
-  for chunk_id, chunk in self.chunks:
+  for chunk_id, chunk in self.voxels.chunks:
     self.expand_bounds_to_chunk(chunk_id)
 
 proc verify_block_count(self: Build) =
   var actual_count = 0
-  for chunk_id, chunk in self.chunks:
+  for chunk_id, chunk in self.voxels.chunks:
     for position, info in chunk:
       if info.kind != Hole:
         inc actual_count
 
-  if actual_count != self.block_count:
-    raise_assert &"Block count mismatch for {self.id}: counter={self.block_count}, actual={actual_count}"
+  if actual_count != self.voxels.block_count:
+    raise_assert &"Block count mismatch for {self.id}: counter={self.voxels.block_count}, actual={actual_count}"
 
 proc add_voxel(self: Build, position: Vector3, voxel: VoxelInfo) =
   let buffer = position.buffer
 
-  if buffer notin self.chunks:
-    self.chunks[buffer] = Chunk.init
+  if buffer notin self.voxels.chunks:
+    self.voxels.chunks[buffer] = Chunk.init
     self.expand_bounds_to_chunk(buffer)
 
-  # Check if voxel exists in either current chunks or batched voxels
-  let exists_in_chunks = position in self.chunks[buffer]
-  let exists_in_batched = self.batching and
-                          buffer in self.batched_voxels and
-                          position in self.batched_voxels[buffer]
+  if packed_chunks_enabled():
+    self.voxels.dirty_chunks.incl(buffer)
 
-  if self.batching:
-    if position notin self.chunks[buffer] or
-        self.chunks[buffer][position] != voxel:
-      if buffer notin self.batched_voxels:
-        self.batched_voxels[buffer] = init_table[Vector3, VoxelInfo]()
+  # Check if voxel exists in either current chunks or batched voxels
+  let exists_in_chunks = position in self.voxels.chunks[buffer]
+  let exists_in_batched = self.voxels.batching and
+                          buffer in self.voxels.batched_voxels and
+                          position in self.voxels.batched_voxels[buffer]
+
+  if self.voxels.batching:
+    if position notin self.voxels.chunks[buffer] or
+        self.voxels.chunks[buffer][position] != voxel:
+      if buffer notin self.voxels.batched_voxels:
+        self.voxels.batched_voxels[buffer] = init_table[Vector3, VoxelInfo]()
 
       # Check limit before adding new voxel
       if not exists_in_chunks and not exists_in_batched:
-        if self.block_count >= MAX_BLOCK_COUNT:
+        if self.voxels.block_count >= MAX_BLOCK_COUNT:
           raise (ref ResourceLimitError)(
             msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
           )
-        inc self.block_count
+        inc self.voxels.block_count
         when defined(debug):
-          if self.block_count mod CHECK_INTERVAL == 0:
+          if self.voxels.block_count mod CHECK_INTERVAL == 0:
             self.verify_block_count()
 
-      self.batched_voxels[buffer][position] = voxel
+      self.voxels.batched_voxels[buffer][position] = voxel
   else:
     if not exists_in_chunks:
-      if self.block_count >= MAX_BLOCK_COUNT:
+      if self.voxels.block_count >= MAX_BLOCK_COUNT:
         raise (ref ResourceLimitError)(
           msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
         )
-      inc self.block_count
+      inc self.voxels.block_count
       when defined(debug):
-        if self.block_count mod CHECK_INTERVAL == 0:
+        if self.voxels.block_count mod CHECK_INTERVAL == 0:
           self.verify_block_count()
-    self.chunks[buffer][position] = voxel
+    self.voxels.chunks[buffer][position] = voxel
 
 proc del_voxel(self: Build, position: Vector3) =
   let buffer = position.buffer
-  if buffer in self.chunks and position in self.chunks[buffer]:
-    dec self.block_count
-  self.chunks[buffer].del position
+  if buffer in self.voxels.chunks and position in self.voxels.chunks[buffer]:
+    dec self.voxels.block_count
+    if packed_chunks_enabled():
+      self.voxels.dirty_chunks.incl(buffer)
+  self.voxels.chunks[buffer].del position
 
 proc restore_edits*(self: Build) =
   if self.id in self.shared.edits:
@@ -210,13 +219,13 @@ proc restore_edits*(self: Build) =
         self.add_voxel(loc, info)
       else:
         let buffer = loc.buffer
-        if buffer in self.chunks and loc in self.chunks[buffer]:
+        if buffer in self.voxels.chunks and loc in self.voxels.chunks[buffer]:
           var info = info
-          info.color = self.chunks[buffer][loc].color
+          info.color = self.voxels.chunks[buffer][loc].color
           var locations = self.shared.edits[self.id]
           locations[loc] = info
           self.shared.edits[self.id] = locations
-          self.chunks[buffer].del loc
+          self.voxels.chunks[buffer].del loc
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
   if voxel.kind == Computed:
@@ -280,7 +289,7 @@ proc remove(self: Build) =
     self.draw(point, (Hole, action_colors[Eraser]))
 
     if self.units.len == 0 and
-        not self.chunks.any_it(
+        not self.voxels.chunks.any_it(
           it.value.any_it(it.value.color != action_colors[Eraser])
         ):
       if self.parent.is_nil:
@@ -309,18 +318,317 @@ proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
 
 method batch_changes*(self: Build): bool =
-  if not self.batching:
-    self.batching = true
+  if not self.voxels.batching:
+    self.voxels.batching = true
     result = true
 
 method apply_changes*(self: Build) =
-  if self.batching:
+  if self.voxels.batching:
     # Block counting now handled in add_voxel
-    for buffer, chunk in self.batched_voxels:
-      self.chunks[buffer] += chunk
+    for buffer, chunk in self.voxels.batched_voxels:
+      self.voxels.chunks[buffer] += chunk
 
-    self.batched_voxels.clear
-    self.batching = false
+    self.voxels.batched_voxels.clear
+    self.voxels.batching = false
+
+  # Encode dirty chunks for network sync
+  if packed_chunks_enabled():
+    if self.voxels.dirty_chunks.len > 0:
+      self.flush_packed_chunks()
+
+proc chunk_to_local(chunk_id: Vector3, pos: Vector3): int =
+  ## Convert world position to linear index within chunk
+  let local_x = int(pos.x - chunk_id.x * 16) mod 16
+  let local_y = int(pos.y - chunk_id.y * 16) mod 16
+  let local_z = int(pos.z - chunk_id.z * 16) mod 16
+  linear_position(local_x, local_y, local_z)
+
+proc get_or_create_delta_seq(self: Build, chunk_id: Vector3): ZenSeq[DeltaUpdate] =
+  ## Get existing delta seq or create a new one for the chunk.
+  if chunk_id in self.voxels.chunk_deltas:
+    result = self.voxels.chunk_deltas[chunk_id]
+  else:
+    result = ~(seq[DeltaUpdate], {SyncLocal, SyncRemote})
+    self.voxels.chunk_deltas[chunk_id] = result
+
+proc flush_packed_chunks*(self: Build) =
+  ## Encode dirty chunks using two-tier system:
+  ## - packed_chunks: Full chunk snapshots (for late-connecting clients)
+  ## - chunk_deltas: Per-chunk incremental changes (for connected clients)
+  ##
+  ## No-op when packed chunks are disabled.
+  if not packed_chunks_enabled():
+    return
+
+  for chunk_id in self.voxels.dirty_chunks:
+    # Build current voxel state and track positions with values
+    var voxels: array[CHUNK_VOLUME, PackedVoxel]
+    var current_voxels: Table[Vector3, PackedVoxel]
+
+    if chunk_id in self.voxels.chunks:
+      let chunk_value = self.voxels.chunks[chunk_id].value
+      for pos, info in chunk_value:
+        let linear = chunk_to_local(chunk_id, pos)
+        let color_idx = info.color.action_index.ord
+        let kind_ord = info.kind.ord
+        let packed = pack_voxel(color_idx, kind_ord)
+        voxels[linear] = packed
+        current_voxels[pos] = packed
+
+    # Get last snapshot state for this chunk
+    let had_snapshot = chunk_id in self.voxels.last_snapshot
+    let last_voxels = if had_snapshot: self.voxels.last_snapshot[chunk_id]
+                      else: initTable[Vector3, PackedVoxel]()
+
+    # Determine changes since last snapshot
+    var changes: seq[tuple[pos: Vector3, voxel: PackedVoxel]]
+
+    # Added or modified voxels
+    for pos, packed in current_voxels:
+      if pos notin last_voxels or last_voxels[pos] != packed:
+        changes.add (pos, packed)
+
+    # Removed voxels (now holes)
+    for pos in last_voxels.keys:
+      if pos notin current_voxels:
+        changes.add (pos, EMPTY_VOXEL)
+
+    # Get delta count for this chunk
+    let delta_count = if chunk_id in self.voxels.chunk_deltas:
+                        self.voxels.chunk_deltas[chunk_id].len
+                      else: 0
+
+    # Force snapshot if this chunk has too many deltas
+    let force_snapshot = delta_count >= MAX_DELTA_UPDATES
+
+    # Decide: delta or snapshot
+    # Use snapshot if: forced, no previous snapshot, or chunk is now empty
+    let use_snapshot = force_snapshot or not had_snapshot or
+                       current_voxels.len == 0
+
+    if use_snapshot:
+      # Full snapshot - clear deltas and update snapshot
+      let packed = encode_chunk(voxels)
+      if packed.is_empty:
+        if chunk_id in self.voxels.packed_chunks:
+          self.voxels.packed_chunks.del(chunk_id)
+        if chunk_id in self.voxels.chunk_deltas:
+          self.voxels.chunk_deltas.del(chunk_id)
+        if chunk_id in self.voxels.last_snapshot:
+          self.voxels.last_snapshot.del(chunk_id)
+      else:
+        self.voxels.packed_chunks[chunk_id] = packed
+        if chunk_id in self.voxels.chunk_deltas:
+          self.voxels.chunk_deltas[chunk_id].clear
+        self.voxels.last_snapshot[chunk_id] = current_voxels
+    elif changes.len > 0:
+      # Delta update - only send changes
+      let delta = encode_delta(changes)
+      let delta_seq = self.get_or_create_delta_seq(chunk_id)
+      delta_seq.add delta
+      # Update last_snapshot to current state
+      self.voxels.last_snapshot[chunk_id] = current_voxels
+
+  self.voxels.dirty_chunks.clear
+
+  # Verify packed data matches actual chunks (debug builds only)
+  when defined(debug):
+    self.verify_packed_chunks()
+
+proc verify_packed_chunks*(self: Build) =
+  ## Verify that packed_chunks + chunk_deltas can reconstruct actual chunks.
+  ## Raises an exception with details if there's a mismatch.
+  if not packed_chunks_enabled():
+    return
+
+  # Collect all chunk_ids from actual chunks, snapshots, and deltas
+  var all_chunk_ids: HashSet[Vector3]
+  for chunk_id in self.voxels.chunks.value.keys:
+    all_chunk_ids.incl(chunk_id)
+  for chunk_id in self.voxels.packed_chunks.value.keys:
+    all_chunk_ids.incl(chunk_id)
+  for chunk_id in self.voxels.chunk_deltas.value.keys:
+    all_chunk_ids.incl(chunk_id)
+
+  for chunk_id in all_chunk_ids:
+    # Reconstruct chunk from snapshot + deltas
+    var reconstructed: Table[Vector3, PackedVoxel]
+
+    # Start with snapshot if exists
+    if chunk_id in self.voxels.packed_chunks:
+      let snapshot = self.voxels.packed_chunks[chunk_id]
+      if snapshot.data.len > 0:
+        let voxels = decode_chunk(snapshot)
+        for linear in 0 ..< CHUNK_VOLUME:
+          if voxels[linear] != EMPTY_VOXEL:
+            let local_pos = from_linear(linear)
+            let world_pos = vec3(
+              chunk_id.x * 16 + local_pos.x,
+              chunk_id.y * 16 + local_pos.y,
+              chunk_id.z * 16 + local_pos.z
+            )
+            reconstructed[world_pos] = voxels[linear]
+
+    # Apply all deltas for this chunk
+    if chunk_id in self.voxels.chunk_deltas:
+      for delta in self.voxels.chunk_deltas[chunk_id]:
+        let changes = decode_delta(delta)
+        for (local_pos, packed_voxel) in changes:
+          let world_pos = vec3(
+            chunk_id.x * 16 + local_pos.x,
+            chunk_id.y * 16 + local_pos.y,
+            chunk_id.z * 16 + local_pos.z
+          )
+          if packed_voxel == EMPTY_VOXEL:
+            reconstructed.del(world_pos)
+          else:
+            reconstructed[world_pos] = packed_voxel
+
+    # Build actual chunk state
+    var actual: Table[Vector3, PackedVoxel]
+    if chunk_id in self.voxels.chunks:
+      for pos, info in self.voxels.chunks[chunk_id]:
+        let color_idx = info.color.action_index.ord
+        let kind_ord = info.kind.ord
+        let packed = pack_voxel(color_idx, kind_ord)
+        actual[pos] = packed
+
+    # Compare reconstructed vs actual
+    var mismatches: seq[string]
+
+    # Check for voxels in actual but not in reconstructed
+    for pos, packed in actual:
+      if pos notin reconstructed:
+        let (c, k) = unpack_voxel(packed)
+        mismatches.add &"  Missing in reconstructed: {pos} (color={c}, kind={k})"
+      elif reconstructed[pos] != packed:
+        let (ac, ak) = unpack_voxel(packed)
+        let (rc, rk) = unpack_voxel(reconstructed[pos])
+        mismatches.add &"  Value mismatch at {pos}: actual=(color={ac}, kind={ak}), reconstructed=(color={rc}, kind={rk})"
+
+    # Check for voxels in reconstructed but not in actual
+    for pos, packed in reconstructed:
+      if pos notin actual:
+        let (c, k) = unpack_voxel(packed)
+        mismatches.add &"  Extra in reconstructed: {pos} (color={c}, kind={k})"
+
+    if mismatches.len > 0:
+      let has_snapshot = chunk_id in self.voxels.packed_chunks
+      let delta_count = if chunk_id in self.voxels.chunk_deltas: self.voxels.chunk_deltas[chunk_id].len else: 0
+      raise newException(AssertionDefect,
+        &"Packed chunk verification failed for {self.id} chunk {chunk_id}:\n" &
+        &"  has_snapshot={has_snapshot}, delta_count={delta_count}\n" &
+        &"  actual_voxels={actual.len}, reconstructed_voxels={reconstructed.len}\n" &
+        mismatches[0 .. min(mismatches.len - 1, 19)].join("\n"))
+
+proc apply_delta_update*(self: Build, chunk_id: Vector3, delta: DeltaUpdate) =
+  ## Apply a delta update to local chunks (for network receive).
+  ## Does NOT mark chunk as dirty since this is receiving data, not generating it.
+  let changes = decode_delta(delta)
+
+  for (local_pos, packed_voxel) in changes:
+    let world_pos = vec3(
+      chunk_id.x * 16 + local_pos.x,
+      chunk_id.y * 16 + local_pos.y,
+      chunk_id.z * 16 + local_pos.z
+    )
+
+    if packed_voxel == EMPTY_VOXEL:
+      # Remove voxel
+      if chunk_id in self.voxels.chunks and world_pos in self.voxels.chunks[chunk_id]:
+        let info = self.voxels.chunks[chunk_id][world_pos]
+        if info.kind != Hole:
+          dec self.voxels.block_count
+        self.voxels.chunks[chunk_id].del(world_pos)
+    else:
+      # Add/modify voxel
+      let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
+      let color = action_colors[Colors(color_idx)]
+      let kind = VoxelKind(kind_ord)
+
+      # Ensure chunk exists
+      if chunk_id notin self.voxels.chunks:
+        self.voxels.chunks[chunk_id] = Chunk.init
+        self.expand_bounds_to_chunk(chunk_id)
+
+      # Check if replacing existing voxel
+      let existed = world_pos in self.voxels.chunks[chunk_id]
+      if existed:
+        let old_info = self.voxels.chunks[chunk_id][world_pos]
+        if old_info.kind != Hole:
+          dec self.voxels.block_count
+
+      self.voxels.chunks[chunk_id][world_pos] = (kind, color)
+      if kind != Hole:
+        inc self.voxels.block_count
+
+proc apply_snapshot*(self: Build, chunk_id: Vector3, snapshot: SnapshotData) =
+  ## Decode a snapshot and apply to local chunks (for network receive).
+  ## Does NOT mark chunk as dirty since this is receiving data, not generating it.
+  if snapshot.data.len == 0:
+    return
+
+  let voxels = decode_chunk(snapshot)
+
+  # Clear existing chunk if present
+  if chunk_id in self.voxels.chunks:
+    let chunk = self.voxels.chunks[chunk_id]
+    for pos, info in chunk:
+      if info.kind != Hole:
+        dec self.voxels.block_count
+    self.voxels.chunks.del(chunk_id)
+    chunk.destroy
+
+  # Check if the packed chunk has any voxels
+  var has_voxels = false
+  for v in voxels:
+    if v != EMPTY_VOXEL:
+      has_voxels = true
+      break
+
+  if has_voxels:
+    self.voxels.chunks[chunk_id] = Chunk.init
+    self.expand_bounds_to_chunk(chunk_id)
+
+    for linear in 0 ..< CHUNK_VOLUME:
+      let packed_voxel = voxels[linear]
+      if packed_voxel != EMPTY_VOXEL:
+        let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
+        let pos = from_linear(linear)
+        let world_pos = vec3(
+          chunk_id.x * 16 + pos.x,
+          chunk_id.y * 16 + pos.y,
+          chunk_id.z * 16 + pos.z
+        )
+        let color = action_colors[Colors(color_idx)]
+        let kind = VoxelKind(kind_ord)
+        self.voxels.chunks[chunk_id][world_pos] = (kind, color)
+        if kind != Hole:
+          inc self.voxels.block_count
+
+proc apply_chunk_with_deltas*(self: Build, chunk_id: Vector3) =
+  ## Apply snapshot and any existing deltas for a chunk.
+  ## Used when a new chunk is first synced from network.
+  if chunk_id in self.voxels.packed_chunks:
+    self.apply_snapshot(chunk_id, self.voxels.packed_chunks[chunk_id])
+
+  # Apply any deltas that arrived with the chunk
+  if chunk_id in self.voxels.chunk_deltas:
+    for delta in self.voxels.chunk_deltas[chunk_id]:
+      self.apply_delta_update(chunk_id, delta)
+
+proc clear_chunk*(self: Build, chunk_id: Vector3) =
+  ## Efficiently clear an entire chunk by deleting it from the table.
+  ## This sends a single Unassign message instead of many individual voxel deletes.
+  if chunk_id in self.voxels.chunks:
+    let chunk = self.voxels.chunks[chunk_id]
+    for pos, info in chunk:
+      if info.kind != Hole:
+        dec self.voxels.block_count
+    self.voxels.chunks.del(chunk_id)
+    chunk.destroy
+    if packed_chunks_enabled():
+      self.voxels.dirty_chunks.incl(chunk_id)
 
 method on_begin_move*(
     self: Build, direction: Vector3, steps: float, move_mode: int
@@ -420,10 +728,21 @@ method reset*(self: Build) =
   self.global_flags += Visible
   self.reset_state()
 
-  let chunks = self.chunks.value
+  let chunks = self.voxels.chunks.value
   for chunk_id, chunk in chunks:
-    self.chunks.del(chunk_id)
+    self.voxels.chunks.del(chunk_id)
     chunk.destroy
+
+  # Clear packed chunk data to avoid stale snapshots/deltas
+  if packed_chunks_enabled():
+    let packed = self.voxels.packed_chunks.value
+    for chunk_id in packed.keys:
+      self.voxels.packed_chunks.del(chunk_id)
+    let deltas = self.voxels.chunk_deltas.value
+    for chunk_id in deltas.keys:
+      self.voxels.chunk_deltas.del(chunk_id)
+    self.voxels.last_snapshot.clear
+    self.voxels.dirty_chunks.clear
 
   self.units.clear()
   self.global_flags -= Resetting
@@ -437,7 +756,7 @@ method ensure_visible*(self: Build) =
   # therefor impossible to select or modify. In that case we want to draw a
   # single block.
   if self.units.len == 0 and
-      not self.chunks.any_it(
+      not self.voxels.chunks.any_it(
         it.value.any_it(it.value.color != action_colors[Eraser])
       ):
     let color =
@@ -460,9 +779,14 @@ proc init*(
     bot_collisions = true,
     parent: Unit = nil,
 ): Build =
+  let voxel_id = id & ".voxels"
+  let voxels = VoxelStore.init(
+    id = voxel_id,
+    disable_packed = not packed_chunks_enabled(),
+  )
   var self = Build(
     id: id,
-    chunks: ~(Table[Vector3, Chunk], {SyncLocal, SyncRemote}),
+    voxels: voxels,
     start_transform: transform,
     draw_transform_value: ~(Transform.init, flags = {}),
     start_color: color,
@@ -481,8 +805,95 @@ proc init*(
   self.reset()
   result = self
 
+method worker_thread_joined*(self: Build) =
+  proc_call worker_thread_joined(Unit(self))
+
+  # Only clients need to apply packed chunks/deltas received from server
+  # Servers create these directly from chunks, so no need to apply
+  if packed_chunks_enabled() and (state.isNil or Server notin state.local_flags):
+    # Helper to set up delta watch for a chunk
+    proc watch_chunk_deltas(chunk_id: Vector3, delta_seq: ZenSeq[DeltaUpdate]) =
+      delta_seq.watch:
+        if added:
+          self.apply_delta_update(chunk_id, change.item)
+
+    # Process any snapshots that arrived before the watch was set up
+    for chunk_id, snapshot in self.voxels.packed_chunks:
+      self.apply_snapshot(chunk_id, snapshot)
+
+    # Process any deltas that arrived before the watch was set up
+    for chunk_id, delta_seq in self.voxels.chunk_deltas:
+      if delta_seq.is_nil:
+        continue
+      for delta in delta_seq:
+        self.apply_delta_update(chunk_id, delta)
+      watch_chunk_deltas(chunk_id, delta_seq)
+
+    self.voxels.packed_chunks.watch:
+      if added:
+        self.apply_snapshot(change.item.key, change.item.value)
+      elif removed and change.item.key in self.voxels.chunks:
+        # Chunk was deleted remotely
+        let chunk = self.voxels.chunks[change.item.key]
+        for pos, info in chunk:
+          if info.kind != Hole:
+            dec self.voxels.block_count
+        self.voxels.chunks.del(change.item.key)
+        chunk.destroy
+
+    self.voxels.chunk_deltas.watch:
+      if added:
+        # New chunk delta seq - apply existing deltas and set up watch
+        let chunk_id = change.item.key
+        let delta_seq = change.item.value
+        if not delta_seq.is_nil:
+          for delta in delta_seq:
+            self.apply_delta_update(chunk_id, delta)
+          watch_chunk_deltas(chunk_id, delta_seq)
+
 method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))
+
+  # Main thread reconstructs chunks from packed_chunks/chunk_deltas
+  if packed_chunks_enabled():
+    # Helper to set up delta watch for a chunk
+    proc watch_chunk_deltas(chunk_id: Vector3, delta_seq: ZenSeq[DeltaUpdate]) =
+      delta_seq.watch:
+        if added:
+          self.apply_delta_update(chunk_id, change.item)
+
+    # Process any snapshots that arrived before the watch was set up
+    for chunk_id, snapshot in self.voxels.packed_chunks:
+      self.apply_snapshot(chunk_id, snapshot)
+
+    # Process any deltas that arrived before the watch was set up
+    for chunk_id, delta_seq in self.voxels.chunk_deltas:
+      if delta_seq.is_nil:
+        continue
+      for delta in delta_seq:
+        self.apply_delta_update(chunk_id, delta)
+      watch_chunk_deltas(chunk_id, delta_seq)
+    self.voxels.packed_chunks.watch:
+      if added:
+        self.apply_snapshot(change.item.key, change.item.value)
+      elif removed and change.item.key in self.voxels.chunks:
+        # Chunk was deleted remotely
+        let chunk = self.voxels.chunks[change.item.key]
+        for pos, info in chunk:
+          if info.kind != Hole:
+            dec self.voxels.block_count
+        self.voxels.chunks.del(change.item.key)
+        chunk.destroy
+
+    self.voxels.chunk_deltas.watch:
+      if added:
+        # New chunk delta seq - apply existing deltas and set up watch
+        let chunk_id = change.item.key
+        let delta_seq = change.item.value
+        if not delta_seq.is_nil:
+          for delta in delta_seq:
+            self.apply_delta_update(chunk_id, delta)
+          watch_chunk_deltas(chunk_id, delta_seq)
 
   self.local_flags.watch:
     if Hover.added and state.tool == CodeMode:
@@ -587,11 +998,11 @@ when is_main_module:
   var b = Build.init
 
   b.draw vec3(1, 1, 1), (Computed, Color())
-  assert vec3(1, 1, 1) in b.chunks[vec3(0, 0, 0)]
+  assert vec3(1, 1, 1) in b.voxels.chunks[vec3(0, 0, 0)]
   b.draw vec3(17, 17, 17), (Computed, Color())
-  assert vec3(17, 17, 17) in b.chunks[vec3(1, 1, 1)]
+  assert vec3(17, 17, 17) in b.voxels.chunks[vec3(1, 1, 1)]
   var c = Build.init(transform = Transform(origin: vec3(5, 5, 5)))
   c.parent = b
 
   c.draw vec3(14, 14, 14), (Manual, Color())
-  c.flags += Hover
+  c.local_flags += Hover
