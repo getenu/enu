@@ -198,7 +198,7 @@ proc load_units(parent: Unit) =
     let unit_id = dir.split_path.tail
     let file_name = dir / unit_id & ".json"
     if not file_exists(file_name):
-      error "Missing unit file", file_name
+      notice "Missing unit file", file_name
       continue
 
     try:
@@ -225,7 +225,7 @@ proc load_units(parent: Unit) =
       else:
         unit.global_flags -= ScriptInitializing
     except Exception as e:
-      error "Failed to load unit", unit_id, error = e[]
+      error "Failed to load unit", unit_id, error = e
 
 proc load_user_config*(dir = ""): UserConfig =
   var work_dir = dir
@@ -237,7 +237,7 @@ proc load_user_config*(dir = ""): UserConfig =
     try:
       result.from_json(read_file(config_file).parse_json, opt)
     except Exception as e:
-      error "Failed to load user config", error = e[]
+      error "Failed to load user config", error = e
 
 proc build_user_config*(config: Config): UserConfig =
   for config_name, config_field in config.field_pairs:
@@ -304,7 +304,7 @@ proc load_level*(worker: Worker, level_dir: string) =
       let level = level_json.parse_json.json_to(LevelInfo)
       load_chunks = level.format_version == "v0.9"
     except Exception as e:
-      error "Failed to load level", error = e[]
+      error "Failed to load level", error = e
 
   let init_proc =
     worker.interpreter.select_routine("initialize_state", "base_api")

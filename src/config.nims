@@ -6,6 +6,15 @@
   off
 --deepcopy:
   on
+--stacktrace:off
+--define:nimStackTraceOverride
+--debugger:native
+# Override default -g3 with minimal line tables for smaller binaries.
+# GCC uses -g1, Clang uses -gline-tables-only.
+--gcc.options.debug:"-g1"
+--gcc.cpp.options.debug:"-g1"
+--clang.options.debug:"-gline-tables-only"
+--clang.cpp.options.debug:"-gline-tables-only"
 
 if host_os == "windows":
   --pass_l:
