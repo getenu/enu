@@ -1,5 +1,6 @@
 {.warning[UnusedImport]: off.}
 
+import pkg / libbacktrace
 import core, game
 
 import

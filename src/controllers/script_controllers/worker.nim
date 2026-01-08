@@ -403,8 +403,25 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         except CatchableError as e:
           worker.handle_catchable_error(unit, e)
 
+      # Apply changes for all Builds not already processed, to ensure packed chunks are flushed
+      # This handles the case where voxels are drawn before Ready is set
+      if packed_chunks_enabled():
+        state.units.value.walk_tree proc(unit: Unit) =
+          if unit of Build and unit notin batched:
+            let build = Build(unit)
+            if build.voxels.dirty_chunks.len > 0 or build.voxels.batching:
+              build.apply_changes()
+
       Zen.thread_ctx.boop
       run_deferred()
+
+      # Update network stats for main thread
+      state.net_bytes_sent = Zen.thread_ctx.bytes_sent
+      state.net_bytes_received = Zen.thread_ctx.bytes_received
+      if not Zen.thread_ctx.reactor.isNil:
+        state.net_connections = Zen.thread_ctx.reactor.connections.len
+      else:
+        state.net_connections = 0
 
       # In test mode, exit when all scripts have finished
       if TestMode in state.local_flags:
@@ -455,7 +472,9 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     error "Unhandled worker thread exception",
       kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace
 
-    state.push_flag(NeedsRestart)
+    # Re-raise to crash properly instead of restarting
+    raise e
+    # state.push_flag(NeedsRestart)
 
   try:
     if NeedsRestart in state.local_flags:
