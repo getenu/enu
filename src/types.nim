@@ -203,7 +203,7 @@ type
 
     # Core storage
     chunks*: ZenTable[Vector3, Chunk]
-    block_count*: int
+    block_count* {.zen_ignore.}: int
 
     # Packed format fields (used when state.disable_packed_chunks = false)
     packed_chunks*: ZenTable[Vector3, SnapshotData]
