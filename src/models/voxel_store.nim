@@ -239,6 +239,7 @@ proc flush_packed_chunks*(self: VoxelStore) =
           self.last_snapshot.del(chunk_id)
       else:
         self.packed_chunks[chunk_id] = packed
+        self.content_bytes += packed.data.len
         if chunk_id in self.chunk_deltas:
           self.chunk_deltas[chunk_id].clear
         self.last_snapshot[chunk_id] = current_voxels
@@ -254,6 +255,7 @@ proc flush_packed_chunks*(self: VoxelStore) =
         local_changes.add (local_pos, packed)
 
       let delta = encode_delta(local_changes)
+      self.content_bytes += delta.data.len
       let delta_seq = self.get_or_create_delta_seq(chunk_id)
       delta_seq.add delta
       # Update last_snapshot to current state

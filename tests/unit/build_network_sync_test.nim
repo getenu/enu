@@ -23,7 +23,9 @@ proc next_port(): string =
 
 type
   TestResult = object
-    bytes: int
+    sent: int
+    recv: int
+    content: int  # Actual voxel data bytes (snapshots + deltas)
     voxels: int
     bytes_per_voxel: float
 
@@ -67,9 +69,11 @@ proc run_voxel_sync_test(
     server_ctx.boop(blocking = false)
     client_ctx.boop(blocking = false)
 
-  result.bytes = server_ctx.bytes_sent + server_ctx.bytes_received
+  result.sent = server_ctx.bytes_sent
+  result.recv = server_ctx.bytes_received
+  result.content = store.content_bytes
   result.voxels = store.block_count
-  result.bytes_per_voxel = if result.voxels > 0: result.bytes.float / result.voxels.float else: 0
+  result.bytes_per_voxel = if result.voxels > 0: result.sent.float / result.voxels.float else: 0
 
   server_ctx.close
   client_ctx.close
@@ -119,9 +123,11 @@ proc run_delta_sync_test(
     server_ctx.boop(blocking = false)
     client_ctx.boop(blocking = false)
 
-  result.bytes = server_ctx.bytes_sent + server_ctx.bytes_received
+  result.sent = server_ctx.bytes_sent
+  result.recv = server_ctx.bytes_received
+  result.content = store.content_bytes
   result.voxels = store.block_count
-  result.bytes_per_voxel = if result.voxels > 0: result.bytes.float / result.voxels.float else: 0
+  result.bytes_per_voxel = if result.voxels > 0: result.sent.float / result.voxels.float else: 0
 
   server_ctx.close
   client_ctx.close
@@ -133,20 +139,28 @@ proc run_both_formats(
   ## Run a test in both packed and unpacked modes, report comparison.
   state.disable_packed_chunks = false
   result.packed = runner(false)
-  echo "[", name, "/Packed] ", result.packed.voxels, " voxels, ",
-       result.packed.bytes, " bytes, ", result.packed.bytes_per_voxel, " bytes/voxel"
+  let p = result.packed
+  echo "[", name, "/Packed] ", p.voxels, " voxels | sent: ", p.sent,
+       " recv: ", p.recv, " content: ", p.content,
+       " | ", p.bytes_per_voxel, " bytes/voxel (sent)"
 
   state.disable_packed_chunks = true
   result.unpacked = runner(true)
-  echo "[", name, "/Unpacked] ", result.unpacked.voxels, " voxels, ",
-       result.unpacked.bytes, " bytes, ", result.unpacked.bytes_per_voxel, " bytes/voxel"
+  let u = result.unpacked
+  echo "[", name, "/Unpacked] ", u.voxels, " voxels | sent: ", u.sent,
+       " recv: ", u.recv, " content: ", u.content,
+       " | ", u.bytes_per_voxel, " bytes/voxel (sent)"
 
-  if result.packed.bytes < result.unpacked.bytes:
-    echo "[", name, "] Packed: ", result.packed.bytes, " Unpacked: ", result.unpacked.bytes,
-         " Ratio: ", result.unpacked.bytes.float / result.packed.bytes.float, "x (packed wins)"
+  # Report overhead
+  if p.content > 0:
+    let overhead = p.sent - p.content
+    echo "[", name, "] Packed overhead: ", overhead, " bytes (",
+         (overhead.float / p.sent.float * 100).int, "% of sent)"
+
+  if p.sent < u.sent:
+    echo "[", name, "] Ratio: ", u.sent.float / p.sent.float, "x (packed wins)"
   else:
-    echo "[", name, "] Packed: ", result.packed.bytes, " Unpacked: ", result.unpacked.bytes,
-         " Ratio: ", result.packed.bytes.float / result.unpacked.bytes.float, "x (unpacked wins)"
+    echo "[", name, "] Ratio: ", p.sent.float / u.sent.float, "x (unpacked wins)"
 
 Zen.bootstrap
 
@@ -1024,7 +1038,7 @@ suite "Build Network Sync":
         store.apply_changes(disable_packed)
       )
     )
-    check packed.bytes < unpacked.bytes
+    check packed.sent < unpacked.sent
 
   test "dense non-repeating - packed vs unpacked":
     ## Full 16x16x16 chunks with varying colors (worst case for RLE).
@@ -1041,7 +1055,7 @@ suite "Build Network Sync":
         store.apply_changes(disable_packed)
       )
     )
-    check packed.bytes < unpacked.bytes
+    check packed.sent < unpacked.sent
 
   test "sparse - packed vs unpacked":
     ## Only 4 voxels per chunk across 16 chunks (64 total voxels).
@@ -1060,7 +1074,7 @@ suite "Build Network Sync":
         store.apply_changes(disable_packed)
       )
     )
-    check packed.bytes < unpacked.bytes
+    check packed.sent < unpacked.sent
 
   test "delta updates - packed vs unpacked":
     ## Client connects first, then voxels added incrementally.
