@@ -28,6 +28,7 @@ var
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
 proc flush_packed_chunks*(self: Build) {.gcsafe.}
+proc init_voxels_if_needed*(self: Build) {.gcsafe.}
 proc verify_packed_chunks*(self: Build) {.gcsafe.}
 
 method code_template*(self: Build, imports: string): string =
@@ -318,6 +319,7 @@ proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
 
 method batch_changes*(self: Build): bool =
+  self.init_voxels_if_needed()
   if not self.voxels.batching:
     self.voxels.batching = true
     result = true
@@ -805,8 +807,24 @@ proc init*(
   self.reset()
   result = self
 
+proc init_voxels_if_needed*(self: Build) =
+  ## Initialize voxels if nil (happens when Build is synced between threads)
+  if self.voxels.isNil:
+    let voxel_id = self.id & ".voxels"
+    let ctx = Zen.thread_ctx
+    self.voxels = VoxelStore(
+      id: voxel_id,
+      disable_packed: not packed_chunks_enabled(),
+      ctx: ctx,
+      chunks: ZenTable[Vector3, Chunk](ctx[voxel_id & ".chunks"]),
+      packed_chunks: ZenTable[Vector3, SnapshotData](ctx[voxel_id & ".packed_chunks"]),
+      chunk_deltas: ZenTable[Vector3, ZenSeq[DeltaUpdate]](ctx[voxel_id & ".chunk_deltas"]),
+    )
+
 method worker_thread_joined*(self: Build) =
   proc_call worker_thread_joined(Unit(self))
+
+  self.init_voxels_if_needed()
 
   # Only clients need to apply packed chunks/deltas received from server
   # Servers create these directly from chunks, so no need to apply
@@ -853,6 +871,8 @@ method worker_thread_joined*(self: Build) =
 
 method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))
+
+  self.init_voxels_if_needed()
 
   # Main thread reconstructs chunks from packed_chunks/chunk_deltas
   if packed_chunks_enabled():

@@ -305,6 +305,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       state.push_flag Server
       load_level()
     else:
+      echo "=== Connected to server. Initial bytes: sent=", Zen.thread_ctx.bytes_sent, " received=", Zen.thread_ctx.bytes_received
       worker.load_script_and_dependents(player)
 
   var sign = Sign.init(
@@ -340,8 +341,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
   state.config_value.changes:
     if added:
-      let uc = state.config.build_user_config
-      save_user_config(uc)
+      discard  # let uc = state.config.build_user_config
+      # save_user_config(uc)  # Temporarily disabled
 
     if state.config.player_color != change.item.player_color:
       player.color = state.config.player_color
@@ -351,9 +352,13 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   const auto_save_interval = 30.seconds
   const backup_interval = 15.minutes
   const test_timeout = 5.minutes
+  const bytes_log_interval = 5.seconds
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
   var test_started_at = MonoTime.high
+  var last_bytes_log = MonoTime.low
+  var last_bytes_sent = 0
+  var last_bytes_received = 0
 
   try:
     while running:
@@ -412,7 +417,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
             if build.voxels.dirty_chunks.len > 0 or build.voxels.batching:
               build.apply_changes()
 
-      Zen.thread_ctx.boop
+      Zen.thread_ctx.tick
       run_deferred()
 
       # Update network stats for main thread
@@ -422,6 +427,18 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         state.net_connections = Zen.thread_ctx.reactor.connections.len
       else:
         state.net_connections = 0
+
+      # Log bytes sent/received periodically
+      if frame_start > last_bytes_log + bytes_log_interval:
+        let sent = Zen.thread_ctx.bytes_sent
+        let recv = Zen.thread_ctx.bytes_received
+        let sent_delta = sent - last_bytes_sent
+        let recv_delta = recv - last_bytes_received
+        if sent_delta > 0 or recv_delta > 0:
+          echo "=== Bytes: sent=", sent, " (+" , sent_delta, "), received=", recv, " (+", recv_delta, ")"
+        last_bytes_log = frame_start
+        last_bytes_sent = sent
+        last_bytes_received = recv
 
       # In test mode, exit when all scripts have finished
       if TestMode in state.local_flags:
@@ -483,7 +500,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         Zen.thread_ctx.reactor.socket.close
       state.pop_flag NeedsRestart
 
-    Zen.thread_ctx.boop
+    Zen.thread_ctx.tick
   except Exception:
     discard
 

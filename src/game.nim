@@ -64,7 +64,7 @@ gdobj Game of Node:
     left_stick: VirtualJoystick
 
   method process*(delta: float) =
-    Zen.thread_ctx.boop
+    Zen.thread_ctx.tick
     inc state.frame_count
     let time = get_mono_time()
     when defined(metrics):
@@ -307,7 +307,7 @@ gdobj Game of Node:
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init
 
-    save_user_config(uc)
+    # save_user_config(uc)  # Temporarily disabled
     echo "=== Enu game.init() complete ==="
 
   proc set_panel_width() =

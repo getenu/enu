@@ -4,6 +4,7 @@
 import std/[tables, sets]
 import unittest2
 import pkg/model_citizen
+import pkg/model_citizen/types as mc_types
 import core
 import types
 import models/[colors, builds, packed_chunks, voxel_store]
@@ -28,6 +29,12 @@ type
     content: int  # Actual voxel data bytes (snapshots + deltas)
     voxels: int
     bytes_per_voxel: float
+    # New tracking from zen_debug_messages
+    messages_sent: int
+    obj_bytes_sent: int
+    pre_compression_bytes: int
+    messages_by_kind: array[mc_types.MessageKind, int]
+    obj_bytes_by_kind: array[mc_types.MessageKind, int]
 
 proc run_voxel_sync_test(
     test_name: string,
@@ -49,11 +56,18 @@ proc run_voxel_sync_test(
 
   # Setup voxels
   setup_voxels(store, server_ctx)
-  server_ctx.boop
+  server_ctx.tick
 
   # Reset counters before client connects
   server_ctx.bytes_sent = 0
   server_ctx.bytes_received = 0
+  when defined(zen_debug_messages):
+    server_ctx.messages_sent = 0
+    server_ctx.obj_bytes_sent = 0
+    server_ctx.pre_compression_bytes = 0
+    for k in mc_types.MessageKind:
+      server_ctx.messages_by_kind[k] = 0
+      server_ctx.obj_bytes_sent_by_kind[k] = 0
 
   # Client connects
   var client_ctx = ZenContext.init(
@@ -62,18 +76,24 @@ proc run_voxel_sync_test(
     max_recv_duration = timeout,
     blocking_recv = true
   )
-  client_ctx.subscribe port, callback = proc() = server_ctx.boop(blocking = false)
+  client_ctx.subscribe port, callback = proc() = server_ctx.tick(blocking = false)
 
   # Sync
   for _ in 0 ..< 30:
-    server_ctx.boop(blocking = false)
-    client_ctx.boop(blocking = false)
+    server_ctx.tick(blocking = false)
+    client_ctx.tick(blocking = false)
 
   result.sent = server_ctx.bytes_sent
   result.recv = server_ctx.bytes_received
   result.content = store.content_bytes
   result.voxels = store.block_count
   result.bytes_per_voxel = if result.voxels > 0: result.sent.float / result.voxels.float else: 0
+  when defined(zen_debug_messages):
+    result.messages_sent = server_ctx.messages_sent
+    result.obj_bytes_sent = server_ctx.obj_bytes_sent
+    result.pre_compression_bytes = server_ctx.pre_compression_bytes
+    result.messages_by_kind = server_ctx.messages_by_kind
+    result.obj_bytes_by_kind = server_ctx.obj_bytes_sent_by_kind
 
   server_ctx.close
   client_ctx.close
@@ -95,7 +115,7 @@ proc run_delta_sync_test(
     disable_packed = disable_packed
   )
 
-  server_ctx.boop
+  server_ctx.tick
 
   # Client connects FIRST (empty state)
   var client_ctx = ZenContext.init(
@@ -104,30 +124,43 @@ proc run_delta_sync_test(
     max_recv_duration = timeout,
     blocking_recv = true
   )
-  client_ctx.subscribe port, callback = proc() = server_ctx.boop(blocking = false)
+  client_ctx.subscribe port, callback = proc() = server_ctx.tick(blocking = false)
 
   # Initial sync (empty)
   for _ in 0 ..< 10:
-    server_ctx.boop(blocking = false)
-    client_ctx.boop(blocking = false)
+    server_ctx.tick(blocking = false)
+    client_ctx.tick(blocking = false)
 
   # Reset counters after initial sync
   server_ctx.bytes_sent = 0
   server_ctx.bytes_received = 0
+  when defined(zen_debug_messages):
+    server_ctx.messages_sent = 0
+    server_ctx.obj_bytes_sent = 0
+    server_ctx.pre_compression_bytes = 0
+    for k in mc_types.MessageKind:
+      server_ctx.messages_by_kind[k] = 0
+      server_ctx.obj_bytes_sent_by_kind[k] = 0
 
   # Now add voxels incrementally
   add_voxels_incrementally(store, server_ctx, client_ctx)
 
   # Final sync
   for _ in 0 ..< 50:
-    server_ctx.boop(blocking = false)
-    client_ctx.boop(blocking = false)
+    server_ctx.tick(blocking = false)
+    client_ctx.tick(blocking = false)
 
   result.sent = server_ctx.bytes_sent
   result.recv = server_ctx.bytes_received
   result.content = store.content_bytes
   result.voxels = store.block_count
   result.bytes_per_voxel = if result.voxels > 0: result.sent.float / result.voxels.float else: 0
+  when defined(zen_debug_messages):
+    result.messages_sent = server_ctx.messages_sent
+    result.obj_bytes_sent = server_ctx.obj_bytes_sent
+    result.pre_compression_bytes = server_ctx.pre_compression_bytes
+    result.messages_by_kind = server_ctx.messages_by_kind
+    result.obj_bytes_by_kind = server_ctx.obj_bytes_sent_by_kind
 
   server_ctx.close
   client_ctx.close
@@ -139,28 +172,31 @@ proc run_both_formats(
   ## Run a test in both packed and unpacked modes, report comparison.
   state.disable_packed_chunks = false
   result.packed = runner(false)
-  let p = result.packed
-  echo "[", name, "/Packed] ", p.voxels, " voxels | sent: ", p.sent,
-       " recv: ", p.recv, " content: ", p.content,
-       " | ", p.bytes_per_voxel, " bytes/voxel (sent)"
 
   state.disable_packed_chunks = true
   result.unpacked = runner(true)
+
+  let p = result.packed
   let u = result.unpacked
-  echo "[", name, "/Unpacked] ", u.voxels, " voxels | sent: ", u.sent,
-       " recv: ", u.recv, " content: ", u.content,
-       " | ", u.bytes_per_voxel, " bytes/voxel (sent)"
 
-  # Report overhead
-  if p.content > 0:
-    let overhead = p.sent - p.content
-    echo "[", name, "] Packed overhead: ", overhead, " bytes (",
-         (overhead.float / p.sent.float * 100).int, "% of sent)"
-
-  if p.sent < u.sent:
-    echo "[", name, "] Ratio: ", u.sent.float / p.sent.float, "x (packed wins)"
-  else:
-    echo "[", name, "] Ratio: ", p.sent.float / u.sent.float, "x (unpacked wins)"
+  echo "[", name, "] ", p.voxels, " voxels"
+  echo "  content_bytes:                   ", p.content
+  when defined(zen_debug_messages):
+    echo "  obj_bytes_sent:                  ", p.obj_bytes_sent
+    echo "  pre_compression_bytes:           ", p.pre_compression_bytes
+  echo "  network sent:                    ", p.sent
+  echo "  network recv:                    ", p.recv
+  echo "  unpacked sent:                   ", u.sent
+  when defined(zen_debug_messages):
+    if p.content > 0 and p.obj_bytes_sent > 0:
+      echo "  Overhead:"
+      echo "    flatty (obj/content):          ", (p.obj_bytes_sent.float / p.content.float), "x"
+      echo "    envelope (pre/obj):            ", (p.pre_compression_bytes.float / p.obj_bytes_sent.float), "x"
+      echo "    compression (sent/pre):        ", (p.sent.float / p.pre_compression_bytes.float), "x"
+    echo "  Messages: ", p.messages_sent
+    for k in mc_types.MessageKind:
+      if p.messages_by_kind[k] > 0:
+        echo "    ", k, ": ", p.messages_by_kind[k], " msgs, ", p.obj_bytes_by_kind[k], " obj_bytes"
 
 Zen.bootstrap
 
@@ -192,8 +228,8 @@ suite "Build Network Sync":
     echo "After encode, packed_chunks count: ", packed1.len
     echo "  Chunk (0,0,0) format: ", packed1[vec3(0, 0, 0)].format_name, " size: ", packed1[vec3(0, 0, 0)].data.len
 
-    ctx1.boop
-    ctx2.boop
+    ctx1.tick
+    ctx2.tick
 
     # Get the packed_chunks on ctx2
     let packed2 = ZenTable[Vector3, PackedChunk](ctx2["test_packed_1"])
@@ -233,8 +269,8 @@ suite "Build Network Sync":
 
     echo "After encode, packed_chunks count: ", packed1.len
 
-    ctx1.boop
-    ctx2.boop
+    ctx1.tick
+    ctx2.tick
 
     let packed2 = ZenTable[Vector3, PackedChunk](ctx2["test_packed_2"])
     echo "Received packed_chunks count: ", packed2.len
@@ -288,8 +324,8 @@ suite "Build Network Sync":
 
     check packed.len == 1
 
-    ctx1.boop
-    ctx2.boop
+    ctx1.tick
+    ctx2.tick
 
     # Check sync
     let packed2 = ZenTable[Vector3, PackedChunk](ctx2["test_build_3.packed_chunks"])
@@ -401,7 +437,7 @@ suite "Build Network Sync":
       chunks[vec3(0, 0, 0)][vec3(float(i), 0, 0)] = (Manual, action_colors[Blue])
     dirty.incl(vec3(0, 0, 0))
     flush_two_tier()
-    server_ctx.boop
+    server_ctx.tick
     echo "[TwoTier] packed_chunks has ", packed_chunks.len, " entries"
     echo "[TwoTier] delta_updates has ", delta_updates.len, " entries"
 
@@ -409,7 +445,7 @@ suite "Build Network Sync":
     chunks[vec3(0, 0, 0)][vec3(10, 0, 0)] = (Manual, action_colors[Red])
     dirty.incl(vec3(0, 0, 0))
     flush_two_tier()
-    server_ctx.boop
+    server_ctx.tick
     echo "[TwoTier] After second flush:"
     echo "[TwoTier]   packed_chunks has ", packed_chunks.len, " entries"
     echo "[TwoTier]   delta_updates has ", delta_updates.len, " entries"
@@ -422,11 +458,11 @@ suite "Build Network Sync":
     var client_ctx = ZenContext.init(
       id = "twotier_client", min_recv_duration = recv_duration, max_recv_duration = timeout
     )
-    client_ctx.subscribe port, callback = proc() = server_ctx.boop(blocking = false)
+    client_ctx.subscribe port, callback = proc() = server_ctx.tick(blocking = false)
 
     for _ in 0 ..< 10:
-      server_ctx.boop(blocking = false)
-      client_ctx.boop(blocking = false)
+      server_ctx.tick(blocking = false)
+      client_ctx.tick(blocking = false)
 
     # STEP 4: Verify client received both snapshot and delta
     let has_packed = "twotier_test.packed_chunks" in client_ctx
@@ -531,20 +567,20 @@ suite "Build Network Sync":
     # Build some blocks over multiple frames (like speed=1 building)
     add_voxel(vec3(0, 0, 0), (Manual, action_colors[Blue]))
     flush()
-    main_ctx.boop
-    worker_ctx.boop
+    main_ctx.tick
+    worker_ctx.tick
     echo "[Build] Frame 1"
 
     add_voxel(vec3(5, 5, 5), (Manual, action_colors[Red]))
     flush()
-    main_ctx.boop
-    worker_ctx.boop
+    main_ctx.tick
+    worker_ctx.tick
     echo "[Build] Frame 2"
 
     add_voxel(vec3(20, 0, 0), (Manual, action_colors[Green]))  # Different chunk
     flush()
-    main_ctx.boop
-    worker_ctx.boop
+    main_ctx.tick
+    worker_ctx.tick
     echo "[Build] Frame 3"
 
     echo "[Build] packed_chunks on main: ", packed_chunks.len
@@ -559,15 +595,15 @@ suite "Build Network Sync":
 
     client_ctx.subscribe port,
       callback = proc() =
-        worker_ctx.boop(blocking = false)
+        worker_ctx.tick(blocking = false)
 
     echo "[Build] Client connected"
 
     # Sync
     for _ in 0 ..< 10:
-      main_ctx.boop(blocking = false)
-      worker_ctx.boop(blocking = false)
-      client_ctx.boop(blocking = false)
+      main_ctx.tick(blocking = false)
+      worker_ctx.tick(blocking = false)
+      client_ctx.tick(blocking = false)
 
     # Check what client sees
     let has_packed = "build_test.packed_chunks" in client_ctx
@@ -640,7 +676,7 @@ suite "Build Network Sync":
     chunks_server[vec3(0, 0, 0)][vec3(0, 0, 0)] = (Manual, action_colors[Blue])
     dirty_chunks.incl(vec3(0, 0, 0))
     flush()
-    server_ctx.boop
+    server_ctx.tick
     echo "[Fail] Frame 1: chunk (0,0,0)"
 
     # FRAME 2
@@ -648,7 +684,7 @@ suite "Build Network Sync":
     chunks_server[vec3(1, 0, 0)][vec3(16, 0, 0)] = (Manual, action_colors[Red])
     dirty_chunks.incl(vec3(1, 0, 0))
     flush()
-    server_ctx.boop
+    server_ctx.tick
     echo "[Fail] Frame 2: chunk (1,0,0)"
 
     # FRAME 3
@@ -656,7 +692,7 @@ suite "Build Network Sync":
     chunks_server[vec3(0, 1, 0)][vec3(0, 16, 0)] = (Manual, action_colors[Green])
     dirty_chunks.incl(vec3(0, 1, 0))
     flush()
-    server_ctx.boop
+    server_ctx.tick
     echo "[Fail] Frame 3: chunk (0,1,0)"
 
     echo "[Fail] Server packed_chunks has ", packed_server.len, " entries"
@@ -671,7 +707,7 @@ suite "Build Network Sync":
     # Subscribe with callback to tick server
     client_ctx.subscribe port,
       callback = proc() =
-        server_ctx.boop(blocking = false)
+        server_ctx.tick(blocking = false)
 
     # Create client's chunks table and set up watch (like Build.main_thread_joined)
     var chunks_client = ZenTable[Vector3, ZenTable[Vector3, VoxelInfo]].init(
@@ -682,8 +718,8 @@ suite "Build Network Sync":
 
     # Sync
     for _ in 0 ..< 10:
-      server_ctx.boop(blocking = false)
-      client_ctx.boop(blocking = false)
+      server_ctx.tick(blocking = false)
+      client_ctx.tick(blocking = false)
 
     # Check packed_chunks on client
     let has_packed = "fail_test.packed_chunks" in client_ctx
@@ -734,7 +770,7 @@ suite "Build Network Sync":
       voxels[linear_position(0, 0, 0)] = pack_voxel(Blue.ord, Manual.ord)
       voxels[linear_position(1, 1, 1)] = pack_voxel(Blue.ord, Manual.ord)
       packed_server[vec3(0, 0, 0)] = encode_chunk(voxels)
-    server_ctx.boop
+    server_ctx.tick
     echo "[Incr] Frame 1: Added chunk (0,0,0) with 2 voxels"
 
     # FRAME 2: Build some blocks in chunk (1,0,0)
@@ -742,7 +778,7 @@ suite "Build Network Sync":
       var voxels: array[CHUNK_VOLUME, PackedVoxel]
       voxels[linear_position(5, 5, 5)] = pack_voxel(Red.ord, Manual.ord)
       packed_server[vec3(1, 0, 0)] = encode_chunk(voxels)
-    server_ctx.boop
+    server_ctx.tick
     echo "[Incr] Frame 2: Added chunk (1,0,0) with 1 voxel"
 
     # FRAME 3: Build some blocks in chunk (0,1,0)
@@ -750,7 +786,7 @@ suite "Build Network Sync":
       var voxels: array[CHUNK_VOLUME, PackedVoxel]
       voxels[linear_position(3, 3, 3)] = pack_voxel(Green.ord, Manual.ord)
       packed_server[vec3(0, 1, 0)] = encode_chunk(voxels)
-    server_ctx.boop
+    server_ctx.tick
     echo "[Incr] Frame 3: Added chunk (0,1,0) with 1 voxel"
 
     echo "[Incr] Server has ", packed_server.len, " packed chunks before client connects"
@@ -766,14 +802,14 @@ suite "Build Network Sync":
 
     client_ctx.subscribe port,
       callback = proc() =
-        server_ctx.boop(blocking = false)
+        server_ctx.tick(blocking = false)
 
     echo "[Incr] Client connected"
 
     # Sync
     for _ in 0 ..< 5:
-      server_ctx.boop(blocking = false)
-      client_ctx.boop(blocking = false)
+      server_ctx.tick(blocking = false)
+      client_ctx.tick(blocking = false)
 
     # Check what client received
     let has_table = "incr_test.packed_chunks" in client_ctx
@@ -826,19 +862,19 @@ suite "Build Network Sync":
     chunks_server[vec3(0, 0, 0)] = ZenTable[Vector3, VoxelInfo].init(ctx = server_ctx)
     chunks_server[vec3(0, 0, 0)][vec3(0, 0, 0)] = (Manual, action_colors[Blue])
     chunks_server[vec3(0, 0, 0)][vec3(1, 1, 1)] = (Manual, action_colors[Blue])
-    server_ctx.boop
+    server_ctx.tick
     echo "[Direct] Frame 1: Added chunk (0,0,0) with 2 voxels"
 
     # FRAME 2: Build some blocks in chunk (1,0,0)
     chunks_server[vec3(1, 0, 0)] = ZenTable[Vector3, VoxelInfo].init(ctx = server_ctx)
     chunks_server[vec3(1, 0, 0)][vec3(21, 5, 5)] = (Manual, action_colors[Red])
-    server_ctx.boop
+    server_ctx.tick
     echo "[Direct] Frame 2: Added chunk (1,0,0) with 1 voxel"
 
     # FRAME 3: Build some blocks in chunk (0,1,0)
     chunks_server[vec3(0, 1, 0)] = ZenTable[Vector3, VoxelInfo].init(ctx = server_ctx)
     chunks_server[vec3(0, 1, 0)][vec3(3, 19, 3)] = (Manual, action_colors[Green])
-    server_ctx.boop
+    server_ctx.tick
     echo "[Direct] Frame 3: Added chunk (0,1,0) with 1 voxel"
 
     echo "[Direct] Server has ", chunks_server.len, " chunks before client connects"
@@ -854,14 +890,14 @@ suite "Build Network Sync":
 
     client_ctx.subscribe port,
       callback = proc() =
-        server_ctx.boop(blocking = false)
+        server_ctx.tick(blocking = false)
 
     echo "[Direct] Client connected"
 
     # Sync
     for _ in 0 ..< 5:
-      server_ctx.boop(blocking = false)
-      client_ctx.boop(blocking = false)
+      server_ctx.tick(blocking = false)
+      client_ctx.tick(blocking = false)
 
     # Check what client received
     let has_table = "direct_test.chunks" in client_ctx
@@ -926,8 +962,8 @@ suite "Build Network Sync":
     echo "[Net] Server has ", packed_data.len, " packed chunks before client connects"
 
     # Commit changes before client connects
-    data_ctx.boop
-    listener_ctx.boop
+    data_ctx.tick
+    listener_ctx.tick
 
     # NOW create client context and connect over network (late connection)
     var client_ctx = ZenContext.init(
@@ -940,15 +976,15 @@ suite "Build Network Sync":
     # Client subscribes to listener over network with callback to tick server
     client_ctx.subscribe server_port,
       callback = proc() =
-        listener_ctx.boop(blocking = false)
+        listener_ctx.tick(blocking = false)
 
     echo "[Net] Client subscribed to server at ", server_port
 
     # Sync - use non-blocking boops to avoid deadlock
     for _ in 0 ..< 5:
-      data_ctx.boop(blocking = false)
-      listener_ctx.boop(blocking = false)
-      client_ctx.boop(blocking = false)
+      data_ctx.tick(blocking = false)
+      listener_ctx.tick(blocking = false)
+      client_ctx.tick(blocking = false)
 
     echo "[Net] After boops"
 
@@ -1003,8 +1039,8 @@ suite "Build Network Sync":
     echo "Encoded size: ", packed1[vec3(0, 0, 0)].data.len, " bytes"
     echo "Format: ", packed1[vec3(0, 0, 0)].format_name
 
-    ctx1.boop
-    ctx2.boop
+    ctx1.tick
+    ctx2.tick
 
     let packed2 = ZenTable[Vector3, PackedChunk](ctx2["test_packed_large"])
     check packed2.len == 1
@@ -1093,8 +1129,8 @@ suite "Build Network Sync":
               store.add_voxel(pos, (Manual, action_colors[Colors(idx mod 7)]), disable_packed)
             store.apply_changes(disable_packed)
             for _ in 0 ..< 20:
-              server_ctx.boop(blocking = false)
-              client_ctx.boop(blocking = false)
+              server_ctx.tick(blocking = false)
+              client_ctx.tick(blocking = false)
       )
     )
     # Delta may or may not be smaller - just report, don't assert
