@@ -218,6 +218,9 @@ type
     # Callbacks for Build integration
     on_chunk_created* {.zen_ignore.}: proc(chunk_id: Vector3) {.gcsafe.}
 
+    # Stats tracking
+    content_bytes* {.zen_ignore.}: int  # Actual voxel data bytes (snapshots + deltas)
+
   Build* = ref object of Unit
     voxels*: VoxelStore
     draw_transform_value*: ZenValue[Transform]
