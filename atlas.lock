@@ -75,13 +75,19 @@
     "zippy": {
       "dir": "$deps/zippy",
       "url": "https://github.com/guzba/zippy",
-      "commit": "a0057dcc689bae60adfc286b8e49dc10db4c98d3",
+      "commit": "9ab82da84edfd6483d273dfcf8a921309945861e",
       "version": ""
     },
     "unittest2": {
       "dir": "$deps/unittest2",
       "url": "https://github.com/status-im/nim-unittest2",
       "commit": "1efa65bb037185f0983ac4fa65932e8d3450825d",
+      "version": ""
+    },
+    "nim-libbacktrace.dsrw.github.com": {
+      "dir": "$deps/nim-libbacktrace.dsrw.github.com",
+      "url": "https://github.com/dsrw/nim-libbacktrace",
+      "commit": "d8bd4ce5c46bb6d2f984f6b3f3d7380897d95ecb",
       "version": ""
     },
     "threading": {
@@ -105,7 +111,7 @@
     "supersnappy": {
       "dir": "$deps/supersnappy",
       "url": "https://github.com/guzba/supersnappy",
-      "commit": "e4df8cb5468dd96fc5a4764028e20c8a3942f16a",
+      "commit": "4fed6553d539cbbfb17ab5fea16a58b4f1916e7d",
       "version": ""
     },
     "faststreams": {
@@ -210,6 +216,7 @@
     "--path:\"deps/metrics\"",
     "--path:\"deps/zippy/src\"",
     "--path:\"deps/unittest2\"",
+    "--path:\"deps/nim-libbacktrace.dsrw.github.com\"",
     "--path:\"deps/threading\"",
     "--path:\"deps/flatty/src\"",
     "--path:\"deps/netty/src\"",
@@ -247,13 +254,14 @@
       "  \"https://github.com/getenu/model_citizen 0.19.10\",",
       "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
       "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
-      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\"",
+      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\",",
+      "  \"https://github.com/dsrw/nim-libbacktrace\"",
       ""
     ]
   },
   "hostOS": "macosx",
   "hostCPU": "arm64",
-  "nimVersion": "2.2.6 ab00c56904e3126ad826bb520d243513a139436a",
+  "nimVersion": "2.2.6",
   "gccVersion": "",
   "clangVersion": ""
 }

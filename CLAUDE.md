@@ -12,6 +12,13 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 - `atlas install && atlas rep` - Install dependencies (first-time setup)
 - `nim prereqs` - Build Godot, download fonts, generate API bindings and stdlib
 
+### Dependency Management (Atlas)
+- `atlas.lock` pins exact dependency versions - never edit this file manually
+- `atlas pin` - Regenerate lock file from enu.nimble dependencies
+- `atlas install` - Install dependencies from lock file
+- `atlas rep` - Regenerate nim.cfg paths from lock file
+- When changing dependencies in enu.nimble, run `atlas install && atlas pin` to update the lock file
+
 ### Core Development Commands
 - `nim build` - Build the main application (required after code changes)
 - `nim start` - Run Enu in development mode
