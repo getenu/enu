@@ -222,6 +222,10 @@ gdobj BuildNode of VoxelTerrain:
     let was_skipping_join = dont_join
     dont_join = true
 
+    # Initialize voxels if nil (happens when Build is synced between threads
+    # before main_thread_joined runs)
+    self.model.init_voxels_if_needed()
+
     self.track_changes
 
     dont_join = was_skipping_join

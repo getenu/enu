@@ -29,12 +29,12 @@ type
   SnapshotData* = object
     ## Encoded snapshot data for a chunk.
     ## First byte indicates format, rest is format-specific data.
-    data*: seq[byte]
+    data*: string
 
   DeltaUpdate* = object
     ## A delta update containing only changed voxels.
     ## Sparse format: count + (position, voxel) pairs
-    data*: seq[byte]
+    data*: string
 
   # Legacy type alias for compatibility
   PackedChunk* = SnapshotData
@@ -98,6 +98,12 @@ proc read_varint*(s: string, i: var int): uint64 =
     buf[j] = s[i + j].uint8
   let bytes_read = readVu64(buf, result)
   i += bytes_read
+
+proc to_string(data: seq[byte]): string =
+  ## Convert seq[byte] to string efficiently.
+  result = newString(data.len)
+  if data.len > 0:
+    copyMem(addr result[0], unsafeAddr data[0], data.len)
 
 proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
   ## RLE encode a full chunk snapshot.
@@ -235,32 +241,36 @@ proc encode_chunk*(voxels: array[CHUNK_VOLUME, PackedVoxel],
       break
 
   if not has_voxels:
-    return PackedChunk(data: @[FMT_EMPTY])
+    return PackedChunk(data: $char(FMT_EMPTY))
 
   case encoding
   of ceRLE:
-    result = PackedChunk(data: encode_rle_data(voxels))
+    result = PackedChunk(data: encode_rle_data(voxels).to_string)
   of ceSparse:
-    result = PackedChunk(data: encode_sparse_data(voxels))
+    result = PackedChunk(data: encode_sparse_data(voxels).to_string)
   of ceAdaptive:
     let rle = encode_rle_data(voxels)
     let sparse = encode_sparse_data(voxels)
     if rle.len <= sparse.len:
-      result = PackedChunk(data: rle)
+      result = PackedChunk(data: rle.to_string)
     else:
-      result = PackedChunk(data: sparse)
+      result = PackedChunk(data: sparse.to_string)
 
 proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
   ## Decode a packed chunk back to voxel array.
   if packed.data.len == 0:
     return  # All zeros (empty)
 
-  let format = packed.data[0]
+  let format = packed.data[0].byte
   case format
   of FMT_RLE:
-    result = decode_rle_data(packed.data, 1)
+    result = decode_rle(packed.data, 1)
   of FMT_SPARSE_FULL, FMT_SPARSE_DELTA:
-    result = decode_sparse_data(packed.data, 1)
+    # Convert string to seq[byte] for sparse decode
+    var data = newSeq[byte](packed.data.len)
+    for i, c in packed.data:
+      data[i] = c.byte
+    result = decode_sparse_data(data, 1)
   of FMT_EMPTY:
     discard  # Result is already all zeros
   else:
@@ -268,13 +278,13 @@ proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
 
 proc is_empty*(packed: PackedChunk): bool =
   ## Check if a packed chunk represents an empty chunk.
-  packed.data.len == 0 or (packed.data.len == 1 and packed.data[0] == FMT_EMPTY)
+  packed.data.len == 0 or (packed.data.len == 1 and packed.data[0].byte == FMT_EMPTY)
 
 proc format_name*(packed: PackedChunk): string =
   ## Get a human-readable name for the encoding format.
   if packed.data.len == 0:
     return "empty"
-  case packed.data[0]
+  case packed.data[0].byte
   of FMT_RLE: "RLE"
   of FMT_SPARSE_FULL: "sparse"
   of FMT_SPARSE_DELTA: "delta"
@@ -284,30 +294,30 @@ proc format_name*(packed: PackedChunk): string =
 proc encode_delta*(changes: openArray[tuple[pos: Vector3, voxel: PackedVoxel]]): DeltaUpdate =
   ## Encode a set of voxel changes into a delta update.
   ## Format: FMT_SPARSE_DELTA + varint count + (varint position, packed voxel) pairs
-  result.data = @[FMT_SPARSE_DELTA]
+  result.data = $char(FMT_SPARSE_DELTA)
 
   var buf: array[maxVarIntLen, byte]
   let count_len = writeVu64(buf, changes.len.uint64)
   for i in 0 ..< count_len:
-    result.data.add buf[i]
+    result.data.add char(buf[i])
 
   for (pos, voxel) in changes:
     let linear = linear_position(pos)
     let pos_len = writeVu64(buf, linear.uint64)
     for j in 0 ..< pos_len:
-      result.data.add buf[j]
-    result.data.add voxel
+      result.data.add char(buf[j])
+    result.data.add char(voxel)
 
 proc decode_delta*(delta: DeltaUpdate): seq[tuple[pos: Vector3, voxel: PackedVoxel]] =
   ## Decode a delta update back to position/voxel pairs.
-  if delta.data.len == 0 or delta.data[0] != FMT_SPARSE_DELTA:
+  if delta.data.len == 0 or delta.data[0].byte != FMT_SPARSE_DELTA:
     return @[]
 
   var i = 1
   var buf: array[maxVarIntLen, byte]
   let available = min(maxVarIntLen, delta.data.len - i)
   for j in 0 ..< available:
-    buf[j] = delta.data[i + j]
+    buf[j] = delta.data[i + j].byte
   var count: uint64
   let count_len = readVu64(buf, count)
   i += count_len
@@ -315,11 +325,11 @@ proc decode_delta*(delta: DeltaUpdate): seq[tuple[pos: Vector3, voxel: PackedVox
   for _ in 0 ..< count.int:
     let pos_available = min(maxVarIntLen, delta.data.len - i)
     for j in 0 ..< pos_available:
-      buf[j] = delta.data[i + j]
+      buf[j] = delta.data[i + j].byte
     var linear: uint64
     let pos_len = readVu64(buf, linear)
     i += pos_len
-    let voxel = delta.data[i].PackedVoxel
+    let voxel = delta.data[i].byte.PackedVoxel
     inc i
     result.add (from_linear(linear.int), voxel)
 

@@ -373,32 +373,6 @@ proc from_flatty*(s: string, i: var int, n: var ZenContext) =
 proc to_flatty*(s: var string, n: ZenContext) =
   discard
 
-proc from_flatty*(s: string, i: var int, p: var SnapshotData) =
-  var len: int
-  from_flatty(s, i, len)
-  p.data = newSeq[byte](len)
-  for j in 0 ..< len:
-    p.data[j] = s[i].uint8
-    inc i
-
-proc to_flatty*(s: var string, p: SnapshotData) =
-  to_flatty(s, p.data.len)
-  for b in p.data:
-    s.add char(b)
-
-proc from_flatty*(s: string, i: var int, d: var DeltaUpdate) =
-  var len: int
-  from_flatty(s, i, len)
-  d.data = newSeq[byte](len)
-  for j in 0 ..< len:
-    d.data[j] = s[i].uint8
-    inc i
-
-proc to_flatty*(s: var string, d: DeltaUpdate) =
-  to_flatty(s, d.data.len)
-  for b in d.data:
-    s.add char(b)
-
 Zen.register(Player)
 Zen.register(VoxelStore)
 Zen.register(Build)
