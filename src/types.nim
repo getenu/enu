@@ -210,6 +210,8 @@ type
     chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
     dirty_chunks*: HashSet[Vector3]
     last_snapshot*: Table[Vector3, Table[Vector3, PackedVoxel]]
+    pending_flush_time*: Table[Vector3, MonoTime]  # When chunk first became dirty
+    pending_change_count*: Table[Vector3, int]     # Changes since last flush
 
     # Batching
     batching*: bool

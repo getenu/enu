@@ -3,7 +3,7 @@
 ## This module handles voxel storage, network synchronization (packed chunks),
 ## and batching. It can be tested independently of Build.
 
-import std/[tables, sets, math, strformat]
+import std/[tables, sets, math, strformat, monotimes, times]
 import pkg/model_citizen
 import core
 import models/[packed_chunks, colors]
@@ -11,7 +11,10 @@ import models/[packed_chunks, colors]
 const
   ChunkSize* = vec3(16, 16, 16)
   MAX_BLOCK_COUNT* = 100_000
-  MAX_DELTA_UPDATES* = 100  # Force snapshot after this many deltas
+  MAX_DELTA_UPDATES* = 10  # Force snapshot after this many deltas
+  DISABLE_DELTA_UPDATES* = false  # Always use snapshots instead of deltas
+  FLUSH_BUFFER_MS* = 100  # Max time to buffer before forcing flush
+  FLUSH_CHANGE_THRESHOLD* = 25  # Buffer if more than this many changes
 
 # VoxelStore type is defined in types.nim
 
@@ -115,6 +118,7 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
 
   if not self.disable_packed:
     self.dirty_chunks.incl(buffer)
+    self.pending_change_count.mgetOrPut(buffer, 0) += 1
 
   # Check if voxel exists in either current chunks or batched voxels
   let exists_in_chunks = position in self.chunks[buffer]
@@ -159,6 +163,7 @@ proc del_voxel*(self: VoxelStore, position: Vector3) =
     dec self.block_count
     if not self.disable_packed:
       self.dirty_chunks.incl(buffer)
+      self.pending_change_count.mgetOrPut(buffer, 0) += 1
   self.chunks[buffer].del position
 
 proc batch_changes*(self: VoxelStore): bool =
@@ -179,7 +184,32 @@ proc flush_packed_chunks*(self: VoxelStore) =
   ## Encode dirty chunks using two-tier system:
   ## - packed_chunks: Full chunk snapshots (for late-connecting clients)
   ## - chunk_deltas: Per-chunk incremental changes (for connected clients)
+  ##
+  ## Buffering: If a chunk has >FLUSH_CHANGE_THRESHOLD changes and hasn't been
+  ## waiting for >FLUSH_BUFFER_MS, defer the flush to batch more changes together.
+  let now = getMonoTime()
+  var deferred_chunks: HashSet[Vector3]
+
   for chunk_id in self.dirty_chunks:
+    # Track when chunk first became dirty
+    if chunk_id notin self.pending_flush_time:
+      self.pending_flush_time[chunk_id] = now
+
+    let first_dirty = self.pending_flush_time[chunk_id]
+    let wait_ms = (now - first_dirty).inMilliseconds
+    let change_count = self.pending_change_count.getOrDefault(chunk_id, 0)
+    let had_snapshot = chunk_id in self.last_snapshot
+
+    # Decide whether to defer this chunk
+    # Defer if: has previous snapshot, many changes, and hasn't waited long enough
+    let should_defer = had_snapshot and
+                       change_count > FLUSH_CHANGE_THRESHOLD and
+                       wait_ms < FLUSH_BUFFER_MS
+
+    if should_defer:
+      deferred_chunks.incl(chunk_id)
+      continue
+
     # Build current voxel state and track positions with values
     var voxels: array[CHUNK_VOLUME, PackedVoxel]
     var current_voxels: Table[Vector3, PackedVoxel]
@@ -195,7 +225,6 @@ proc flush_packed_chunks*(self: VoxelStore) =
         current_voxels[pos] = packed
 
     # Get last snapshot state for this chunk
-    let had_snapshot = chunk_id in self.last_snapshot
     let last_voxels = if had_snapshot: self.last_snapshot[chunk_id]
                       else: initTable[Vector3, PackedVoxel]()
 
@@ -222,8 +251,8 @@ proc flush_packed_chunks*(self: VoxelStore) =
 
     # Decide: delta or snapshot
     # Use snapshot if: forced, no previous snapshot, or chunk is now empty
-    let use_snapshot = force_snapshot or not had_snapshot or
-                       current_voxels.len == 0
+    let use_snapshot = DISABLE_DELTA_UPDATES or force_snapshot or
+                       not had_snapshot or current_voxels.len == 0
 
     if use_snapshot:
       # Full snapshot - clear deltas and update snapshot
@@ -259,7 +288,12 @@ proc flush_packed_chunks*(self: VoxelStore) =
       # Update last_snapshot to current state
       self.last_snapshot[chunk_id] = current_voxels
 
-  self.dirty_chunks.clear
+    # Clear pending state for this chunk after successful flush
+    self.pending_flush_time.del(chunk_id)
+    self.pending_change_count.del(chunk_id)
+
+  # Only clear chunks that were actually flushed; keep deferred ones
+  self.dirty_chunks = deferred_chunks
 
 proc apply_changes*(self: VoxelStore, disable_packed: bool = false) =
   ## Flush batched changes to chunks and encode for network sync.
