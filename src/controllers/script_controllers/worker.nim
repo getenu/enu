@@ -288,6 +288,11 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   else:
     var timeout_at = get_mono_time() + 30.seconds
     var connected = false
+    when defined(zen_debug_messages):
+      echo "=== Client objects before connect ==="
+      for id in Zen.thread_ctx.objects.keys:
+        echo "  ", id
+      echo "=== End pre-connect objects ==="
     while not connected and get_mono_time() < timeout_at:
       try:
         Zen.thread_ctx.subscribe(connect_address)
@@ -306,6 +311,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       load_level()
     else:
       echo "=== Connected to server. Initial bytes: sent=", Zen.thread_ctx.bytes_sent, " received=", Zen.thread_ctx.bytes_received
+      when defined(zen_debug_messages):
+        Zen.thread_ctx.dump_message_stats("client after connect")
       worker.load_script_and_dependents(player)
 
   var sign = Sign.init(

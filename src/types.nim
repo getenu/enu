@@ -190,47 +190,47 @@ type
   VoxelKind* = enum
     Hole
     Manual
-    Computed 
+    Computed
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
 
   Chunk* = ZenTable[Vector3, VoxelInfo]
 
-  VoxelStore* = ref object of RootObj
+  VoxelStore* = ref object
     id*: string
-    disable_packed* {.zen_ignore.}: bool
-    ctx* {.zen_ignore.}: ZenContext
+    disable_packed*: bool
+    ctx*: ZenContext
 
     # Core storage
     chunks*: ZenTable[Vector3, Chunk]
-    block_count* {.zen_ignore.}: int
+    block_count*: int
 
     # Packed format fields (used when state.disable_packed_chunks = false)
     packed_chunks*: ZenTable[Vector3, SnapshotData]
     chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
-    dirty_chunks* {.zen_ignore.}: HashSet[Vector3]
-    last_snapshot* {.zen_ignore.}: Table[Vector3, Table[Vector3, PackedVoxel]]
+    dirty_chunks*: HashSet[Vector3]
+    last_snapshot*: Table[Vector3, Table[Vector3, PackedVoxel]]
 
     # Batching
-    batching* {.zen_ignore.}: bool
-    batched_voxels* {.zen_ignore.}: Table[Vector3, Table[Vector3, VoxelInfo]]
+    batching*: bool
+    batched_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
 
     # Callbacks for Build integration
-    on_chunk_created* {.zen_ignore.}: proc(chunk_id: Vector3) {.gcsafe.}
+    on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
 
     # Stats tracking
-    content_bytes* {.zen_ignore.}: int  # Actual voxel data bytes (snapshots + deltas)
+    content_bytes*: int  # Actual voxel data bytes (snapshots + deltas)
 
   Build* = ref object of Unit
     voxels*: VoxelStore
     draw_transform_value*: ZenValue[Transform]
-    voxels_per_frame* {.zen_ignore.}: float
-    voxels_remaining_this_frame* {.zen_ignore.}: float
-    drawing* {.zen_ignore.}: bool
-    save_points* {.zen_ignore.}:
+    voxels_per_frame*: float
+    voxels_remaining_this_frame*: float
+    drawing*: bool
+    save_points*:
       Table[string, tuple[position: Transform, color: Color, drawing: bool]]
     bounds_value*: ZenValue[AABB]
-    bot_collisions* {.zen_ignore.}: bool
+    bot_collisions*: bool
 
   Config* = object
     font_size*: int
@@ -374,7 +374,6 @@ proc to_flatty*(s: var string, n: ZenContext) =
   discard
 
 Zen.register(Player)
-Zen.register(VoxelStore)
 Zen.register(Build)
 Zen.register(Sign)
 Zen.register(Bot)

@@ -1,0 +1,565 @@
+❯ ENU_LISTEN_ADDRESS=0.0.0.0 nim start
+arguments
+0: /Users/scott/src/enu/vendor/godot/bin/godot.osx.tools.arm64
+1: --verbose
+2: scenes/game.tscn
+Current path: /Users/scott/src/enu/app
+Godot Engine v3.6.2.stable.custom_build.c6e3b86ef - https://godotengine.org
+VisualServerWrapMT: Creating render thread
+VisualServerWrapMT: Starting render thread
+Using GLES3 video driver
+OpenGL debugging not supported!
+OpenGL ES 3.0 Renderer: Apple M4
+Async. shader compilation: OFF
+VisualServerWrapMT: Finished render thread
+CoreAudio: detected 2 channels
+CoreAudio: audio buffer frames: 512 calculated latency: 11ms
+
+UNSUPPORTED (log once): POSSIBLE ISSUE: unit 1 GLD_TEXTURE_INDEX_2D is unloadable and bound to sampler type (Float) - using zero texture because texture unloadable
+Voxel: HW threads hint: 10
+Voxel: automatic thread count set to 4
+Size of BlockDataRequest: 104
+Size of BlockMeshRequest: 1232
+Size of Object: 240
+Size of Reference: 256
+Size of Node: 504
+Size of VoxelBuffer: 280
+Size of VoxelMeshBlock: 256
+Size of VoxelTerrain: 1296
+Size of VoxelLodTerrain: 6800
+Size of VoxelInstancer: 1776
+Size of VoxelDataMap: 144
+------------ Voxel tests begin -------------
+Running test_box3i_intersects
+Running test_box3i_for_inner_outline
+Running test_voxel_data_map_paste_fill
+Running test_voxel_data_map_paste_mask
+Running test_voxel_data_map_copy
+Running test_encode_weights_packed_u16
+Running test_copy_3d_region_zxy
+Running test_voxel_graph_generator_default_graph_compilation
+Compiled voxel graph. Program size: 18b, buffers: 6
+Voxel graph compiled in 169 us
+Running test_voxel_graph_generator_texturing
+Compiled voxel graph. Program size: 62b, buffers: 10
+Voxel graph compiled in 29 us
+Running test_island_finder
+Running test_unordered_remove_if
+Running test_instance_data_serialization
+Running test_transform_3d_array_zxy
+Running test_octree_update
+Initial block count: 17749, time: 6323 us
+Stay time: 996 us
+Stay time: 997 us
+Stay time: 993 us
+Stay time: 1055 us
+Stay time: 1007 us
+Stay time: 1011 us
+Stay time: 995 us
+Stay time: 1001 us
+Stay time: 985 us
+Stay time: 983 us
+Running test_octree_find_in_box
+for_each_cell time with 6 lods: total 198352 us, single query 6.053223 us, checksum: 38622156
+Running test_get_curve_monotonic_sections
+Running test_voxel_buffer_create
+------------ Voxel tests end -------------
+CameraServer: Registered camera MacBook Air Camera with ID 1 and position 0 at index 0
+CORE API HASH: 8822061373267293949
+EDITOR API HASH: 1307865197627434137
+Loaded builtin certs
+Loading resource: res://scenes/game.tscn
+Loading resource: res://scenes/world.tscn
+Loading resource: res://environments/default.tres
+Loading resource: res://textures/planet_sky.png
+Loading resource: res://materials/default_ground.tres
+Loading resource: res://textures/tile_nrm.png
+Loading resource: res://components/GroundNode.gdns
+Loading resource: res://nimlib.gdnlib
+Loading resource: res://components/Game.gdns
+Loading resource: res://scenes/GUI.tscn
+Loading resource: res://components/Editor.tscn
+Loading resource: res://components/Editor.gdns
+Loading resource: res://themes/DarkTheme.tres
+Loading resource: res://themes/dot.png
+Loading resource: res://themes/mono-bold.otf
+Loading resource: res://themes/StyleBox.tres
+Loading resource: res://themes/mono.otf
+Loading resource: res://themes/icons.otf
+Loading resource: res://components/FloatingButton.gdns
+Loading resource: res://components/Console.tscn
+Loading resource: res://components/Console.gdns
+Loading resource: res://components/ActionButton.tscn
+Loading resource: res://textures/code.png
+Loading resource: res://components/ActionButton.gdns
+Loading resource: res://components/MarkdownLabel.tscn
+Loading resource: res://components/MarkdownLabel.gdns
+Loading resource: res://themes/text-bold-italic.otf
+Loading resource: res://themes/text-italic.otf
+Loading resource: res://themes/text-bold.otf
+Loading resource: res://themes/text.otf
+Loading resource: res://themes/display-bold.otf
+Loading resource: res://textures/reticle.png
+Loading resource: res://components/RightPanel.gdns
+Loading resource: res://scenes/PreviewWorld.tscn
+Loading resource: res://materials/blue-block-grid.tres
+Loading resource: res://textures/blue_block.png
+Loading resource: res://components/BotNode.tscn
+Loading resource: res://components/BotNode.gdns
+Loading resource: res://components/SelectionArea.gdns
+Loading resource: res://materials/toon.tres
+Loading resource: res://materials/Blanco.material
+Loading resource: res://materials/bot_black.material
+Loading resource: res://materials/highlight.tres
+Loading resource: res://components/PreviewMaker.gdns
+Loading resource: res://components/Toolbar.gdns
+Loading resource: res://components/Settings.tscn
+Loading resource: res://components/Settings.gdns
+Loading resource: res://joystick/virtual_joystick.tscn
+Loading resource: res://joystick/textures/joystick_base_outline.png
+Loading resource: res://joystick/textures/joystick_tip_arrows.png
+Loading resource: res://joystick/virtual_joystick.gdns
+Loading resource: res://scenes/GUI.gdns
+=== Enu game.init() starting ===
+=== Enu game.init() complete ===
+WARNING: MSAA must be <= GL_MAX_SAMPLES, falling-back to GL_MAX_SAMPLES = 4
+     at: _render_target_allocate (drivers/gles3/rasterizer_storage_gles3.cpp:7118)
+Took 471 us to bake VoxelLibrary
+ERROR: Index line = 1 is out of bounds (text.size() = 1).
+   at: times_line_wraps (scene/gui/text_edit.cpp:4639)
+ERROR: Index line = 1 is out of bounds (text.size() = 1).
+   at: times_line_wraps (scene/gui/text_edit.cpp:4639)
+INF 2026-01-08 20:21:18.636-04:00 Changed game mode                          tid=3246009 environment=default
+
+INF 2026-01-08 20:21:18.636-04:00 config                                     tid=3246009 config="(font_size: 18, world: tutorial, level: tutorial-3, toolbar_size: 75.0, show_stats: true, megapixels: 2.0, megapixels_override: 0.0, environment: default, environment_override: , world_dir: /Users/scott/Library/Application Support/enu/tutorial, level_dir: /Users/scott/Library/Application Support/enu/tutorial/tutorial-3, data_dir: , script_dir: , scene: , lib_dir: /Users/scott/src/enu/vmlib, full_screen: false, semicolon_as_colon: false, listen_address: 0.0.0.0, connect_address: , run_server: false, player_color: (0.90588236, 0.5176471, 0.19215687, 1.0), work_dir: /Users/scott/Library/Application Support/enu, walk_speed: 500, fly_speed: 1500, alt_walk_speed: 1000, alt_fly_speed: 250, mouse_sensitivity: 5.0, gamepad_sensitivity: 2.5, invert_gamepad_y_axis: false, screen_scale: 2.6770833333333335)"
+
+ERROR: Index line = 1 is out of bounds (text.size() = 1).
+   at: times_line_wraps (scene/gui/text_edit.cpp:4639)
+ERROR: Index line = 1 is out of bounds (text.size() = 1).
+   at: times_line_wraps (scene/gui/text_edit.cpp:4639)
+Loading resource: res://components/Player.tscn
+Loading resource: res://components/Player.gdns
+Loading resource: res://components/CameraRig.tscn
+Loading resource: res://components/AimTarget.gdns
+INF 2026-01-08 20:21:18.689-04:00 Rescaled viewport                          tid=3246009 size=1885, 1060
+
+Loading resource: res://materials/brown-block-grid.tres
+Loading resource: res://textures/brown_block.png
+Creating VoxelServerUpdater
+INF 2026-01-08 20:21:18.752-04:00 loading script                             tid=3246190 script=/Users/scott/src/enu/vmlib/enu/players.nim
+
+Loading resource: res://materials/white-block-grid.tres
+Loading resource: res://textures/white_block.png
+Loading resource: res://materials/black-block-grid.tres
+Loading resource: res://textures/black_block.png
+Loading resource: res://materials/blue-block-grid.tres
+Loading resource: res://textures/blue_block.png
+Loading resource: res://materials/red-block-grid.tres
+Loading resource: res://textures/red_block.png
+Loading resource: res://materials/green-block-grid.tres
+Loading resource: res://textures/green_block.png
+Loading resource: res://components/BuildNode.tscn
+Loading resource: res://components/BuildNode.gdns
+INF 2026-01-08 20:21:19.872-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_0kqsf4kugz22b.nim"
+
+Loading resource: res://textures/black_block.png
+Loading resource: res://textures/white_block.png
+Loading resource: res://textures/red_block.png
+Loading resource: res://textures/blue_block.png
+Loading resource: res://shaders/terrain_voxel.shader
+Loading resource: res://shaders/terrain_voxel_hidden.shader
+Took 429 us to bake VoxelLibrary
+Took 2886 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2874 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.000-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_2evt18x9goyxs.nim"
+
+Took 434 us to bake VoxelLibrary
+Took 2893 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.009-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_7acqeexn0l7r2.nim"
+
+undeclared identifier: 'Button'
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2835 us to bake VoxelLibrary
+Took 422 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.017-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_8lap32sqeqlok.nim"
+
+Took 2890 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 421 us to bake VoxelLibrary
+undeclared identifier: 'inky'
+Took 2880 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2886 us to bake VoxelLibrary
+Took 421 us to bake VoxelLibrary
+Took 2873 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2877 us to bake VoxelLibrary
+Took 429 us to bake VoxelLibrary
+Took 2855 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+INF 2026-01-08 20:21:20.061-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_9mcxd85a34ph6.nim"
+
+Took 2864 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.071-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_em5344si3j457.nim"
+
+Took 426 us to bake VoxelLibrary
+Took 2886 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2868 us to bake VoxelLibrary
+Took 432 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.373-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_f4qf20mu45gj8.nim"
+
+Took 2905 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2866 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.465-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_fsued2iao7tij.nim"
+
+Took 433 us to bake VoxelLibrary
+Took 2900 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2864 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.495-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_hiywqqyzha3r9.nim"
+
+Took 430 us to bake VoxelLibrary
+Took 2878 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2867 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.546-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_inajs92yvpeo2.nim"
+
+Took 439 us to bake VoxelLibrary
+undeclared identifier: 'Button'
+Took 2798 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.552-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_m64zp4mnhqib3.nim"
+
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2874 us to bake VoxelLibrary
+Took 422 us to bake VoxelLibrary
+Took 2876 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 420 us to bake VoxelLibrary
+undeclared identifier: 'inky'
+Took 2885 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+INF 2026-01-08 20:21:20.568-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_m6d84ocmrei97.nim"
+
+Took 2858 us to bake VoxelLibrary
+Took 419 us to bake VoxelLibrary
+Took 2894 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2867 us to bake VoxelLibrary
+Took 421 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.581-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_p3pwvry0wznqb.nim"
+
+Took 2888 us to bake VoxelLibrary
+Took 426 us to bake VoxelLibrary
+Took 2887 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 421 us to bake VoxelLibrary
+Took 2887 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+INF 2026-01-08 20:21:20.594-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_p3rokg2vii39x.nim"
+
+Took 2861 us to bake VoxelLibrary
+Took 418 us to bake VoxelLibrary
+Took 2887 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2884 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.739-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_qmjxkhcjwnbhb.nim"
+
+undeclared identifier: 'Button'
+Took 432 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.744-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_r7e4b8cvf0hk7.nim"
+
+Took 2929 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+INF 2026-01-08 20:21:20.755-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_uu8u87ua76wp0.nim"
+
+Took 2824 us to bake VoxelLibrary
+Took 415 us to bake VoxelLibrary
+undeclared identifier: 'level_menu'
+Took 2880 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+INF 2026-01-08 20:21:20.762-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_zdvcvo11pyd20.nim"
+
+Took 2863 us to bake VoxelLibrary
+Took 424 us to bake VoxelLibrary
+Took 2845 us to bake VoxelLibrary
+Took 418 us to bake VoxelLibrary
+Took 2866 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2867 us to bake VoxelLibrary
+Took 424 us to bake VoxelLibrary
+Took 2885 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 423 us to bake VoxelLibrary
+Took 2874 us to bake VoxelLibrary
+ERROR: Condition "!is_valid_size(aabb.size)" is true.
+   at: _b_set_bounds (/Users/scott/src/enu/vendor/modules/voxel/terrain/voxel_terrain.cpp:1353)
+Took 2872 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.810-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_7acqeexn0l7r2.nim"
+
+undeclared identifier: 'Button'
+INF 2026-01-08 20:21:20.814-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_8lap32sqeqlok.nim"
+
+INF 2026-01-08 20:21:20.824-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_inajs92yvpeo2.nim"
+
+undeclared identifier: 'Button'
+INF 2026-01-08 20:21:20.828-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_m64zp4mnhqib3.nim"
+
+INF 2026-01-08 20:21:20.883-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_qmjxkhcjwnbhb.nim"
+
+INF 2026-01-08 20:21:20.891-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_uu8u87ua76wp0.nim"
+
+Took 431 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.897-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_7acqeexn0l7r2.nim"
+
+Took 2881 us to bake VoxelLibrary
+INF 2026-01-08 20:21:20.904-04:00 loading script                             tid=3246190 script="/Users/scott/Library/Application Support/enu/tutorial/tutorial-3/scripts/build_inajs92yvpeo2.nim"
+
+Took 426 us to bake VoxelLibrary
+Took 2876 us to bake VoxelLibrary
+Took 425 us to bake VoxelLibrary
+Took 2885 us to bake VoxelLibrary
+Loading resource: res://components/SignNode.tscn
+Loading resource: res://components/MarkdownLabel.tscn
+Loading resource: res://components/SignNode.gdns
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (-2, 0, 0) as modified
+Marking block (6, 0, 1) as modified
+Marking block (6, 0, 0) as modified
+Marking block (-2, 0, 6) as modified
+Marking block (-2, 0, 7) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (0, 0, -1) as modified
+Marking block (0, 0, 0) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (0, 0, 0) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (0, 0, -1) as modified
+Marking block (0, 0, 0) as modified
+Marking block (-1, 0, 0) as modified
+INF 2026-01-08 20:21:20.956-04:00 creating sign                              tid=3246190 id=sign_7yofhxps7ga11
+
+INF 2026-01-08 20:21:20.957-04:00 creating sign                              tid=3246190 id=sign_9zkgf0g1267vy
+
+INF 2026-01-08 20:21:20.967-04:00 creating sign                              tid=3246190 id=sign_d8dqfneoeouxh
+
+INF 2026-01-08 20:21:20.968-04:00 creating sign                              tid=3246190 id=sign_s9jt1h037l44t
+
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, 0) as modified
+Marking block (1, 0, 0) as modified
+Marking block (1, 0, 0) as modified
+Marking block (0, 0, 1) as modified
+Marking block (-1, 0, 1) as modified
+Marking block (-1, 0, 2) as modified
+Marking block (0, 0, 2) as modified
+Marking block (0, 0, 3) as modified
+Marking block (1, 0, 2) as modified
+Marking block (1, 0, 3) as modified
+Marking block (0, 0, 4) as modified
+Marking block (1, 0, 4) as modified
+Marking block (2, 0, 4) as modified
+Marking block (2, 0, 3) as modified
+Marking block (1, 0, 5) as modified
+Marking block (2, 0, 5) as modified
+Marking block (3, 0, 4) as modified
+Marking block (3, 0, 5) as modified
+Marking block (4, 0, 5) as modified
+Marking block (4, 0, 4) as modified
+Marking block (4, 0, 3) as modified
+Marking block (5, 0, 4) as modified
+Marking block (5, 0, 3) as modified
+Marking block (6, 0, 4) as modified
+Marking block (6, 0, 3) as modified
+Marking block (7, 0, 4) as modified
+Marking block (7, 0, 3) as modified
+Marking block (8, 0, 3) as modified
+Marking block (8, 0, 4) as modified
+Marking block (8, 0, 2) as modified
+Marking block (9, 0, 3) as modified
+Marking block (9, 0, 2) as modified
+Marking block (8, 0, 1) as modified
+Marking block (9, 0, 1) as modified
+Marking block (8, 0, 0) as modified
+Marking block (9, 0, 0) as modified
+Marking block (9, 0, -1) as modified
+Marking block (8, 0, -1) as modified
+Marking block (7, 0, -1) as modified
+Marking block (8, 0, -2) as modified
+Marking block (7, 0, -2) as modified
+Marking block (6, 0, -2) as modified
+Marking block (6, 0, -1) as modified
+Marking block (5, 0, -2) as modified
+Marking block (5, 0, -1) as modified
+Marking block (5, 0, 0) as modified
+Marking block (5, 0, 1) as modified
+Marking block (6, 0, 2) as modified
+Marking block (5, 0, 2) as modified
+Marking block (7, 0, 2) as modified
+Marking block (7, 0, 1) as modified
+Marking block (7, 0, 0) as modified
+Marking block (4, 0, -1) as modified
+Marking block (4, 0, 0) as modified
+Marking block (3, 0, 0) as modified
+Marking block (4, 0, 1) as modified
+Marking block (3, 0, 1) as modified
+Marking block (4, 0, 2) as modified
+Marking block (3, 0, 2) as modified
+Marking block (3, 0, -1) as modified
+Marking block (2, 0, 0) as modified
+Marking block (2, 0, -1) as modified
+Marking block (2, 0, -2) as modified
+Marking block (1, 0, -1) as modified
+Marking block (1, 0, -2) as modified
+Marking block (0, 0, -2) as modified
+Marking block (0, 0, -1) as modified
+Marking block (-1, 0, -1) as modified
+Marking block (-2, 0, -1) as modified
+Marking block (-2, 0, 1) as modified
+Marking block (-3, 0, 1) as modified
+Marking block (-2, 0, 2) as modified
+Marking block (-3, 0, 2) as modified
+Marking block (-2, 0, 3) as modified
+Marking block (-3, 0, 3) as modified
+Marking block (-2, 0, 4) as modified
+Marking block (-3, 0, 4) as modified
+Marking block (-4, 0, 4) as modified
+Marking block (-3, 0, 5) as modified
+Marking block (-4, 0, 5) as modified
+Marking block (-4, 0, 6) as modified
+Marking block (-3, 0, 6) as modified
+Marking block (-3, 0, 7) as modified
+Marking block (-4, 0, 7) as modified
+Marking block (-3, 0, 8) as modified
+Marking block (-4, 0, 8) as modified
+Marking block (-2, 0, 8) as modified
+Marking block (-2, 0, 9) as modified
+Marking block (-1, 0, 8) as modified
+Marking block (-1, 0, 9) as modified
+Marking block (0, 0, 8) as modified
+Marking block (-1, 0, 7) as modified
+Marking block (0, 0, 7) as modified
+Marking block (0, 0, 6) as modified
+Marking block (-1, 0, 6) as modified
+Marking block (0, 0, 5) as modified
+Marking block (-1, 0, 5) as modified
+Marking block (-2, 0, 5) as modified
+Marking block (-5, 0, 6) as modified
+Marking block (-5, 0, 7) as modified
+Marking block (-5, 0, 8) as modified
+Marking block (-6, 0, 8) as modified
+Marking block (-5, 0, 9) as modified
+Marking block (-6, 0, 9) as modified
+Marking block (-5, 0, 10) as modified
+Marking block (-4, 0, 9) as modified
+Marking block (-4, 0, 10) as modified
+Marking block (-4, 0, 11) as modified
+Marking block (-5, 0, 11) as modified
+Marking block (-3, 0, 10) as modified
+Marking block (-3, 0, 11) as modified
+Marking block (-3, 0, 9) as modified
+Marking block (-2, 0, 10) as modified
+Loading resource: res://components/BotNode.tscn
+=== Bytes: sent=346773 (+346773), received=38708 (+38708)
+=== Bytes: sent=464414 (+117641), received=122747 (+84039)
+=== Bytes: sent=500333 (+35919), received=122747 (+0)
+libbacktrace error: executable file is not an executable (0)
+libbacktrace error: executable file is not an executable (0)
+ERR 2026-01-08 20:22:00.561-04:00 Unhandled worker thread exception          tid=3246190 kind="ref Exception" msg="/Users/scott/src/enu/deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim(32, 3) `self.valid` " stacktrace="/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(101) _ZN12typedthreads17threadProcWrapperE7pointer\n/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(95) _ZN6system24threadProcWrapStackFrameE3ptrI6ThreadI5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEEEE\n/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(69) _ZN6system24threadProcWrapStackFrameE3ptrI6ThreadI5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEEEE\n_ZN12typedthreads17threadProcWrapperE7pointer(406) _ZN6worker13worker_threadE5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEE\ndeps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim(33) _ZN6worker13worker_threadE5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEE\n/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(41) _ZN12typedthreads17threadProcWrapperE7pointer\n/opt/homebrew/Cellar/nim/2.2.6/nim/lib/std/assertions.nim(36) _ZN10assertions11raiseAssertE6string\n_ZN12typedthreads17threadProcWrapperE7pointer(53) deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim\n/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/fatal.nim(350) /opt/homebrew/Cellar/nim/2.2.6/nim/lib/std/assertions.nim\n/opt/homebrew/Cellar/nim/2.2.6/nim/lib/std/assertions.nim(62) deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim\n"
+
+ERROR: Unhandled Nim exception: /opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(101) _ZN12typedthreads17threadProcWrapperE7pointer
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(95) _ZN6system24threadProcWrapStackFrameE3ptrI6ThreadI5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEEEE
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(69) _ZN6system22threadProcWrapDispatchE3ptrI6ThreadI5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEEEE
+_ZN12typedthreads17threadProcWrapperE7pointer(406) _ZN6worker13worker_threadE5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEE
+deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim(33) _ZN6worker13worker_threadE5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEE
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(41) _ZN12typedthreads17threadProcWrapperE7pointer
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(36) _ZN10assertions11raiseAssertE6string
+_ZN12typedthreads17threadProcWrapperE7pointer(53) deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim
+src/controllers/script_controllers/worker.nim(350) /opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(62) deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim
+[[reraised from:
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(101) _ZN12typedthreads17threadProcWrapperE7pointer
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(95) _ZN6system24threadProcWrapStackFrameE3ptrI6ThreadI5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEEEE
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(69) _ZN6system24threadProcWrapStackFrameE3ptrI6ThreadI5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEEEE
+_ZN12typedthreads17threadProcWrapperE7pointer(500) _ZN6worker13worker_threadE5tupleI3refIN5types26ZenContextcolonObjectType_EE3refIN5types25GameStatecolonObjectType_EEE
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/threadimpl.nim(62) _ZN11stacktraces30auxWriteStackTraceWithOverrideE3varI3seqIN6system15StackTraceEntryEEE
+]]
+Error: unhandled exception: /Users/scott/src/enu/deps/model_citizen.getenu.github.com/src/model_citizen/zens/operations.nim(32, 3) `self.valid`  [AssertionDefect]
+
+   at:  (godotnim.nim:923)
+libc++abi: terminating due to uncaught exception of type std::__1::system_error: recursive_mutex lock failed: Invalid argument
+Traceback (most recent call last, using override)
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/excpt.nim(667) signalHandler
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/excpt.nim(335) _ZN6system18rawWriteStackTraceE3varI6stringE
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/stacktraces.nim(59) _ZN11stacktraces30auxWriteStackTraceWithOverrideE3varI6stringE
+SIGABRT: Abnormal termination.
+stack trace: (most recent call last)
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/nimscript.nim(427, 18)
+/Users/scott/src/enu/tasks.nim(372, 3) startTask
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/nimscript.nim(264, 7) exec
+/opt/homebrew/Cellar/nim/2.2.6/nim/lib/system/nimscript.nim(264, 7) Error: unhandled exception: FAILED: /Users/scott/src/enu/vendor/godot/bin/godot.osx.tools.arm64 --verbose scenes/game.tscn [OSError]
+
+enu on  packed-chunk [!⇡] is 📦 v0.2.99 via 👑 v2.2.6 took 48s
+❯ code client.log
+
+enu on  packed-chunk [!⇡] is 📦 v0.2.99 via 👑 v2.2.6
+❯

@@ -104,23 +104,16 @@ proc find_voxel*(self: VoxelStore, position: Vector3): Option[VoxelInfo] =
     return some(self.chunks[buf][position])
   none(VoxelInfo)
 
-proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo,
-                disable_packed: bool = false) =
+proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   ## Add a voxel to the store.
-  ## disable_packed: If true, don't track dirty chunks (direct sync mode).
   let buffer = position.buffer
 
   if buffer notin self.chunks:
-    # Create chunk with proper flags for sync mode
-    let chunk_flags =
-      if self.disable_packed: {SyncLocal, SyncRemote}
-      else: {}
-    let ctx = if self.ctx.isNil: Zen.thread_ctx else: self.ctx
-    self.chunks[buffer] = Chunk.init(ctx = ctx, flags = chunk_flags)
+    self.chunks[buffer] = self.create_chunk()
     if self.on_chunk_created != nil:
       self.on_chunk_created(buffer)
 
-  if not disable_packed:
+  if not self.disable_packed:
     self.dirty_chunks.incl(buffer)
 
   # Check if voxel exists in either current chunks or batched voxels
@@ -159,13 +152,12 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo,
           self.verify_block_count()
     self.chunks[buffer][position] = voxel
 
-proc del_voxel*(self: VoxelStore, position: Vector3,
-                disable_packed: bool = false) =
+proc del_voxel*(self: VoxelStore, position: Vector3) =
   ## Remove a voxel from the store.
   let buffer = position.buffer
   if buffer in self.chunks and position in self.chunks[buffer]:
     dec self.block_count
-    if not disable_packed:
+    if not self.disable_packed:
       self.dirty_chunks.incl(buffer)
   self.chunks[buffer].del position
 
@@ -380,10 +372,8 @@ proc apply_chunk_with_deltas*(self: VoxelStore, chunk_id: Vector3) =
     for delta in self.chunk_deltas[chunk_id]:
       self.apply_delta_update(chunk_id, delta)
 
-proc clear_chunk*(self: VoxelStore, chunk_id: Vector3,
-                  disable_packed: bool = false) =
-  ## Efficiently clear an entire chunk by deleting it from the table.
-  ## This sends a single Unassign message instead of many individual voxel deletes.
+proc clear_chunk_internal(self: VoxelStore, chunk_id: Vector3) =
+  ## Clear a chunk without marking dirty (internal helper).
   if chunk_id in self.chunks:
     let chunk = self.chunks[chunk_id]
     for pos, info in chunk:
@@ -391,17 +381,27 @@ proc clear_chunk*(self: VoxelStore, chunk_id: Vector3,
         dec self.block_count
     self.chunks.del(chunk_id)
     chunk.destroy
-    if not disable_packed:
-      self.dirty_chunks.incl(chunk_id)
 
-proc clear*(self: VoxelStore, disable_packed: bool = false) =
+proc clear_chunk*(self: VoxelStore, chunk_id: Vector3) =
+  ## Efficiently clear an entire chunk by deleting it from the table.
+  ## This sends a single Unassign message instead of many individual voxel deletes.
+  self.clear_chunk_internal(chunk_id)
+  if not self.disable_packed:
+    self.dirty_chunks.incl(chunk_id)
+
+proc clear_chunk_remote*(self: VoxelStore, chunk_id: Vector3) =
+  ## Clear a chunk that was removed remotely.
+  ## Does NOT mark dirty since this is receiving data, not generating it.
+  self.clear_chunk_internal(chunk_id)
+
+proc clear*(self: VoxelStore) =
   ## Clear all voxels from the store.
   let chunks = self.chunks.value
   for chunk_id, chunk in chunks:
     self.chunks.del(chunk_id)
     chunk.destroy
 
-  if not disable_packed:
+  if not self.disable_packed:
     let packed = self.packed_chunks.value
     for chunk_id in packed.keys:
       self.packed_chunks.del(chunk_id)
