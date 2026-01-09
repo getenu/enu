@@ -162,7 +162,7 @@ proc add_voxel(self: Build, position: Vector3, voxel: VoxelInfo) =
   let buffer = position.buffer
 
   if buffer notin self.voxels.chunks:
-    self.voxels.chunks[buffer] = Chunk.init
+    self.voxels.chunks[buffer] = self.voxels.create_chunk()
     self.expand_bounds_to_chunk(buffer)
 
   if packed_chunks_enabled():
@@ -550,7 +550,7 @@ proc apply_delta_update*(self: Build, chunk_id: Vector3, delta: DeltaUpdate) =
 
       # Ensure chunk exists
       if chunk_id notin self.voxels.chunks:
-        self.voxels.chunks[chunk_id] = Chunk.init
+        self.voxels.chunks[chunk_id] = self.voxels.create_chunk()
         self.expand_bounds_to_chunk(chunk_id)
 
       # Check if replacing existing voxel
@@ -589,7 +589,7 @@ proc apply_snapshot*(self: Build, chunk_id: Vector3, snapshot: SnapshotData) =
       break
 
   if has_voxels:
-    self.voxels.chunks[chunk_id] = Chunk.init
+    self.voxels.chunks[chunk_id] = self.voxels.create_chunk()
     self.expand_bounds_to_chunk(chunk_id)
 
     for linear in 0 ..< CHUNK_VOLUME:

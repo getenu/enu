@@ -25,6 +25,12 @@ proc chunk_to_local*(chunk_id: Vector3, pos: Vector3): int =
   let local_z = int(pos.z - chunk_id.z * 16) mod 16
   linear_position(local_x, local_y, local_z)
 
+proc create_chunk*(self: VoxelStore): Chunk =
+  let flags =
+    if self.disable_packed: {SyncLocal, SyncRemote}
+    else: {}
+  Chunk.init(ctx = self.ctx, flags = flags)
+
 proc init*(
     _: type VoxelStore,
     id: string,
@@ -303,7 +309,7 @@ proc apply_delta_update*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate
 
       # Ensure chunk exists
       if chunk_id notin self.chunks:
-        self.chunks[chunk_id] = Chunk.init
+        self.chunks[chunk_id] = self.create_chunk()
         if self.on_chunk_created != nil:
           self.on_chunk_created(chunk_id)
 
@@ -343,7 +349,7 @@ proc apply_snapshot*(self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData
       break
 
   if has_voxels:
-    self.chunks[chunk_id] = Chunk.init
+    self.chunks[chunk_id] = self.create_chunk()
     if self.on_chunk_created != nil:
       self.on_chunk_created(chunk_id)
 
