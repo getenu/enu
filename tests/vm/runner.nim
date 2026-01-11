@@ -103,6 +103,15 @@ proc setup_mock_functions(interp: Interpreter) =
       result_node.add new_str_node(nkStrLit, "")
       args.set_result(result_node)
 
+  # Mock now_seconds - returns seconds since test start
+  var test_start_time = 0.0
+  interp.implement_routine pkg, "base_bridge", "now_seconds_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        # Increment by small amount each call to simulate time passing
+        test_start_time += 0.001
+        args.set_result(test_start_time)
+
 proc run_test_script(script_path: string): TestResult =
   result.name = script_path.extract_filename.change_file_ext("")
 

@@ -1,5 +1,5 @@
 import std/[tables, monotimes, sets, options, macros]
-import godotapi/[spatial, ray_cast]
+import godotapi/[spatial, ray_cast, voxel_tool, voxel_buffer]
 import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
@@ -106,7 +106,9 @@ type
     paused*: bool
     frame_count*: int
     skip_block_paint*: bool
-    disable_packed_chunks*: bool  # Runtime toggle for packed chunk format
+    disable_packed_chunks*: bool # Runtime toggle for packed chunk format
+    use_chunk_buffers* = false
+      # Use VoxelBuffer+paste instead of voxel_tool.set_voxel
     open_sign_value*: ZenValue[Sign]
     queued_action_value*: ZenValue[string]
     scale_factor*: float
@@ -116,7 +118,8 @@ type
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
-    test_exit_code_value*: ZenValue[int]  # -1 = not set, 0 = success, 1+ = failure count
+    test_exit_code_value*: ZenValue[int]
+      # -1 = not set, 0 = success, 1+ = failure count
     net_bytes_sent_value*: ZenValue[int64]
     net_bytes_received_value*: ZenValue[int64]
     net_connections_value*: ZenValue[int]
@@ -200,6 +203,7 @@ type
     id*: string
     disable_packed*: bool
     ctx*: ZenContext
+    model*: Unit # Owning unit for watch lifetime binding
 
     # Core storage
     chunks*: ZenTable[Vector3, Chunk]
@@ -210,8 +214,8 @@ type
     chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
     dirty_chunks*: HashSet[Vector3]
     last_snapshot*: Table[Vector3, Table[Vector3, PackedVoxel]]
-    pending_flush_time*: Table[Vector3, MonoTime]  # When chunk first became dirty
-    pending_change_count*: Table[Vector3, int]     # Changes since last flush
+    pending_flush_time*: Table[Vector3, MonoTime] # When chunk first became dirty
+    pending_change_count*: Table[Vector3, int] # Changes since last flush
 
     # Batching
     batching*: bool
@@ -220,8 +224,13 @@ type
     # Callbacks for Build integration
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
 
+    # Rendering (set by BuildNode)
+    voxel_tool*: VoxelTool
+    render_buffers*: Table[Vector3, VoxelBuffer]
+
     # Stats tracking
-    content_bytes*: int  # Actual voxel data bytes (snapshots + deltas)
+    content_bytes*: int # Actual voxel data bytes (snapshots + deltas)
+    render_stats*: tuple[buffer_creates, pastes: int]
 
   Build* = ref object of Unit
     voxels*: VoxelStore

@@ -4,7 +4,8 @@
 ## and batching. It can be tested independently of Build.
 
 import std/[tables, sets, math, strformat, monotimes, times]
-import pkg/model_citizen
+import pkg/[model_citizen, godot]
+import godotapi/[voxel_buffer, voxel_tool]
 import core
 import models/[packed_chunks, colors]
 
@@ -529,3 +530,112 @@ proc verify_packed_chunks*(self: VoxelStore) =
         &"  has_snapshot={has_snapshot}, delta_count={delta_count}\n" &
         &"  actual_voxels={actual.len}, reconstructed_voxels={reconstructed.len}\n" &
         mismatches[0 .. min(mismatches.len - 1, 19)].join("\n"))
+
+# Buffer management for rendering
+
+proc get_render_buffer*(self: VoxelStore, chunk_id: Vector3): VoxelBuffer =
+  ## Get or create a VoxelBuffer for rendering a chunk.
+  if chunk_id notin self.render_buffers:
+    self.render_stats.buffer_creates.inc
+    let buffer = gdnew[VoxelBuffer]()
+    buffer.create(16, 16, 16)
+    buffer.fill(0)
+    self.render_buffers[chunk_id] = buffer
+  result = self.render_buffers[chunk_id]
+
+proc paste_chunk*(self: VoxelStore, chunk_id: Vector3) =
+  ## Paste the render buffer for a chunk to the terrain.
+  ## We pass -1 as mask_value to DISABLE masking (triggers fast copy_from path).
+  ## This means zeros in the buffer will overwrite terrain (correct for snapshots).
+  if chunk_id in self.render_buffers and self.voxel_tool != nil:
+    self.render_stats.pastes.inc
+    let buffer = self.render_buffers[chunk_id]
+    let chunk_origin = chunk_id * 16.0
+    self.voxel_tool.paste(chunk_origin, buffer, 1, -1)
+
+proc remove_render_buffer*(self: VoxelStore, chunk_id: Vector3) =
+  ## Remove a render buffer when chunk is unloaded.
+  self.render_buffers.del(chunk_id)
+
+proc log_render_stats*(self: VoxelStore) =
+  if self.render_stats.pastes mod 100 == 0 and self.render_stats.pastes > 0:
+    info "render stats", id = self.id,
+      buffer_creates = self.render_stats.buffer_creates,
+      pastes = self.render_stats.pastes
+
+proc render_snapshot*(self: VoxelStore, chunk_id: Vector3) =
+  ## Render a chunk from its packed snapshot.
+  ## Uses buffer+paste when state.use_chunk_buffers=true, else set_voxel.
+  if self.voxel_tool.is_nil:
+    return
+  if chunk_id notin self.packed_chunks:
+    return
+  let snapshot = self.packed_chunks[chunk_id]
+  if snapshot.is_empty:
+    return
+
+  let voxels = decode_chunk(snapshot)
+  let chunk_origin = chunk_id * 16.0
+
+  if state.use_chunk_buffers:
+    let buffer = self.get_render_buffer(chunk_id)
+    for i, packed in voxels:
+      if packed != EMPTY_VOXEL:
+        let (color_index, _) = unpack_voxel(packed)
+        let local_pos = from_linear(i)
+        buffer.set_voxel(color_index.int64, local_pos.x.int64,
+          local_pos.y.int64, local_pos.z.int64)
+    self.paste_chunk(chunk_id)
+  else:
+    for i, packed in voxels:
+      if packed != EMPTY_VOXEL:
+        let (color_index, _) = unpack_voxel(packed)
+        let local_pos = from_linear(i)
+        let world_pos = chunk_origin + local_pos
+        self.voxel_tool.set_voxel(world_pos, color_index.int64)
+
+  self.log_render_stats()
+
+proc render_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
+  ## Render a delta update.
+  ## Uses buffer+paste when state.use_chunk_buffers=true, else set_voxel.
+  if self.voxel_tool.is_nil:
+    return
+
+  let chunk_origin = chunk_id * 16.0
+  let changes = decode_delta(delta)
+
+  if state.use_chunk_buffers:
+    let buffer = self.get_render_buffer(chunk_id)
+    for (local_pos, packed) in changes:
+      let color_index = if packed == EMPTY_VOXEL: 0 else: unpack_voxel(packed)[0]
+      buffer.set_voxel(color_index.int64, local_pos.x.int64,
+        local_pos.y.int64, local_pos.z.int64)
+    self.paste_chunk(chunk_id)
+  else:
+    for (local_pos, packed) in changes:
+      let world_pos = chunk_origin + local_pos
+      let color_index = if packed == EMPTY_VOXEL: 0 else: unpack_voxel(packed)[0]
+      self.voxel_tool.set_voxel(world_pos, color_index.int64)
+
+  self.log_render_stats()
+
+proc setup_render_watchers*(self: VoxelStore) =
+  ## Set up watchers on packed_chunks and chunk_deltas to trigger rendering.
+  ## Requires self.model and self.voxel_tool to be set.
+  assert self.model != nil, "VoxelStore.model must be set before setup_render_watchers"
+
+  # Watch packed_chunks for snapshot updates
+  self.packed_chunks.watch(self.model):
+    let chunk_id = change.item.key
+    if added:
+      self.render_snapshot(chunk_id)
+
+  # Watch chunk_deltas for new delta sequences, then watch each sequence
+  self.chunk_deltas.watch(self.model):
+    let chunk_id = change.item.key
+    if added:
+      # Watch this chunk's delta sequence for new deltas
+      change.item.value.watch(self.model):
+        if added:
+          self.render_delta(chunk_id, change.item)

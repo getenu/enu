@@ -18,6 +18,7 @@ proc sees_impl*(self: Unit, target: Unit, less_than = 100.0): bool =
   discard
 
 bridged_to_host:
+  proc now_seconds*(): float
   proc write_stack_trace*()
   proc id*(self: Unit): string
   proc position*(self: Unit): Vector3
