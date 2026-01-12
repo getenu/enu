@@ -11,7 +11,6 @@ vendor/pcre
 *.dylib
 *.dll
 *.a
-bin/
 scratch/
 tools/build_helpers
 tools/build_helpers.exe
