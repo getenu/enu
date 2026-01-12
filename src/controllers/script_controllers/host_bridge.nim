@@ -1,4 +1,4 @@
-import std/[os, macros, math, asyncfutures, hashes]
+import std/[os, macros, math, asyncfutures, hashes, times]
 import locks except Lock
 import pkg/godot except print
 import pkg/compiler/vm except get_int
@@ -13,6 +13,14 @@ import shared/errors
 
 import ./[vars, scripting]
 include ./host_bridge_utils
+
+# Program start time for now_seconds() function
+let program_start_time = get_mono_time()
+
+proc now_seconds(): float =
+  ## Returns seconds since program start as a float.
+  let elapsed = get_mono_time() - program_start_time
+  elapsed.inNanoseconds.float / 1_000_000_000.0
 
 proc get_last_error(self: Worker): ErrorData =
   result = self.last_exception.from_exception
@@ -682,7 +690,7 @@ proc bridge_to_vm*(worker: Worker) =
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
-    all_bots, all_signs, all_units, signal_test_complete
+    all_bots, all_signs, all_units, signal_test_complete, now_seconds
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,

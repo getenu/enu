@@ -345,3 +345,77 @@ proc init*[T: Exception](
     kind: type[T], message: string, parent: ref Exception = nil
 ): ref Exception =
   (ref kind)(msg: message, parent: parent)
+
+# Timing types - simple wrappers that don't require posix
+
+type
+  Timestamp* = object
+    ## A point in time, represented as seconds since program start.
+    seconds_since_start: float
+
+  Duration* = object
+    ## A duration of time.
+    total_seconds: float
+
+proc init_timestamp*(seconds: float): Timestamp =
+  Timestamp(seconds_since_start: seconds)
+
+proc init_duration*(seconds: float): Duration =
+  Duration(total_seconds: seconds)
+
+proc `-`*(a, b: Timestamp): Duration =
+  ## Calculate duration between two timestamps.
+  Duration(total_seconds: a.seconds_since_start - b.seconds_since_start)
+
+proc `+`*(a: Timestamp, b: Duration): Timestamp =
+  Timestamp(seconds_since_start: a.seconds_since_start + b.total_seconds)
+
+proc `-`*(a: Timestamp, b: Duration): Timestamp =
+  Timestamp(seconds_since_start: a.seconds_since_start - b.total_seconds)
+
+proc `+`*(a, b: Duration): Duration =
+  Duration(total_seconds: a.total_seconds + b.total_seconds)
+
+proc `-`*(a, b: Duration): Duration =
+  Duration(total_seconds: a.total_seconds - b.total_seconds)
+
+proc seconds*(d: Duration): float =
+  ## Get duration in seconds.
+  d.total_seconds
+
+proc milliseconds*(d: Duration): float =
+  ## Get duration in milliseconds.
+  d.total_seconds * 1000.0
+
+proc `$`*(d: Duration): string =
+  let s = d.total_seconds
+  if s < 0.001:
+    $(s * 1_000_000) & "us"
+  elif s < 1.0:
+    $(s * 1000) & "ms"
+  else:
+    $s & "s"
+
+proc `$`*(t: Timestamp): string =
+  $t.seconds_since_start & "s"
+
+proc `<`*(a, b: Duration): bool =
+  a.total_seconds < b.total_seconds
+
+proc `<=`*(a, b: Duration): bool =
+  a.total_seconds <= b.total_seconds
+
+proc `>`*(a, b: Duration): bool =
+  a.total_seconds > b.total_seconds
+
+proc `>=`*(a, b: Duration): bool =
+  a.total_seconds >= b.total_seconds
+
+proc `==`*(a, b: Duration): bool =
+  a.total_seconds == b.total_seconds
+
+proc `<`*(a, b: Timestamp): bool =
+  a.seconds_since_start < b.seconds_since_start
+
+proc `>`*(a, b: Timestamp): bool =
+  a.seconds_since_start > b.seconds_since_start

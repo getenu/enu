@@ -4,6 +4,16 @@ import random as rnd except rand
 import types, state_machine, base_bridge, base_bridge_private
 
 export base_bridge
+export Timestamp, Duration
+
+proc now*(): Timestamp =
+  ## Returns the current time as a Timestamp.
+  ## Use with subtraction to measure elapsed time:
+  ##   let start = now()
+  ##   # ... do work ...
+  ##   let elapsed = now() - start
+  ##   echo "Took ", elapsed
+  init_timestamp(now_seconds())
 
 var state_init_callbacks: seq[proc()] = @[]
 
