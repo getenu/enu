@@ -548,3 +548,28 @@ task export_docs, "Build docs and copy them to ../enu-site/docs":
   docs_task()
   exec "rm -rf ../enu-site/docs"
   exec "cp -r dist/docs ../enu-site"
+
+task build_bin, "Build all nim files in bin/":
+  p "Building bin/ tools..."
+  for file in list_files("bin"):
+    if file.ends_with(".nim"):
+      let name = file.split_file.name
+      echo &"  Building {name}..."
+      exec &"nim c bin/{name}.nim"
+
+task build_docs, "Build all documentation (enu, godot, godot-voxel)":
+  echo "Required tools: python3, mkdocs, sphinx-build"
+  echo "  pip install mkdocs sphinx sphinx_rtd_theme"
+  echo ""
+
+  p "Building Godot class reference..."
+  with_dir "vendor/godot/doc":
+    exec "python3 tools/make_rst.py -o _build/rst classes/ ../modules/"
+    exec "sphinx-build -b html _build/rst _build/html"
+
+  p "Building godot-voxel docs..."
+  with_dir "vendor/modules/voxel/doc":
+    exec "mkdocs build"
+
+  p "Building Enu docs..."
+  export_docs_task()
