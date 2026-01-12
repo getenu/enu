@@ -1,21 +1,20 @@
-## VoxelStore - Extracted voxel management for Build
+## VoxelStore - Voxel data storage and network encoding
 ##
-## This module handles voxel storage, network synchronization (packed chunks),
-## and batching. It can be tested independently of Build.
+## Handles voxel storage, network synchronization (packed chunks), and batching.
+## Rendering is handled separately by VoxelRenderer.
 
 import std/[tables, sets, math, strformat, monotimes, times]
-import pkg/[model_citizen, godot]
-import godotapi/[voxel_buffer, voxel_tool]
+import pkg/model_citizen
 import core
 import models/[packed_chunks, colors]
 
 const
   ChunkSize* = vec3(16, 16, 16)
   MAX_BLOCK_COUNT* = 100_000
-  MAX_DELTA_UPDATES* = 10  # Force snapshot after this many deltas
-  DISABLE_DELTA_UPDATES* = false  # Always use snapshots instead of deltas
-  FLUSH_BUFFER_MS* = 100  # Max time to buffer before forcing flush
-  FLUSH_CHANGE_THRESHOLD* = 25  # Buffer if more than this many changes
+  MAX_DELTA_UPDATES* = 10 # Force snapshot after this many deltas
+  DISABLE_DELTA_UPDATES* = false # Always use snapshots instead of deltas
+  FLUSH_BUFFER_MS* = 100 # Max time to buffer before forcing flush
+  FLUSH_CHANGE_THRESHOLD* = 25 # Buffer if more than this many changes
 
 # VoxelStore type is defined in types.nim
 
@@ -31,8 +30,10 @@ proc chunk_to_local*(chunk_id: Vector3, pos: Vector3): int =
 
 proc create_chunk*(self: VoxelStore): Chunk =
   let flags =
-    if self.disable_packed: {SyncLocal, SyncRemote}
-    else: {}
+    if self.disable_packed:
+      {SyncLocal, SyncRemote}
+    else:
+      {}
   Chunk.init(ctx = self.ctx, flags = flags)
 
 proc init*(
@@ -44,8 +45,10 @@ proc init*(
   ## Initialize a VoxelStore.
   ## disable_packed: If true, chunks sync directly (no packed format).
   let chunk_flags =
-    if disable_packed: {SyncLocal, SyncRemote}
-    else: {}  # No sync - reconstructed from packed_chunks/chunk_deltas
+    if disable_packed:
+      {SyncLocal, SyncRemote}
+    else:
+      {} # No sync - reconstructed from packed_chunks/chunk_deltas
 
   # Use provided context or fall back to thread context
   let use_ctx = if ctx.isNil: Zen.thread_ctx else: ctx
@@ -55,19 +58,13 @@ proc init*(
     disable_packed: disable_packed,
     ctx: use_ctx,
     chunks: ZenTable[Vector3, Chunk].init(
-      id = id & ".chunks",
-      ctx = use_ctx,
-      flags = chunk_flags
+      id = id & ".chunks", ctx = use_ctx, flags = chunk_flags
     ),
     packed_chunks: ZenTable[Vector3, SnapshotData].init(
-      id = id & ".packed_chunks",
-      ctx = use_ctx,
-      flags = {SyncLocal, SyncRemote}
+      id = id & ".packed_chunks", ctx = use_ctx, flags = {SyncLocal, SyncRemote}
     ),
     chunk_deltas: ZenTable[Vector3, ZenSeq[DeltaUpdate]].init(
-      id = id & ".chunk_deltas",
-      ctx = use_ctx,
-      flags = {SyncLocal, SyncRemote}
+      id = id & ".chunk_deltas", ctx = use_ctx, flags = {SyncLocal, SyncRemote}
     ),
   )
 
@@ -123,9 +120,9 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
 
   # Check if voxel exists in either current chunks or batched voxels
   let exists_in_chunks = position in self.chunks[buffer]
-  let exists_in_batched = self.batching and
-                          buffer in self.batched_voxels and
-                          position in self.batched_voxels[buffer]
+  let exists_in_batched =
+    self.batching and buffer in self.batched_voxels and
+    position in self.batched_voxels[buffer]
 
   if self.batching:
     if position notin self.chunks[buffer] or
@@ -137,7 +134,8 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
       if not exists_in_chunks and not exists_in_batched:
         if self.block_count >= MAX_BLOCK_COUNT:
           raise (ref ResourceLimitError)(
-            msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
+            msg:
+              &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
           )
         inc self.block_count
         when defined(debug):
@@ -149,7 +147,8 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
     if not exists_in_chunks:
       if self.block_count >= MAX_BLOCK_COUNT:
         raise (ref ResourceLimitError)(
-          msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
+          msg:
+            &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
         )
       inc self.block_count
       when defined(debug):
@@ -173,7 +172,9 @@ proc batch_changes*(self: VoxelStore): bool =
     self.batching = true
     result = true
 
-proc get_or_create_delta_seq(self: VoxelStore, chunk_id: Vector3): ZenSeq[DeltaUpdate] =
+proc get_or_create_delta_seq(
+    self: VoxelStore, chunk_id: Vector3
+): ZenSeq[DeltaUpdate] =
   ## Get existing delta seq or create a new one for the chunk.
   if chunk_id in self.chunk_deltas:
     result = self.chunk_deltas[chunk_id]
@@ -203,9 +204,9 @@ proc flush_packed_chunks*(self: VoxelStore) =
 
     # Decide whether to defer this chunk
     # Defer if: has previous snapshot, many changes, and hasn't waited long enough
-    let should_defer = had_snapshot and
-                       change_count > FLUSH_CHANGE_THRESHOLD and
-                       wait_ms < FLUSH_BUFFER_MS
+    let should_defer =
+      had_snapshot and change_count > FLUSH_CHANGE_THRESHOLD and
+      wait_ms < FLUSH_BUFFER_MS
 
     if should_defer:
       deferred_chunks.incl(chunk_id)
@@ -226,8 +227,11 @@ proc flush_packed_chunks*(self: VoxelStore) =
         current_voxels[pos] = packed
 
     # Get last snapshot state for this chunk
-    let last_voxels = if had_snapshot: self.last_snapshot[chunk_id]
-                      else: initTable[Vector3, PackedVoxel]()
+    let last_voxels =
+      if had_snapshot:
+        self.last_snapshot[chunk_id]
+      else:
+        initTable[Vector3, PackedVoxel]()
 
     # Determine changes since last snapshot
     var changes: seq[tuple[pos: Vector3, voxel: PackedVoxel]]
@@ -243,17 +247,20 @@ proc flush_packed_chunks*(self: VoxelStore) =
         changes.add (pos, EMPTY_VOXEL)
 
     # Get delta count for this chunk
-    let delta_count = if chunk_id in self.chunk_deltas:
-                        self.chunk_deltas[chunk_id].len
-                      else: 0
+    let delta_count =
+      if chunk_id in self.chunk_deltas:
+        self.chunk_deltas[chunk_id].len
+      else:
+        0
 
     # Force snapshot if this chunk has too many deltas
     let force_snapshot = delta_count >= MAX_DELTA_UPDATES
 
     # Decide: delta or snapshot
     # Use snapshot if: forced, no previous snapshot, or chunk is now empty
-    let use_snapshot = DISABLE_DELTA_UPDATES or force_snapshot or
-                       not had_snapshot or current_voxels.len == 0
+    let use_snapshot =
+      DISABLE_DELTA_UPDATES or force_snapshot or not had_snapshot or
+      current_voxels.len == 0
 
     if use_snapshot:
       # Full snapshot - clear deltas and update snapshot
@@ -278,7 +285,7 @@ proc flush_packed_chunks*(self: VoxelStore) =
         let local_pos = vec3(
           floor_mod(world_pos.x.int, 16).float,
           floor_mod(world_pos.y.int, 16).float,
-          floor_mod(world_pos.z.int, 16).float
+          floor_mod(world_pos.z.int, 16).float,
         )
         local_changes.add (local_pos, packed)
 
@@ -309,7 +316,9 @@ proc apply_changes*(self: VoxelStore, disable_packed: bool = false) =
   if not disable_packed and self.dirty_chunks.len > 0:
     self.flush_packed_chunks()
 
-proc apply_delta_update*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
+proc apply_delta_update*(
+    self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate
+) =
   ## Apply a delta update to local chunks (for network receive).
   ## Does NOT mark chunk as dirty since this is receiving data, not generating it.
   let changes = decode_delta(delta)
@@ -318,7 +327,7 @@ proc apply_delta_update*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate
     let world_pos = vec3(
       chunk_id.x * 16 + local_pos.x,
       chunk_id.y * 16 + local_pos.y,
-      chunk_id.z * 16 + local_pos.z
+      chunk_id.z * 16 + local_pos.z,
     )
 
     if packed_voxel == EMPTY_VOXEL:
@@ -351,7 +360,9 @@ proc apply_delta_update*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate
       if kind != Hole:
         inc self.block_count
 
-proc apply_snapshot*(self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData) =
+proc apply_snapshot*(
+    self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData
+) =
   ## Decode a snapshot and apply to local chunks (for network receive).
   ## Does NOT mark chunk as dirty since this is receiving data, not generating it.
   if snapshot.data.len == 0:
@@ -388,7 +399,7 @@ proc apply_snapshot*(self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData
         let world_pos = vec3(
           chunk_id.x * 16 + pos.x,
           chunk_id.y * 16 + pos.y,
-          chunk_id.z * 16 + pos.z
+          chunk_id.z * 16 + pos.z,
         )
         let color = action_colors[Colors(color_idx)]
         let kind = VoxelKind(kind_ord)
@@ -475,7 +486,7 @@ proc verify_packed_chunks*(self: VoxelStore) =
             let world_pos = vec3(
               chunk_id.x * 16 + local_pos.x,
               chunk_id.y * 16 + local_pos.y,
-              chunk_id.z * 16 + local_pos.z
+              chunk_id.z * 16 + local_pos.z,
             )
             reconstructed[world_pos] = voxels[linear]
 
@@ -487,7 +498,7 @@ proc verify_packed_chunks*(self: VoxelStore) =
           let world_pos = vec3(
             chunk_id.x * 16 + local_pos.x,
             chunk_id.y * 16 + local_pos.y,
-            chunk_id.z * 16 + local_pos.z
+            chunk_id.z * 16 + local_pos.z,
           )
           if packed_voxel == EMPTY_VOXEL:
             reconstructed.del(world_pos)
@@ -524,118 +535,15 @@ proc verify_packed_chunks*(self: VoxelStore) =
 
     if mismatches.len > 0:
       let has_snapshot = chunk_id in self.packed_chunks
-      let delta_count = if chunk_id in self.chunk_deltas: self.chunk_deltas[chunk_id].len else: 0
-      raise newException(AssertionDefect,
+      let delta_count =
+        if chunk_id in self.chunk_deltas:
+          self.chunk_deltas[chunk_id].len
+        else:
+          0
+      raise newException(
+        AssertionDefect,
         &"Packed chunk verification failed for {self.id} chunk {chunk_id}:\n" &
-        &"  has_snapshot={has_snapshot}, delta_count={delta_count}\n" &
-        &"  actual_voxels={actual.len}, reconstructed_voxels={reconstructed.len}\n" &
-        mismatches[0 .. min(mismatches.len - 1, 19)].join("\n"))
-
-# Buffer management for rendering
-
-proc get_render_buffer*(self: VoxelStore, chunk_id: Vector3): VoxelBuffer =
-  ## Get or create a VoxelBuffer for rendering a chunk.
-  if chunk_id notin self.render_buffers:
-    self.render_stats.buffer_creates.inc
-    let buffer = gdnew[VoxelBuffer]()
-    buffer.create(16, 16, 16)
-    buffer.fill(0)
-    self.render_buffers[chunk_id] = buffer
-  result = self.render_buffers[chunk_id]
-
-proc paste_chunk*(self: VoxelStore, chunk_id: Vector3) =
-  ## Paste the render buffer for a chunk to the terrain.
-  ## We pass -1 as mask_value to DISABLE masking (triggers fast copy_from path).
-  ## This means zeros in the buffer will overwrite terrain (correct for snapshots).
-  if chunk_id in self.render_buffers and self.voxel_tool != nil:
-    self.render_stats.pastes.inc
-    let buffer = self.render_buffers[chunk_id]
-    let chunk_origin = chunk_id * 16.0
-    self.voxel_tool.paste(chunk_origin, buffer, 1, -1)
-
-proc remove_render_buffer*(self: VoxelStore, chunk_id: Vector3) =
-  ## Remove a render buffer when chunk is unloaded.
-  self.render_buffers.del(chunk_id)
-
-proc log_render_stats*(self: VoxelStore) =
-  if self.render_stats.pastes mod 100 == 0 and self.render_stats.pastes > 0:
-    info "render stats", id = self.id,
-      buffer_creates = self.render_stats.buffer_creates,
-      pastes = self.render_stats.pastes
-
-proc render_snapshot*(self: VoxelStore, chunk_id: Vector3) =
-  ## Render a chunk from its packed snapshot.
-  ## Uses buffer+paste when state.use_chunk_buffers=true, else set_voxel.
-  if self.voxel_tool.is_nil:
-    return
-  if chunk_id notin self.packed_chunks:
-    return
-  let snapshot = self.packed_chunks[chunk_id]
-  if snapshot.is_empty:
-    return
-
-  let voxels = decode_chunk(snapshot)
-  let chunk_origin = chunk_id * 16.0
-
-  if state.use_chunk_buffers:
-    let buffer = self.get_render_buffer(chunk_id)
-    for i, packed in voxels:
-      if packed != EMPTY_VOXEL:
-        let (color_index, _) = unpack_voxel(packed)
-        let local_pos = from_linear(i)
-        buffer.set_voxel(color_index.int64, local_pos.x.int64,
-          local_pos.y.int64, local_pos.z.int64)
-    self.paste_chunk(chunk_id)
-  else:
-    for i, packed in voxels:
-      if packed != EMPTY_VOXEL:
-        let (color_index, _) = unpack_voxel(packed)
-        let local_pos = from_linear(i)
-        let world_pos = chunk_origin + local_pos
-        self.voxel_tool.set_voxel(world_pos, color_index.int64)
-
-  self.log_render_stats()
-
-proc render_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
-  ## Render a delta update.
-  ## Uses buffer+paste when state.use_chunk_buffers=true, else set_voxel.
-  if self.voxel_tool.is_nil:
-    return
-
-  let chunk_origin = chunk_id * 16.0
-  let changes = decode_delta(delta)
-
-  if state.use_chunk_buffers:
-    let buffer = self.get_render_buffer(chunk_id)
-    for (local_pos, packed) in changes:
-      let color_index = if packed == EMPTY_VOXEL: 0 else: unpack_voxel(packed)[0]
-      buffer.set_voxel(color_index.int64, local_pos.x.int64,
-        local_pos.y.int64, local_pos.z.int64)
-    self.paste_chunk(chunk_id)
-  else:
-    for (local_pos, packed) in changes:
-      let world_pos = chunk_origin + local_pos
-      let color_index = if packed == EMPTY_VOXEL: 0 else: unpack_voxel(packed)[0]
-      self.voxel_tool.set_voxel(world_pos, color_index.int64)
-
-  self.log_render_stats()
-
-proc setup_render_watchers*(self: VoxelStore) =
-  ## Set up watchers on packed_chunks and chunk_deltas to trigger rendering.
-  ## Requires self.model and self.voxel_tool to be set.
-  assert self.model != nil, "VoxelStore.model must be set before setup_render_watchers"
-
-  # Watch packed_chunks for snapshot updates
-  self.packed_chunks.watch(self.model):
-    let chunk_id = change.item.key
-    if added:
-      self.render_snapshot(chunk_id)
-
-  # Watch chunk_deltas for new delta sequences, then watch each sequence
-  self.chunk_deltas.watch(self.model):
-    let chunk_id = change.item.key
-    if added:
-      # Watch this chunk's delta sequence for new deltas
-      change.item.value.watch(self.model):
-        if added:
-          self.render_delta(chunk_id, change.item)
+          &"  has_snapshot={has_snapshot}, delta_count={delta_count}\n" &
+          &"  actual_voxels={actual.len}, reconstructed_voxels={reconstructed.len}\n" &
+          mismatches[0 .. min(mismatches.len - 1, 19)].join("\n"),
+      )

@@ -1,5 +1,5 @@
 import std/[tables, monotimes, sets, options, macros]
-import godotapi/[spatial, ray_cast, voxel_tool, voxel_buffer]
+import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
@@ -107,7 +107,8 @@ type
     frame_count*: int
     skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format
-    use_chunk_buffers* = false
+    use_chunk_buffers* = true
+      # EXPERIMENT: Set to true for 20-second paste test
       # Use VoxelBuffer+paste instead of voxel_tool.set_voxel
     open_sign_value*: ZenValue[Sign]
     queued_action_value*: ZenValue[string]
@@ -224,13 +225,8 @@ type
     # Callbacks for Build integration
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
 
-    # Rendering (set by BuildNode)
-    voxel_tool*: VoxelTool
-    render_buffers*: Table[Vector3, VoxelBuffer]
-
     # Stats tracking
     content_bytes*: int # Actual voxel data bytes (snapshots + deltas)
-    render_stats*: tuple[buffer_creates, pastes: int]
 
   Build* = ref object of Unit
     voxels*: VoxelStore

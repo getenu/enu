@@ -5,8 +5,8 @@ import
     node, voxel_terrain, voxel_mesher_blocky, voxel_library, shader_material,
     resource_loader, packed_scene, ray_cast,
   ]
-import core, models/[units, builds, colors, voxel_store], gdutils
-import ./queries
+import core, models/[units, builds, colors], gdutils
+import ./queries, ./voxel_renderer
 
 const
   highlight_glow = 1.0
@@ -20,6 +20,7 @@ var hidden_shader {.threadvar.}: Shader
 gdobj BuildNode of VoxelTerrain:
   var
     model*: Build
+    renderer: VoxelRenderer
     transform_zid: ZID
     default_view_distance: int
     toggle_error_highlight_at = MonoTime.high
@@ -40,7 +41,9 @@ gdobj BuildNode of VoxelTerrain:
         else:
           let m = m.duplicate.as(ShaderMaterial)
           m.set_shader_param("emission_energy", default_glow.to_variant)
-          self.model.shared.emission_colors.add(m.get_shader_param("emission").as_color)
+          self.model.shared.emission_colors.add(
+            m.get_shader_param("emission").as_color
+          )
 
           self.model.shared.materials.add(m)
 
@@ -67,19 +70,22 @@ gdobj BuildNode of VoxelTerrain:
           )
 
         if Highlight in self.model.local_flags or
-            (HighlightError in self.model.global_flags and self.error_highlight_on):
+            (
+              HighlightError in self.model.global_flags and
+              self.error_highlight_on
+            ):
           m.set_shader_param("emission_energy", highlight_glow.to_variant)
         else:
           m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
   method on_block_loaded(chunk_id: Vector3) =
     # Render current voxels when terrain block loads
-    if ?self.model:
-      self.model.voxels.render_snapshot(chunk_id)
+    if ?self.renderer:
+      self.renderer.render_snapshot(chunk_id)
 
   method on_block_unloaded(chunk_id: Vector3) =
-    if ?self.model:
-      self.model.voxels.remove_render_buffer(chunk_id)
+    if ?self.renderer:
+      self.renderer.remove_buffer(chunk_id)
 
   proc set_visibility() =
     if Visible in self.model.global_flags:
@@ -106,14 +112,19 @@ gdobj BuildNode of VoxelTerrain:
         debug "changing bounds", new = change.item
         self.bounds = change.item
 
-    # Set up VoxelStore for rendering
-    self.model.voxels.voxel_tool = self.get_voxel_tool()
-    self.model.voxels.model = self.model
-    self.model.voxels.setup_render_watchers()
+    # Set up VoxelRenderer
+    self.renderer = VoxelRenderer.init(
+      store = self.model.voxels,
+      model = self.model,
+      voxel_tool = self.get_voxel_tool().as(VoxelToolTerrain),
+    )
+    self.renderer.setup_watchers()
 
     self.model.global_flags.watch:
-      if (change.item == Visible and ScriptInitializing notin self.model.global_flags) or
-          ScriptInitializing.removed:
+      if (
+        change.item == Visible and
+        ScriptInitializing notin self.model.global_flags
+      ) or ScriptInitializing.removed:
         self.set_visibility
       elif Resetting.added:
         self.generator = nil
@@ -169,6 +180,10 @@ gdobj BuildNode of VoxelTerrain:
         self.error_highlight_on = not self.error_highlight_on
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
+
+      # Flush any batched render updates
+      if ?self.renderer:
+        self.renderer.flush()
 
   proc setup*() =
     let was_skipping_join = dont_join
