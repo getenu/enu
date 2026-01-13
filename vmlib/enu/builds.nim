@@ -11,6 +11,18 @@ bridged_to_host:
   proc `draw_position=`*(self: Build, value: Vector3)
   proc has_block_at*(position: Vector3): bool
   proc block_color_at*(position: Vector3): Colors
+  proc begin_asap*(self: Build)
+  proc end_asap*(self: Build)
+
+template asap*(body: untyped) =
+  ## Execute build commands instantly without incremental updates.
+  let self = Build(active_unit())
+  let prev_speed = self.speed
+  self.speed = ASAP
+  try:
+    body
+  finally:
+    self.speed = prev_speed
 
 proc `draw_position=`*(self: Build, unit: Unit) =
   self.draw_position = unit.position

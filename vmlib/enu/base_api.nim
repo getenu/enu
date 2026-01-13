@@ -348,12 +348,16 @@ template lean*(self: Unit, degrees: float) =
   wait self.lean(degrees, move_mode)
 
 template move*[T: Unit](new_enu_target: T) =
+  when enu_target is Build:
+    enu_target.end_asap()
   enu_target = new_enu_target
   move_mode = 2
   if enu_target.speed == 0:
     enu_target.speed = 1
 
 template build*(new_enu_target: Unit) =
+  when enu_target is Build:
+    enu_target.end_asap()
   enu_target = new_enu_target
   move_mode = 1
 
