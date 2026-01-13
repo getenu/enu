@@ -244,6 +244,7 @@ proc flush_delta(
   let delta = encode_delta(local_changes)
   self.content_bytes += delta.data.len
   self.get_or_create_delta_seq(chunk_id).add delta
+  inc self.deltas_flushed
 
   # Clear tracked changes
   self.pending_changes.del(chunk_id)
@@ -295,6 +296,7 @@ proc flush_next_snapshots*(self: VoxelStore, max_count: int): int =
     let (voxels, _) = self.build_chunk_state(chunk_id)
     let packed = encode_chunk(voxels)
     self.update_packed_state(chunk_id, packed)
+    inc self.snapshots_flushed
 
     # Clear tracked changes for this chunk
     self.pending_changes.del(chunk_id)

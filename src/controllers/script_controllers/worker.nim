@@ -368,12 +368,18 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   var last_bytes_log = MonoTime.low
   var last_bytes_sent = 0
   var last_bytes_received = 0
+  var last_snapshots_flushed = 0
+  var last_deltas_flushed = 0
+  var tick_count = 0
+  var last_tick_count = 0
+  var max_tick_time = Duration.default
 
   try:
     while running:
       let frame_start = get_mono_time()
       let timeout = frame_start + max_time
       let wait_until = frame_start + min_time
+      inc tick_count
 
       var to_process: seq[Unit]
       state.units.value.walk_tree proc(unit: Unit) =
@@ -464,17 +470,36 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       else:
         state.net_connections = 0
 
-      # Log bytes sent/received periodically
+      # Log bytes sent/received and snapshot/delta stats periodically
       if frame_start > last_bytes_log + bytes_log_interval:
         let sent = Zen.thread_ctx.bytes_sent
         let recv = Zen.thread_ctx.bytes_received
         let sent_delta = sent - last_bytes_sent
         let recv_delta = recv - last_bytes_received
-        if sent_delta > 0 or recv_delta > 0:
-          echo "=== Bytes: sent=", sent, " (+" , sent_delta, "), received=", recv, " (+", recv_delta, ")"
+
+        # Collect snapshot/delta stats from all builds
+        var total_snapshots = 0
+        var total_deltas = 0
+        state.units.value.walk_tree proc(unit: Unit) =
+          if unit of Build:
+            let build = Build(unit)
+            total_snapshots += build.voxels.snapshots_flushed
+            total_deltas += build.voxels.deltas_flushed
+
+        let snapshots_delta = total_snapshots - last_snapshots_flushed
+        let deltas_delta = total_deltas - last_deltas_flushed
+        let ticks_delta = tick_count - last_tick_count
+        let ticks_per_sec = ticks_delta.float / bytes_log_interval.in_seconds.float
+
+        if sent_delta > 0 or recv_delta > 0 or snapshots_delta > 0 or deltas_delta > 0 or ticks_delta > 0:
+          echo "=== Worker: ", ticks_per_sec.int, " ticks/s, max=", max_tick_time.in_milliseconds, "ms | Bytes: sent=", sent, " (+", sent_delta, "), recv=", recv, " (+", recv_delta, ") | Snapshots: ", total_snapshots, " (+", snapshots_delta, "), Deltas: ", total_deltas, " (+", deltas_delta, ")"
         last_bytes_log = frame_start
         last_bytes_sent = sent
         last_bytes_received = recv
+        last_snapshots_flushed = total_snapshots
+        last_deltas_flushed = total_deltas
+        last_tick_count = tick_count
+        max_tick_time = Duration.default
 
       # In test mode, exit when all scripts have finished
       if TestMode in state.local_flags:
@@ -518,6 +543,11 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         backup_level(state.config.level_dir)
         Zen.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
+
+      # Track max tick time for debugging
+      let tick_time = get_mono_time() - frame_start
+      if tick_time > max_tick_time:
+        max_tick_time = tick_time
 
       if now < wait_until:
         sleep int((wait_until - get_mono_time()).in_milliseconds)

@@ -233,6 +233,8 @@ type
 
     # Stats tracking
     content_bytes*: int  # Actual voxel data bytes (snapshots + deltas)
+    snapshots_flushed*: int  # Total snapshots flushed
+    deltas_flushed*: int  # Total deltas flushed
 
   Build* = ref object of Unit
     voxels*: VoxelStore
