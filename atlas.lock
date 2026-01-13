@@ -15,7 +15,7 @@
     "model_citizen.getenu.github.com": {
       "dir": "$deps/model_citizen.getenu.github.com",
       "url": "https://github.com/getenu/model_citizen",
-      "commit": "a4254cb1350e073141873a92dda1e81620d66765",
+      "commit": "9ddffa76af3cac75e29e8a14f1f1b3dbee59a3f9",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
