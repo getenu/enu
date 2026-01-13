@@ -124,7 +124,7 @@ proc scattered_points(count: int, seed: int = 42): TestChunk =
 
 proc compare_encoding(name: string, chunk: TestChunk) =
   let non_empty = chunk.count_non_empty()
-  let rle = encode_rle(chunk)
+  let rle = encode_rle_data(chunk)
   let sparse = encode_sparse(chunk)
 
   let rle_size = rle.len

@@ -352,8 +352,20 @@ proc position_set(self: Unit, position: Vector3) =
 proc speed(self: Unit): float =
   self.speed
 
+const ASAP_VALUE = float.high  ## Magic value for ASAP mode
+
+# Forward declarations for ASAP mode
+proc begin_asap(self: Build) {.gcsafe.}
+proc end_asap*(self: Build) {.gcsafe.}
+
 proc `speed=`(self: Unit, speed: float) =
-  self.speed = speed
+  if self of Build and speed == ASAP_VALUE:
+    Build(self).begin_asap()
+    self.speed = 0
+  else:
+    if self of Build:
+      Build(self).end_asap()
+    self.speed = speed
 
 proc scale(self: Unit): float =
   types.scale(self)
@@ -491,6 +503,20 @@ proc save(self: Build, name: string) =
 proc restore(self: Build, name: string) =
   (self.draw_transform, self.color_value.value, self.drawing) =
     self.save_points[name]
+
+proc begin_asap(self: Build) {.gcsafe.} =
+  ## Enable ASAP mode - defers rendering and network sync.
+  if ASAPMode notin self.local_flags:
+    self.local_flags += ASAPMode
+    self.voxels.defer_flush = true
+
+proc end_asap*(self: Build) {.gcsafe.} =
+  ## Begin exiting ASAP mode - queues snapshots for rate-limited flush.
+  ## ASAPMode flag is cleared when snapshot queue empties (in worker loop).
+  if ASAPMode in self.local_flags:
+    self.voxels.defer_flush = false
+    self.voxels.queue_dirty_chunks()
+    # Note: ASAPMode flag cleared when snapshot queue empties (in worker loop)
 
 # Player binding
 
@@ -701,7 +727,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, draw_position,
-    draw_position_set, has_block_at, block_color_at
+    draw_position_set, has_block_at, block_color_at, begin_asap, end_asap
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,

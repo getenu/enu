@@ -6,8 +6,9 @@ import
 import godotapi/spatial
 import core, models/[states, bots, colors, units, packed_chunks, voxel_store]
 
-# Re-export constants from voxel_store
-export ChunkSize, MAX_BLOCK_COUNT, MAX_DELTA_UPDATES
+# Re-export from voxel_store
+export ChunkSize, MAX_BLOCK_COUNT, MAX_DELTA_UPDATES, MAX_CHANGES_PER_DELTA,
+       queue_dirty_chunks, flush_next_snapshots, is_flushing
 
 include "build_code_template.nim.nimf"
 
@@ -356,21 +357,7 @@ method reset*(self: Build) =
   self.global_flags += Visible
   self.reset_state()
 
-  let chunks = self.voxels.chunks.value
-  for chunk_id, chunk in chunks:
-    self.voxels.chunks.del(chunk_id)
-    chunk.destroy
-
-  # Clear packed chunk data to avoid stale snapshots/deltas
-  if packed_chunks_enabled():
-    let packed = self.voxels.packed_chunks.value
-    for chunk_id in packed.keys:
-      self.voxels.packed_chunks.del(chunk_id)
-    let deltas = self.voxels.chunk_deltas.value
-    for chunk_id in deltas.keys:
-      self.voxels.chunk_deltas.del(chunk_id)
-    self.voxels.last_snapshot.clear
-    self.voxels.dirty_chunks.clear
+  self.voxels.clear()
 
   self.units.clear()
   self.global_flags -= Resetting

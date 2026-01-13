@@ -105,6 +105,12 @@ proc to_string(data: seq[byte]): string =
   if data.len > 0:
     copyMem(addr result[0], unsafeAddr data[0], data.len)
 
+proc to_bytes(s: string): seq[byte] =
+  ## Convert string to seq[byte] efficiently.
+  result = newSeq[byte](s.len)
+  if s.len > 0:
+    copyMem(addr result[0], unsafeAddr s[0], s.len)
+
 proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
   ## RLE encode a full chunk snapshot.
   ## Output format: format byte + sequential voxel bytes with REPEAT commands for runs of 3+.
@@ -209,19 +215,6 @@ proc decode_sparse_data*(data: openArray[byte], start: int = 1): array[CHUNK_VOL
     if pos < CHUNK_VOLUME.uint64:
       result[pos.int] = voxel
 
-# Legacy string-based functions for compatibility with existing tests
-proc encode_rle*(voxels: array[CHUNK_VOLUME, PackedVoxel]): string =
-  let data = encode_rle_data(voxels)
-  result = newString(data.len)
-  for i, b in data:
-    result[i] = char(b)
-
-proc decode_rle*(s: string, start: int = 1): array[CHUNK_VOLUME, PackedVoxel] =
-  var data = newSeq[byte](s.len)
-  for i, c in s:
-    data[i] = c.uint8
-  decode_rle_data(data, start)
-
 type
   ChunkEncoding* = enum
     ceAdaptive  # Pick smaller of RLE/sparse
@@ -264,13 +257,9 @@ proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
   let format = packed.data[0].byte
   case format
   of FMT_RLE:
-    result = decode_rle(packed.data, 1)
+    result = decode_rle_data(packed.data.to_bytes, 1)
   of FMT_SPARSE_FULL, FMT_SPARSE_DELTA:
-    # Convert string to seq[byte] for sparse decode
-    var data = newSeq[byte](packed.data.len)
-    for i, c in packed.data:
-      data[i] = c.byte
-    result = decode_sparse_data(data, 1)
+    result = decode_sparse_data(packed.data.to_bytes, 1)
   of FMT_EMPTY:
     discard  # Result is already all zeros
   else:
@@ -380,8 +369,8 @@ when is_main_module:
       for i in 500 ..< CHUNK_VOLUME:
         voxels[i] = 0
 
-      let encoded = encode_rle(voxels)
-      let decoded = decode_rle(encoded)
+      let encoded = encode_rle_data(voxels)
+      let decoded = decode_rle_data(encoded)
 
       for i in 0 ..< CHUNK_VOLUME:
         check decoded[i] == voxels[i]
@@ -391,5 +380,5 @@ when is_main_module:
       for i in 0 ..< CHUNK_VOLUME:
         uniform[i] = 5
 
-      let encoded = encode_rle(uniform)
+      let encoded = encode_rle_data(uniform)
       check encoded.len < 100

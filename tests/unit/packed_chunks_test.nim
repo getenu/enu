@@ -88,8 +88,8 @@ suite "RLE Compression":
     for i in 500 ..< CHUNK_VOLUME:
       voxels[i] = 0
 
-    let encoded = encode_rle(voxels)
-    let decoded = decode_rle(encoded)
+    let encoded = encode_rle_data(voxels)
+    let decoded = decode_rle_data(encoded)
 
     for i in 0 ..< CHUNK_VOLUME:
       check decoded[i] == voxels[i]
@@ -99,13 +99,13 @@ suite "RLE Compression":
     for i in 0 ..< CHUNK_VOLUME:
       uniform[i] = 5
 
-    let encoded = encode_rle(uniform)
+    let encoded = encode_rle_data(uniform)
     check encoded.len < 100  # Should be very small
 
   test "RLE format byte is correct":
     var voxels: array[CHUNK_VOLUME, PackedVoxel]
-    let encoded = encode_rle(voxels)
-    check encoded[0].uint8 == FMT_RLE
+    let encoded = encode_rle_data(voxels)
+    check encoded[0] == FMT_RLE
 
 suite "PackedChunk Encoding":
   test "encode/decode empty chunk":

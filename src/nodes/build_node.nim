@@ -89,15 +89,18 @@ gdobj BuildNode of VoxelTerrain:
 
   proc track_chunk(chunk_id: Vector3) =
     if chunk_id in self.model.voxels.chunks:
-      self.draw_block(self.model.voxels.chunks[chunk_id])
+      let in_asap_mode = ASAPMode in self.model.local_flags
+      if not in_asap_mode:
+        self.draw_block(self.model.voxels.chunks[chunk_id])
       self.active_chunks[chunk_id] = self.model.voxels.chunks[chunk_id].watch:
-        # `and not modified` isn't required, but the block will be
-        # replaced on the next iteration anyway.
-        if removed and not modified:
-          self.draw(change.item.key, action_colors[Eraser])
-        elif added:
-          self.draw(change.item.key, change.item.value.color)
-      self.draw_block(self.model.voxels.chunks[chunk_id])
+        # Skip drawing during ASAP mode - will be flushed when mode ends
+        if ASAPMode notin self.model.local_flags:
+          # `and not modified` isn't required, but the block will be
+          # replaced on the next iteration anyway.
+          if removed and not modified:
+            self.draw(change.item.key, action_colors[Eraser])
+          elif added:
+            self.draw(change.item.key, change.item.value.color)
     else:
       self.active_chunks[chunk_id] = empty_zid
 
@@ -180,6 +183,11 @@ gdobj BuildNode of VoxelTerrain:
     self.model.local_flags.watch:
       if change.item == Highlight:
         self.set_highlight
+      elif change.item == ASAPMode and removed:
+        # ASAP mode ended - redraw all active chunks
+        for chunk_id, zid in self.active_chunks:
+          if chunk_id in self.model.voxels.chunks:
+            self.draw_block(self.model.voxels.chunks[chunk_id])
 
     state.local_flags.watch:
       if change.item == God:

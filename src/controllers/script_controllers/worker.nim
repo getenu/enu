@@ -66,6 +66,8 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         ctx.timeout_at = now + script_timeout
         ctx.running = ctx.resume()
         if not ctx.running and not ?unit.clone_of:
+          if unit of Build:
+            Build(unit).end_asap()
           unit.collect_garbage
           unit.ensure_visible
           unit.current_line = 0
@@ -423,6 +425,33 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
             let build = Build(unit)
             if build.voxels.dirty_chunks.len > 0 or build.voxels.batching:
               build.apply_changes()
+
+      # Process rate-limited snapshot queues
+      if packed_chunks_enabled():
+        state.snapshots_flushed_this_frame = 0
+        let global_limit = if state.global_snapshots_per_frame > 0:
+                             state.global_snapshots_per_frame
+                           else:
+                             int.high
+
+        state.units.value.walk_tree proc(unit: Unit) =
+          if unit of Build:
+            let build = Build(unit)
+            if build.voxels.is_flushing:
+              let per_build = if build.voxels.snapshots_per_frame > 0:
+                                build.voxels.snapshots_per_frame
+                              else:
+                                int.high
+              let remaining = global_limit - state.snapshots_flushed_this_frame
+              let limit = min(per_build, remaining)
+
+              if limit > 0:
+                let flushed = build.voxels.flush_next_snapshots(limit)
+                state.snapshots_flushed_this_frame += flushed
+
+                # If done flushing and was in ASAP mode, clear flag
+                if not build.voxels.is_flushing and ASAPMode in build.local_flags:
+                  build.local_flags -= ASAPMode
 
       Zen.thread_ctx.tick
       run_deferred()

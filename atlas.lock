@@ -15,7 +15,7 @@
     "model_citizen.getenu.github.com": {
       "dir": "$deps/model_citizen.getenu.github.com",
       "url": "https://github.com/getenu/model_citizen",
-      "commit": "7c8bf62749bc8b7004a653fce00cd3972e2d1d6e",
+      "commit": "a4254cb1350e073141873a92dda1e81620d66765",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
@@ -88,6 +88,12 @@
       "dir": "$deps/nph",
       "url": "https://github.com/arnetheduck/nph",
       "commit": "1c6d7813f9f6d6a4fbcd36dfd1489b18982d0d55",
+      "version": ""
+    },
+    "regex": {
+      "dir": "$deps/regex",
+      "url": "https://github.com/nitely/nim-regex",
+      "commit": "4593305ed1e49731fc75af1dc572dd2559aad19c",
       "version": ""
     },
     "nim-libbacktrace.dsrw.github.com": {
@@ -180,10 +186,10 @@
       "commit": "b5b387e6fb2a7cc75d54a269b07cc6218361bd46",
       "version": ""
     },
-    "regex": {
-      "dir": "$deps/regex",
-      "url": "https://github.com/nitely/nim-regex",
-      "commit": "4593305ed1e49731fc75af1dc572dd2559aad19c",
+    "unicodedb": {
+      "dir": "$deps/unicodedb",
+      "url": "https://github.com/nitely/nim-unicodedb",
+      "commit": "66f2458710dc641dd4640368f9483c8a0ec70561",
       "version": ""
     },
     "stew": {
@@ -233,12 +239,6 @@
       "url": "https://github.com/c-blake/adix",
       "commit": "38a95ee6bd675b31746fa79d318b546495374ffa",
       "version": ""
-    },
-    "unicodedb": {
-      "dir": "$deps/unicodedb",
-      "url": "https://github.com/nitely/nim-unicodedb",
-      "commit": "66f2458710dc641dd4640368f9483c8a0ec70561",
-      "version": ""
     }
   },
   "nimcfg": [
@@ -259,6 +259,7 @@
     "--path:\"deps/zippy/src\"",
     "--path:\"deps/unittest2\"",
     "--path:\"deps/nph/src\"",
+    "--path:\"deps/regex/src\"",
     "--path:\"deps/nim-libbacktrace.dsrw.github.com\"",
     "--path:\"deps/threading\"",
     "--path:\"deps/flatty/src\"",
@@ -276,14 +277,13 @@
     "--path:\"deps/hldiff\"",
     "--path:\"deps/glob/src\"",
     "--path:\"deps/toml_serialization\"",
-    "--path:\"deps/regex/src\"",
+    "--path:\"deps/unicodedb/src\"",
     "--path:\"deps/fusion/src\"",
     "--path:\"deps/mustache/src\"",
     "--path:\"deps/parsetoml/src\"",
     "--path:\"deps/bearssl\"",
     "--path:\"deps/httputils\"",
     "--path:\"deps/adix\"",
-    "--path:\"deps/unicodedb/src\"",
     "############# end Atlas config section   ##########",
     ""
   ],
@@ -303,8 +303,8 @@
       "  \"https://github.com/getenu/model_citizen 0.19.11\",",
       "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
       "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
-      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\", \"nph\",",
-      "  \"https://github.com/dsrw/nim-libbacktrace\"",
+      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\",",
+      "  \"nph\", \"regex\", \"https://github.com/dsrw/nim-libbacktrace\"",
       ""
     ]
   },

@@ -58,6 +58,7 @@ type
     TargetMoved
     Highlight
     Hide
+    ASAPMode
 
   GlobalModelFlags* = enum
     Global
@@ -120,6 +121,10 @@ type
     net_bytes_sent_value*: ZenValue[int64]
     net_bytes_received_value*: ZenValue[int64]
     net_connections_value*: ZenValue[int]
+
+    # Global snapshot rate limiting
+    global_snapshots_per_frame*: int  # 0 = unlimited
+    snapshots_flushed_this_frame*: int  # Reset each frame
 
   Model* = ref object of RootObj
     id*: string
@@ -209,14 +214,22 @@ type
     packed_chunks*: ZenTable[Vector3, SnapshotData]
     chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
     dirty_chunks*: HashSet[Vector3]
-    last_snapshot*: Table[Vector3, Table[Vector3, PackedVoxel]]
+
+    # Change tracking for efficient deltas
+    pending_changes*: Table[Vector3, Table[Vector3, PackedVoxel]]  # chunk_id -> {pos -> packed}
+
+    # Rate-limited snapshot queue (HashSet for O(1) lookup in add_voxel/del_voxel)
+    snapshot_queue*: HashSet[Vector3]
+    snapshots_per_frame*: int  # 0 = unlimited
 
     # Batching
     batching*: bool
     batched_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
+    defer_flush*: bool  # When true, skip flush_packed_chunks in apply_changes
 
     # Callbacks for Build integration
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
+    on_chunk_flushed*: proc(chunk_id: Vector3) {.gcsafe.}
 
     # Stats tracking
     content_bytes*: int  # Actual voxel data bytes (snapshots + deltas)
