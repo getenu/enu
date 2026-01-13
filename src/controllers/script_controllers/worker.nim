@@ -1,7 +1,7 @@
 import std/[locks, os, random, net]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
-import core, models, models/[serializers], libs/[interpreters, eval]
+import core, models, models/[serializers, voxel_store], libs/[interpreters, eval]
 import ./[vars, host_bridge, scripting]
 
 var
@@ -125,7 +125,7 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
 proc watch_code(self: Worker, unit: Unit) =
   unit.code_value.changes:
     if added or touched:
-      if Server in state.local_flags:
+      if change.item.runner == Zen.thread_ctx.id:
         save_level(state.config.level_dir)
         self.change_code(unit, change.item)
         if change.item.nim == "":
@@ -210,6 +210,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   let connect_address = main_thread_state.config.connect_address
   if ?listen_address or not ?connect_address:
     state.push_flag Server
+    state.server_ctx_name = worker_ctx.id
 
   state.config_value = ZenValue[Config](Zen.thread_ctx["config"])
   state.console = ConsoleModel.init_from(main_thread_state.console)
@@ -299,7 +300,12 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       try:
         Zen.thread_ctx.subscribe(connect_address)
         connected = true
-        echo "=== Connected to server. Initial bytes: sent=", Zen.thread_ctx.bytes_sent, " received=", Zen.thread_ctx.bytes_received
+        # Get the remote server's context ID from subscribers
+        for sub in Zen.thread_ctx.subscribers:
+          if sub.kind == Remote:
+            state.server_ctx_name = sub.ctx_id
+            break
+        info "connected to server", bytes_sent = Zen.thread_ctx.bytes_sent, bytes_received = Zen.thread_ctx.bytes_received
         when defined(zen_debug_messages):
           Zen.thread_ctx.dump_message_stats("client after connect")
       except ConnectionError:
@@ -356,8 +362,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     if state.config.player_color != change.item.player_color:
       player.color = state.config.player_color
 
-  const max_time = (1.0 / 120.0).seconds
-  const min_time = (1.0 / 120.0).seconds
+  const max_time = (1.0 / 30.0).seconds
+  const min_time = (1.0 / 60.0).seconds
   const auto_save_interval = 30.seconds
   const backup_interval = 15.minutes
   const test_timeout = 5.minutes
@@ -383,7 +389,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
       var to_process: seq[Unit]
       state.units.value.walk_tree proc(unit: Unit) =
-        if ?unit.script_ctx:
+        if unit.code.runner == Zen.thread_ctx.id and ?unit.script_ctx:
           if unit.script_ctx.running:
             unit.global_flags += ScriptRunning
           else:
@@ -435,21 +441,13 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       # Process rate-limited snapshot queues
       if packed_chunks_enabled():
         state.snapshots_flushed_this_frame = 0
-        let global_limit = if state.global_snapshots_per_frame > 0:
-                             state.global_snapshots_per_frame
-                           else:
-                             int.high
 
         state.units.value.walk_tree proc(unit: Unit) =
           if unit of Build:
             let build = Build(unit)
             if build.voxels.is_flushing:
-              let per_build = if build.voxels.snapshots_per_frame > 0:
-                                build.voxels.snapshots_per_frame
-                              else:
-                                int.high
-              let remaining = global_limit - state.snapshots_flushed_this_frame
-              let limit = min(per_build, remaining)
+              let remaining = DEFAULT_GLOBAL_SNAPSHOTS - state.snapshots_flushed_this_frame
+              let limit = min(DEFAULT_SNAPSHOTS_PER_FRAME, remaining)
 
               if limit > 0:
                 let flushed = build.voxels.flush_next_snapshots(limit)
@@ -492,7 +490,9 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         let ticks_per_sec = ticks_delta.float / bytes_log_interval.in_seconds.float
 
         if sent_delta > 0 or recv_delta > 0 or snapshots_delta > 0 or deltas_delta > 0 or ticks_delta > 0:
-          echo "=== Worker: ", ticks_per_sec.int, " ticks/s, max=", max_tick_time.in_milliseconds, "ms | Bytes: sent=", sent, " (+", sent_delta, "), recv=", recv, " (+", recv_delta, ") | Snapshots: ", total_snapshots, " (+", snapshots_delta, "), Deltas: ", total_deltas, " (+", deltas_delta, ")"
+          info "worker stats", ticks_per_sec = ticks_per_sec.int, max_tick_ms = max_tick_time.in_milliseconds, bytes_sent = sent, sent_delta = sent_delta, bytes_recv = recv, recv_delta = recv_delta, snapshots = total_snapshots, snapshots_delta = snapshots_delta, deltas = total_deltas, deltas_delta = deltas_delta
+          when defined(zen_debug_messages):
+            Zen.thread_ctx.dump_message_stats("worker periodic")
         last_bytes_log = frame_start
         last_bytes_sent = sent
         last_bytes_received = recv
@@ -505,7 +505,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       if TestMode in state.local_flags:
         if test_started_at == MonoTime.high:
           test_started_at = get_mono_time()
-          echo "=== Test mode: started ==="
+          notice "test mode started"
 
         var any_running = false
         var running_scripts: seq[string]
@@ -518,15 +518,15 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         # Log progress every 30 seconds
         if elapsed.in_seconds.int mod 30 == 0 and elapsed.in_seconds.int > 0 and
             elapsed.in_milliseconds.int mod 1000 < 100:
-          echo "=== Test mode: still running after ", elapsed, " scripts=", running_scripts, " ==="
+          notice "test mode running", elapsed = elapsed, scripts = running_scripts
 
         if not any_running:
           let exit_code = if state.test_exit_code < 0: 0 else: state.test_exit_code
-          echo "=== Test mode: all scripts finished, exit_code=", exit_code, " elapsed=", elapsed, " ==="
+          notice "test mode finished", exit_code = exit_code, elapsed = elapsed
           state.test_exit_code = exit_code
           state.push_flag Quitting
         elif elapsed > test_timeout:
-          echo "=== Test mode: TIMEOUT after ", elapsed, " scripts=", running_scripts, " ==="
+          notice "test mode timeout", elapsed = elapsed, scripts = running_scripts
           state.test_exit_code = 1
           state.push_flag Quitting
 

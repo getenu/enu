@@ -35,7 +35,7 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     color_value = ~self.start_color
     errors = ScriptErrors.init
     current_line_value = ~0
-    collisions = ~seq[(string, Vector3)]
+    collisions = ~(seq[(string, Vector3)], flags = {SyncLocal})
     shared_value = ~Shared
     sight_query_value = ~(SightQuery, flags = {SyncLocal})
     eval_value = ~("", flags = {SyncLocal})

@@ -157,6 +157,7 @@ proc init*(_: type GameState): GameState =
     wants: ~(seq[LocalStateFlags], flags),
     level_name_value: ~("", id = "level_name"),
     queued_action_value: ~("", flags),
+    server_ctx_name_value: ~("", flags),
     status_message_value: ~("", flags),
     voxel_tasks_value: ~(0, flags),
     test_exit_code_value: ~(-1, flags),

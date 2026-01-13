@@ -112,6 +112,7 @@ type
     queued_action_value*: ZenValue[string]
     scale_factor*: float
     worker_ctx_name*: string
+    server_ctx_name_value*: ZenValue[string]  # Context running scripts (self if Server, remote otherwise)
     level_name_value*: ZenValue[string]
     status_message_value*: ZenValue[string]
     voxel_tasks_value*: ZenValue[int]
@@ -123,7 +124,6 @@ type
     net_connections_value*: ZenValue[int]
 
     # Global snapshot rate limiting
-    global_snapshots_per_frame*: int  # 0 = unlimited
     snapshots_flushed_this_frame*: int  # Reset each frame
 
   Model* = ref object of RootObj
@@ -220,7 +220,6 @@ type
 
     # Rate-limited snapshot queue (HashSet for O(1) lookup in add_voxel/del_voxel)
     snapshot_queue*: HashSet[Vector3]
-    snapshots_per_frame*: int  # 0 = unlimited
 
     # Batching
     batching*: bool
@@ -304,6 +303,7 @@ type
 
   Code* = object
     owner*: string
+    runner*: string
     nim*: string
 
   ScriptCtx* = ref object

@@ -271,7 +271,7 @@ proc init*(_: type Transform, origin = vec3()): Transform =
   result.origin = origin
 
 proc init*(_: type Code, nim: string): Code =
-  Code(owner: state.worker_ctx_name, nim: nim)
+  Code(owner: state.worker_ctx_name, runner: state.server_ctx_name, nim: nim)
 
 proc update_action_index*(state: GameState, change: int) =
   var index = int(state.tool) + change

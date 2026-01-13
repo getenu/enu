@@ -14,7 +14,7 @@ const
   MAX_DELTA_UPDATES* = 100 # Force snapshot after this many deltas
   MAX_CHANGES_PER_DELTA* = 100
     # Force snapshot if single update has this many changes
-  DEFAULT_SNAPSHOTS_PER_FRAME* = 2 # Per-build default
+  DEFAULT_SNAPSHOTS_PER_FRAME* = 8 # Per-build default
   DEFAULT_GLOBAL_SNAPSHOTS* = 32 # Global default across all builds
 
 # VoxelStore type is defined in types.nim
