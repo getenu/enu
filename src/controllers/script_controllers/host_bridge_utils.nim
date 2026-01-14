@@ -92,35 +92,36 @@ macro bridged_from_vm(
       return_node = proc_impl[3][0]
       arg_nodes = proc_impl[3][1 ..^ 1]
 
-    let args = collect:
-      block:
-        var pos = -1
-        for ident_def in arg_nodes:
-          let typ = ident_def[1].repr
-          let name = ident_def[0].repr
-          if typ == $Worker.type:
-            ident"script_engine"
-          elif typ == "VmArgs":
-            ident"a"
-          elif typ == "ScriptCtx":
-            quote:
-              script_engine.active_unit.script_ctx
-          elif typ in unit_types:
-            let getter = "get_" & typ
-            pos.inc
-            var call = new_call(
-              bind_sym(getter), ident"script_engine", ident"a", new_lit(pos)
-            )
-            if name == "self":
-              call = new_call(bind_sym("assert_self"), call, new_lit(proc_name))
-            call
-          elif typ in unit_types.map_it(\"type {it}"):
-            let type_name = typ.split(" ")[1]
-            ident(type_name)
-          else:
-            let getter = "get_" & typ
-            pos.inc
-            new_call(bind_sym(getter), ident"a", new_lit(pos))
+    var args: seq[NimNode]
+    var pos = -1
+    for ident_def in arg_nodes:
+      let typ = ident_def[1].repr
+      let name = ident_def[0].repr
+      let arg =
+        if typ == $Worker.type:
+          ident"script_engine"
+        elif typ == "VmArgs":
+          ident"a"
+        elif typ == "ScriptCtx":
+          quote:
+            script_engine.active_unit.script_ctx
+        elif typ in unit_types:
+          let getter = "get_" & typ
+          pos.inc
+          var call = new_call(
+            bind_sym(getter), ident"script_engine", ident"a", new_lit(pos)
+          )
+          if name == "self":
+            call = new_call(bind_sym("assert_self"), call, new_lit(proc_name))
+          call
+        elif typ in unit_types.map_it(\"type {it}"):
+          let type_name = typ.split(" ")[1]
+          ident(type_name)
+        else:
+          let getter = "get_" & typ
+          pos.inc
+          new_call(bind_sym(getter), ident"a", new_lit(pos))
+      args.add arg
 
     var call = new_call(proc_ref, args)
     let return_type = return_node.repr

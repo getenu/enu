@@ -5,6 +5,7 @@ import pkg/compiler/vm except get_int
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import pkg/compiler/ast except new_node
 import pkg/compiler/[vmdef, renderer, msgs]
+import pkg/metrics
 
 import godotapi/[spatial, ray_cast]
 import core, models/[states, bots, builds, units, colors, signs, serializers]
@@ -286,15 +287,23 @@ proc all_units(worker: Worker): seq[Unit] =
   worker.find_all(Unit)
 
 proc added_units(worker: Worker): seq[Unit] =
-  collect:
-    for unit in worker.find_all(Unit):
-      if unit.frame_created == state.frame_count:
-        unit
+  for unit in worker.find_all(Unit):
+    if unit.frame_created == state.frame_count:
+      result.add unit
 
 proc echo_console(msg: string) =
   echo(msg)
   logger("info", msg & "\n")
   state.push_flag ConsoleVisible
+
+proc dump_stats(label: string) =
+  when defined(metrics):
+    var stats: string
+    {.cast(gcsafe).}:
+      stats = $default_registry
+    info "dump_stats", label, stats
+  else:
+    info "dump_stats: build with -d:metrics to enable stats"
 
 proc action_running(self: Unit): bool =
   self.script_ctx.action_running
@@ -352,7 +361,7 @@ proc position_set(self: Unit, position: Vector3) =
 proc speed(self: Unit): float =
   self.speed
 
-const ASAP_VALUE = float.high  ## Magic value for ASAP mode
+const ASAP_VALUE = float.high
 
 # Forward declarations for ASAP mode
 proc begin_asap(self: Build) {.gcsafe.}
@@ -506,9 +515,10 @@ proc restore(self: Build, name: string) =
 
 proc begin_asap(self: Build) {.gcsafe.} =
   ## Enable ASAP mode - defers rendering and network sync.
-  if ASAPMode notin self.local_flags:
-    self.local_flags += ASAPMode
-    self.voxels.defer_flush = true
+  ## Always set defer_flush even if ASAPMode already set (back-to-back ASAP blocks)
+  self.local_flags += ASAPMode
+  self.voxels.defer_flush = true
+  self.script_ctx.asap_mode = true
 
 proc end_asap*(self: Build) {.gcsafe.} =
   ## Begin exiting ASAP mode - queues snapshots for rate-limited flush.
@@ -516,7 +526,7 @@ proc end_asap*(self: Build) {.gcsafe.} =
   if ASAPMode in self.local_flags:
     self.voxels.defer_flush = false
     self.voxels.queue_dirty_chunks()
-    # Note: ASAPMode flag cleared when snapshot queue empties (in worker loop)
+    self.script_ctx.asap_mode = false
 
 # Player binding
 
@@ -716,7 +726,8 @@ proc bridge_to_vm*(worker: Worker) =
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
-    all_bots, all_signs, all_units, signal_test_complete, now_seconds
+    all_bots, all_signs, all_units, signal_test_complete, now_seconds,
+    dump_stats
 
   result.bridged_from_vm "base_bridge_private",
     link_dependency, action_running, `action_running=`, yield_script,

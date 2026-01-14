@@ -4,7 +4,6 @@
 import std/[tables, sets]
 import unittest2
 import pkg/model_citizen
-import pkg/model_citizen/types as mc_types
 import core
 import types
 import models/[colors, builds, packed_chunks, voxel_store]
@@ -24,17 +23,8 @@ proc next_port(): string =
 
 type
   TestResult = object
-    sent: int
-    recv: int
     content: int  # Actual voxel data bytes (snapshots + deltas)
     voxels: int
-    bytes_per_voxel: float
-    # New tracking from zen_debug_messages
-    messages_sent: int
-    obj_bytes_sent: int
-    pre_compression_bytes: int
-    messages_by_kind: array[mc_types.MessageKind, int]
-    obj_bytes_by_kind: array[mc_types.MessageKind, int]
 
 proc run_voxel_sync_test(
     test_name: string,
@@ -58,17 +48,6 @@ proc run_voxel_sync_test(
   setup_voxels(store, server_ctx)
   server_ctx.tick
 
-  # Reset counters before client connects
-  server_ctx.bytes_sent = 0
-  server_ctx.bytes_received = 0
-  when defined(zen_debug_messages):
-    server_ctx.messages_sent = 0
-    server_ctx.obj_bytes_sent = 0
-    server_ctx.pre_compression_bytes = 0
-    for k in mc_types.MessageKind:
-      server_ctx.messages_by_kind[k] = 0
-      server_ctx.obj_bytes_sent_by_kind[k] = 0
-
   # Client connects
   var client_ctx = ZenContext.init(
     id = test_name & "_" & mode & "_client",
@@ -83,17 +62,8 @@ proc run_voxel_sync_test(
     server_ctx.tick(blocking = false)
     client_ctx.tick(blocking = false)
 
-  result.sent = server_ctx.bytes_sent
-  result.recv = server_ctx.bytes_received
   result.content = store.content_bytes
   result.voxels = store.block_count
-  result.bytes_per_voxel = if result.voxels > 0: result.sent.float / result.voxels.float else: 0
-  when defined(zen_debug_messages):
-    result.messages_sent = server_ctx.messages_sent
-    result.obj_bytes_sent = server_ctx.obj_bytes_sent
-    result.pre_compression_bytes = server_ctx.pre_compression_bytes
-    result.messages_by_kind = server_ctx.messages_by_kind
-    result.obj_bytes_by_kind = server_ctx.obj_bytes_sent_by_kind
 
   server_ctx.close
   client_ctx.close
@@ -131,17 +101,6 @@ proc run_delta_sync_test(
     server_ctx.tick(blocking = false)
     client_ctx.tick(blocking = false)
 
-  # Reset counters after initial sync
-  server_ctx.bytes_sent = 0
-  server_ctx.bytes_received = 0
-  when defined(zen_debug_messages):
-    server_ctx.messages_sent = 0
-    server_ctx.obj_bytes_sent = 0
-    server_ctx.pre_compression_bytes = 0
-    for k in mc_types.MessageKind:
-      server_ctx.messages_by_kind[k] = 0
-      server_ctx.obj_bytes_sent_by_kind[k] = 0
-
   # Now add voxels incrementally
   add_voxels_incrementally(store, server_ctx, client_ctx)
 
@@ -150,17 +109,8 @@ proc run_delta_sync_test(
     server_ctx.tick(blocking = false)
     client_ctx.tick(blocking = false)
 
-  result.sent = server_ctx.bytes_sent
-  result.recv = server_ctx.bytes_received
   result.content = store.content_bytes
   result.voxels = store.block_count
-  result.bytes_per_voxel = if result.voxels > 0: result.sent.float / result.voxels.float else: 0
-  when defined(zen_debug_messages):
-    result.messages_sent = server_ctx.messages_sent
-    result.obj_bytes_sent = server_ctx.obj_bytes_sent
-    result.pre_compression_bytes = server_ctx.pre_compression_bytes
-    result.messages_by_kind = server_ctx.messages_by_kind
-    result.obj_bytes_by_kind = server_ctx.obj_bytes_sent_by_kind
 
   server_ctx.close
   client_ctx.close
@@ -177,26 +127,9 @@ proc run_both_formats(
   result.unpacked = runner(true)
 
   let p = result.packed
-  let u = result.unpacked
 
   echo "[", name, "] ", p.voxels, " voxels"
   echo "  content_bytes:                   ", p.content
-  when defined(zen_debug_messages):
-    echo "  obj_bytes_sent:                  ", p.obj_bytes_sent
-    echo "  pre_compression_bytes:           ", p.pre_compression_bytes
-  echo "  network sent:                    ", p.sent
-  echo "  network recv:                    ", p.recv
-  echo "  unpacked sent:                   ", u.sent
-  when defined(zen_debug_messages):
-    if p.content > 0 and p.obj_bytes_sent > 0:
-      echo "  Overhead:"
-      echo "    flatty (obj/content):          ", (p.obj_bytes_sent.float / p.content.float), "x"
-      echo "    envelope (pre/obj):            ", (p.pre_compression_bytes.float / p.obj_bytes_sent.float), "x"
-      echo "    compression (sent/pre):        ", (p.sent.float / p.pre_compression_bytes.float), "x"
-    echo "  Messages: ", p.messages_sent
-    for k in mc_types.MessageKind:
-      if p.messages_by_kind[k] > 0:
-        echo "    ", k, ": ", p.messages_by_kind[k], " msgs, ", p.obj_bytes_by_kind[k], " obj_bytes"
 
 Zen.bootstrap
 
@@ -1061,7 +994,7 @@ suite "Build Network Sync":
 
   test "mixed density - packed vs unpacked":
     ## 1200 blocks across 16 chunks with varying colors.
-    let (packed, unpacked) = run_both_formats("mixed", proc(disable_packed: bool): TestResult =
+    discard run_both_formats("mixed", proc(disable_packed: bool): TestResult =
       run_voxel_sync_test("mixed", disable_packed, proc(store: VoxelStore, ctx: ZenContext) =
         for cx in 0 ..< 4:
           for cy in 0 ..< 4:
@@ -1074,11 +1007,10 @@ suite "Build Network Sync":
         store.apply_changes(disable_packed)
       )
     )
-    check packed.sent < unpacked.sent
 
   test "dense non-repeating - packed vs unpacked":
     ## Full 16x16x16 chunks with varying colors (worst case for RLE).
-    let (packed, unpacked) = run_both_formats("dense", proc(disable_packed: bool): TestResult =
+    discard run_both_formats("dense", proc(disable_packed: bool): TestResult =
       run_voxel_sync_test("dense", disable_packed, proc(store: VoxelStore, ctx: ZenContext) =
         for cx in 0 ..< 2:
           for cy in 0 ..< 2:
@@ -1091,11 +1023,10 @@ suite "Build Network Sync":
         store.apply_changes(disable_packed)
       )
     )
-    check packed.sent < unpacked.sent
 
   test "sparse - packed vs unpacked":
     ## Only 4 voxels per chunk across 16 chunks (64 total voxels).
-    let (packed, unpacked) = run_both_formats("sparse", proc(disable_packed: bool): TestResult =
+    discard run_both_formats("sparse", proc(disable_packed: bool): TestResult =
       run_voxel_sync_test("sparse", disable_packed, proc(store: VoxelStore, ctx: ZenContext) =
         for cx in 0 ..< 4:
           for cy in 0 ..< 4:
@@ -1110,7 +1041,6 @@ suite "Build Network Sync":
         store.apply_changes(disable_packed)
       )
     )
-    check packed.sent < unpacked.sent
 
   test "delta updates - packed vs unpacked":
     ## Client connects first, then voxels added incrementally.

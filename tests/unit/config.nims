@@ -11,7 +11,6 @@ switch("path", "$projectDir/../../vmlib")
 --define:vmExecHooks
 --define:nimPreviewHashRef
 --define:nimTypeNames
---define:zen_debug_messages
 
 # Chronicles config (match main project)
 --define:"chronicles_enabled=on"

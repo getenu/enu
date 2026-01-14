@@ -1,5 +1,7 @@
 import std/[monotimes, os, json, math, random, net, strformat]
-import pkg/[godot, metrics, metrics/stdlib_httpserver]
+import pkg/[godot, metrics]
+when defined(metrics):
+  import metrics_server
 from dotenv import nil
 import
   godotapi/[
@@ -286,9 +288,7 @@ gdobj Game of Node:
           get_env("ENU_METRICS_PORT").parse_int
         else:
           8000
-
-      {.cast(gcsafe).}:
-        start_metrics_http_server("0.0.0.0", Port(metrics_port))
+      start_metrics_server("0.0.0.0", metrics_port)
 
     self.add_platform_input_actions()
 

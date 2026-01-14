@@ -1,7 +1,8 @@
 import std/[locks, os, random, net]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
-import core, models, models/[serializers, voxel_store], libs/[interpreters, eval]
+import
+  core, models, models/[serializers, voxel_store], libs/[interpreters, eval]
 import ./[vars, host_bridge, scripting]
 
 var
@@ -11,27 +12,26 @@ var
 worker_lock.init_lock
 work_done.init_cond
 
-proc handle_catchable_error(
-    self: Worker, unit: Unit, e: ref CatchableError
-) =
+proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
   ## Convert CatchableError to VMQuit and display in console with stack trace
   let ctx = unit.script_ctx
-  let info = if ?ctx: ctx.current_line else: TLineInfo()
-  let loc = if ?ctx and ?ctx.file_name and info.line > 0:
-    \"{ctx.file_name}({int info.line},{int info.col})"
-  else:
-    ""
+  let info =
+    if ?ctx:
+      ctx.current_line
+    else:
+      TLineInfo()
+  let loc =
+    if ?ctx and ?ctx.file_name and info.line > 0:
+      \"{ctx.file_name}({int info.line},{int info.col})"
+    else:
+      ""
   # Add error to unit.errors for console display (similar to error_hook)
   unit.errors.add (e.msg, info, loc, false)
   if ?ctx:
     ctx.exit_code = error_code
     ctx.running = false
-  let vm_error = (ref VMQuit)(
-    info: info,
-    kind: Unknown,
-    msg: e.msg,
-    location: loc
-  )
+  let vm_error =
+    (ref VMQuit)(info: info, kind: Unknown, msg: e.msg, location: loc)
   if ?ctx:
     self.interpreter.reset_module(ctx.module_name)
   self.script_error(unit, vm_error)
@@ -39,7 +39,8 @@ proc handle_catchable_error(
 proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
   let ctx = unit.script_ctx
   if ?ctx and ctx.running:
-    unit.current_line = ctx.current_line.line.int
+    if ASAPMode notin unit.local_flags:
+      unit.current_line = ctx.current_line.line.int
     if unit of Build:
       let unit = Build(unit)
       unit.voxels_remaining_this_frame += unit.voxels_per_frame
@@ -291,11 +292,6 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   else:
     var timeout_at = get_mono_time() + 30.seconds
     var connected = false
-    when defined(zen_debug_messages):
-      echo "=== Client objects before connect ==="
-      for id in Zen.thread_ctx.objects.keys:
-        echo "  ", id
-      echo "=== End pre-connect objects ==="
     while not connected and get_mono_time() < timeout_at:
       try:
         Zen.thread_ctx.subscribe(connect_address)
@@ -305,9 +301,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           if sub.kind == Remote:
             state.server_ctx_name = sub.ctx_id
             break
-        info "connected to server", bytes_sent = Zen.thread_ctx.bytes_sent, bytes_received = Zen.thread_ctx.bytes_received
-        when defined(zen_debug_messages):
-          Zen.thread_ctx.dump_message_stats("client after connect")
+        info "connected to server"
       except ConnectionError:
         discard
 
@@ -356,7 +350,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
   state.config_value.changes:
     if added:
-      discard  # let uc = state.config.build_user_config
+      discard # let uc = state.config.build_user_config
       # save_user_config(uc)  # Temporarily disabled
 
     if state.config.player_color != change.item.player_color:
@@ -367,13 +361,11 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   const auto_save_interval = 30.seconds
   const backup_interval = 15.minutes
   const test_timeout = 5.minutes
-  const bytes_log_interval = 5.seconds
+  const stats_log_interval = 5.seconds
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
   var test_started_at = MonoTime.high
-  var last_bytes_log = MonoTime.low
-  var last_bytes_sent = 0
-  var last_bytes_received = 0
+  var last_stats_log = MonoTime.low
   var last_snapshots_flushed = 0
   var last_deltas_flushed = 0
   var tick_count = 0
@@ -445,36 +437,33 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         state.units.value.walk_tree proc(unit: Unit) =
           if unit of Build:
             let build = Build(unit)
+            do_assert not (
+              build.voxels.is_flushing and build.voxels.defer_flush
+            )
             if build.voxels.is_flushing:
-              let remaining = DEFAULT_GLOBAL_SNAPSHOTS - state.snapshots_flushed_this_frame
+              let remaining =
+                DEFAULT_GLOBAL_SNAPSHOTS - state.snapshots_flushed_this_frame
               let limit = min(DEFAULT_SNAPSHOTS_PER_FRAME, remaining)
 
               if limit > 0:
                 let flushed = build.voxels.flush_next_snapshots(limit)
                 state.snapshots_flushed_this_frame += flushed
 
-                # If done flushing and was in ASAP mode, clear flag
-                if not build.voxels.is_flushing and ASAPMode in build.local_flags:
-                  build.local_flags -= ASAPMode
+              # Clear ASAPMode flag when flush completes (triggers redraw in build_node)
+              if not build.voxels.is_flushing and ASAPMode in build.local_flags:
+                build.local_flags -= ASAPMode
 
       Zen.thread_ctx.tick
       run_deferred()
 
       # Update network stats for main thread
-      state.net_bytes_sent = Zen.thread_ctx.bytes_sent
-      state.net_bytes_received = Zen.thread_ctx.bytes_received
       if not Zen.thread_ctx.reactor.isNil:
         state.net_connections = Zen.thread_ctx.reactor.connections.len
       else:
         state.net_connections = 0
 
-      # Log bytes sent/received and snapshot/delta stats periodically
-      if frame_start > last_bytes_log + bytes_log_interval:
-        let sent = Zen.thread_ctx.bytes_sent
-        let recv = Zen.thread_ctx.bytes_received
-        let sent_delta = sent - last_bytes_sent
-        let recv_delta = recv - last_bytes_received
-
+      # Log snapshot/delta stats periodically
+      if frame_start > last_stats_log + stats_log_interval:
         # Collect snapshot/delta stats from all builds
         var total_snapshots = 0
         var total_deltas = 0
@@ -487,15 +476,18 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         let snapshots_delta = total_snapshots - last_snapshots_flushed
         let deltas_delta = total_deltas - last_deltas_flushed
         let ticks_delta = tick_count - last_tick_count
-        let ticks_per_sec = ticks_delta.float / bytes_log_interval.in_seconds.float
+        let ticks_per_sec =
+          ticks_delta.float / stats_log_interval.in_seconds.float
 
-        if sent_delta > 0 or recv_delta > 0 or snapshots_delta > 0 or deltas_delta > 0 or ticks_delta > 0:
-          info "worker stats", ticks_per_sec = ticks_per_sec.int, max_tick_ms = max_tick_time.in_milliseconds, bytes_sent = sent, sent_delta = sent_delta, bytes_recv = recv, recv_delta = recv_delta, snapshots = total_snapshots, snapshots_delta = snapshots_delta, deltas = total_deltas, deltas_delta = deltas_delta
-          when defined(zen_debug_messages):
-            Zen.thread_ctx.dump_message_stats("worker periodic")
-        last_bytes_log = frame_start
-        last_bytes_sent = sent
-        last_bytes_received = recv
+        if snapshots_delta > 0 or deltas_delta > 0 or ticks_delta > 0:
+          info "worker stats",
+            ticks_per_sec = ticks_per_sec.int,
+            max_tick_ms = max_tick_time.in_milliseconds,
+            snapshots = total_snapshots,
+            snapshots_delta = snapshots_delta,
+            deltas = total_deltas,
+            deltas_delta = deltas_delta
+        last_stats_log = frame_start
         last_snapshots_flushed = total_snapshots
         last_deltas_flushed = total_deltas
         last_tick_count = tick_count
@@ -518,15 +510,18 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         # Log progress every 30 seconds
         if elapsed.in_seconds.int mod 30 == 0 and elapsed.in_seconds.int > 0 and
             elapsed.in_milliseconds.int mod 1000 < 100:
-          notice "test mode running", elapsed = elapsed, scripts = running_scripts
+          notice "test mode running",
+            elapsed = elapsed, scripts = running_scripts
 
         if not any_running:
-          let exit_code = if state.test_exit_code < 0: 0 else: state.test_exit_code
+          let exit_code =
+            if state.test_exit_code < 0: 0 else: state.test_exit_code
           notice "test mode finished", exit_code = exit_code, elapsed = elapsed
           state.test_exit_code = exit_code
           state.push_flag Quitting
         elif elapsed > test_timeout:
-          notice "test mode timeout", elapsed = elapsed, scripts = running_scripts
+          notice "test mode timeout",
+            elapsed = elapsed, scripts = running_scripts
           state.test_exit_code = 1
           state.push_flag Quitting
 
