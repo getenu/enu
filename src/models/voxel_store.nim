@@ -10,7 +10,7 @@ import models/[packed_chunks, colors]
 
 const
   ChunkSize* = vec3(16, 16, 16)
-  MAX_BLOCK_COUNT* = 100_000
+  MAX_BUILD_DIMENSION* = 65535  # VoxelBuffer.MAX_SIZE - max size per axis
   MAX_DELTA_UPDATES* = 100 # Force snapshot after this many deltas
   MAX_CHANGES_PER_DELTA* = 100
     # Force snapshot if single update has this many changes
@@ -137,13 +137,7 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
       if buffer notin self.batched_voxels:
         self.batched_voxels[buffer] = init_table[Vector3, VoxelInfo]()
 
-      # Check limit before adding new voxel
       if not exists_in_chunks and not exists_in_batched:
-        if self.block_count >= MAX_BLOCK_COUNT:
-          raise (ref ResourceLimitError)(
-            msg:
-              &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
-          )
         inc self.block_count
         when defined(debug):
           if self.block_count mod CHECK_INTERVAL == 0:
@@ -152,11 +146,6 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
       self.batched_voxels[buffer][position] = voxel
   else:
     if not exists_in_chunks:
-      if self.block_count >= MAX_BLOCK_COUNT:
-        raise (ref ResourceLimitError)(
-          msg:
-            &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
-        )
       inc self.block_count
       when defined(debug):
         if self.block_count mod CHECK_INTERVAL == 0:

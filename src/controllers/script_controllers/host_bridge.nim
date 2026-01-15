@@ -518,7 +518,6 @@ proc begin_asap(self: Build) {.gcsafe.} =
   ## Always set defer_flush even if ASAPMode already set (back-to-back ASAP blocks)
   self.local_flags += ASAPMode
   self.voxels.defer_flush = true
-  self.script_ctx.asap_mode = true
 
 proc end_asap*(self: Build) {.gcsafe.} =
   ## Begin exiting ASAP mode - queues snapshots for rate-limited flush.
@@ -526,7 +525,6 @@ proc end_asap*(self: Build) {.gcsafe.} =
   if ASAPMode in self.local_flags:
     self.voxels.defer_flush = false
     self.voxels.queue_dirty_chunks()
-    self.script_ctx.asap_mode = false
 
 # Player binding
 

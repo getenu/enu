@@ -1,9 +1,10 @@
-import std/[tables, bitops]
+import std/[tables, bitops, times]
 import pkg/godot except print, Color
 import
   godotapi/[
     node, voxel_terrain, voxel_mesher_blocky, voxel_tool, voxel_library,
-    shader_material, resource_loader, packed_scene, ray_cast,
+    voxel_buffer, voxel_server, shader_material, resource_loader, packed_scene,
+    ray_cast,
   ]
 import core, models/[units, builds, colors], gdutils
 import ./queries
@@ -13,6 +14,7 @@ const
   default_glow = 0.0
   empty_zid: ZID = 0
   error_flash_time = 0.5.seconds
+  use_bulk_paste = true # Toggle between bulk paste (true) and per-voxel (false)
 
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
@@ -27,6 +29,7 @@ gdobj BuildNode of VoxelTerrain:
     chunks_zid: ZID
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
+    bulk_paste_done: bool # Skip individual draws after bulk paste
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded"
@@ -59,6 +62,91 @@ gdobj BuildNode of VoxelTerrain:
     for loc, info in voxels:
       self.draw(loc, info.color)
 
+  proc draw_all_chunks_per_voxel() =
+    ## Draw all chunks using individual set_voxel calls (old approach).
+    for chunk_id, chunk in self.model.voxels.chunks:
+      self.draw_block(chunk)
+
+  proc draw_all_chunks_bulk() =
+    ## Draw all chunks at once using a single large buffer paste.
+    ## This triggers only ONE post_edit_area for the entire structure,
+    ## avoiding cascading neighbor remeshes at internal chunk boundaries.
+    var min_pos = vec3(float.high, float.high, float.high)
+    var max_pos = vec3(float.low, float.low, float.low)
+    var has_voxels = false
+
+    for chunk_id, chunk in self.model.voxels.chunks:
+      for world_pos, info in chunk:
+        has_voxels = true
+        min_pos.x = min(min_pos.x, world_pos.x)
+        min_pos.y = min(min_pos.y, world_pos.y)
+        min_pos.z = min(min_pos.z, world_pos.z)
+        max_pos.x = max(max_pos.x, world_pos.x)
+        max_pos.y = max(max_pos.y, world_pos.y)
+        max_pos.z = max(max_pos.z, world_pos.z)
+
+    if not has_voxels:
+      return
+
+    let size_x = int(max_pos.x - min_pos.x) + 1
+    let size_y = int(max_pos.y - min_pos.y) + 1
+    let size_z = int(max_pos.z - min_pos.z) + 1
+
+    # Check VoxelBuffer size limits
+    if size_x > MAX_BUILD_DIMENSION or size_y > MAX_BUILD_DIMENSION or
+        size_z > MAX_BUILD_DIMENSION:
+      error "Build exceeds maximum dimension",
+        size_x = size_x,
+        size_y = size_y,
+        size_z = size_z,
+        max = MAX_BUILD_DIMENSION
+      return
+
+    let buffer = gdnew[VoxelBuffer]()
+    buffer.create(size_x, size_y, size_z)
+    buffer.fill(0)
+
+    for chunk_id, chunk in self.model.voxels.chunks:
+      for world_pos, info in chunk:
+        let local_x = int(world_pos.x - min_pos.x)
+        let local_y = int(world_pos.y - min_pos.y)
+        let local_z = int(world_pos.z - min_pos.z)
+        buffer.set_voxel(ord info.color.action_index, local_x, local_y, local_z)
+
+    self.get_voxel_tool.paste(min_pos, buffer, 1, 0)
+    self.bulk_paste_done = true
+
+  proc draw_all_chunks() =
+    ## Draw all chunks, logging stats before/after for comparison.
+    var voxel_count = 0
+    for chunk_id, chunk in self.model.voxels.chunks:
+      voxel_count += chunk.len
+
+    let stats_before = self.getStatistics()
+    let server_before = getStats()
+    let start_time = get_mono_time()
+
+    if use_bulk_paste:
+      self.draw_all_chunks_bulk()
+    else:
+      self.draw_all_chunks_per_voxel()
+
+    let elapsed = get_mono_time() - start_time
+    let stats_after = self.getStatistics()
+    let server_after = getStats()
+
+    let tasks_before = server_before["tasks"].as_dictionary
+    let tasks_after = server_after["tasks"].as_dictionary
+
+    info "draw_all_chunks",
+      mode = (if use_bulk_paste: "bulk_paste" else: "per_voxel"),
+      voxels = voxel_count,
+      elapsed_ms = elapsed.in_milliseconds,
+      updated_blocks_before = stats_before["updated_blocks"].as_int,
+      updated_blocks_after = stats_after["updated_blocks"].as_int,
+      meshing_tasks_before = tasks_before["meshing"].as_int,
+      meshing_tasks_after = tasks_after["meshing"].as_int
+
   proc set_glow(glow: float) =
     let library = self.mesher.as(VoxelMesherBlocky).library
     for i in 0 ..< library.voxel_count.int:
@@ -90,7 +178,8 @@ gdobj BuildNode of VoxelTerrain:
   proc track_chunk(chunk_id: Vector3) =
     if chunk_id in self.model.voxels.chunks:
       let in_asap_mode = ASAPMode in self.model.local_flags
-      if not in_asap_mode:
+      # Skip initial draw if bulk paste already drew everything, or if in ASAP mode
+      if not in_asap_mode and not self.bulk_paste_done:
         self.draw_block(self.model.voxels.chunks[chunk_id])
       self.active_chunks[chunk_id] = self.model.voxels.chunks[chunk_id].watch:
         # Skip drawing during ASAP mode - will be flushed when mode ends
@@ -184,10 +273,8 @@ gdobj BuildNode of VoxelTerrain:
       if change.item == Highlight:
         self.set_highlight
       elif change.item == ASAPMode and removed:
-        # ASAP mode ended - redraw all active chunks
-        for chunk_id, zid in self.active_chunks:
-          if chunk_id in self.model.voxels.chunks:
-            self.draw_block(self.model.voxels.chunks[chunk_id])
+        # ASAP mode ended - draw all voxels
+        self.draw_all_chunks()
 
     state.local_flags.watch:
       if change.item == God:

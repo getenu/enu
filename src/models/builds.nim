@@ -7,7 +7,7 @@ import godotapi/spatial
 import core, models/[states, bots, colors, units, packed_chunks, voxel_store]
 
 # Re-export from voxel_store
-export ChunkSize, MAX_BLOCK_COUNT, MAX_DELTA_UPDATES, MAX_CHANGES_PER_DELTA,
+export ChunkSize, MAX_BUILD_DIMENSION, MAX_DELTA_UPDATES, MAX_CHANGES_PER_DELTA,
        queue_dirty_chunks, flush_next_snapshots, is_flushing
 
 include "build_code_template.nim.nimf"
@@ -62,12 +62,6 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
         return first
 
 proc add_build(self, source: Build) =
-  # Check if merging would exceed limit
-  if self.voxels.block_count + source.voxels.block_count > MAX_BLOCK_COUNT:
-    raise (ref ResourceLimitError)(
-      msg: &"{self.id}: Block limit exceeded ({MAX_BLOCK_COUNT} blocks maximum)"
-    )
-
   dont_join = true
   for chunk_id, chunk in source.voxels.chunks:
     for position, info in chunk:
