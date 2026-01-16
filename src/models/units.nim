@@ -18,10 +18,6 @@ proc init_shared*(self: Unit) =
     shared.init_zen_fields
     self.shared = shared
 
-  if self.id notin self.shared.edits:
-    let table = ~Table[Vector3, VoxelInfo]
-    self.shared.edits[self.id] = table
-
 proc init_unit*[T: Unit](self: T, shared = true) =
   with self:
     units = ~seq[Unit]
@@ -112,16 +108,9 @@ method reset*(self: Unit) {.base, gcsafe.} =
   discard
 
 method collect_garbage*(self: Unit) {.base, gcsafe.} =
-  for id, chunk in self.shared.edits.value:
-    var cleaned_chunk = chunk
-    for loc, voxel in chunk.value:
-      if voxel.kind == Hole and voxel.color == action_colors[Eraser]:
-        cleaned_chunk.del(loc)
-      elif voxel.kind == Hole:
-        var voxel = voxel
-        voxel.color = action_colors[Eraser]
-        cleaned_chunk[loc] = voxel
-    self.shared.edits[id] = cleaned_chunk
+  # Edit garbage collection now happens via the packed format
+  # The edit_snapshots are re-encoded when changes are made
+  discard
 
 method ensure_visible*(self: Unit) {.base, gcsafe.} =
   discard
@@ -149,9 +138,10 @@ proc destroy_impl*(self: Bot | Build | Sign) =
 
   if self.parent == nil:
     let shared = self.shared
-    for _, edit in shared.edits:
-      edit.destroy
-    shared.edits.destroy
+    if ?shared.edit_snapshots:
+      shared.edit_snapshots.destroy
+    if ?shared.edit_deltas:
+      shared.edit_deltas.destroy
     self.shared = nil
     Zen.thread_ctx.free(shared)
   else:

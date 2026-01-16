@@ -1,22 +1,19 @@
 import
   std/[
     tables, sets, options, sequtils, math, monotimes, sugar,
-    macros, base64, strformat,
+    macros, base64, strformat, strutils,
   ]
 import godotapi/spatial
-import core, models/[states, bots, colors, units, packed_chunks, voxel_store]
+import core, models/[states, bots, colors, units, voxels]
 
-# Re-export from voxel_store
-export ChunkSize, MAX_BUILD_DIMENSION, MAX_DELTA_UPDATES, MAX_CHANGES_PER_DELTA,
-       queue_dirty_chunks, flush_next_snapshots, is_flushing
+# Re-export from voxels
+export encode_chunk, decode_chunk, encode_delta, decode_delta,
+       pack_voxel, unpack_voxel, linear_position, from_linear,
+       is_empty, flush_dirty_chunks, flush_dirty_edits, chunk_id_for_pos
 
 include "build_code_template.nim.nimf"
 
 const default_color = action_colors[Blue]
-
-proc packed_chunks_enabled*(): bool =
-  ## Check if packed chunks are enabled. Handles nil state.
-  result = state.isNil or not state.disable_packed_chunks
 
 var
   current_build* {.threadvar.}: Build
@@ -29,6 +26,10 @@ var
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
 proc init_voxels_if_needed*(self: Build) {.gcsafe.}
+
+# =============================================================================
+# Build implementation
+# =============================================================================
 
 method code_template*(self: Build, imports: string): string =
   result = build_code_template(
@@ -54,7 +55,7 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
       for position in positions:
         var loc = position - offset
         if loc in unit:
-          var info = unit.voxels.chunks[loc.buffer][loc]
+          var info = unit.voxels.voxel_info(loc)
           if info.kind != Hole and info.color != action_colors[Eraser]:
             return unit
       let first = unit.units.find_first(positions)
@@ -63,11 +64,10 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
 
 proc add_build(self, source: Build) =
   dont_join = true
-  for chunk_id, chunk in source.voxels.chunks:
-    for position, info in chunk:
-      var position = position.global_from(source)
-      position = position.local_to(self)
-      self.draw(position, info)
+  for pos, info in source.voxels.all_voxels:
+    var position = pos.global_from(source)
+    position = position.local_to(self)
+    self.draw(position, info)
 
   if source.parent.is_nil:
     state.units -= source
@@ -117,7 +117,7 @@ proc expand_bounds_to_chunk(self: Build, chunk_id: Vector3) =
 proc reset_bounds*(self: Build) =
   self.bounds = init_aabb(vec3(), vec3(-1, -1, -1))
 
-  for chunk_id, chunk in self.voxels.chunks:
+  for chunk_id, chunk in self.voxels.local_voxels:
     self.expand_bounds_to_chunk(chunk_id)
 
 proc add_voxel(self: Build, position: Vector3, voxel: VoxelInfo) =
@@ -127,54 +127,41 @@ proc del_voxel(self: Build, position: Vector3) =
   self.voxels.del_voxel(position)
 
 proc restore_edits*(self: Build) =
-  if self.id in self.shared.edits:
-    for loc, info in self.shared.edits[self.id]:
-      assert info.kind in {Manual, Hole}
-      if info.kind != Hole:
-        self.add_voxel(loc, info)
-      else:
-        let buffer = loc.buffer
-        if buffer in self.voxels.chunks and loc in self.voxels.chunks[buffer]:
-          var info = info
-          info.color = self.voxels.chunks[buffer][loc].color
-          var locations = self.shared.edits[self.id]
-          locations[loc] = info
-          self.shared.edits[self.id] = locations
-          self.voxels.chunks[buffer].del loc
+  self.voxels.for_all_edits:
+    assert info.kind in {Manual, Hole}
+    if info.kind != Hole:
+      self.add_voxel(pos, info)
+    else:
+      if pos in self.voxels:
+        var edit = info
+        edit.color = self.voxels.voxel_info(pos).color
+        self.voxels.set_edit(pos, edit)
+        self.voxels.del_voxel(pos)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
   if voxel.kind == Computed:
-    if position in self.shared.edits[self.id]:
-      var edit = self.shared.edits[self.id][position]
+    if self.voxels.has_edit(position):
+      var edit = self.voxels.get_edit(position)
       if edit.kind == Hole:
         # We're using color as a flag to indicate that the hole is active
         edit.color = voxel.color
-        var locations = self.shared.edits[self.id]
-        locations[position] = edit
-        self.shared.edits[self.id] = locations
+        self.voxels.set_edit(position, edit)
         return
       elif edit.kind == Manual and edit.color == voxel.color:
-        var locations = self.shared.edits[self.id]
-        locations.del position
-        self.shared.edits[self.id] = locations
+        self.voxels.del_edit(position)
     elif ?self.clone_of and
-        position in self.clone_of.shared.edits[self.clone_of.id] and
-        self.clone_of.shared.edits[self.clone_of.id][position].kind == Hole:
+        Build(self.clone_of).voxels.has_edit(position) and
+        Build(self.clone_of).voxels.get_edit(position).kind == Hole:
       return
     else:
       self.add_voxel(position, voxel)
   else:
     self.global_flags += Dirty
-    # :( Crash fix hack. Why would shared be nil?
     if ?self.shared:
-      if self.id notin self.shared.edits:
-        self.shared.edits[self.id] = ~Table[Vector3, VoxelInfo]
       var voxel = voxel
       if voxel.kind == Hole and position in self:
         voxel.color = self.voxel_info(position).color
-      var locations = self.shared.edits[self.id]
-      locations[position] = voxel
-      self.shared.edits[self.id] = locations
+      self.voxels.set_edit(position, voxel)
       if voxel.kind != Hole:
         self.add_voxel(position, voxel)
       else:
@@ -191,6 +178,12 @@ proc drop_block(self: Build) =
     var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
     self.draw(p, (Computed, self.color))
 
+proc has_visible_voxels(self: Build): bool =
+  for pos, info in self.voxels.all_voxels:
+    if info.color != action_colors[Eraser]:
+      return true
+  false
+
 proc remove(self: Build) =
   if state.tool notin {CodeMode, PlaceBot}:
     state.skip_block_paint = true
@@ -203,10 +196,7 @@ proc remove(self: Build) =
     last_point = self.target_point
     self.draw(point, (Hole, action_colors[Eraser]))
 
-    if self.units.len == 0 and
-        not self.voxels.chunks.any_it(
-          it.value.any_it(it.value.color != action_colors[Eraser])
-        ):
+    if self.units.len == 0 and not self.has_visible_voxels:
       if self.parent.is_nil:
         state.units -= self
       else:
@@ -231,27 +221,6 @@ proc fire(self: Build) =
 
 proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
-
-method batch_changes*(self: Build): bool =
-  self.init_voxels_if_needed()
-  if not self.voxels.batching:
-    self.voxels.batching = true
-    result = true
-
-method apply_changes*(self: Build) =
-  self.voxels.apply_changes()
-
-proc apply_delta_update*(self: Build, chunk_id: Vector3, delta: DeltaUpdate) =
-  self.voxels.apply_delta_update(chunk_id, delta)
-
-proc apply_snapshot*(self: Build, chunk_id: Vector3, snapshot: SnapshotData) =
-  self.voxels.apply_snapshot(chunk_id, snapshot)
-
-proc apply_chunk_with_deltas*(self: Build, chunk_id: Vector3) =
-  self.voxels.apply_chunk_with_deltas(chunk_id)
-
-proc clear_chunk*(self: Build, chunk_id: Vector3) =
-  self.voxels.clear_chunk(chunk_id)
 
 method on_begin_move*(
     self: Build, direction: Vector3, steps: float, move_mode: int
@@ -359,15 +328,7 @@ method reset*(self: Build) =
   self.draw(vec3(), (Computed, self.start_color))
 
 method ensure_visible*(self: Build) =
-  # It's possible for a build to have no blocks of its own if has children with
-  # blocks. However, if the script fails or is changed to remove its children,
-  # the unit will still exist but will have no presence in the world, and is
-  # therefor impossible to select or modify. In that case we want to draw a
-  # single block.
-  if self.units.len == 0 and
-      not self.voxels.chunks.any_it(
-        it.value.any_it(it.value.color != action_colors[Eraser])
-      ):
+  if self.units.len == 0 and not self.has_visible_voxels:
     let color =
       if self.start_color == action_colors[Eraser]:
         action_colors[Blue]
@@ -389,10 +350,7 @@ proc init*(
     parent: Unit = nil,
 ): Build =
   let voxel_id = id & ".voxels"
-  let voxels = VoxelStore.init(
-    id = voxel_id,
-    disable_packed = not packed_chunks_enabled(),
-  )
+  let voxels = VoxelStore.init(id = voxel_id, unit_id = id)
   var self = Build(
     id: id,
     voxels: voxels,
@@ -407,12 +365,12 @@ proc init*(
     parent: parent,
   )
 
-  # Set callback for bounds expansion when new chunks are created
-  let build = self
-  voxels.on_chunk_created = proc(chunk_id: Vector3) =
-    build.expand_bounds_to_chunk(chunk_id)
-
   self.init_unit
+
+  # Set up edit references after init_unit creates Shared
+  self.voxels.edit_snapshots = self.shared.edit_snapshots
+  self.voxels.edit_deltas = self.shared.edit_deltas
+  self.voxels.rebuild_local_edits()
 
   if global:
     self.global_flags += Global
@@ -426,63 +384,57 @@ proc init_voxels_if_needed*(self: Build) =
     let ctx = Zen.thread_ctx
     self.voxels = VoxelStore(
       id: voxel_id,
-      disable_packed: not packed_chunks_enabled(),
       ctx: ctx,
-      chunks: ZenTable[Vector3, Chunk](ctx[voxel_id & ".chunks"]),
+      unit_id: self.id,
       packed_chunks: ZenTable[Vector3, SnapshotData](ctx[voxel_id & ".packed_chunks"]),
       chunk_deltas: ZenTable[Vector3, ZenSeq[DeltaUpdate]](ctx[voxel_id & ".chunk_deltas"]),
+      edit_snapshots: self.shared.edit_snapshots,
+      edit_deltas: self.shared.edit_deltas,
     )
-    let build = self
-    self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
-      build.expand_bounds_to_chunk(chunk_id)
+    self.voxels.rebuild_local_edits()
 
 proc setup_packed_chunk_watches(self: Build) =
-  ## Set up watches for packed_chunks and chunk_deltas to reconstruct chunks.
-  ## Called from both worker and main thread joined handlers.
-  proc watch_chunk_deltas(chunk_id: Vector3, delta_seq: ZenSeq[DeltaUpdate]) =
+  ## Set up watches for packed_chunks and chunk_deltas to reconstruct local voxels on clients.
+  proc watch_delta_seq(chunk_id: Vector3, delta_seq: ZenSeq[DeltaUpdate]) =
     delta_seq.watch:
       if added:
-        self.apply_delta_update(chunk_id, change.item)
+        self.voxels.apply_delta(chunk_id, change.item)
 
   # Process any snapshots that arrived before the watch was set up
   for chunk_id, snapshot in self.voxels.packed_chunks:
-    self.apply_snapshot(chunk_id, snapshot)
+    self.voxels.apply_snapshot(chunk_id, snapshot)
 
   # Process any deltas that arrived before the watch was set up
   for chunk_id, delta_seq in self.voxels.chunk_deltas:
-    if delta_seq.is_nil:
-      continue
-    for delta in delta_seq:
-      self.apply_delta_update(chunk_id, delta)
-    watch_chunk_deltas(chunk_id, delta_seq)
+    if not delta_seq.isNil:
+      for delta in delta_seq:
+        self.voxels.apply_delta(chunk_id, delta)
+      watch_delta_seq(chunk_id, delta_seq)
 
   self.voxels.packed_chunks.watch:
     if added:
-      self.apply_snapshot(change.item.key, change.item.value)
-    elif removed and change.item.key in self.voxels.chunks:
-      self.voxels.clear_chunk_remote(change.item.key)
+      self.voxels.apply_snapshot(change.item.key, change.item.value)
 
   self.voxels.chunk_deltas.watch:
     if added:
       let chunk_id = change.item.key
       let delta_seq = change.item.value
-      if not delta_seq.is_nil:
+      if not delta_seq.isNil:
         for delta in delta_seq:
-          self.apply_delta_update(chunk_id, delta)
-        watch_chunk_deltas(chunk_id, delta_seq)
+          self.voxels.apply_delta(chunk_id, delta)
+        watch_delta_seq(chunk_id, delta_seq)
 
 method worker_thread_joined*(self: Build) =
   proc_call worker_thread_joined(Unit(self))
   self.init_voxels_if_needed()
-  # Only clients need to apply packed chunks/deltas received from server
-  if packed_chunks_enabled() and (state.isNil or Server notin state.local_flags):
+  # Only clients need to apply packed chunks received from server
+  if Server notin state.local_flags:
     self.setup_packed_chunk_watches()
 
 method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))
   self.init_voxels_if_needed()
-  if packed_chunks_enabled():
-    self.setup_packed_chunk_watches()
+  self.setup_packed_chunk_watches()
 
   self.local_flags.watch:
     if Hover.added and state.tool == CodeMode:
@@ -518,15 +470,6 @@ method main_thread_joined*(self: Build) =
       else:
         state.pop_flag BlockTargetVisible
 
-  # self.local_flags.watch:
-  #   if Hover.added:
-  #     if PrimaryDown in state.local_flags:
-  #       state.draw_unit_id = self.id
-  #       self.fire
-  #     elif SecondaryDown in state.local_flags:
-  #       state.draw_unit_id = self.id
-  #       self.remove
-
   state.local_flags.watch:
     if Hover in self.local_flags and ViewportFocused in state.local_flags:
       if PrimaryDown.added:
@@ -560,9 +503,7 @@ method clone*(self: Build, clone_to: Unit, id: string): Unit =
     transform = Build(clone_to).draw_transform
     global = false
 
-  # we need this off for Potato Zombies, but on for the
-  # tutorials. Make it configurable somehow.
-  let bot_collisions = true #not (clone_to of Bot)
+  let bot_collisions = true
   let clone = Build.init(
     id = id,
     transform = transform,
@@ -573,9 +514,10 @@ method clone*(self: Build, clone_to: Unit, id: string): Unit =
     parent = clone_to,
   )
 
-  for loc, info in self.shared.edits[self.id]:
-    if info.kind != Hole and loc notin clone.shared.edits[clone.id]:
-      clone.add_voxel(loc, info)
+  # Copy edits from source to clone
+  self.voxels.for_all_edits:
+    if info.kind != Hole and not clone.voxels.has_edit(pos):
+      clone.add_voxel(pos, info)
 
   clone.restore_edits
   result = clone
@@ -587,9 +529,9 @@ when is_main_module:
   var b = Build.init
 
   b.draw vec3(1, 1, 1), (Computed, Color())
-  assert vec3(1, 1, 1) in b.voxels.chunks[vec3(0, 0, 0)]
+  assert vec3(1, 1, 1) in b.voxels
   b.draw vec3(17, 17, 17), (Computed, Color())
-  assert vec3(17, 17, 17) in b.voxels.chunks[vec3(1, 1, 1)]
+  assert vec3(17, 17, 17) in b.voxels
   var c = Build.init(transform = Transform(origin: vec3(5, 5, 5)))
   c.parent = b
 

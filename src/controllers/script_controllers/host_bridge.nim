@@ -514,17 +514,15 @@ proc restore(self: Build, name: string) =
     self.save_points[name]
 
 proc begin_asap(self: Build) {.gcsafe.} =
-  ## Enable ASAP mode - defers rendering and network sync.
-  ## Always set defer_flush even if ASAPMode already set (back-to-back ASAP blocks)
+  ## Enable ASAP mode - defers rendering.
   self.local_flags += ASAPMode
-  self.voxels.defer_flush = true
 
 proc end_asap*(self: Build) {.gcsafe.} =
-  ## Begin exiting ASAP mode - queues snapshots for rate-limited flush.
-  ## ASAPMode flag is cleared when snapshot queue empties (in worker loop).
+  ## Exit ASAP mode. Flushes all dirty chunks and clears the flag.
   if ASAPMode in self.local_flags:
-    self.voxels.defer_flush = false
-    self.voxels.queue_dirty_chunks()
+    self.reset_bounds()  # Update bounds now that all voxels are drawn
+    self.voxels.flush_dirty_chunks()
+    self.local_flags -= ASAPMode  # Clear immediately - triggers redraw in build_node
 
 # Player binding
 

@@ -1,4 +1,4 @@
-import std/[json, jsonutils, sugar, tables, strutils, os, times, algorithm]
+import std/[json, jsonutils, sugar, tables, strutils, strformat, os, times, algorithm, math]
 import pkg/zippy/ziparchives_v1
 import core except to_json
 import models
@@ -54,19 +54,49 @@ proc from_json_hook(
       let info = chunk[1].json_to(VoxelInfo)
       self[location] = info
 
-proc from_json_hook(
-    self: var ZenTable[string, ZenTable[Vector3, VoxelInfo]], json: JsonNode
+proc chunk_id_for_world_pos(pos: Vector3): Vector3 =
+  ## Get chunk ID for a world position (16x16x16 chunks)
+  vec3(
+    math.floor(pos.x / ChunkDim).int.float,
+    math.floor(pos.y / ChunkDim).int.float,
+    math.floor(pos.z / ChunkDim).int.float,
+  )
+
+proc local_pos_for_world_pos(pos: Vector3): Vector3 =
+  ## Get local position within chunk (0-15 for each axis)
+  let chunk_id = chunk_id_for_world_pos(pos)
+  vec3(
+    pos.x - chunk_id.x * ChunkDim,
+    pos.y - chunk_id.y * ChunkDim,
+    pos.z - chunk_id.z * ChunkDim,
+  )
+
+proc load_edits_from_json(
+    shared: Shared, json: JsonNode
 ) =
-  assert not load_chunks
+  ## Load edits from JSON format into the new packed edit_snapshots format
+  ## Supports both old format (single chunk per unit) and new format (chunked with composite keys)
   for id, edits in json:
+    # Group edits by chunk
+    var chunks: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
     for edit in edits:
-      if id notin self:
-        self[id] = ~Table[Vector3, VoxelInfo]
-      let location = edit[0].json_to(Vector3)
+      let world_pos = edit[0].json_to(Vector3)
       let info = edit[1].json_to(VoxelInfo)
-      var locations = self[id]
-      locations[location] = info
-      self[id] = locations
+      let chunk_id = chunk_id_for_world_pos(world_pos)
+      let local_pos = local_pos_for_world_pos(world_pos)
+      let linear = linear_position(local_pos)
+      if linear >= 0 and linear < CHUNK_VOLUME:
+        if chunk_id notin chunks:
+          var empty_chunk: array[CHUNK_VOLUME, PackedVoxel]
+          chunks[chunk_id] = empty_chunk
+        chunks[chunk_id][linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
+
+    # Encode and store each chunk with EditKey
+    for chunk_id, voxels in chunks:
+      let packed = encode_chunk(voxels)
+      if not packed.is_empty:
+        let key: EditKey = (id, chunk_id)
+        shared.edit_snapshots[key] = packed
 
 proc from_json_hook(self: var Transform, json: JsonNode) =
   self = Transform.init(origin = json["origin"].json_to(Vector3))
@@ -88,11 +118,29 @@ proc from_json_hook(self: var Build, json: JsonNode) =
   )
 
   if load_chunks:
-    var edit = ~Table[Vector3, VoxelInfo]()
-    edit.from_json(json["chunks"])
-    self.shared.edits[self.id] = edit
+    # Old chunks format - group by chunk and load with EditKey
+    var chunks: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
+    for chunk_data in json["chunks"]:
+      for voxel_data in chunk_data[1]:
+        let world_pos = voxel_data[0].json_to(Vector3)
+        let info = voxel_data[1].json_to(VoxelInfo)
+        let chunk_id = chunk_id_for_world_pos(world_pos)
+        let local_pos = local_pos_for_world_pos(world_pos)
+        let linear = linear_position(local_pos)
+        if linear >= 0 and linear < CHUNK_VOLUME:
+          if chunk_id notin chunks:
+            var empty_chunk: array[CHUNK_VOLUME, PackedVoxel]
+            chunks[chunk_id] = empty_chunk
+          chunks[chunk_id][linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
+    for chunk_id, voxels in chunks:
+      let packed = encode_chunk(voxels)
+      if not packed.is_empty:
+        let key: EditKey = (self.id, chunk_id)
+        self.shared.edit_snapshots[key] = packed
   else:
-    self.shared.edits.from_json(json["edits"])
+    # New edits format
+    if "edits" in json:
+      load_edits_from_json(self.shared, json["edits"])
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   self = Bot.init(
@@ -100,8 +148,8 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
     transform = json["start_transform"].json_to(Transform),
   )
 
-  if not load_chunks:
-    self.shared.edits.from_json(json["edits"])
+  if not load_chunks and "edits" in json:
+    load_edits_from_json(self.shared, json["edits"])
 
 proc `$`(self: Color): string =
   $json_utils.to_json(self)
@@ -112,21 +160,45 @@ proc `$`(self: VoxelInfo): string =
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
   \"[{$[self.voxel.x, self.voxel.y, self.voxel.z]}, [{int self.info.kind}, {self.info.color}]]"
 
-proc `$`(self: ZenTable[string, ZenTable[Vector3, VoxelInfo]]): string =
+proc edits_to_string(edit_snapshots: ZenTable[EditKey, SnapshotData]): string =
+  ## Serialize edit_snapshots to JSON format for backwards compatibility
+  # Group edits by unit_id
+  var by_unit: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
+
+  for key, packed in edit_snapshots.value:
+    let unit_id = key.id
+    let chunk_id = key.loc
+
+    let decoded = decode_chunk(packed)
+    for linear in 0 ..< CHUNK_VOLUME:
+      let packed_voxel = decoded[linear]
+      if packed_voxel != EMPTY_VOXEL:
+        let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
+        let local_pos = from_linear(linear)
+        # Convert to world position
+        let world_pos = vec3(
+          chunk_id.x * ChunkDim + local_pos.x,
+          chunk_id.y * ChunkDim + local_pos.y,
+          chunk_id.z * ChunkDim + local_pos.z,
+        )
+        let info = (VoxelKind(kind_ord), action_colors[Colors(color_idx)])
+        if unit_id notin by_unit:
+          by_unit[unit_id] = @[]
+        by_unit[unit_id].add((world_pos, info))
+
+  # Format output
   let edits = collect:
-    for id, edit in self.value:
-      let json = collect:
-        for voxel, info in edit.value:
-          $(voxel, info)
+    for unit_id, voxels in by_unit:
+      let json = voxels.map_it($(it.pos, it.info))
       if json.len > 0:
         let elements = json.join(",\n").indent(2)
-        \"\"{id}\": [\n{elements}\n]"
+        \"\"{unit_id}\": [\n{elements}\n]"
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
   let elements = self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
-  let edits = $self.shared.edits
+  let edits = edits_to_string(self.shared.edit_snapshots)
   result =
     \"""
 {{

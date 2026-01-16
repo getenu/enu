@@ -4,7 +4,7 @@ import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
 import pkg/[model_citizen]
-import models/[colors, packed_chunks], libs/[eval]
+import models/colors, libs/[eval]
 
 from pkg/godot import NimGodotObject
 
@@ -12,6 +12,37 @@ export Vector3, Transform, vector3, basis, AABB, aabb
 export godotbase except print
 export Interpreter
 export lineinfos.`==`
+
+const
+  ChunkDim* = 16
+  CHUNK_VOLUME* = ChunkDim * ChunkDim * ChunkDim # 4096
+  ChunkSize* = vec3(16, 16, 16)
+  MAX_BUILD_DIMENSION* = 65535 # VoxelBuffer.MAX_SIZE
+  EMPTY_VOXEL* = 0'u8
+
+  # Delta thresholds
+  MAX_CHANGES_FOR_DELTA* = 100
+  MAX_DELTAS_BEFORE_SNAPSHOT* = 100
+
+type
+  PackedVoxel* = uint8
+
+  SnapshotData* = object
+    data*: string
+
+  DeltaUpdate* = object
+    data*: string
+
+  PackedChunk* = SnapshotData # Legacy alias
+
+  VoxelKind* = enum
+    Hole
+    Manual
+    Computed
+
+  VoxelInfo* = tuple[kind: VoxelKind, color: Color]
+
+  EditKey* = tuple[id: string, loc: Vector3]
 
 type
   EnuError* = object of CatchableError
@@ -107,24 +138,23 @@ type
     paused*: bool
     frame_count*: int
     skip_block_paint*: bool
-    disable_packed_chunks*: bool  # Runtime toggle for packed chunk format
+    disable_packed_chunks*: bool # Runtime toggle for packed chunk format
     open_sign_value*: ZenValue[Sign]
     queued_action_value*: ZenValue[string]
     scale_factor*: float
     worker_ctx_name*: string
-    server_ctx_name_value*: ZenValue[string]  # Context running scripts (self if Server, remote otherwise)
+    server_ctx_name_value*: ZenValue[string]
+      # Context running scripts (self if Server, remote otherwise)
     level_name_value*: ZenValue[string]
     status_message_value*: ZenValue[string]
     voxel_tasks_value*: ZenValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
-    test_exit_code_value*: ZenValue[int]  # -1 = not set, 0 = success, 1+ = failure count
+    test_exit_code_value*: ZenValue[int]
+      # -1 = not set, 0 = success, 1+ = failure count
     net_bytes_sent_value*: ZenValue[int64]
     net_bytes_received_value*: ZenValue[int64]
     net_connections_value*: ZenValue[int]
-
-    # Global snapshot rate limiting
-    snapshots_flushed_this_frame*: int  # Reset each frame
 
   Model* = ref object of RootObj
     id*: string
@@ -140,7 +170,35 @@ type
     id*: string
     materials*: seq[ShaderMaterial]
     emission_colors*: seq[godot.Color]
-    edits*: ZenTable[string, ZenTable[Vector3, VoxelInfo]]
+    edit_snapshots*: ZenTable[EditKey, SnapshotData]
+    edit_deltas*: ZenTable[EditKey, ZenSeq[DeltaUpdate]]
+
+  VoxelStore* = ref object
+    id*: string
+    ctx*: ZenContext
+    unit_id*: string # For edit key construction
+
+    # Regular chunks (owned)
+    packed_chunks*: ZenTable[Vector3, SnapshotData]
+    chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
+
+    # Edits - references to tables in Shared (not owned)
+    edit_snapshots*: ZenTable[EditKey, SnapshotData]
+    edit_deltas*: ZenTable[EditKey, ZenSeq[DeltaUpdate]]
+
+    # Local caches (plain Tables)
+    local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
+    local_edits*: Table[Vector3, Table[Vector3, VoxelInfo]]
+
+    # Pending changes
+    pending_chunks*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
+    pending_edits*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
+
+    block_count*: int
+
+    # Stats
+    snapshots_flushed*: int
+    deltas_flushed*: int
 
   ScriptErrors* =
     ZenSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
@@ -191,49 +249,6 @@ type
     billboard_value*: ZenValue[bool]
     owner_value*: ZenValue[Unit]
     text_only*: bool
-
-  VoxelKind* = enum
-    Hole
-    Manual
-    Computed
-
-  VoxelInfo* = tuple[kind: VoxelKind, color: Color]
-
-  Chunk* = ZenTable[Vector3, VoxelInfo]
-
-  VoxelStore* = ref object
-    id*: string
-    disable_packed*: bool
-    ctx*: ZenContext
-
-    # Core storage
-    chunks*: ZenTable[Vector3, Chunk]
-    block_count*: int
-
-    # Packed format fields (used when state.disable_packed_chunks = false)
-    packed_chunks*: ZenTable[Vector3, SnapshotData]
-    chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
-    dirty_chunks*: HashSet[Vector3]
-
-    # Change tracking for efficient deltas
-    pending_changes*: Table[Vector3, Table[Vector3, PackedVoxel]]  # chunk_id -> {pos -> packed}
-
-    # Rate-limited snapshot queue (HashSet for O(1) lookup in add_voxel/del_voxel)
-    snapshot_queue*: HashSet[Vector3]
-
-    # Batching
-    batching*: bool
-    batched_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
-    defer_flush*: bool  # When true, skip flush_packed_chunks in apply_changes
-
-    # Callbacks for Build integration
-    on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
-    on_chunk_flushed*: proc(chunk_id: Vector3) {.gcsafe.}
-
-    # Stats tracking
-    content_bytes*: int  # Actual voxel data bytes (snapshots + deltas)
-    snapshots_flushed*: int  # Total snapshots flushed
-    deltas_flushed*: int  # Total deltas flushed
 
   Build* = ref object of Unit
     voxels*: VoxelStore

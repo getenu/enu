@@ -2,7 +2,7 @@ import std/[locks, os, random, net]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
 import
-  core, models, models/[serializers, voxel_store], libs/[interpreters, eval]
+  core, models, models/serializers, libs/[interpreters, eval]
 import ./[vars, host_bridge, scripting]
 
 var
@@ -95,13 +95,6 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
   unit.global_flags -= HighlightError
   if ?unit.script_ctx and unit.script_ctx.running and not ?unit.clone_of:
     unit.collect_garbage
-
-  var edits = unit.shared.edits
-  for id in edits.value.keys:
-    if id != unit.id and edits[id].len == 0:
-      let edit = edits[id]
-      edits.del id
-      edit.destroy
 
   unit.reset()
   if LoadingScript notin state.local_flags and code.nim.strip == "":
@@ -402,56 +395,26 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           break
       to_process.shuffle
 
-      var batched: HashSet[Unit]
-
       while Zen.thread_ctx.pressure < 0.9 and to_process.len > 0 and
           state.voxel_tasks <= 10 and get_mono_time() < timeout:
         let units = to_process
         to_process = @[]
         for unit in units:
           if Ready in unit.global_flags:
-            if unit.batch_changes:
-              batched.incl unit
+            discard unit.batch_changes
             if worker.advance_unit(unit, timeout):
               to_process.add(unit)
 
-      for unit in batched:
-        try:
-          unit.apply_changes
-        except CatchableError as e:
-          worker.handle_catchable_error(unit, e)
-
-      # Apply changes for all Builds not already processed, to ensure packed chunks are flushed
-      # This handles the case where voxels are drawn before Ready is set
-      if packed_chunks_enabled():
-        state.units.value.walk_tree proc(unit: Unit) =
-          if unit of Build and unit notin batched:
-            let build = Build(unit)
-            if build.voxels.dirty_chunks.len > 0 or build.voxels.batching:
-              build.apply_changes()
-
-      # Process rate-limited snapshot queues
-      if packed_chunks_enabled():
-        state.snapshots_flushed_this_frame = 0
-
-        state.units.value.walk_tree proc(unit: Unit) =
-          if unit of Build:
-            let build = Build(unit)
-            do_assert not (
-              build.voxels.is_flushing and build.voxels.defer_flush
-            )
-            if build.voxels.is_flushing:
-              let remaining =
-                DEFAULT_GLOBAL_SNAPSHOTS - state.snapshots_flushed_this_frame
-              let limit = min(DEFAULT_SNAPSHOTS_PER_FRAME, remaining)
-
-              if limit > 0:
-                let flushed = build.voxels.flush_next_snapshots(limit)
-                state.snapshots_flushed_this_frame += flushed
-
-              # Clear ASAPMode flag when flush completes (triggers redraw in build_node)
-              if not build.voxels.is_flushing and ASAPMode in build.local_flags:
-                build.local_flags -= ASAPMode
+      # Flush pending changes for all Builds (no rate limiting)
+      state.units.value.walk_tree proc(unit: Unit) =
+        if unit of Build:
+          let build = Build(unit)
+          # Only flush if NOT in ASAP mode (ASAP mode flushes on end_asap)
+          if ASAPMode notin build.local_flags:
+            if build.voxels.pending_chunks.len > 0:
+              build.voxels.flush_dirty_chunks()
+            if build.voxels.pending_edits.len > 0:
+              build.voxels.flush_dirty_edits()
 
       Zen.thread_ctx.tick
       run_deferred()
@@ -462,31 +425,29 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       else:
         state.net_connections = 0
 
-      # Log snapshot/delta stats periodically
+      # Log stats periodically
       if frame_start > last_stats_log + stats_log_interval:
-        # Collect snapshot/delta stats from all builds
         var total_snapshots = 0
         var total_deltas = 0
         state.units.value.walk_tree proc(unit: Unit) =
           if unit of Build:
-            let build = Build(unit)
-            total_snapshots += build.voxels.snapshots_flushed
-            total_deltas += build.voxels.deltas_flushed
+            total_snapshots += Build(unit).voxels.snapshots_flushed
+            total_deltas += Build(unit).voxels.deltas_flushed
 
-        let snapshots_delta = total_snapshots - last_snapshots_flushed
-        let deltas_delta = total_deltas - last_deltas_flushed
+        let snapshots_this_period = total_snapshots - last_snapshots_flushed
+        let deltas_this_period = total_deltas - last_deltas_flushed
         let ticks_delta = tick_count - last_tick_count
         let ticks_per_sec =
           ticks_delta.float / stats_log_interval.in_seconds.float
 
-        if snapshots_delta > 0 or deltas_delta > 0 or ticks_delta > 0:
+        if snapshots_this_period > 0 or deltas_this_period > 0 or ticks_delta > 0:
           info "worker stats",
             ticks_per_sec = ticks_per_sec.int,
             max_tick_ms = max_tick_time.in_milliseconds,
             snapshots = total_snapshots,
-            snapshots_delta = snapshots_delta,
+            snapshots_delta = snapshots_this_period,
             deltas = total_deltas,
-            deltas_delta = deltas_delta
+            deltas_delta = deltas_this_period
         last_stats_log = frame_start
         last_snapshots_flushed = total_snapshots
         last_deltas_flushed = total_deltas
