@@ -22,7 +22,7 @@ proc init*(
     size_value: ~size,
     billboard_value: ~billboard,
     frame_created: state.frame_count,
-    start_color: action_colors[Black],
+    start_color: ACTION_COLORS[BLACK],
     start_transform: transform,
     owner_value: ~owner,
     text_only: text_only,
@@ -35,16 +35,16 @@ method main_thread_joined*(self: Sign) =
   proc_call main_thread_joined(Unit(self))
 
   state.local_flags.watch:
-    if PrimaryDown.added and Hover in self.local_flags:
+    if PRIMARY_DOWN.added and HOVER in self.local_flags:
       state.open_sign = self
 
   self.local_flags.watch:
-    if Hover.added:
-      self.local_flags += Highlight
-      state.push_flag ReticleVisible
-    elif Hover.removed:
-      self.local_flags -= Highlight
-      state.pop_flag ReticleVisible
+    if HOVER.added:
+      self.local_flags += HIGHLIGHT
+      state.push_flag RETICLE_VISIBLE
+    elif HOVER.removed:
+      self.local_flags -= HIGHLIGHT
+      state.pop_flag RETICLE_VISIBLE
 
 method destroy*(self: Sign) =
   self.destroy_impl

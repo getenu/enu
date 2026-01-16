@@ -11,10 +11,10 @@ proc init*(_: type Player): Player =
     cursor_position_value: ~((0, 0)),
   )
   self.init_unit(shared = false)
-  self.global_flags += Global
+  self.global_flags += GLOBAL
 
   state.local_flags.changes:
-    if ResettingVM.added:
+    if RESETTING_VM.added:
       self.frame_created = state.frame_count
   result = self
 
@@ -44,11 +44,11 @@ proc `open_code=`*(self: Player, code: string) =
     if unit of Sign:
       let unit = Sign(unit)
       if code == "":
-        unit.global_flags -= Visible
+        unit.global_flags -= VISIBLE
       else:
         unit.message = code
         unit.more = code
-        unit.global_flags += Visible
+        unit.global_flags += VISIBLE
       return
 
 method destroy*(self: Player) =

@@ -12,22 +12,22 @@ type LevelInfo = object
 
 proc to_json_hook(self: Color): JsonNode =
   result =
-    if self == action_colors[Eraser]:
+    if self == ACTION_COLORS[ERASER]:
       %""
     else:
       for i, color in Colors.enum_fields:
-        if self == action_colors[Colors(i)]:
+        if self == ACTION_COLORS[Colors(i)]:
           return %color
       %self.to_html_hex
 
 proc from_json_hook(self: var Color, json: JsonNode) =
   let hex = json.get_str
   if hex == "":
-    self = action_colors[Eraser]
+    self = ACTION_COLORS[ERASER]
   else:
     for i, color in Colors.enum_fields:
       if color.to_lower == hex.to_lower:
-        self = action_colors[Colors(i)]
+        self = ACTION_COLORS[Colors(i)]
         return
     self = hex.parse_html_hex
 
@@ -181,7 +181,7 @@ proc edits_to_string(edit_snapshots: ZenTable[EditKey, SnapshotData]): string =
           chunk_id.y * ChunkDim + local_pos.y,
           chunk_id.z * ChunkDim + local_pos.z,
         )
-        let info = (VoxelKind(kind_ord), action_colors[Colors(color_idx)])
+        let info = (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
         if unit_id notin by_unit:
           by_unit[unit_id] = @[]
         by_unit[unit_id].add((world_pos, info))
@@ -230,20 +230,20 @@ proc save*(unit: Unit) =
       unit.save
 
 proc save_level*(level_dir: string, save_all = false) =
-  if Server in state.local_flags and TestMode notin state.local_flags:
+  if SERVER in state.local_flags and TEST_MODE notin state.local_flags:
     debug "saving level"
     let level = LevelInfo(enu_version: enu_version, format_version: "v0.9.2")
     write_file level_dir / "level.json", jsonutils.to_json(level).pretty
 
     for unit in state.units:
-      if save_all or Dirty in unit.global_flags:
+      if save_all or DIRTY in unit.global_flags:
         unit.save
-        unit.global_flags -= Dirty
+        unit.global_flags -= DIRTY
   else:
     debug "not server. Skipping save."
 
 proc backup_level*(level_dir: string) =
-  if Server in state.local_flags:
+  if SERVER in state.local_flags:
     let backup_dir = state.config.world_dir / "backups"
     create_dir backup_dir
 
@@ -281,7 +281,7 @@ proc load_units(parent: Unit) =
       else:
         quit "Unknown unit type: " & unit_id
 
-      unit.global_flags += ScriptInitializing
+      unit.global_flags += SCRIPT_INITIALIZING
       if parent.is_nil:
         state.units.add(unit)
       else:
@@ -293,7 +293,7 @@ proc load_units(parent: Unit) =
       if file_exists(unit.script_ctx.script):
         unit.code = Code.init(read_file(unit.script_ctx.script))
       else:
-        unit.global_flags -= ScriptInitializing
+        unit.global_flags -= SCRIPT_INITIALIZING
     except Exception as e:
       error "Failed to load unit", unit_id, error = e
 
@@ -331,16 +331,16 @@ proc change_loaded_level*(level, world: string) =
   state.config = config
 
 proc unload_level*(worker: Worker) =
-  state.global_flags += LoadingLevel
-  state.push_flag LoadingScript
-  state.pop_flag Playing
+  state.global_flags += LOADING_LEVEL
+  state.push_flag LOADING_SCRIPT
+  state.pop_flag PLAYING
   state.units.clear_all
-  state.pop_flag LoadingScript
-  state.global_flags -= LoadingLevel
+  state.pop_flag LOADING_SCRIPT
+  state.global_flags -= LOADING_LEVEL
 
 proc load_level*(worker: Worker, level_dir: string) =
-  state.global_flags += LoadingLevel
-  state.push_flag LoadingScript
+  state.global_flags += LOADING_LEVEL
+  state.push_flag LOADING_SCRIPT
   var config = state.config
 
   config.level_dir = level_dir
@@ -400,6 +400,6 @@ proc load_level*(worker: Worker, level_dir: string) =
   dont_join = false
 
   for unit in state.units:
-    unit.global_flags -= Dirty
-  state.pop_flag LoadingScript
-  state.global_flags -= LoadingLevel
+    unit.global_flags -= DIRTY
+  state.pop_flag LOADING_SCRIPT
+  state.global_flags -= LOADING_LEVEL

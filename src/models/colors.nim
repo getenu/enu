@@ -14,57 +14,57 @@ proc col*(hex: string): chroma.Color =
 
 type
   Colors* = enum
-    Eraser
-    Blue
-    Red
-    Green
-    Black
-    White
-    Brown
+    ERASER
+    BLUE
+    RED
+    GREEN
+    BLACK
+    WHITE
+    BROWN
 
   Theme* = enum
-    Normal
-    Comment
-    Entity
-    Keyword
-    Operator
-    Class
-    Storage
-    Constant
-    Text
-    Number
-    Variable
-    Invalid
+    NORMAL
+    COMMENT
+    ENTITY
+    KEYWORD
+    OPERATOR
+    CLASS
+    STORAGE
+    CONSTANT
+    TEXT
+    NUMBER
+    VARIABLE
+    INVALID
 
-const ir_black* = [
-  Normal: col"F6F3E8",
-  Comment: col"7C7C7C",
-  Entity: col"FFD2A7",
-  Keyword: col"96CBFE",
-  Operator: col"EDEDED",
-  Class: col"FFFFB6",
-  Storage: col"CFCB90",
-  Constant: col"99CC99",
-  Text: col"A8FF60",
-  Number: col"FF73FD",
-  Variable: col"C6C5FE",
-  Invalid: col"FD5FF1"
+const IR_BLACK* = [
+  NORMAL: col"F6F3E8",
+  COMMENT: col"7C7C7C",
+  ENTITY: col"FFD2A7",
+  KEYWORD: col"96CBFE",
+  OPERATOR: col"EDEDED",
+  CLASS: col"FFFFB6",
+  STORAGE: col"CFCB90",
+  CONSTANT: col"99CC99",
+  TEXT: col"A8FF60",
+  NUMBER: col"FF73FD",
+  VARIABLE: col"C6C5FE",
+  INVALID: col"FD5FF1"
 ]
 
-const action_colors* = [
-  Eraser: chroma.Color(),
-  Blue: col"0067ff",
-  Red: col"fc0e0b",
-  Green: col"14f707",
-  Black: col"000000",
-  White: col"d9eed8",
-  Brown: col"3f302b"
+const ACTION_COLORS* = [
+  ERASER: chroma.Color(),
+  BLUE: col"0067ff",
+  RED: col"fc0e0b",
+  GREEN: col"14f707",
+  BLACK: col"000000",
+  WHITE: col"d9eed8",
+  BROWN: col"3f302b"
 ]
 
 proc action_index*(self: Color): Colors =
-  for key, value in action_colors:
+  for key, value in ACTION_COLORS:
     if value == self:
       return key
 
 when is_main_module:
-  print action_colors[white]
+  print ACTION_COLORS[WHITE]

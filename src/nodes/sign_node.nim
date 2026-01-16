@@ -23,12 +23,12 @@ gdobj SignNode of Spatial:
   var expanded: bool
 
   proc set_visibility() =
-    if Hide in self.model.local_flags:
+    if HIDE in self.model.local_flags:
       self.visible = false
-    elif Visible in self.model.global_flags:
+    elif VISIBLE in self.model.global_flags:
       self.visible = true
       self.material.params_blend_mode = spatial_material.BLEND_MODE_MIX
-    elif Visible notin self.model.global_flags and God in state.local_flags:
+    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
       self.material.params_blend_mode = spatial_material.BLEND_MODE_ADD
     else:
@@ -130,19 +130,19 @@ gdobj SignNode of Spatial:
 
     self.model.global_flags.watch:
       if (
-        change.item == Visible and
-        ScriptInitializing notin self.model.global_flags
-      ) or ScriptInitializing.removed:
+        change.item == VISIBLE and
+        SCRIPT_INITIALIZING notin self.model.global_flags
+      ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
 
     state.local_flags.watch:
-      if God.removed:
+      if GOD.removed:
         self.set_visibility
 
     self.model.local_flags.watch:
-      if Highlight.added:
+      if HIGHLIGHT.added:
         self.material.emission_energy = 1.0
-      elif Highlight.removed:
+      elif HIGHLIGHT.removed:
         self.material.emission_energy = self.model.glow
 
   method physics_process*(delta: float) =

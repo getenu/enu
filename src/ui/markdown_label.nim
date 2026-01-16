@@ -143,7 +143,7 @@ gdobj MarkdownLabel of ScrollContainer:
 
       if t of Heading:
         label.with(
-          push_font self.local_header_font, push_color ir_black[Keyword]
+          push_font self.local_header_font, push_color IR_BLACK[KEYWORD]
         )
         self.render_markdown t
         label.with(pop, pop, newline)
@@ -159,7 +159,7 @@ gdobj MarkdownLabel of ScrollContainer:
       elif t of CodeSpan:
         label.with(
           push_font self.local_mono_font,
-          push_color ir_black[Number],
+          push_color IR_BLACK[NUMBER],
           add_text t.doc,
         )
         self.render_markdown t
@@ -194,7 +194,7 @@ gdobj MarkdownLabel of ScrollContainer:
         label.with(pop, pop, newline)
       elif t of Link:
         let t = Link(t)
-        label.push_color(ir_black[Variable])
+        label.push_color(IR_BLACK[VARIABLE])
         label.push_font self.local_bold_font
         label.push_meta(t.url.to_variant)
         label.add_text t.title

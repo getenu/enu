@@ -94,7 +94,7 @@ proc select*(self: OptionButton, text: string): int {.discardable.} =
   result = -1
 
 proc ignore_touches*(self: Control, event: InputEvent) =
-  if event of InputEventScreenTouch and TouchControls in state.local_flags:
+  if event of InputEventScreenTouch and TOUCH_CONTROLS in state.local_flags:
     let event = event as InputEventScreenTouch
     if event.pressed and
         event.position.within(self.rect_global_position, self.rect_size):

@@ -143,7 +143,7 @@ proc wake(self: Unit) =
   self.script_ctx.timer = get_mono_time()
 
 proc pause_script(self: Worker) =
-  self.active_unit.global_flags -= ScriptInitializing
+  self.active_unit.global_flags -= SCRIPT_INITIALIZING
   self.active_unit.script_ctx.pause()
 
 proc yield_script(self: Worker, unit: Unit) =
@@ -247,11 +247,11 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   ctx.callback = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
     if seconds > 0 and duration < seconds:
-      Running
+      RUNNING
     elif seconds <= 0 and duration <= 0.5 and ctx.timer > get_mono_time():
-      Running
+      RUNNING
     else:
-      Done
+      DONE
   ctx.last_ran = MonoTime.default
   self.pause_script()
 
@@ -294,7 +294,7 @@ proc added_units(worker: Worker): seq[Unit] =
 proc echo_console(msg: string) =
   echo(msg)
   logger("info", msg & "\n")
-  state.push_flag ConsoleVisible
+  state.push_flag CONSOLE_VISIBLE
 
 proc dump_stats(label: string) =
   when defined(metrics):
@@ -319,22 +319,22 @@ proc id(self: Unit): string =
   self.id
 
 proc global(self: Unit): bool =
-  Global in self.global_flags
+  GLOBAL in self.global_flags
 
 proc `global=`(self: Unit, global: bool) =
   if global:
-    self.global_flags += Global
+    self.global_flags += GLOBAL
   else:
-    self.global_flags -= Global
+    self.global_flags -= GLOBAL
 
 proc lock(self: Unit): bool =
-  Lock in self.global_flags
+  LOCK in self.global_flags
 
 proc `lock=`(self: Unit, value: bool) =
   if value:
-    self.global_flags += Lock
+    self.global_flags += LOCK
   else:
-    self.global_flags -= Lock
+    self.global_flags -= LOCK
 
 proc position(self: Unit): Vector3 =
   units.position(self)
@@ -343,7 +343,7 @@ proc local_position(self: Unit): Vector3 =
   self.transform.origin
 
 proc start_position(self: Unit): Vector3 =
-  if Global in self.global_flags:
+  if GLOBAL in self.global_flags:
     self.start_transform.origin
   else:
     self.start_transform.origin.global_from(self.parent)
@@ -353,7 +353,7 @@ proc position_set(self: Unit, position: Vector3) =
   if self of Player and position.y <= 0:
     position.y = 0.1
 
-  if Global in self.global_flags:
+  if GLOBAL in self.global_flags:
     self.transform_value.origin = position
   else:
     self.transform_value.origin = position.local_to(self.parent)
@@ -386,16 +386,16 @@ proc color(self: Unit): Colors =
   action_index self.color_value.value
 
 proc `color=`(self: Unit, color: Colors) =
-  types.`color=`(self, action_colors[color])
+  types.`color=`(self, ACTION_COLORS[color])
 
 proc show(self: Unit): bool =
-  Visible in self.global_flags
+  VISIBLE in self.global_flags
 
 proc `show=`(self: Unit, value: bool) =
   if value:
-    self.global_flags += Visible
+    self.global_flags += VISIBLE
   else:
-    self.global_flags -= Visible
+    self.global_flags -= VISIBLE
 
 proc rotation(self: Unit): float =
   if self of Player:
@@ -428,7 +428,7 @@ proc sees(
 ): Future[bool] =
   result = Future.init(bool, "sees")
 
-  if target == state.player and Flying in state.local_flags:
+  if target == state.player and FLYING in state.local_flags:
     result.complete(false)
     return
 
@@ -443,9 +443,9 @@ proc sees(
     let query = self.sight_query
     if ?query.answer:
       future.complete(query.answer.get)
-      result = Done
+      result = DONE
     else:
-      result = Running
+      result = RUNNING
 
   self.script_ctx.last_ran = MonoTime.default
   worker.pause_script()
@@ -499,7 +499,7 @@ proc draw_position(self: Build): Vector3 =
   self.position + self.draw_transform.origin
 
 proc draw_position_set(self: Build, position: Vector3) =
-  if Global in self.global_flags:
+  if GLOBAL in self.global_flags:
     self.draw_transform_value.origin = position - self.position
   else:
     self.draw_transform_value.origin =
@@ -515,40 +515,40 @@ proc restore(self: Build, name: string) =
 
 proc begin_asap(self: Build) {.gcsafe.} =
   ## Enable ASAP mode - defers rendering.
-  self.local_flags += ASAPMode
+  self.local_flags += ASAP_MODE
 
 proc end_asap*(self: Build) {.gcsafe.} =
   ## Exit ASAP mode. Flushes all dirty chunks and clears the flag.
-  if ASAPMode in self.local_flags:
+  if ASAP_MODE in self.local_flags:
     self.reset_bounds()  # Update bounds now that all voxels are drawn
     self.voxels.flush_dirty_chunks()
-    self.local_flags -= ASAPMode  # Clear immediately - triggers redraw in build_node
+    self.local_flags -= ASAP_MODE  # Clear immediately - triggers redraw in build_node
 
 # Player binding
 
 proc playing(self: Unit): bool =
-  Playing in state.local_flags
+  PLAYING in state.local_flags
 
 proc `playing=`*(self: Unit, value: bool) =
-  state.set_flag Playing, value
+  state.set_flag PLAYING, value
 
 proc god(self: Unit): bool =
-  God in state.local_flags
+  GOD in state.local_flags
 
 proc `god=`*(self: Unit, value: bool) =
-  state.set_flag God, value
+  state.set_flag GOD, value
 
 proc flying(self: Unit): bool =
-  Flying in state.local_flags
+  FLYING in state.local_flags
 
 proc `flying=`*(self: Unit, value: bool) =
-  state.set_flag Flying, value
+  state.set_flag FLYING, value
 
 proc running(self: Unit): bool =
-  AltWalkSpeed in state.local_flags
+  ALT_WALK_SPEED in state.local_flags
 
 proc `running=`*(self: Unit, value: bool) =
-  state.set_flag AltWalkSpeed, value
+  state.set_flag ALT_WALK_SPEED, value
 
 proc tool(self: Unit): int =
   int(state.tool)
@@ -684,7 +684,7 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
       let local_pos = position.local_to(build)
       if local_pos in build:
         let info = build.voxel_info(local_pos)
-        if info.kind != Hole and info.color != action_colors[Eraser]:
+        if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
           return some(info)
     for child in unit.units.value:
       if child of Build:
@@ -692,7 +692,7 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
         let local_pos = position.local_to(build)
         if local_pos in build:
           let info = build.voxel_info(local_pos)
-          if info.kind != Hole and info.color != action_colors[Eraser]:
+          if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
             return some(info)
   none(VoxelInfo)
 
@@ -704,7 +704,7 @@ proc block_color_at(position: Vector3): Colors =
   if block_info.is_some:
     action_index(block_info.get.color)
   else:
-    Eraser
+    ERASER
 
 # End of bindings
 

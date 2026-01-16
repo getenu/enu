@@ -60,10 +60,10 @@ gdobj GUI of Control:
       self.bind_signal(button, "button_down", button.name)
 
     state.local_flags.changes:
-      self.left_stick.visible = TouchControls in state.local_flags
-      self.up.visible = TouchControls in state.local_flags
+      self.left_stick.visible = TOUCH_CONTROLS in state.local_flags
+      self.up.visible = TOUCH_CONTROLS in state.local_flags
       self.down.visible =
-        TouchControls in state.local_flags and Flying in state.local_flags
+        TOUCH_CONTROLS in state.local_flags and FLYING in state.local_flags
 
   method on_button_up(name: string) =
     var ev = gdnew[InputEventAction]()
@@ -78,38 +78,38 @@ gdobj GUI of Control:
     parse_input_event(ev)
 
   method on_settings_opened() =
-    state.push_flag SettingsVisible
+    state.push_flag SETTINGS_VISIBLE
 
   method on_mouse_entered() =
-    state.push_flag ViewportFocused
+    state.push_flag VIEWPORT_FOCUSED
 
   method on_mouse_exited() =
-    state.pop_flag ViewportFocused
+    state.pop_flag VIEWPORT_FOCUSED
 
   method on_focus_entered() =
-    state.push_flag ViewportFocused
+    state.push_flag VIEWPORT_FOCUSED
 
   method on_focus_exited() =
-    state.pop_flag ViewportFocused
+    state.pop_flag VIEWPORT_FOCUSED
 
   method handle_player_input*(event: InputEvent) =
     if not ?self:
       return
-    if TestMode in state.local_flags:
+    if TEST_MODE in state.local_flags:
       return
     let player = state.nodes.player as PlayerNode
     if not ?player:
       return
     let time = get_mono_time()
 
-    if event of InputEventMouseMotion and MouseCaptured in state.local_flags and
-        TouchControls notin state.local_flags:
+    if event of InputEventMouseMotion and MOUSE_CAPTURED in state.local_flags and
+        TOUCH_CONTROLS notin state.local_flags:
       if not self.skip_next_mouse_move:
         player.input_relative += event.as(InputEventMouseMotion).relative()
       else:
         self.skip_next_mouse_move = false
 
-    if event of InputEventScreenTouch and TouchControls in state.local_flags:
+    if event of InputEventScreenTouch and TOUCH_CONTROLS in state.local_flags:
       let event = event as InputEventScreenTouch
       if event.index == 0:
         if event.pressed:
@@ -118,13 +118,13 @@ gdobj GUI of Control:
         else:
           if ?self.touch_position and self.touch_position.get == event.position:
             player.update_raycast()
-            state.push_flag PrimaryDown
-            state.pop_flag PrimaryDown
+            state.push_flag PRIMARY_DOWN
+            state.pop_flag PRIMARY_DOWN
             self.deleting = false
             self.delete_timer = MonoTime.high
             self.touch_position = none(Vector2)
 
-    if event of InputEventScreenDrag and TouchControls in state.local_flags:
+    if event of InputEventScreenDrag and TOUCH_CONTROLS in state.local_flags:
       let event = event as InputEventScreenDrag
       if event.index == 0:
         self.touch_position = none(Vector2)
@@ -132,25 +132,25 @@ gdobj GUI of Control:
       if not self.deleting:
         self.delete_timer = MonoTime.high
 
-    if EditorVisible in state.local_flags and not self.skip_release and
+    if EDITOR_VISIBLE in state.local_flags and not self.skip_release and
         (event of InputEventJoypadButton or event of InputEventJoypadMotion):
       let active_input = self.has_active_input(event.device.int)
-      if CommandMode in state.local_flags and not active_input:
+      if COMMAND_MODE in state.local_flags and not active_input:
         self.command_timer = input_command_timeout
-      elif CommandMode in state.local_flags and active_input:
+      elif COMMAND_MODE in state.local_flags and active_input:
         self.command_timer = 0.0
       elif active_input:
         self.command_timer = 0.0
-        state.push_flag CommandMode
+        state.push_flag COMMAND_MODE
 
     if event.is_action_pressed("jump"):
       self.get_tree().set_input_as_handled()
       self.jump_down = true
       let toggle = ?self.jump_time and time < self.jump_time.get + fly_toggle
 
-      if toggle and Playing notin state.local_flags:
+      if toggle and PLAYING notin state.local_flags:
         self.jump_time = nil_time
-        state.toggle_flag(Flying)
+        state.toggle_flag(FLYING)
       elif player.is_on_floor():
         player.velocity += vec3(0, jump_impulse, 0)
         self.jump_time = some time
@@ -165,7 +165,7 @@ gdobj GUI of Control:
 
       if ?self.crouch_time and time < self.crouch_time.get + fly_toggle:
         self.crouch_time = nil_time
-        state.set_flag(Flying, false)
+        state.set_flag(FLYING, false)
       else:
         self.crouch_time = some time
 
@@ -177,9 +177,9 @@ gdobj GUI of Control:
       if toggle:
         self.run_time = nil_time
         if player.flying:
-          state.toggle_flag(AltFlySpeed)
+          state.toggle_flag(ALT_FLY_SPEED)
         else:
-          state.toggle_flag(AltWalkSpeed)
+          state.toggle_flag(ALT_WALK_SPEED)
       else:
         self.run_time = some time
       self.alt_speed = true
@@ -187,7 +187,7 @@ gdobj GUI of Control:
       self.get_tree().set_input_as_handled()
       self.alt_speed = false
 
-    if event of InputEventPanGesture and state.tool notin {CodeMode, PlaceBot}:
+    if event of InputEventPanGesture and state.tool notin {CODE_MODE, PLACE_BOT}:
       let pan = event as InputEventPanGesture
       self.pan_delta += pan.delta.y
       if self.pan_delta > 2:
@@ -198,30 +198,30 @@ gdobj GUI of Control:
         state.update_action_index(-1)
 
     if event.is_action_pressed("fire"):
-      if EditorVisible in state.local_flags:
+      if EDITOR_VISIBLE in state.local_flags:
         self.skip_release = true
-      state.push_flag PrimaryDown
+      state.push_flag PRIMARY_DOWN
     elif event.is_action_released("fire"):
       self.skip_release = false
-      state.pop_flag PrimaryDown
+      state.pop_flag PRIMARY_DOWN
 
     if event.is_action_pressed("remove"):
-      state.push_flag SecondaryDown
+      state.push_flag SECONDARY_DOWN
     elif event.is_action_released("remove"):
-      state.pop_flag SecondaryDown
+      state.pop_flag SECONDARY_DOWN
 
   method unhandled_input*(event: InputEvent) =
-    if TestMode in state.local_flags:
+    if TEST_MODE in state.local_flags:
       return
-    if CommandMode notin state.local_flags and
+    if COMMAND_MODE notin state.local_flags and
         event.is_action_pressed("ui_cancel") and
-        ViewportFocused in state.local_flags:
-      let flags = state.try_pop(ViewportFocused)
-      if SettingsFocused in flags:
-        state.pop_flags SettingsFocused, SettingsVisible
-      elif EditorFocused in flags:
+        VIEWPORT_FOCUSED in state.local_flags:
+      let flags = state.try_pop(VIEWPORT_FOCUSED)
+      if SETTINGS_FOCUSED in flags:
+        state.pop_flags SETTINGS_FOCUSED, SETTINGS_VISIBLE
+      elif EDITOR_FOCUSED in flags:
         state.open_unit = nil
-      elif DocsFocused in flags:
+      elif DOCS_FOCUSED in flags:
         state.open_sign = nil
 
     if event of InputEventKey or event of InputEventAction:
@@ -237,10 +237,10 @@ gdobj GUI of Control:
   #   self.accept_event()
 
   method gui_input*(event: InputEvent) =
-    if TestMode in state.local_flags:
+    if TEST_MODE in state.local_flags:
       return
     template touch_controls() =
-      if TouchControls in state.local_flags:
+      if TOUCH_CONTROLS in state.local_flags:
         let index = byte(event.index)
         if index notin state.ignored_touches:
           self.handle_player_input(event)

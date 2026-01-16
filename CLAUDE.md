@@ -96,9 +96,19 @@ Pass `amd64` or `arm64` to `nim prereqs` to set the target architecture. See `do
 - Controllers manage game logic and coordinate between models and UI
 - UI components handle presentation and user interaction
 
-### Important Notes
+### Casing Conventions
 
-- **Always use `snake_case` for identifiers.** Nim's identifier normalization means `snake_case` and `camelCase` are equivalent, but this project strictly uses `snake_case`. Only use `lowerCamelCase` when `snake_case` doesn't work, which should only happen with third-party macros that don't properly normalize identifiers.
+This project follows Ruby-like casing conventions. Nim is style-insensitive for identifiers (ignoring case and underscores), so these are style guidelines rather than compiler requirements:
+
+- **Types**: `UpperCamelCase` (e.g., `VoxelRenderer`, `GameState`, `Build`)
+- **Enum values**: `SCREAMING_SNAKE_CASE` (e.g., `ERASER`, `BLUE`, `CODE_MODE`, `PLAYING`)
+- **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `CHUNK_DIM`, `ACTION_COLORS`, `IR_BLACK`)
+- **Everything else**: `snake_case` (procs, variables, fields, parameters, etc.)
+- **Third-party identifiers starting with lowercase**: use `snake_case` (e.g., `writeVu64` → `write_vu64`)
+
+Only use `lowerCamelCase` when `snake_case` doesn't work, which should only happen with third-party macros that don't properly normalize identifiers.
+
+### Important Notes
 - Use `nim build` to verify changes compile correctly
 - The project uses ZenContext for metrics and threading
 - Scripts are Logo-inspired but use Nim syntax

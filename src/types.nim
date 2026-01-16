@@ -36,9 +36,9 @@ type
   PackedChunk* = SnapshotData # Legacy alias
 
   VoxelKind* = enum
-    Hole
-    Manual
-    Computed
+    HOLE
+    MANUAL
+    COMPUTED
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
 
@@ -48,75 +48,75 @@ type
   EnuError* = object of CatchableError
   ResourceLimitError* = object of CatchableError
   LocalStateFlags* = enum
-    CommandMode
-    EditorVisible
-    ConsoleVisible
-    BlockTargetVisible
-    ReticleVisible
-    DocsVisible
-    SettingsVisible
-    MouseCaptured
-    PrimaryDown
-    SecondaryDown
-    EditorFocused
-    ConsoleFocused
-    DocsFocused
-    SettingsFocused
-    ViewportFocused
-    Playing
-    Flying
-    God
-    AltWalkSpeed
-    AltFlySpeed
-    LoadingScript
-    Server
-    Quitting
-    ResettingVM
-    NeedsRestart
-    Connecting
-    SceneReady
-    TouchControls
-    FullWidthPanels
-    EditorOpening
-    EditorClosing
-    TestMode
+    COMMAND_MODE
+    EDITOR_VISIBLE
+    CONSOLE_VISIBLE
+    BLOCK_TARGET_VISIBLE
+    RETICLE_VISIBLE
+    DOCS_VISIBLE
+    SETTINGS_VISIBLE
+    MOUSE_CAPTURED
+    PRIMARY_DOWN
+    SECONDARY_DOWN
+    EDITOR_FOCUSED
+    CONSOLE_FOCUSED
+    DOCS_FOCUSED
+    SETTINGS_FOCUSED
+    VIEWPORT_FOCUSED
+    PLAYING
+    FLYING
+    GOD
+    ALT_WALK_SPEED
+    ALT_FLY_SPEED
+    LOADING_SCRIPT
+    SERVER
+    QUITTING
+    RESETTING_VM
+    NEEDS_RESTART
+    CONNECTING
+    SCENE_READY
+    TOUCH_CONTROLS
+    FULL_WIDTH_PANELS
+    EDITOR_OPENING
+    EDITOR_CLOSING
+    TEST_MODE
 
   GlobalStateFlags* = enum
-    LoadingLevel
+    LOADING_LEVEL
 
   LocalModelFlags* = enum
-    Hover
-    TargetMoved
-    Highlight
-    Hide
-    ASAPMode
+    HOVER
+    TARGET_MOVED
+    HIGHLIGHT
+    HIDE
+    ASAP_MODE
 
   GlobalModelFlags* = enum
-    Global
-    Visible
-    Lock
-    Ready
-    ScriptInitializing
-    ScriptRunning
-    Dirty
-    Resetting
-    HighlightError
+    GLOBAL
+    VISIBLE
+    LOCK
+    READY
+    SCRIPT_INITIALIZING
+    SCRIPT_RUNNING
+    DIRTY
+    RESETTING
+    HIGHLIGHT_ERROR
 
   Tools* = enum
-    CodeMode
-    BlueBlock
-    RedBlock
-    GreenBlock
-    BlackBlock
-    WhiteBlock
-    BrownBlock
-    PlaceBot
-    Disabled
+    CODE_MODE
+    BLUE_BLOCK
+    RED_BLOCK
+    GREEN_BLOCK
+    BLACK_BLOCK
+    WHITE_BLOCK
+    BROWN_BLOCK
+    PLACE_BOT
+    DISABLED
 
   TaskStates* = enum
-    Running
-    Done
-    NextTask
+    RUNNING
+    DONE
+    NEXT_TASK
 
   ConsoleModel* = ref object
     log*: ZenSeq[string]
@@ -347,8 +347,8 @@ type
 
   VMError* = object of CatchableError
   QuitKind* = enum
-    Unknown
-    Timeout
+    UNKNOWN
+    TIMEOUT
 
   VMQuit* = object of VMError
     info*: TLineInfo

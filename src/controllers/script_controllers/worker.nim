@@ -31,7 +31,7 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
     ctx.exit_code = error_code
     ctx.running = false
   let vm_error =
-    (ref VMQuit)(info: info, kind: Unknown, msg: e.msg, location: loc)
+    (ref VMQuit)(info: info, kind: UNKNOWN, msg: e.msg, location: loc)
   if ?ctx:
     self.interpreter.reset_module(ctx.module_name)
   self.script_error(unit, vm_error)
@@ -39,14 +39,14 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
 proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
   let ctx = unit.script_ctx
   if ?ctx and ctx.running:
-    if ASAPMode notin unit.local_flags:
+    if ASAP_MODE notin unit.local_flags:
       unit.current_line = ctx.current_line.line.int
     if unit of Build:
       let unit = Build(unit)
       unit.voxels_remaining_this_frame += unit.voxels_per_frame
     try:
       assert self.active_unit.is_nil
-      var task_state = NextTask
+      var task_state = NEXT_TASK
 
       let now = get_mono_time()
 
@@ -59,7 +59,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       ctx.last_ran = now
       if ctx.callback == nil or (;
         task_state = ctx.callback(delta, timeout)
-        task_state in {Done, NextTask}
+        task_state in {DONE, NEXT_TASK}
       ):
         ctx.timer = MonoTime.high
         ctx.action_running = false
@@ -73,7 +73,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
           unit.ensure_visible
           unit.current_line = 0
 
-        result = ctx.running and task_state == NextTask
+        result = ctx.running and task_state == NEXT_TASK
       elif now >= ctx.timer:
         ctx.timer = now + advance_step
         ctx.saved_callback = ctx.callback
@@ -92,12 +92,12 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
 proc change_code(self: Worker, unit: Unit, code: Code) =
   debug "code changing", unit = unit.id
   unit.errors.clear
-  unit.global_flags -= HighlightError
+  unit.global_flags -= HIGHLIGHT_ERROR
   if ?unit.script_ctx and unit.script_ctx.running and not ?unit.clone_of:
     unit.collect_garbage
 
   unit.reset()
-  if LoadingScript notin state.local_flags and code.nim.strip == "":
+  if LOADING_SCRIPT notin state.local_flags and code.nim.strip == "":
     self.interpreter.reset_module(unit.script_ctx.module_name)
     debug "reset module", module = unit.script_ctx.module_name
     unit.script_ctx.running = false
@@ -105,7 +105,7 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
     remove_file unit.script_ctx.script
   elif code.nim.strip != "":
     debug "loading unit", unit_id = unit.id
-    if LoadingScript notin state.local_flags and not self.retry_failures:
+    if LOADING_SCRIPT notin state.local_flags and not self.retry_failures:
       write_file(unit.script_ctx.script, code.nim)
       if not self.interpreter.is_nil:
         self.load_script_and_dependents(unit)
@@ -142,10 +142,10 @@ proc watch_code(self: Worker, unit: Unit) =
           state.err(
             \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
           )
-          state.push_flags ConsoleVisible
+          state.push_flags CONSOLE_VISIBLE
 
         if removed:
-          state.pop_flags ConsoleVisible
+          state.pop_flags CONSOLE_VISIBLE
 
   if unit.script_ctx.is_nil:
     unit.script_ctx =
@@ -203,7 +203,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   state.init_logger
   let connect_address = main_thread_state.config.connect_address
   if ?listen_address or not ?connect_address:
-    state.push_flag Server
+    state.push_flag SERVER
     state.server_ctx_name = worker_ctx.id
 
   state.config_value = ZenValue[Config](Zen.thread_ctx["config"])
@@ -231,7 +231,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       if ?unit.script_ctx:
         unit.script_ctx.running = false
         unit.script_ctx.callback = nil
-        if not (unit of Player) and LoadingScript notin state.local_flags and
+        if not (unit of Player) and LOADING_SCRIPT notin state.local_flags and
             not ?unit.clone_of:
           remove_file unit.script_ctx.script
           remove_dir unit.data_dir
@@ -245,10 +245,10 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   let player = state.player
   # add player before interpreter is initialized to get to an interactive
   # state quicker
-  if Server in state.local_flags:
+  if SERVER in state.local_flags:
     state.units.add player
   else:
-    state.push_flag(Connecting)
+    state.push_flag(CONNECTING)
     let tmp_path = join_path(state.config.work_dir, "tmp")
     create_dir tmp_path
     state.config_value.value:
@@ -267,7 +267,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     state.config_value.changes:
       if added:
         if change.item.level_dir != level_dir:
-          let full_reset = ResettingVM in state.local_flags
+          let full_reset = RESETTING_VM in state.local_flags
           if level_dir != "":
             save_level(level_dir, save_all = full_reset)
           worker.unload_level()
@@ -280,7 +280,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           if level_dir != "":
             worker.load_level(level_dir)
 
-  if Server in state.local_flags:
+  if SERVER in state.local_flags:
     load_level()
   else:
     var timeout_at = get_mono_time() + 30.seconds
@@ -298,14 +298,14 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       except ConnectionError:
         discard
 
-    state.pop_flag(Connecting)
+    state.pop_flag(CONNECTING)
     state.units.add player
     player.script_ctx.interpreter = worker.interpreter
     if not connected:
       state.err \"Unable to connect to server at {connect_address}"
       state.config_value.value:
         connect_address = ""
-      state.push_flag Server
+      state.push_flag SERVER
       load_level()
     else:
       worker.load_script_and_dependents(player)
@@ -323,22 +323,22 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   )
 
   state.player.units += sign
-  sign.global_flags -= Visible
-  sign.local_flags += Hide
+  sign.global_flags -= VISIBLE
+  sign.local_flags += HIDE
 
   var running = true
-  if NeedsRestart in state.local_flags:
+  if NEEDS_RESTART in state.local_flags:
     running = false
 
   state.local_flags.changes:
-    if Quitting.added:
+    if QUITTING.added:
       save_level(state.config.level_dir)
       # In test mode, don't pop the flag - let the main thread's force_quit_at
       # timeout handle it. This ensures test_exit_code has time to propagate.
-      if TestMode notin state.local_flags:
-        state.pop_flag Quitting
+      if TEST_MODE notin state.local_flags:
+        state.pop_flag QUITTING
       running = false
-    elif NeedsRestart.added:
+    elif NEEDS_RESTART.added:
       running = false
 
   state.config_value.changes:
@@ -376,9 +376,9 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
       state.units.value.walk_tree proc(unit: Unit) =
         if unit.code.runner == Zen.thread_ctx.id and ?unit.script_ctx:
           if unit.script_ctx.running:
-            unit.global_flags += ScriptRunning
+            unit.global_flags += SCRIPT_RUNNING
           else:
-            unit.global_flags -= ScriptRunning
+            unit.global_flags -= SCRIPT_RUNNING
         to_process.add unit
 
       for ctx_name in Zen.thread_ctx.unsubscribed:
@@ -390,8 +390,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           else:
             i += 1
 
-        if Server notin state.local_flags:
-          state.push_flag(NeedsRestart)
+        if SERVER notin state.local_flags:
+          state.push_flag(NEEDS_RESTART)
           break
       to_process.shuffle
 
@@ -400,7 +400,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         let units = to_process
         to_process = @[]
         for unit in units:
-          if Ready in unit.global_flags:
+          if READY in unit.global_flags:
             discard unit.batch_changes
             if worker.advance_unit(unit, timeout):
               to_process.add(unit)
@@ -410,7 +410,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         if unit of Build:
           let build = Build(unit)
           # Only flush if NOT in ASAP mode (ASAP mode flushes on end_asap)
-          if ASAPMode notin build.local_flags:
+          if ASAP_MODE notin build.local_flags:
             if build.voxels.pending_chunks.len > 0:
               build.voxels.flush_dirty_chunks()
             if build.voxels.pending_edits.len > 0:
@@ -455,7 +455,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         max_tick_time = Duration.default
 
       # In test mode, exit when all scripts have finished
-      if TestMode in state.local_flags:
+      if TEST_MODE in state.local_flags:
         if test_started_at == MonoTime.high:
           test_started_at = get_mono_time()
           notice "test mode started"
@@ -479,12 +479,12 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
             if state.test_exit_code < 0: 0 else: state.test_exit_code
           notice "test mode finished", exit_code = exit_code, elapsed = elapsed
           state.test_exit_code = exit_code
-          state.push_flag Quitting
+          state.push_flag QUITTING
         elif elapsed > test_timeout:
           notice "test mode timeout",
             elapsed = elapsed, scripts = running_scripts
           state.test_exit_code = 1
-          state.push_flag Quitting
+          state.push_flag QUITTING
 
       inc state.frame_count
 
@@ -495,7 +495,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
         Zen.thread_ctx.tick_keepalives()
         save_at = now + auto_save_interval
 
-      if now > backup_at and TestMode notin state.local_flags:
+      if now > backup_at and TEST_MODE notin state.local_flags:
         backup_level(state.config.level_dir)
         Zen.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
@@ -513,14 +513,14 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
     # Re-raise to crash properly instead of restarting
     raise e
-    # state.push_flag(NeedsRestart)
+    # state.push_flag(NEEDS_RESTART)
 
   try:
-    if NeedsRestart in state.local_flags:
+    if NEEDS_RESTART in state.local_flags:
       if ?listen_address:
         private_access Reactor
         Zen.thread_ctx.reactor.socket.close
-      state.pop_flag NeedsRestart
+      state.pop_flag NEEDS_RESTART
 
     Zen.thread_ctx.tick
   except Exception:

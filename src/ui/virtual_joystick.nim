@@ -19,7 +19,7 @@ type
 
 gdobj VirtualJoystick of Control:
   var
-    pressed_color {.gdexport.} = godot.Color(ir_black[Number])
+    pressed_color {.gdexport.} = godot.Color(IR_BLACK[NUMBER])
     deadzone_size {.gdexport, hint: Range, hint_str = "0,200,1".} = 10.0
     clampzone_size {.gdexport, hint: Range, hint_str = "0,500,1".} = 75.0
     joystick_mode {.gdexport.} = FIXED
@@ -65,11 +65,11 @@ gdobj VirtualJoystick of Control:
             self.tip.modulate = self.pressed_color
             self.update_joystick(event.position)
             self.get_tree().set_input_as_handled()
-            state.push_flag CommandMode
+            state.push_flag COMMAND_MODE
       elif event.index == self.touch_index:
         self.reset()
         self.get_tree().set_input_as_handled()
-        state.pop_flag CommandMode
+        state.pop_flag COMMAND_MODE
     elif event of InputEventScreenDrag:
       let event = event as InputEventScreenDrag
       if event.index == self.touch_index:

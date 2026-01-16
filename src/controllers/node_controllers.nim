@@ -15,7 +15,7 @@ proc remove_from_scene(unit: Unit) =
     Zen.thread_ctx.untrack zid
   unit.zids = @[]
 
-  unit.global_flags -= Ready
+  unit.global_flags -= READY
 
   let units = unit.units.value
   unit.units.clear
@@ -48,18 +48,18 @@ proc add_to_scene(unit: Unit) =
     if node.owner != nil:
       fail \"{T.name} node shouldn't be owned. unit = {unit.id}"
     unit.node.visible =
-      Visible in unit.global_flags and
-      (ScriptInitializing notin unit.global_flags)
+      VISIBLE in unit.global_flags and
+      (SCRIPT_INITIALIZING notin unit.global_flags)
 
     parent_node.add_child(unit.node)
     unit.node.owner = parent_node
     when compiles(node.setup):
       node.setup
     unit.main_thread_joined
-    unit.global_flags += Ready
+    unit.global_flags += READY
 
   let parent_node =
-    if Global in unit.global_flags: state.nodes.data else: unit.parent.node
+    if GLOBAL in unit.global_flags: state.nodes.data else: unit.parent.node
 
   if unit of Bot:
     Bot(unit).add(BotNode, parent_node)
@@ -115,7 +115,7 @@ proc find_nested_changes(parent: Change[Unit]) =
         change.item.remove_from_scene()
     elif change.type_name == $Change[GlobalModelFlags]:
       let change = Change[GlobalModelFlags](change)
-      if change.item == Global:
+      if change.item == GLOBAL:
         if Added in change.changes:
           parent.item.set_global(true)
         elif Removed in change.changes:
@@ -132,9 +132,9 @@ proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
       change.item.remove_from_scene()
 
   unit.global_flags.watch(unit):
-    if Global.added:
+    if GLOBAL.added:
       unit.set_global(true)
-    elif Global.removed:
+    elif GLOBAL.removed:
       unit.set_global(false)
 
 proc watch*(self: NodeController, state: GameState) =

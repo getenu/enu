@@ -41,17 +41,17 @@ gdobj RightPanel of MarginContainer:
     state.status_message_value.changes:
       if added:
         if ?change.item:
-          state.push_flags DocsVisible, DocsFocused
+          state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
           self.label.markdown = change.item
           self.label.update
         else:
-          state.pop_flags DocsFocused, DocsVisible
+          state.pop_flags DOCS_FOCUSED, DOCS_VISIBLE
           self.label.markdown = ""
           self.label.update
 
     state.open_sign_value.changes:
       if added and change.item != nil:
-        state.push_flags DocsVisible, DocsFocused
+        state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
         var sign = change.item
         self.label.markdown = md(sign, sign.more)
         self.label.update
@@ -63,20 +63,20 @@ gdobj RightPanel of MarginContainer:
         if change.item.more_value.valid:
           change.item.more_value.untrack(self.zid)
       if removed and not ?state.open_sign:
-        state.pop_flags DocsFocused, DocsVisible
+        state.pop_flags DOCS_FOCUSED, DOCS_VISIBLE
 
     state.local_flags.changes:
-      if FullWidthPanels.added:
+      if FULL_WIDTH_PANELS.added:
         self.center = 0.0
         self.anchor_left = 0.0
         self.margin_left = 0.0
         self.margin_right = 1.0
-      elif FullWidthPanels.removed:
+      elif FULL_WIDTH_PANELS.removed:
         self.center = 1.0
         self.anchor_left = 0.5
         self.margin_left = 2.0
 
-      if DocsVisible.added:
+      if DOCS_VISIBLE.added:
         var tween = self.get_tree.create_tween()
         self.visible = true
         discard tween
@@ -86,7 +86,7 @@ gdobj RightPanel of MarginContainer:
           )
           .set_trans(TRANS_EXPO)
           .set_ease(EASE_IN_OUT)
-      elif DocsVisible.removed:
+      elif DOCS_VISIBLE.removed:
         var tween = self.get_tree.create_tween()
         discard tween
           .tween_method(
@@ -97,17 +97,17 @@ gdobj RightPanel of MarginContainer:
           .set_ease(EASE_IN_OUT)
         discard
           tween.tween_callback(self, "set_visible", new_array(false.to_variant))
-      elif DocsFocused.added:
+      elif DOCS_FOCUSED.added:
         self.raisee()
         find("Close", Control).visible = true
-      elif DocsFocused.removed:
+      elif DOCS_FOCUSED.removed:
         self.label.release_focus
-        if FullWidthPanels in state.local_flags and
-            ViewportFocused notin state.local_flags:
+        if FULL_WIDTH_PANELS in state.local_flags and
+            VIEWPORT_FOCUSED notin state.local_flags:
           find("Close", Control).visible = false
-      elif CommandMode.added:
+      elif COMMAND_MODE.added:
         self.ghost()
-      elif CommandMode.removed:
+      elif COMMAND_MODE.removed:
         self.unghost()
         find("Overlay", Control).set_mouse_filter_recursive(MOUSE_FILTER_IGNORE)
         find("Close", Control).mouse_filter = MOUSE_FILTER_STOP
@@ -116,8 +116,8 @@ gdobj RightPanel of MarginContainer:
     state.open_sign = nil
 
   method unhandled_input*(event: InputEvent) =
-    if DocsFocused in state.local_flags and event.is_action_pressed("ui_cancel"):
+    if DOCS_FOCUSED in state.local_flags and event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
-          CommandMode notin state.local_flags:
+          COMMAND_MODE notin state.local_flags:
         state.open_sign = nil
         self.get_tree().set_input_as_handled()

@@ -13,7 +13,7 @@ export encode_chunk, decode_chunk, encode_delta, decode_delta,
 
 include "build_code_template.nim.nimf"
 
-const default_color = action_colors[Blue]
+const default_color = ACTION_COLORS[BLUE]
 
 var
   current_build* {.threadvar.}: Build
@@ -56,7 +56,7 @@ proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
         var loc = position - offset
         if loc in unit:
           var info = unit.voxels.voxel_info(loc)
-          if info.kind != Hole and info.color != action_colors[Eraser]:
+          if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
             return unit
       let first = unit.units.find_first(positions)
       if ?first:
@@ -128,8 +128,8 @@ proc del_voxel(self: Build, position: Vector3) =
 
 proc restore_edits*(self: Build) =
   self.voxels.for_all_edits:
-    assert info.kind in {Manual, Hole}
-    if info.kind != Hole:
+    assert info.kind in {MANUAL, HOLE}
+    if info.kind != HOLE:
       self.add_voxel(pos, info)
     else:
       if pos in self.voxels:
@@ -139,53 +139,53 @@ proc restore_edits*(self: Build) =
         self.voxels.del_voxel(pos)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
-  if voxel.kind == Computed:
+  if voxel.kind == COMPUTED:
     if self.voxels.has_edit(position):
       var edit = self.voxels.get_edit(position)
-      if edit.kind == Hole:
+      if edit.kind == HOLE:
         # We're using color as a flag to indicate that the hole is active
         edit.color = voxel.color
         self.voxels.set_edit(position, edit)
         return
-      elif edit.kind == Manual and edit.color == voxel.color:
+      elif edit.kind == MANUAL and edit.color == voxel.color:
         self.voxels.del_edit(position)
     elif ?self.clone_of and
         Build(self.clone_of).voxels.has_edit(position) and
-        Build(self.clone_of).voxels.get_edit(position).kind == Hole:
+        Build(self.clone_of).voxels.get_edit(position).kind == HOLE:
       return
     else:
       self.add_voxel(position, voxel)
   else:
-    self.global_flags += Dirty
+    self.global_flags += DIRTY
     if ?self.shared:
       var voxel = voxel
-      if voxel.kind == Hole and position in self:
+      if voxel.kind == HOLE and position in self:
         voxel.color = self.voxel_info(position).color
       self.voxels.set_edit(position, voxel)
-      if voxel.kind != Hole:
+      if voxel.kind != HOLE:
         self.add_voxel(position, voxel)
       else:
         self.del_voxel(position)
 
-  if position == vec3(0, 0, 0) and voxel.kind != Computed:
+  if position == vec3(0, 0, 0) and voxel.kind != COMPUTED:
     self.start_color = voxel.color
 
-  if not dont_join and voxel.kind == Manual:
+  if not dont_join and voxel.kind == MANUAL:
     self.maybe_join_previous_build(position, voxel)
 
 proc drop_block(self: Build) =
   if self.drawing:
     var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
-    self.draw(p, (Computed, self.color))
+    self.draw(p, (COMPUTED, self.color))
 
 proc has_visible_voxels(self: Build): bool =
   for pos, info in self.voxels.all_voxels:
-    if info.color != action_colors[Eraser]:
+    if info.color != ACTION_COLORS[ERASER]:
       return true
   false
 
 proc remove(self: Build) =
-  if state.tool notin {CodeMode, PlaceBot}:
+  if state.tool notin {CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point =
@@ -194,7 +194,7 @@ proc remove(self: Build) =
 
     skip_point = vec3()
     last_point = self.target_point
-    self.draw(point, (Hole, action_colors[Eraser]))
+    self.draw(point, (HOLE, ACTION_COLORS[ERASER]))
 
     if self.units.len == 0 and not self.has_visible_voxels:
       if self.parent.is_nil:
@@ -204,18 +204,18 @@ proc remove(self: Build) =
 
 proc fire(self: Build) =
   let global_point = self.target_point.global_from(self)
-  if state.tool notin {Disabled, CodeMode, PlaceBot}:
+  if state.tool notin {DISABLED, CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point = (self.target_point + (self.target_normal * 0.5)).floor
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
-    self.draw(point, (Manual, state.selected_color))
-  elif state.tool == PlaceBot and BlockTargetVisible in state.local_flags and
+    self.draw(point, (MANUAL, state.selected_color))
+  elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
     state.units += Bot.init(transform = transform)
-  elif state.tool == CodeMode:
+  elif state.tool == CODE_MODE:
     let root = self.find_root
     state.open_unit = root
 
@@ -238,12 +238,12 @@ method on_begin_move*(
       duration += delta
       if duration >= finish_time:
         self.transform_value.origin = finish
-        return Done
+        return DONE
       else:
         self.transform_value.origin =
           self.transform.origin + (moving * self.speed * delta)
 
-        return Running
+        return RUNNING
   else:
     if self.speed == 0:
       self.voxels_per_frame = float.high
@@ -264,7 +264,7 @@ method on_begin_move*(
         self.voxels_remaining_this_frame -= 1
         self.drop_block()
 
-      if count.float >= steps: NextTask else: Running
+      if count.float >= steps: NEXT_TASK else: RUNNING
 
 method on_begin_turn*(
     self: Build, axis: Vector3, degrees: float, lean: bool, move_mode: int
@@ -293,10 +293,10 @@ method on_begin_turn*(
       )
 
       if duration <= 1.0 / self.speed:
-        Running
+        RUNNING
       else:
         self.transform = final_transform
-        Done
+        DONE
   else:
     let axis = self.draw_transform.basis.xform(axis)
     self.draw_transform_value.basis =
@@ -316,25 +316,25 @@ method reset*(self: Build) =
   self.speed = 1
   self.scale = 1
 
-  self.global_flags += Resetting
-  self.global_flags += Visible
+  self.global_flags += RESETTING
+  self.global_flags += VISIBLE
   self.reset_state()
 
   self.voxels.clear()
 
   self.units.clear()
-  self.global_flags -= Resetting
+  self.global_flags -= RESETTING
   self.restore_edits
-  self.draw(vec3(), (Computed, self.start_color))
+  self.draw(vec3(), (COMPUTED, self.start_color))
 
 method ensure_visible*(self: Build) =
   if self.units.len == 0 and not self.has_visible_voxels:
     let color =
-      if self.start_color == action_colors[Eraser]:
-        action_colors[Blue]
+      if self.start_color == ACTION_COLORS[ERASER]:
+        ACTION_COLORS[BLUE]
       else:
         self.start_color
-    self.draw(vec3(), (Computed, color))
+    self.draw(vec3(), (COMPUTED, color))
 
 method destroy*(self: Build) =
   self.destroy_impl
@@ -373,7 +373,7 @@ proc init*(
   self.voxels.rebuild_local_edits()
 
   if global:
-    self.global_flags += Global
+    self.global_flags += GLOBAL
   self.reset()
   result = self
 
@@ -428,7 +428,7 @@ method worker_thread_joined*(self: Build) =
   proc_call worker_thread_joined(Unit(self))
   self.init_voxels_if_needed()
   # Only clients need to apply packed chunks received from server
-  if Server notin state.local_flags:
+  if SERVER notin state.local_flags:
     self.setup_packed_chunk_watches()
 
 method main_thread_joined*(self: Build) =
@@ -437,17 +437,17 @@ method main_thread_joined*(self: Build) =
   self.setup_packed_chunk_watches()
 
   self.local_flags.watch:
-    if Hover.added and state.tool == CodeMode:
-      if Playing notin state.local_flags and
-          TouchControls notin state.local_flags:
+    if HOVER.added and state.tool == CODE_MODE:
+      if PLAYING notin state.local_flags and
+          TOUCH_CONTROLS notin state.local_flags:
         let root = self.find_root(true)
         root.walk_tree proc(unit: Unit) =
-          unit.local_flags += Highlight
-    elif Hover.removed:
+          unit.local_flags += HIGHLIGHT
+    elif HOVER.removed:
       let root = self.find_root(true)
       root.walk_tree proc(unit: Unit) =
-        unit.local_flags -= Highlight
-    if TargetMoved.touched:
+        unit.local_flags -= HIGHLIGHT
+    if TARGET_MOVED.touched:
       let length = (
         self.target_point * self.target_normal - last_point * self.target_normal
       ).length
@@ -457,35 +457,35 @@ method main_thread_joined*(self: Build) =
       elif (
         state.draw_unit_id == self.id and self.target_normal == draw_normal and
         length <= 5 and self.target_point != skip_point and
-        state.tool != PlaceBot
+        state.tool != PLACE_BOT
       ):
-        if SecondaryDown in state.local_flags:
+        if SECONDARY_DOWN in state.local_flags:
           self.remove
-        elif PrimaryDown in state.local_flags:
+        elif PRIMARY_DOWN in state.local_flags:
           self.fire
 
-    if change.item in {TargetMoved, Hover} and state.tool == PlaceBot:
+    if change.item in {TARGET_MOVED, HOVER} and state.tool == PLACE_BOT:
       if self.target_normal == UP:
-        state.push_flag BlockTargetVisible
+        state.push_flag BLOCK_TARGET_VISIBLE
       else:
-        state.pop_flag BlockTargetVisible
+        state.pop_flag BLOCK_TARGET_VISIBLE
 
   state.local_flags.watch:
-    if Hover in self.local_flags and ViewportFocused in state.local_flags:
-      if PrimaryDown.added:
+    if HOVER in self.local_flags and VIEWPORT_FOCUSED in state.local_flags:
+      if PRIMARY_DOWN.added:
         state.draw_unit_id = self.id
         self.fire
-      elif SecondaryDown.added:
+      elif SECONDARY_DOWN.added:
         state.draw_unit_id = self.id
         self.remove
-    if PrimaryDown.removed or SecondaryDown.removed:
+    if PRIMARY_DOWN.removed or SECONDARY_DOWN.removed:
       state.draw_unit_id = ""
       last_point = vec3()
-    if Playing.added:
-      self.local_flags -= Highlight
-    elif Playing.removed:
-      if Hover in self.local_flags:
-        self.local_flags += Highlight
+    if PLAYING.added:
+      self.local_flags -= HIGHLIGHT
+    elif PLAYING.removed:
+      if HOVER in self.local_flags:
+        self.local_flags += HIGHLIGHT
 
 method on_collision*(self: Build, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)
@@ -516,7 +516,7 @@ method clone*(self: Build, clone_to: Unit, id: string): Unit =
 
   # Copy edits from source to clone
   self.voxels.for_all_edits:
-    if info.kind != Hole and not clone.voxels.has_edit(pos):
+    if info.kind != HOLE and not clone.voxels.has_edit(pos):
       clone.add_voxel(pos, info)
 
   clone.restore_edits
@@ -528,12 +528,12 @@ when is_main_module:
 
   var b = Build.init
 
-  b.draw vec3(1, 1, 1), (Computed, Color())
+  b.draw vec3(1, 1, 1), (COMPUTED, Color())
   assert vec3(1, 1, 1) in b.voxels
-  b.draw vec3(17, 17, 17), (Computed, Color())
+  b.draw vec3(17, 17, 17), (COMPUTED, Color())
   assert vec3(17, 17, 17) in b.voxels
   var c = Build.init(transform = Transform(origin: vec3(5, 5, 5)))
   c.parent = b
 
-  c.draw vec3(14, 14, 14), (Manual, Color())
-  c.local_flags += Hover
+  c.draw vec3(14, 14, 14), (MANUAL, Color())
+  c.local_flags += HOVER

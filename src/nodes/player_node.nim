@@ -75,14 +75,14 @@ gdobj PlayerNode of KinematicBody:
     KinematicBody(self).is_on_floor()
 
   proc flying*(): bool =
-    Flying in state.local_flags
+    FLYING in state.local_flags
 
   proc flying*(value: bool) =
-    state.set_flag Flying, value
+    state.set_flag FLYING, value
 
   proc get_look_direction(): Vector2 =
-    if EditorVisible notin state.local_flags or CommandMode in state.local_flags or
-        TouchControls in state.local_flags:
+    if EDITOR_VISIBLE notin state.local_flags or COMMAND_MODE in state.local_flags or
+        TOUCH_CONTROLS in state.local_flags:
       result = vec2(
         get_action_strength("look_right") - get_action_strength("look_left"),
         get_action_strength("look_up") - get_action_strength("look_down"),
@@ -102,8 +102,8 @@ gdobj PlayerNode of KinematicBody:
     #       {EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused} -
     #       state.local_flags.value
     #     ).card == 4:
-    if EditorVisible notin state.local_flags or CommandMode in state.local_flags or
-        TouchControls in state.local_flags:
+    if EDITOR_VISIBLE notin state.local_flags or COMMAND_MODE in state.local_flags or
+        TOUCH_CONTROLS in state.local_flags:
       result = vec3(
         get_action_strength("move_right") - get_action_strength("move_left"),
         get_action_strength("jump") - get_action_strength("crouch"),
@@ -117,11 +117,11 @@ gdobj PlayerNode of KinematicBody:
       flying, alt_speed: bool,
   ): Vector3 =
     let speed =
-      if not flying and not (alt_speed xor AltWalkSpeed in state.local_flags):
+      if not flying and not (alt_speed xor ALT_WALK_SPEED in state.local_flags):
         vec3(state.config.walk_speed)
-      elif not flying and (alt_speed xor AltWalkSpeed in state.local_flags):
+      elif not flying and (alt_speed xor ALT_WALK_SPEED in state.local_flags):
         vec3(state.config.alt_walk_speed)
-      elif flying and not (alt_speed xor AltFlySpeed in state.local_flags):
+      elif flying and not (alt_speed xor ALT_FLY_SPEED in state.local_flags):
         vec3(state.config.fly_speed)
       else:
         vec3(state.config.alt_fly_speed)
@@ -164,15 +164,15 @@ gdobj PlayerNode of KinematicBody:
       gamepad_sensitivity.y = -gamepad_sensitivity.y
 
     state.local_flags.watch:
-      if MouseCaptured.removed:
+      if MOUSE_CAPTURED.removed:
         self.skip_next_mouse_move = true
-      elif change.item == Flying:
+      elif change.item == FLYING:
         for i in [0, 1, 2]:
-          let collision_enabled = Flying.removed
+          let collision_enabled = FLYING.removed
           self.set_collision_mask_bit(i, collision_enabled)
 
     state.global_flags.watch:
-      if LoadingLevel.added:
+      if LOADING_LEVEL.added:
         self.model.colliders.clear
 
     self.model.transform_value.watch:
@@ -212,18 +212,18 @@ gdobj PlayerNode of KinematicBody:
     self.model.rotation_value.pause(self.rotation_zid):
       self.model.rotation = rad_to_deg r.y
 
-    if LoadingLevel notin state.global_flags:
+    if LOADING_LEVEL notin state.global_flags:
       self.update_raycast()
 
   method physics_process*(delta: float) =
-    if CommandMode in state.local_flags and self.command_timer > 0:
+    if COMMAND_MODE in state.local_flags and self.command_timer > 0:
       self.command_timer -= delta
       if self.command_timer <= 0:
-        state.pop_flag CommandMode
+        state.pop_flag COMMAND_MODE
 
     const forward_rotation = deg_to_rad(-90.0)
     let
-      process_input = ViewportFocused in state.local_flags
+      process_input = VIEWPORT_FOCUSED in state.local_flags
       input_direction =
         if process_input:
           self.get_input_direction()
@@ -293,8 +293,8 @@ gdobj PlayerNode of KinematicBody:
   proc update_raycast*() =
     if not ?self.camera or not ?self.aim_target:
       return
-    let ray_length = if state.tool == CodeMode: 200.0 else: 100.0
-    if MouseCaptured notin state.local_flags:
+    let ray_length = if state.tool == CODE_MODE: 200.0 else: 100.0
+    if MOUSE_CAPTURED notin state.local_flags:
       let
         mouse_pos =
           self.get_viewport().get_mouse_position() * float state.scale_factor
@@ -304,7 +304,7 @@ gdobj PlayerNode of KinematicBody:
           self.camera.project_ray_normal(mouse_pos) * ray_length
 
       self.world_ray.cast_to =
-        if ViewportFocused in state.local_flags: cast_to else: cast_from
+        if VIEWPORT_FOCUSED in state.local_flags: cast_to else: cast_from
 
       self.world_ray.translation = cast_from
       self.aim_target.update(self.world_ray)

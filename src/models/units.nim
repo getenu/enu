@@ -37,11 +37,11 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     eval_value = ~("", flags = {SyncLocal})
 
   self.init_shared
-  self.global_flags += Visible
-  self.global_flags += Dirty
+  self.global_flags += VISIBLE
+  self.global_flags += DIRTY
 
 proc position*(self: Unit): Vector3 =
-  if Global in self.global_flags:
+  if GLOBAL in self.global_flags:
     self.transform.origin
   else:
     self.transform.origin.global_from(self.parent)
@@ -54,7 +54,7 @@ proc find_root*(self: Unit, all_clones = false): Unit =
     result = parent
 
     if (all_clones and not ?parent.clone_of) or
-        (not all_clones and Global in parent.global_flags):
+        (not all_clones and GLOBAL in parent.global_flags):
       parent = nil
     else:
       parent = parent.parent

@@ -17,7 +17,7 @@ gdobj Console of RichTextLabel:
     self.rect_position = vec2(width * offset, self.rect_position.y)
 
   proc show() =
-    if CommandMode in state.local_flags:
+    if COMMAND_MODE in state.local_flags:
       self.modulate = dimmed_alpha
     else:
       self.opacity = 1.0
@@ -49,18 +49,18 @@ gdobj Console of RichTextLabel:
 
   method ready*() =
     state.local_flags.changes:
-      if ConsoleVisible.added:
+      if CONSOLE_VISIBLE.added:
         self.show()
-      elif ConsoleVisible.removed:
+      elif CONSOLE_VISIBLE.removed:
         self.hide()
-      elif CommandMode.added:
+      elif COMMAND_MODE.added:
         self.ghost()
-      elif CommandMode.removed:
+      elif COMMAND_MODE.removed:
         self.unghost()
 
-      if MouseCaptured.added:
+      if MOUSE_CAPTURED.added:
         self.mouse_filter = MOUSE_FILTER_IGNORE
-      elif MouseCaptured.removed:
+      elif MOUSE_CAPTURED.removed:
         self.mouse_filter = self.default_mouse_filter
 
     state.console.log.changes:
@@ -76,7 +76,7 @@ gdobj Console of RichTextLabel:
     state.nodes.game.bind_signals(self, "meta_clicked")
     state.nodes.game.bind_signal(self, "gui_input", self.name)
 
-    if ConsoleVisible notin state.local_flags:
+    if CONSOLE_VISIBLE notin state.local_flags:
       self.opacity = 0.0
       self.hide()
 
@@ -88,12 +88,12 @@ gdobj Console of RichTextLabel:
     self.bind_signal(find("Close", Control), ("pressed", "close"))
 
   method on_close() =
-    state.pop_flags ConsoleVisible, ConsoleFocused
+    state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
 
   method unhandled_input*(event: InputEvent) =
-    if ConsoleFocused in state.local_flags and
+    if CONSOLE_FOCUSED in state.local_flags and
         event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
-          CommandMode notin state.local_flags:
-        state.pop_flags ConsoleVisible, ConsoleFocused
+          COMMAND_MODE notin state.local_flags:
+        state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
         self.get_tree().set_input_as_handled()

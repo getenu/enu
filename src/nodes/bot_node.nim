@@ -41,26 +41,26 @@ gdobj BotNode of KinematicBody:
 
   proc set_color(color: chroma.Color) =
     var adjusted: chroma.Color
-    if color == action_colors[Green]:
+    if color == ACTION_COLORS[GREEN]:
       adjusted = color
       adjusted.a = 0.015
-    elif color == action_colors[White]:
+    elif color == ACTION_COLORS[WHITE]:
       adjusted = color
       adjusted.a = 0.1
     else:
-      var dist = (color.distance(action_colors[Brown]) + 10).cbrt / 7.5
+      var dist = (color.distance(ACTION_COLORS[BROWN]) + 10).cbrt / 7.5
       adjusted = color.saturate(0.2).darken(dist - 0.15)
-      adjusted.a = 0.95 - color.distance(action_colors[Black]) / 100
+      adjusted.a = 0.95 - color.distance(ACTION_COLORS[BLACK]) / 100
 
     debug "setting bot color", color, adjusted
     SpatialMaterial(self.material).albedo_color = adjusted
 
   proc set_visibility() =
     var color = self.model.color
-    if Visible in self.model.global_flags:
+    if VISIBLE in self.model.global_flags:
       self.visible = true
       self.set_color(color)
-    elif Visible notin self.model.global_flags and God in state.local_flags:
+    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
       color.a = 0.0
       SpatialMaterial(self.material).albedo_color = color
@@ -94,25 +94,25 @@ gdobj BotNode of KinematicBody:
 
     self.model.global_flags.watch:
       if (
-        change.item == Visible and
-        ScriptInitializing notin self.model.global_flags
-      ) or ScriptInitializing.removed:
+        change.item == VISIBLE and
+        SCRIPT_INITIALIZING notin self.model.global_flags
+      ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
 
       if self.model of Bot:
-        if ScriptRunning.added:
+        if SCRIPT_RUNNING.added:
           self.set_process(true)
-        elif ScriptRunning.removed:
+        elif SCRIPT_RUNNING.removed:
           self.set_process(false)
 
     self.model.local_flags.watch:
-      if Highlight.added:
+      if HIGHLIGHT.added:
         self.highlight()
-      elif Highlight.removed:
+      elif HIGHLIGHT.removed:
         self.set_default_material()
 
     state.local_flags.watch:
-      if change.item == God:
+      if change.item == GOD:
         self.set_visibility
 
     var velocity_zid: ZID
@@ -173,7 +173,7 @@ gdobj BotNode of KinematicBody:
     self.model.sight_ray = self.get_node("SightRay") as RayCast
 
     if self.model of Bot:
-      self.set_process(ScriptRunning in self.model.global_flags)
+      self.set_process(SCRIPT_RUNNING in self.model.global_flags)
 
   method process(delta: float) =
     if ?self.model:

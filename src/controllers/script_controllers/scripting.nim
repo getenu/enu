@@ -42,12 +42,12 @@ proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
     error.log = true
     unit.errors[i] = error
 
-  unit.global_flags += HighlightError
-  unit.global_flags -= ScriptInitializing
+  unit.global_flags += HIGHLIGHT_ERROR
+  unit.global_flags -= SCRIPT_INITIALIZING
   unit.ensure_visible
 
   # In test mode, track script errors for exit code
-  if TestMode in state.local_flags:
+  if TEST_MODE in state.local_flags:
     if state.test_exit_code < 0:
       state.test_exit_code = 1
     else:
@@ -126,7 +126,7 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
         let duration = script_timeout
         raise (ref VMQuit)(
           info: info,
-          kind: Timeout,
+          kind: TIMEOUT,
           msg:
             \"Timeout. Script {ctx.script} executed for too long without " &
             \"yielding: {duration}",
@@ -154,7 +154,7 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
   try:
     self.active_unit = unit
     unit.errors.clear
-    unit.global_flags -= HighlightError
+    unit.global_flags -= HIGHLIGHT_ERROR
 
     if not state.paused:
       let module_name = ctx.script.split_file.name
@@ -181,7 +181,7 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
   except VMQuit as e:
     ctx.running = false
     self.interpreter.reset_module(unit.script_ctx.module_name)
-    if self.retry_failures and e.kind != Timeout:
+    if self.retry_failures and e.kind != TIMEOUT:
       self.failed.add (unit, e)
     else:
       self.script_error(unit, e)
@@ -207,7 +207,7 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
   var units_to_reload: HashSet[Unit]
 
   units_to_reload.incl unit
-  state.push_flag LoadingScript
+  state.push_flag LOADING_SCRIPT
   self.retry_failures = true
 
   for other in state.units.value:
@@ -237,7 +237,7 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
 
   self.retry_failed_scripts()
   self.retry_failures = false
-  state.pop_flag LoadingScript
+  state.pop_flag LOADING_SCRIPT
 
 proc script_file_for*(self: Unit): string =
   if self.id == state.player.id:

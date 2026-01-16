@@ -13,11 +13,11 @@ log_scope:
 const groups =
   @[
     {
-      EditorFocused, ConsoleFocused, DocsFocused, SettingsFocused,
-      ViewportFocused,
+      EDITOR_FOCUSED, CONSOLE_FOCUSED, DOCS_FOCUSED, SETTINGS_FOCUSED,
+      VIEWPORT_FOCUSED,
     },
-    {ReticleVisible, BlockTargetVisible},
-    {Playing, Flying},
+    {RETICLE_VISIBLE, BLOCK_TARGET_VISIBLE},
+    {PLAYING, FLYING},
   ]
 
 proc resolve_flags*(
@@ -32,38 +32,38 @@ proc resolve_flags*(
           result.excl f
     result.incl flag
 
-  if self.tool == CodeMode:
+  if self.tool == CODE_MODE:
     for flag in groups[1]:
       result.excl(flag)
-    result.incl(ReticleVisible)
+    result.incl(RETICLE_VISIBLE)
 
   if not groups[1].any_it(it in result):
-    result.incl ReticleVisible
+    result.incl RETICLE_VISIBLE
 
-  if MouseCaptured in result:
-    result.incl(ViewportFocused)
+  if MOUSE_CAPTURED in result:
+    result.incl(VIEWPORT_FOCUSED)
 
-  if CommandMode in result:
+  if COMMAND_MODE in result:
     for flag in groups[0]:
       result.excl(flag)
-    result.incl(ViewportFocused)
-    if TouchControls notin result:
-      result.incl(MouseCaptured)
+    result.incl(VIEWPORT_FOCUSED)
+    if TOUCH_CONTROLS notin result:
+      result.incl(MOUSE_CAPTURED)
   else:
-    if EditorVisible in result or DocsVisible in result or
-        SettingsVisible in result:
-      result.excl(MouseCaptured)
+    if EDITOR_VISIBLE in result or DOCS_VISIBLE in result or
+        SETTINGS_VISIBLE in result:
+      result.excl(MOUSE_CAPTURED)
 
-  if Playing in result:
-    result.excl(BlockTargetVisible)
-    result.excl(EditorVisible)
-    result.incl(ReticleVisible)
+  if PLAYING in result:
+    result.excl(BLOCK_TARGET_VISIBLE)
+    result.excl(EDITOR_VISIBLE)
+    result.incl(RETICLE_VISIBLE)
 
-  if TouchControls in result:
-    result.excl(BlockTargetVisible)
+  if TOUCH_CONTROLS in result:
+    result.excl(BLOCK_TARGET_VISIBLE)
 
-  if MouseCaptured notin result:
-    result.excl(ReticleVisible)
+  if MOUSE_CAPTURED notin result:
+    result.excl(RETICLE_VISIBLE)
 
   debug "resolved flags", flags = result
 
@@ -130,13 +130,13 @@ proc `-=`*(
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc selected_color*(self: GameState): Color =
-  action_colors[Colors(ord self.tool)]
+  ACTION_COLORS[Colors(ord self.tool)]
 
 proc init_logger*(self: GameState) =
   self.logger = proc(level, msg: string) {.closure.} =
     if level == "err":
       debug "console visible"
-      state.push_flag ConsoleVisible
+      state.push_flag CONSOLE_VISIBLE
     let msg = \"[b]{level.to_upper}[/b] {msg}"
     debug "logging", msg
     state.console.log += msg & "\n"
@@ -150,7 +150,7 @@ proc init*(_: type GameState): GameState =
     units: ~(seq[Unit], id = "root_units"),
     open_unit_value: ~(Unit, flags),
     config_value: ~(Config, flags, id = "config"),
-    tool_value: ~(BlueBlock, flags),
+    tool_value: ~(BLUE_BLOCK, flags),
     gravity: -80.0,
     console: ConsoleModel(log: ~(seq[string], flags)),
     open_sign_value: ~(Sign, flags),
@@ -171,24 +171,24 @@ proc init*(_: type GameState): GameState =
   result = self
   self.open_unit_value.changes:
     if added and change.item != nil:
-      self.push_flags EditorVisible, EditorOpening
+      self.push_flags EDITOR_VISIBLE, EDITOR_OPENING
     elif added:
-      self.push_flag EditorOpening
-      self.pop_flag EditorVisible
+      self.push_flag EDITOR_OPENING
+      self.pop_flag EDITOR_VISIBLE
 
   self.local_flags.changes:
-    if EditorVisible.added:
-      self.push_flag EditorFocused
-    elif EditorVisible.removed:
-      self.pop_flag EditorFocused
-    elif DocsVisible.added:
-      self.push_flag DocsFocused
-    elif DocsVisible.removed:
-      self.pop_flag DocsFocused
-    elif SettingsVisible.added:
-      self.push_flag SettingsFocused
-    elif SettingsVisible.removed:
-      self.pop_flag SettingsFocused
+    if EDITOR_VISIBLE.added:
+      self.push_flag EDITOR_FOCUSED
+    elif EDITOR_VISIBLE.removed:
+      self.pop_flag EDITOR_FOCUSED
+    elif DOCS_VISIBLE.added:
+      self.push_flag DOCS_FOCUSED
+    elif DOCS_VISIBLE.removed:
+      self.pop_flag DOCS_FOCUSED
+    elif SETTINGS_VISIBLE.added:
+      self.push_flag SETTINGS_FOCUSED
+    elif SETTINGS_VISIBLE.removed:
+      self.pop_flag SETTINGS_FOCUSED
 
   result = self
 
@@ -200,32 +200,32 @@ when is_main_module:
   type Node = ref object
   var state = GameState.init
 
-  state.push_flag ReticleVisible
+  state.push_flag RETICLE_VISIBLE
   check:
-    ReticleVisible notin state.local_flags
-    BlockTargetVisible notin state.local_flags
-    CommandMode notin state.local_flags
-    MouseCaptured notin state.local_flags
+    RETICLE_VISIBLE notin state.local_flags
+    BLOCK_TARGET_VISIBLE notin state.local_flags
+    COMMAND_MODE notin state.local_flags
+    MOUSE_CAPTURED notin state.local_flags
 
-  state.push_flag MouseCaptured
+  state.push_flag MOUSE_CAPTURED
   check:
-    ReticleVisible in state.local_flags
-    MouseCaptured in state.local_flags
-    BlockTargetVisible notin state.local_flags
+    RETICLE_VISIBLE in state.local_flags
+    MOUSE_CAPTURED in state.local_flags
+    BLOCK_TARGET_VISIBLE notin state.local_flags
 
-  state.replace_flag BlockTargetVisible
+  state.replace_flag BLOCK_TARGET_VISIBLE
   check:
-    MouseCaptured in state.local_flags
-    BlockTargetVisible in state.local_flags
-    ReticleVisible notin state.local_flags
+    MOUSE_CAPTURED in state.local_flags
+    BLOCK_TARGET_VISIBLE in state.local_flags
+    RETICLE_VISIBLE notin state.local_flags
 
-  state.pop_flag MouseCaptured
-  state.push_flag ReticleVisible
+  state.pop_flag MOUSE_CAPTURED
+  state.push_flag RETICLE_VISIBLE
   check:
-    ReticleVisible notin state.local_flags
-    BlockTargetVisible notin state.local_flags
-    CommandMode notin state.local_flags
-    MouseCaptured notin state.local_flags
+    RETICLE_VISIBLE notin state.local_flags
+    BLOCK_TARGET_VISIBLE notin state.local_flags
+    COMMAND_MODE notin state.local_flags
+    MOUSE_CAPTURED notin state.local_flags
 
   var added {.threadvar.}: set[LocalStateFlags]
   var removed {.threadvar.}: set[LocalStateFlags]
@@ -239,41 +239,41 @@ when is_main_module:
       if Removed in change.changes:
         removed.incl change.item
 
-  state.push_flag CommandMode
+  state.push_flag COMMAND_MODE
   check:
-    ReticleVisible in state.local_flags
-    CommandMode in state.local_flags
-    MouseCaptured in state.local_flags
-    BlockTargetVisible notin state.local_flags
+    RETICLE_VISIBLE in state.local_flags
+    COMMAND_MODE in state.local_flags
+    MOUSE_CAPTURED in state.local_flags
+    BLOCK_TARGET_VISIBLE notin state.local_flags
 
-  state.pop_flag CommandMode
+  state.pop_flag COMMAND_MODE
 
-  state.push_flag MouseCaptured
-  assert MouseCaptured in state.local_flags
+  state.push_flag MOUSE_CAPTURED
+  assert MOUSE_CAPTURED in state.local_flags
 
   state.open_unit = Unit()
-  assert MouseCaptured notin state.local_flags
+  assert MOUSE_CAPTURED notin state.local_flags
 
-  state.push_flag CommandMode
-  assert MouseCaptured in state.local_flags
+  state.push_flag COMMAND_MODE
+  assert MOUSE_CAPTURED in state.local_flags
 
-  state.pop_flag MouseCaptured
-  assert MouseCaptured in state.local_flags
+  state.pop_flag MOUSE_CAPTURED
+  assert MOUSE_CAPTURED in state.local_flags
 
   state.open_unit = nil
-  assert MouseCaptured in state.local_flags
+  assert MOUSE_CAPTURED in state.local_flags
 
-  state.pop_flag CommandMode
-  assert MouseCaptured notin state.local_flags
+  state.pop_flag COMMAND_MODE
+  assert MOUSE_CAPTURED notin state.local_flags
 
-  state.pop_flag EditorVisible
-  assert MouseCaptured notin state.local_flags
+  state.pop_flag EDITOR_VISIBLE
+  assert MOUSE_CAPTURED notin state.local_flags
 
-  state.push_flag MouseCaptured
-  assert MouseCaptured in state.local_flags
+  state.push_flag MOUSE_CAPTURED
+  assert MOUSE_CAPTURED in state.local_flags
 
-  state.push_flag DocsVisible
-  assert MouseCaptured notin state.local_flags
+  state.push_flag DOCS_VISIBLE
+  assert MOUSE_CAPTURED notin state.local_flags
 
-  state.push_flag CommandMode
-  assert MouseCaptured in state.local_flags
+  state.push_flag COMMAND_MODE
+  assert MOUSE_CAPTURED in state.local_flags

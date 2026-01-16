@@ -45,7 +45,7 @@ proc get_network_stats(): string =
 
 # saved state when restarting worker thread
 const savable_flags =
-  {ConsoleVisible, MouseCaptured, Flying, God, AltWalkSpeed, AltFlySpeed}
+  {CONSOLE_VISIBLE, MOUSE_CAPTURED, FLYING, GOD, ALT_WALK_SPEED, ALT_FLY_SPEED}
 
 var environment_cache {.threadvar.}: Table[string, Environment]
 
@@ -56,7 +56,7 @@ gdobj Game of Node:
     triggered = false
     saved_mouse_captured_state = false
     stats: Label
-    last_tool = BlueBlock
+    last_tool = BLUE_BLOCK
     saved_mouse_position: Vector2
     rescale_at = get_mono_time()
     update_metrics_at = get_mono_time()
@@ -105,10 +105,10 @@ gdobj Game of Node:
       self.rescale()
 
     if time > self.force_quit_at:
-      state.pop_flag Quitting
+      state.pop_flag QUITTING
 
-    if SceneReady notin state.local_flags:
-      state.push_flag SceneReady
+    if SCENE_READY notin state.local_flags:
+      state.push_flag SCENE_READY
 
   proc rescale*() =
     let vp = self.get_viewport().size
@@ -127,7 +127,7 @@ gdobj Game of Node:
 
   method notification*(what: int) =
     if what == main_loop.NOTIFICATION_WM_QUIT_REQUEST:
-      state.push_flag Quitting
+      state.push_flag QUITTING
 
     if what == main_loop.NOTIFICATION_WM_ABOUT:
       alert \"Enu {enu_version}\n\n© 2025 Scott Wadden", "Enu"
@@ -220,10 +220,10 @@ gdobj Game of Node:
         )
 
     when host_os == "ios":
-      state.push_flag TouchControls
+      state.push_flag TOUCH_CONTROLS
       let vmlib = join_path(get_executable_path().parent_dir(), "vmlib")
     else:
-      # state.push_flag TouchControls
+      # state.push_flag TOUCH_CONTROLS
       let vmlib =
         join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
 
@@ -277,9 +277,9 @@ gdobj Game of Node:
 
     if test_mode:
       echo "=== Enu: TestMode enabled ==="
-      state.push_flag TestMode
+      state.push_flag TEST_MODE
 
-    state.set_flag(God, uc.god_mode ||= false)
+    state.set_flag(GOD, uc.god_mode ||= false)
 
     set_window_fullscreen state.config.full_screen
     when defined(metrics):
@@ -318,9 +318,9 @@ gdobj Game of Node:
       viewport_width = self.get_viewport().size.x
 
     if font_width > viewport_width / 2.0:
-      state.push_flag FullWidthPanels
+      state.push_flag FULL_WIDTH_PANELS
     else:
-      state.pop_flag FullWidthPanels
+      state.pop_flag FULL_WIDTH_PANELS
 
   proc set_font_size(size: int) =
     if state.config.font_size != size:
@@ -350,17 +350,17 @@ gdobj Game of Node:
     if event of InputEventMouseButton:
       case name
       of "Editor":
-        debug "pushing EditorFocused", topics = "state"
-        state.push_flag EditorFocused
+        debug "pushing EDITOR_FOCUSED", topics = "state"
+        state.push_flag EDITOR_FOCUSED
       of "Console":
-        debug "pushing ConsoleFocused", topics = "state"
-        state.push_flag ConsoleFocused
+        debug "pushing CONSOLE_FOCUSED", topics = "state"
+        state.push_flag CONSOLE_FOCUSED
       of "Settings":
-        debug "pushing SettingsFocused", topics = "state"
-        state.push_flag SettingsFocused
+        debug "pushing SETTINGS_FOCUSED", topics = "state"
+        state.push_flag SETTINGS_FOCUSED
       of "RightPanel":
-        debug "pushing DocsFocused", topics = "state"
-        state.push_flag DocsFocused
+        debug "pushing DOCS_FOCUSED", topics = "state"
+        state.push_flag DOCS_FOCUSED
       else:
         warn "Couldn't focus control", name
 
@@ -435,24 +435,24 @@ gdobj Game of Node:
         saved_state.restarting = false
 
     state.local_flags.changes(false):
-      if Quitting.added:
+      if QUITTING.added:
         # We don't quit until the worker thread acks by popping the `Quitting`
         # flag, giving it a chance to save and cleanup. If the worker thread is
         # stuck, killed, or hasn't fully started because it's trying to connect
         # to a server, it won't pop the flag, so we force it after a timeout.
-        if TestMode in state.local_flags:
+        if TEST_MODE in state.local_flags:
           # In test mode, pop immediately - test_exit_code is a ZenValue so it syncs with the flag
-          state.pop_flag Quitting
+          state.pop_flag QUITTING
         else:
           self.force_quit_at = get_mono_time() + 2.seconds
-      elif Quitting.removed:
-        let exit_code = if TestMode in state.local_flags and state.test_exit_code >= 0:
+      elif QUITTING.removed:
+        let exit_code = if TEST_MODE in state.local_flags and state.test_exit_code >= 0:
           state.test_exit_code
         else:
           0
         self.get_tree().quit(exit_code)
 
-      if NeedsRestart.removed:
+      if NEEDS_RESTART.removed:
         saved_state.transform = state.player.transform
         saved_state.rotation = state.player.rotation
         saved_state.flags = {}
@@ -465,33 +465,33 @@ gdobj Game of Node:
         saved_state.restarting = true
         discard self.get_tree.reload_current_scene()
 
-      if Connecting.added:
+      if CONNECTING.added:
         state.status_message =
           \"""
           # Connecting...
 
           Trying to connect to {state.config.connect_address}.
           """
-      elif Connecting.removed:
+      elif CONNECTING.removed:
         state.status_message = ""
 
-      if MouseCaptured.added:
+      if MOUSE_CAPTURED.added:
         let center = self.get_viewport().get_visible_rect().size * 0.5
         self.saved_mouse_position = self.get_viewport().get_mouse_position()
         warp_mouse_position(center)
         set_mouse_mode MOUSE_MODE_CAPTURED
-      elif MouseCaptured.removed:
+      elif MOUSE_CAPTURED.removed:
         set_mouse_mode MOUSE_MODE_VISIBLE
         warp_mouse_position(self.saved_mouse_position)
 
-      if ReticleVisible.added:
+      if RETICLE_VISIBLE.added:
         self.reticle.visible = true
-      elif ReticleVisible.removed:
+      elif RETICLE_VISIBLE.removed:
         self.reticle.visible = false
 
-    if TouchControls notin state.local_flags:
-      state.push_flag MouseCaptured
-    state.push_flag ViewportFocused
+    if TOUCH_CONTROLS notin state.local_flags:
+      state.push_flag MOUSE_CAPTURED
+    state.push_flag VIEWPORT_FOCUSED
 
     state.queued_action_value.changes:
       if added and change.item != "":
@@ -511,7 +511,7 @@ gdobj Game of Node:
     elif action == "site":
       discard shell_open("http://getenu.com")
     elif action == "settings":
-      state.push_flag SettingsVisible
+      state.push_flag SETTINGS_VISIBLE
     elif action == "openurl":
       logger("info", \"Open URL: {id}")
     elif action == "tutorial":
@@ -546,12 +546,12 @@ gdobj Game of Node:
           (host_os == "windows" and event.raw_code == 56) or
           (host_os == "linux" and event.raw_code == 65513):
         if event.pressed:
-          state.push_flag CommandMode
+          state.push_flag COMMAND_MODE
         else:
-          state.pop_flag CommandMode
+          state.pop_flag COMMAND_MODE
 
-    if EditorVisible in state.local_flags or DocsVisible in state.local_flags or
-        ConsoleVisible in state.local_flags:
+    if EDITOR_VISIBLE in state.local_flags or DOCS_VISIBLE in state.local_flags or
+        CONSOLE_VISIBLE in state.local_flags:
       if event.is_action_pressed("zoom_in"):
         state.config_value.value:
           font_size = state.config.font_size + 1
@@ -568,36 +568,36 @@ gdobj Game of Node:
     # NOTE: alt+enter isn't being picked up on windows if the editor is
     # open. Needs investigation.
     if event.is_action_pressed("toggle_fullscreen") or (
-      host_os == "windows" and CommandMode in state.local_flags and
-      EditorVisible in state.local_flags and event of InputEventKey and
+      host_os == "windows" and COMMAND_MODE in state.local_flags and
+      EDITOR_VISIBLE in state.local_flags and event of InputEventKey and
       event.as(InputEventKey).scancode == KEY_ENTER
     ):
       state.config_value.value:
         full_screen = not state.config.full_screen
     elif event.is_action_pressed("settings"):
-      state.set_flag SettingsVisible, SettingsVisible notin state.local_flags
+      state.set_flag SETTINGS_VISIBLE, SETTINGS_VISIBLE notin state.local_flags
     elif event.is_action_pressed("next_level"):
       self.switch_world(+1)
     elif event.is_action_pressed("prev_level"):
       self.switch_world(-1)
     elif event.is_action_pressed("save_and_reload"):
-      state.pop_flag Playing
-      state.push_flag ResettingVM
+      state.pop_flag PLAYING
+      state.push_flag RESETTING_VM
       self.switch_world(0)
-      state.pop_flag ResettingVM
+      state.pop_flag RESETTING_VM
       self.get_tree().set_input_as_handled()
     elif event.is_action_pressed("pause"):
       state.paused = not state.paused
     elif event.is_action_pressed("clear_console"):
       state.console.log.clear()
     elif event.is_action_pressed("toggle_console"):
-      if ConsoleVisible in state.local_flags:
-        state.pop_flags ConsoleVisible, ConsoleFocused
+      if CONSOLE_VISIBLE in state.local_flags:
+        state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
       else:
-        state.push_flags ConsoleVisible, ConsoleFocused
+        state.push_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
     elif event.is_action_pressed("quit"):
       if host_os != "macosx":
-        state.push_flag Quitting
+        state.push_flag QUITTING
     elif event.is_action_pressed("change_mode"):
       var mode = state.config.environment
       let keys = environments.keys.to_seq
@@ -605,34 +605,34 @@ gdobj Game of Node:
         discard
       state.config_value.value:
         environment = mode
-    elif EditorVisible notin state.local_flags:
+    elif EDITOR_VISIBLE notin state.local_flags:
       if event.is_action_pressed("toggle_mouse_captured"):
-        state.set_flag MouseCaptured, MouseCaptured notin state.local_flags
+        state.set_flag MOUSE_CAPTURED, MOUSE_CAPTURED notin state.local_flags
         self.get_tree().set_input_as_handled()
 
-    if state.tool != Disabled:
+    if state.tool != DISABLED:
       if event.is_action_pressed("toggle_code_mode"):
-        if state.tool != CodeMode:
+        if state.tool != CODE_MODE:
           self.last_tool = state.tool
-          state.tool = CodeMode
+          state.tool = CODE_MODE
         else:
           state.tool = self.last_tool
       elif event.is_action_pressed("mode_1"):
-        state.tool = CodeMode
+        state.tool = CODE_MODE
       elif event.is_action_pressed("mode_2"):
-        state.tool = BlueBlock
+        state.tool = BLUE_BLOCK
       elif event.is_action_pressed("mode_3"):
-        state.tool = RedBlock
+        state.tool = RED_BLOCK
       elif event.is_action_pressed("mode_4"):
-        state.tool = GreenBlock
+        state.tool = GREEN_BLOCK
       elif event.is_action_pressed("mode_5"):
-        state.tool = BlackBlock
+        state.tool = BLACK_BLOCK
       elif event.is_action_pressed("mode_6"):
-        state.tool = WhiteBlock
+        state.tool = WHITE_BLOCK
       elif event.is_action_pressed("mode_7"):
-        state.tool = BrownBlock
+        state.tool = BROWN_BLOCK
       elif event.is_action_pressed("mode_8"):
-        state.tool = PlaceBot
+        state.tool = PLACE_BOT
 
   method on_meta_clicked(url: string) =
     if url.starts_with("nim://"):

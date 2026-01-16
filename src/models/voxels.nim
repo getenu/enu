@@ -456,7 +456,7 @@ proc rebuild_local_edits*(self: VoxelStore) =
         if chunk_id notin self.local_edits:
           self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
         self.local_edits[chunk_id][local_pos] =
-          (VoxelKind(kind_ord), action_colors[Colors(color_idx)])
+          (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
 
   # Apply deltas on top
   if self.edit_deltas.isNil:
@@ -477,7 +477,7 @@ proc rebuild_local_edits*(self: VoxelStore) =
           if chunk_id notin self.local_edits:
             self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
           self.local_edits[chunk_id][local_pos] =
-            (VoxelKind(kind_ord), action_colors[Colors(color_idx)])
+            (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
 
 # =============================================================================
 # Unified Flush Helpers
@@ -631,7 +631,7 @@ proc apply_snapshot*(
   # Clear existing chunk
   if chunk_id in self.local_voxels:
     for pos, info in self.local_voxels[chunk_id]:
-      if info.kind != Hole:
+      if info.kind != HOLE:
         dec self.block_count
     self.local_voxels.del(chunk_id)
 
@@ -654,10 +654,10 @@ proc apply_snapshot*(
           chunk_id.y * 16 + pos.y,
           chunk_id.z * 16 + pos.z,
         )
-        let color = action_colors[Colors(color_idx)]
+        let color = ACTION_COLORS[Colors(color_idx)]
         let kind = VoxelKind(kind_ord)
         self.local_voxels[chunk_id][world_pos] = (kind, color)
-        if kind != Hole:
+        if kind != HOLE:
           inc self.block_count
 
 proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
@@ -674,12 +674,12 @@ proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
       if chunk_id in self.local_voxels and
           world_pos in self.local_voxels[chunk_id]:
         let info = self.local_voxels[chunk_id][world_pos]
-        if info.kind != Hole:
+        if info.kind != HOLE:
           dec self.block_count
         self.local_voxels[chunk_id].del(world_pos)
     else:
       let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
-      let color = action_colors[Colors(color_idx)]
+      let color = ACTION_COLORS[Colors(color_idx)]
       let kind = VoxelKind(kind_ord)
 
       if chunk_id notin self.local_voxels:
@@ -688,11 +688,11 @@ proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
       let existed = world_pos in self.local_voxels[chunk_id]
       if existed:
         let old_info = self.local_voxels[chunk_id][world_pos]
-        if old_info.kind != Hole:
+        if old_info.kind != HOLE:
           dec self.block_count
 
       self.local_voxels[chunk_id][world_pos] = (kind, color)
-      if kind != Hole:
+      if kind != HOLE:
         inc self.block_count
 
 proc clear*(self: VoxelStore) =

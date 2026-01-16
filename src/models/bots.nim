@@ -29,9 +29,9 @@ method on_begin_move*(
     if duration >= finish_time:
       self.velocity = vec3()
       self.transform_value.origin = finish.snapped(vec3(0.1, 0.1, 0.1))
-      return Done
+      return DONE
     else:
-      return Running
+      return RUNNING
 
 method on_begin_turn*(
     self: Bot, axis: Vector3, degrees: float, lean: bool, move_mode: int
@@ -48,10 +48,10 @@ method on_begin_turn*(
       # Use start_basis for incremental rotation to avoid compounding rotations
       self.transform_value.basis =
         start_basis.rotated(UP, deg_to_rad(degrees * duration * self.speed))
-      Running
+      RUNNING
     else:
       self.transform_value.basis = final_basis
-      Done
+      DONE
 
 proc bot_at*(state: GameState, position: Vector3): Bot =
   for unit in state.units:
@@ -66,7 +66,7 @@ method reset*(self: Bot) =
   self.speed = 5
   self.color = self.start_color
   self.animation_value.touch "auto"
-  self.global_flags += Visible
+  self.global_flags += VISIBLE
   self.velocity = vec3()
   self.units.clear()
 
@@ -87,14 +87,14 @@ proc init*(
     animation_value: ~"auto",
     speed: 1.0,
     clone_of: clone_of,
-    start_color: action_colors[Black],
+    start_color: ACTION_COLORS[BLACK],
     parent: parent,
   )
 
   self.init_unit
 
   if global:
-    self.global_flags += Global
+    self.global_flags += GLOBAL
   result = self
 
 method clone*(self: Bot, clone_to: Unit, id: string): Unit =
@@ -119,11 +119,11 @@ method worker_thread_joined*(self: Bot) =
       unit = self.id,
       zen_id = self.local_flags.id
 
-    if Hover in self.local_flags:
-      if PrimaryDown.added and state.tool == CodeMode:
+    if HOVER in self.local_flags:
+      if PRIMARY_DOWN.added and state.tool == CODE_MODE:
         let root = self.find_root(true)
         state.open_unit = root
-      if SecondaryDown.added and state.tool == PlaceBot:
+      if SECONDARY_DOWN.added and state.tool == PLACE_BOT:
         # :(
         for unit in self.units:
           if unit of Sign:
@@ -144,14 +144,14 @@ method worker_thread_joined*(self: Bot) =
       unit = self.id,
       zen_id = self.local_flags.id
 
-    if Hover.added:
-      state.push_flag ReticleVisible
-      if state.tool in {CodeMode, PlaceBot}:
+    if HOVER.added:
+      state.push_flag RETICLE_VISIBLE
+      if state.tool in {CODE_MODE, PLACE_BOT}:
         let root = self.find_root(true)
         root.walk_tree proc(unit: Unit) =
-          unit.local_flags += Highlight
-    elif Hover.removed:
+          unit.local_flags += HIGHLIGHT
+    elif HOVER.removed:
       let root = self.find_root(true)
       root.walk_tree proc(unit: Unit) =
-        unit.local_flags -= Highlight
-      state.pop_flag ReticleVisible
+        unit.local_flags -= HIGHLIGHT
+      state.pop_flag RETICLE_VISIBLE

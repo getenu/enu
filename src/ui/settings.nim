@@ -46,10 +46,10 @@ gdobj Settings of PanelContainer:
     self.environments.select(state.config.environment)
     let level_label = find("LevelLabel", Label)
     if ?state.config.connect_address:
-      level_label.add_color_override("font_color", ir_black[Comment])
+      level_label.add_color_override("font_color", IR_BLACK[COMMENT])
       self.levels.disabled = true
     else:
-      level_label.add_color_override("font_color", ir_black[Normal])
+      level_label.add_color_override("font_color", IR_BLACK[NORMAL])
       self.levels.disabled = false
       self.levels.select(state.config.level)
 
@@ -111,9 +111,9 @@ gdobj Settings of PanelContainer:
 
     var add_hex = true
     for color in Colors:
-      if color != Eraser:
+      if color != ERASER:
         self.colors.add_item($color)
-        if state.config.player_color == action_colors[color]:
+        if state.config.player_color == ACTION_COLORS[color]:
           add_hex = false
           self.colors.select(self.colors.get_item_count - 1)
     if add_hex:
@@ -151,21 +151,21 @@ gdobj Settings of PanelContainer:
       self.update_values()
 
     state.local_flags.changes:
-      if SettingsVisible.added:
+      if SETTINGS_VISIBLE.added:
         self.open_window()
-      elif SettingsVisible.removed:
+      elif SETTINGS_VISIBLE.removed:
         self.close_window()
-      elif CommandMode.added:
+      elif COMMAND_MODE.added:
         self.ghost()
-      elif CommandMode.removed:
+      elif COMMAND_MODE.removed:
         self.unghost()
-    if SettingsVisible notin state.local_flags:
+    if SETTINGS_VISIBLE notin state.local_flags:
       self.window.opacity = 0.0
-      if SceneReady in state.local_flags:
+      if SCENE_READY in state.local_flags:
         self.close_window
       else:
         state.local_flags.changes:
-          if SceneReady.added:
+          if SCENE_READY.added:
             self.close_window
 
   proc collapsed_margin(): int =
@@ -244,17 +244,17 @@ gdobj Settings of PanelContainer:
         ?self.server_address.text:
       state.config_value.value:
         connect_address = self.server_address.text
-      state.pop_flags SettingsFocused, SettingsVisible
-      state.push_flag NeedsRestart
+      state.pop_flags SETTINGS_FOCUSED, SETTINGS_VISIBLE
+      state.push_flag NEEDS_RESTART
     elif name == "Connect" and self.connect.text == "Disconnect":
       state.config_value.value:
         connect_address = ""
-      state.pop_flags SettingsFocused, SettingsVisible
-      state.push_flag NeedsRestart
+      state.pop_flags SETTINGS_FOCUSED, SETTINGS_VISIBLE
+      state.push_flag NEEDS_RESTART
     elif name == "Save":
       if is_valid_file_name(self.level_name.text):
         change_loaded_level(self.level_name.text, state.config.world)
-        state.pop_flag SettingsVisible
+        state.pop_flag SETTINGS_VISIBLE
 
     self.update_values()
 
@@ -349,7 +349,7 @@ gdobj Settings of PanelContainer:
     self.state = Closed
 
   method on_closed() =
-    state.pop_flag SettingsVisible
+    state.pop_flag SETTINGS_VISIBLE
 
   method on_cancelled() =
     self.update_values()
@@ -428,12 +428,12 @@ gdobj Settings of PanelContainer:
         self.show_new_level()
       else:
         change_loaded_level(self.levels.text, state.config.world)
-        state.pop_flag SettingsVisible
+        state.pop_flag SETTINGS_VISIBLE
     elif name == "PlayerColors":
       for color in Colors:
         if self.colors.text == $color:
           state.config_value.value:
-            player_color = action_colors[color]
+            player_color = ACTION_COLORS[color]
           return
       state.config_value.value:
         player_color = self.colors.text.parse_html_hex
@@ -483,12 +483,12 @@ gdobj Settings of PanelContainer:
   #   self.ignore_touches(event)
 
   method unhandled_input*(event: InputEvent) =
-    if SettingsFocused in state.local_flags and
+    if SETTINGS_FOCUSED in state.local_flags and
         event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
-          CommandMode notin state.local_flags:
+          COMMAND_MODE notin state.local_flags:
         if self.state == NewLevel:
           self.on_cancelled()
         else:
-          state.pop_flag SettingsVisible
+          state.pop_flag SETTINGS_VISIBLE
         self.get_tree().set_input_as_handled()

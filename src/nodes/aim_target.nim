@@ -9,18 +9,18 @@ gdobj AimTarget of Sprite3D:
   method ready*() =
     self.set_as_top_level(true)
     self.bind_signals "collider_exiting"
-    self.visible = BlockTargetVisible in state.local_flags
+    self.visible = BLOCK_TARGET_VISIBLE in state.local_flags
 
     state.local_flags.watch(state.player):
-      if BlockTargetVisible.added:
+      if BLOCK_TARGET_VISIBLE.added:
         self.visible = true
-      elif BlockTargetVisible.removed:
+      elif BLOCK_TARGET_VISIBLE.removed:
         self.visible = false
 
     state.tool_value.watch(state.player):
       # tool changed. Retarget.
       if self.target_model != nil:
-        self.target_model.local_flags -= Hover
+        self.target_model.local_flags -= HOVER
         self.target_model.target_point = vec3()
         self.target_model.target_normal = vec3()
         self.target_model = nil
@@ -45,19 +45,19 @@ gdobj AimTarget of Sprite3D:
 
     if unit != self.target_model:
       if self.target_model != nil:
-        self.target_model.local_flags -= Hover
-        state.pop_flag BlockTargetVisible
+        self.target_model.local_flags -= HOVER
+        state.pop_flag BLOCK_TARGET_VISIBLE
       self.target_model = unit
       # :(
       if not (
         unit == nil or (unit of Sign and Sign(unit).more == "") or (
-          God notin state.local_flags and (unit of Bot or unit of Build) and
-          Lock in Unit(unit).find_root.global_flags
+          GOD notin state.local_flags and (unit of Bot or unit of Build) and
+          LOCK in Unit(unit).find_root.global_flags
         )
       ):
-        unit.local_flags += Hover
+        unit.local_flags += HOVER
         if unit of Build or unit of Ground:
-          state.push_flag BlockTargetVisible
+          state.push_flag BLOCK_TARGET_VISIBLE
 
     if collider != nil:
       var
@@ -93,9 +93,9 @@ gdobj AimTarget of Sprite3D:
         ):
           unit.target_point = local_point
           unit.target_normal = local_normal
-          unit.local_flags.touch TargetMoved
+          unit.local_flags.touch TARGET_MOVED
         else:
-          unit.local_flags -= TargetMoved
+          unit.local_flags -= TARGET_MOVED
     else:
       state.skip_block_paint = false
 

@@ -21,12 +21,12 @@ const clear = init_color(0.0, 0.0, 0.0, 0.0)
 
 proc configure_highlighting*(self: TextEdit) =
   # strings
-  self.add_color_region("\"", "\"", ir_black[Text], false)
-  self.add_color_region("\"\"\"", "\"\"\"", ir_black[Text], false)
+  self.add_color_region("\"", "\"", IR_BLACK[TEXT], false)
+  self.add_color_region("\"\"\"", "\"\"\"", IR_BLACK[TEXT], false)
   # block comments
-  self.add_color_region("#[", "]#", ir_black[Comment], false)
+  self.add_color_region("#[", "]#", IR_BLACK[COMMENT], false)
   # line comments
-  self.add_color_region("#", "\n", ir_black[Comment], true)
+  self.add_color_region("#", "\n", IR_BLACK[COMMENT], true)
 
 gdobj Editor of MarginContainer:
   var
@@ -69,7 +69,7 @@ gdobj Editor of MarginContainer:
         self.get_tree.set_input_as_handled()
 
   method input*(event: InputEvent) =
-    if event of InputEventKey and EditorFocused in state.local_flags:
+    if event of InputEventKey and EDITOR_FOCUSED in state.local_flags:
       let event = event.as(InputEventKey)
       if not event.pressed:
         return
@@ -97,17 +97,17 @@ gdobj Editor of MarginContainer:
       else:
         self.touch_timer = MonoTime.high
     elif (
-      EditorVisible in state.local_flags or EditorClosing in state.local_flags
-    ) and CommandMode notin state.local_flags and event of InputEventScreenDrag and
+      EDITOR_VISIBLE in state.local_flags or EDITOR_CLOSING in state.local_flags
+    ) and COMMAND_MODE notin state.local_flags and event of InputEventScreenDrag and
         self.scroll_state == Idle:
       self.get_tree.set_input_as_handled()
       self.ignore_touches(event)
 
   method unhandled_input*(event: InputEvent) =
-    if EditorFocused in state.local_flags and
+    if EDITOR_FOCUSED in state.local_flags and
         event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
-          CommandMode notin state.local_flags:
+          COMMAND_MODE notin state.local_flags:
         state.open_unit.code = Code.init(self.text_edit.text)
         state.open_unit = nil
         self.get_tree().set_input_as_handled()
@@ -201,7 +201,7 @@ gdobj Editor of MarginContainer:
     )
 
   method open_done() =
-    state.pop_flag EditorClosing
+    state.pop_flag EDITOR_CLOSING
 
   proc open_editor() =
     self.opacity = 0.0
@@ -212,7 +212,7 @@ gdobj Editor of MarginContainer:
     discard
       self.tween.tween_callback(self, "_offset_x", new_array(0.0.to_variant))
     discard self.tween.tween_property(self, "modulate:a", 1.0.to_variant, 0.0)
-    if CommandMode in state.local_flags:
+    if COMMAND_MODE in state.local_flags:
       discard self.tween.tween_callback(self.text_edit, "_ghost")
     discard self.tween
       .tween_method(
@@ -245,7 +245,7 @@ gdobj Editor of MarginContainer:
           self.text_edit.text = state.open_unit.code.nim
           state.player.open_code = self.text_edit.text
 
-          if CommandMode in state.local_flags:
+          if COMMAND_MODE in state.local_flags:
             self.ghost()
           else:
             self.unghost()
@@ -256,29 +256,29 @@ gdobj Editor of MarginContainer:
 
   proc watch_local_flags() =
     state.local_flags.changes:
-      if FullWidthPanels.added:
+      if FULL_WIDTH_PANELS.added:
         self.left_panel.anchor_right = 1.0
         self.left_panel.margin_right = 0.0
-      elif FullWidthPanels.removed:
+      elif FULL_WIDTH_PANELS.removed:
         self.left_panel.margin_right = -1.0
         self.left_panel.anchor_right = 0.5
 
-      if ConsoleVisible.added:
+      if CONSOLE_VISIBLE.added:
         self.highlight_errors()
-      elif ConsoleVisible.removed:
+      elif CONSOLE_VISIBLE.removed:
         self.clear_errors()
-      elif EditorFocused.added:
+      elif EDITOR_FOCUSED.added:
         self.text_edit.grab_focus
         self.left_panel.raisee()
-      if CommandMode.added:
-        if EditorVisible in state.local_flags:
+      if COMMAND_MODE.added:
+        if EDITOR_VISIBLE in state.local_flags:
           state.open_unit.code = Code.init(self.text_edit.text)
 
           self.ghost()
           self.text_edit.release_focus()
           self.mouse_filter = MOUSE_FILTER_IGNORE
-      elif CommandMode.removed:
-        if EditorVisible in state.local_flags:
+      elif COMMAND_MODE.removed:
+        if EDITOR_VISIBLE in state.local_flags:
           self.unghost()
           self.text_edit.grab_focus()
           self.mouse_filter = MOUSE_FILTER_STOP

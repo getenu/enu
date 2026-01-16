@@ -20,12 +20,12 @@ gdobj Toolbar of HBoxContainer:
     assert not self.preview_maker.is_nil
 
     state.local_flags.changes:
-      if Playing.added:
+      if PLAYING.added:
         self.visible = false
-        state.tool = Disabled
-      if Playing.removed:
+        state.tool = DISABLED
+      if PLAYING.removed:
         self.visible = true
-        state.tool = BlueBlock
+        state.tool = BLUE_BLOCK
 
     self.zid = state.tool_value.changes:
       if added:
@@ -61,18 +61,18 @@ gdobj Toolbar of HBoxContainer:
     state.tool_value.pause(self.zid):
       case button_name[7 ..^ 1]
       of "code":
-        state.tool = CodeMode
+        state.tool = CODE_MODE
       of "blue":
-        state.tool = BlueBlock
+        state.tool = BLUE_BLOCK
       of "red":
-        state.tool = RedBlock
+        state.tool = RED_BLOCK
       of "green":
-        state.tool = GreenBlock
+        state.tool = GREEN_BLOCK
       of "black":
-        state.tool = BlackBlock
+        state.tool = BLACK_BLOCK
       of "white":
-        state.tool = WhiteBlock
+        state.tool = WHITE_BLOCK
       of "brown":
-        state.tool = BrownBlock
+        state.tool = BROWN_BLOCK
       of "bot":
-        state.tool = PlaceBot
+        state.tool = PLACE_BOT

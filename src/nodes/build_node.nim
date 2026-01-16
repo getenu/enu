@@ -82,15 +82,15 @@ gdobj BuildNode of VoxelTerrain:
       let m = self.get_material(i).as(ShaderMaterial)
       if not m.is_nil:
         if self.error_highlight_on:
-          m.set_shader_param("emission", action_colors[Red].to_variant)
+          m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
         else:
           m.set_shader_param(
             "emission", self.model.shared.emission_colors[i].to_variant
           )
 
-        if Highlight in self.model.local_flags or
+        if HIGHLIGHT in self.model.local_flags or
             (
-              HighlightError in self.model.global_flags and
+              HIGHLIGHT_ERROR in self.model.global_flags and
               self.error_highlight_on
             ):
           m.set_shader_param("emission_energy", highlight_glow.to_variant)
@@ -98,12 +98,12 @@ gdobj BuildNode of VoxelTerrain:
           m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
   proc set_visibility() =
-    if Visible in self.model.global_flags:
+    if VISIBLE in self.model.global_flags:
       self.visible = true
 
       for material in self.model.shared.materials:
         material.shader = shader
-    elif Visible notin self.model.global_flags and God in state.local_flags:
+    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
 
       for material in self.model.shared.materials:
@@ -146,36 +146,36 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.global_flags.watch:
       if (
-        change.item == Visible and
-        ScriptInitializing notin self.model.global_flags
-      ) or ScriptInitializing.removed:
+        change.item == VISIBLE and
+        SCRIPT_INITIALIZING notin self.model.global_flags
+      ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
-      elif Resetting.added:
+      elif RESETTING.added:
         self.loaded_chunks.clear()
         self.generator = nil
         self.stream = nil
-      elif Resetting.removed:
+      elif RESETTING.removed:
         self.generator = gdnew[VoxelGeneratorFlat]()
-      elif HighlightError.added:
+      elif HIGHLIGHT_ERROR.added:
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.error_highlight_on = true
         self.set_highlight
-      elif HighlightError.removed:
+      elif HIGHLIGHT_ERROR.removed:
         self.toggle_error_highlight_at = MonoTime.high
         self.error_highlight_on = false
         self.set_highlight
 
     self.model.local_flags.watch:
-      if change.item == Highlight:
+      if change.item == HIGHLIGHT:
         self.set_highlight
-      elif change.item == ASAPMode:
+      elif change.item == ASAP_MODE:
         if added:
           self.renderer.begin_asap()
         elif removed:
           self.renderer.end_asap()
 
     state.local_flags.watch:
-      if change.item == God:
+      if change.item == GOD:
         self.set_visibility
 
     self.model.scale_value.watch:
@@ -211,7 +211,7 @@ gdobj BuildNode of VoxelTerrain:
         self.set_highlight()
 
       # Paste buffered voxels when not in ASAP mode
-      if ASAPMode notin self.model.local_flags:
+      if ASAP_MODE notin self.model.local_flags:
         self.renderer.paste_if_dirty()
 
   proc setup*() =
