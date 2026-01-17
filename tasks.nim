@@ -541,8 +541,13 @@ task docs, "Build docs":
   with_dir "docs":
     exec "nim r book.nim init"
     exec "nim r book.nim build"
+    exec "nim r ed.nim build"
   exec "cp -r docs/book/assets dist/docs"
   exec "cp media/*.{png,webp} dist/docs/assets"
+  # Copy Ed docs to /ed/ for https://getenu.com/ed
+  exec "mkdir -p dist/docs/ed"
+  exec "cp dist/docs/api/ed_readme.html dist/docs/ed/index.html"
+  exec "cp dist/docs/api/ed_api.html dist/docs/ed/api.html"
 
 task export_docs, "Build docs and copy them to ../enu-site/docs":
   docs_task()

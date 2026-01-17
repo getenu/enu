@@ -1,11 +1,14 @@
 import std/[sugar, strutils, os, enumerate, pathnorm, macros]
 import pkg/[pretty, nimibook, nimib, nimib/themes]
 import pkg/nimibook/[types, commands, entries, toc_render]
+import api_docs
 
 export pathutils, pretty
+export api_docs
 # adapted from https://raw.githubusercontent.com/pietroppeter/nimibook/ef700f646db8ec0bbe8a3319cbb3561aaac89a34/src/nimibook/themes.nim
 
 const document* = hl_html static_read("./book/template.html.mustache")
+const api_document* = hl_html static_read("./book/templates/api.html.mustache")
 
 proc use_enu*(doc: var NbDoc) =
   doc.context["path_to_root"] = doc.src_dir_rel.string & "/"
@@ -19,7 +22,7 @@ proc use_enu*(doc: var NbDoc) =
   # book.json is publicly accessible (sort of a public static api)
   let book_path = doc.home_dir.string / "book.json"
   # load book object
-  var book = load(bookPath)
+  var book = load(book_path)
 
   # book configuration
   doc.context["language"] = book.language
@@ -54,6 +57,20 @@ proc use_enu*(doc: var NbDoc) =
 
   # html.head.title (what appears in the tab)
   doc.context["title"] = this_entry.title & " - " & book.title
+
+proc use_api_docs*(doc: var NbDoc) =
+  ## Theme for API documentation pages
+  ## Uses the API-specific template with sidebar navigation for types
+  use_enu(doc)
+  doc.partials["document"] = api_document
+  doc.context["is_api_docs"] = true
+
+proc use_ed_readme*(doc: var NbDoc) =
+  ## Theme for Ed README page
+  ## Uses the same template as API docs but with README marked as active
+  use_enu(doc)
+  doc.partials["document"] = api_document
+  doc.context["is_readme"] = true
 
 template load_md*(file) =
   const text = static_read file

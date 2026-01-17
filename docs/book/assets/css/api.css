@@ -1,0 +1,243 @@
+/* Ed API Documentation - IR_BLACK Theme */
+/* Integrated with nimibook theme system */
+
+/* Fix sidebar layout: chapter items with nested sections should stack vertically */
+.sidebar .chapter > li.chapter-item {
+  display: block;
+}
+
+/* Nested section inside API Reference */
+.sidebar .api-nav-content {
+  padding-left: 20px;
+}
+
+/* API Nav Section Headers */
+.api-nav-header {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sidebar-non-existant);
+  padding: 5px 0;
+  margin: 0;
+}
+
+/* Type items with details/summary for collapsing operations */
+.api-type-details {
+  margin: 0;
+}
+
+.api-type-details > summary {
+  cursor: pointer;
+  list-style: none;
+  display: block;
+}
+
+.api-type-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.api-type-details > summary > a {
+  color: #96CBFE;
+  text-decoration: none;
+}
+
+.api-type-details > summary > a:hover {
+  color: var(--sidebar-active);
+}
+
+/* Chevron after the type name */
+.api-type-details > summary > a::after {
+  content: " \25B6";
+  font-size: 0.6em;
+  display: inline-block;
+  transition: transform 0.15s;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.api-type-details[open] > summary > a::after {
+  transform: rotate(90deg);
+}
+
+/* Types without operations - light blue */
+.chapter-item > a[href*="_type"] {
+  color: #96CBFE;
+}
+
+/* Main Content Styling */
+.readme-section {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin-top: 0;
+}
+
+.warning {
+  background: #1a1a0a;
+  border: 1px solid #444400;
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-size: 0.9em;
+}
+
+.intro {
+  margin-bottom: 2rem;
+}
+
+/* Code blocks - IR_BLACK theme */
+.code-block {
+  background: #000000;
+  border: 1px solid var(--quote-border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.code-block code {
+  color: #F6F3E8;
+  font-family: "Source Code Pro", "Fira Code", "Monaco", monospace;
+  font-size: 0.85em;
+}
+
+/* Syntax highlighting - IR_BLACK colors */
+.code-block .kw { color: #96CBFE; }
+.code-block .str { color: #A8FF60; }
+.code-block .num { color: #FF73FD; }
+.code-block .cmt { color: #7C7C7C; }
+.code-block .op { color: #FFFFB6; }
+
+/* Inline code in descriptions */
+.description code {
+  color: #FF73FD;
+  font-family: "Source Code Pro", "Fira Code", "Monaco", monospace;
+  font-size: 0.9em;
+}
+
+/* Symbols (constants, enums) */
+.symbol {
+  margin: 2rem 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.symbol:last-child {
+  border-bottom: none;
+}
+
+.symbol h3, .symbol h4 {
+  margin-top: 0;
+}
+
+.symbol h3 a, .symbol h4 a {
+  color: var(--links);
+}
+
+.symbol h3 a:hover, .symbol h4 a:hover {
+  text-decoration: none;
+}
+
+.description {
+  margin: 0.5em 0;
+  color: var(--fg);
+}
+
+.source {
+  font-size: 0.8em;
+  color: #7C7C7C;
+  margin-top: 0.5em;
+}
+
+.source code {
+  color: #7C7C7C;
+}
+
+.overload {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 2px solid var(--quote-border);
+}
+
+.overload:first-child {
+  margin-top: 0;
+}
+
+/* Type sections */
+.type-section {
+  margin: 2.5rem 0;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.type-section:last-child {
+  border-bottom: none;
+}
+
+.type-heading {
+  font-size: 1.4em;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.type-heading a {
+  color: var(--links);
+}
+
+.operation {
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--quote-border);
+}
+
+.operation h4, .operation h5 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.1em;
+}
+
+.operation h4 a, .operation h5 a {
+  color: var(--links);
+}
+
+/* Section headers */
+section > h2, section > h3 {
+  border-bottom: 1px solid var(--quote-border);
+  padding-bottom: 0.3em;
+}
+
+/* Footer */
+main > footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--quote-border);
+  text-align: center;
+  color: #7C7C7C;
+  font-size: 0.9em;
+}
+
+/* Light theme adjustments */
+.light .warning {
+  background: #fffff0;
+  border-color: #e6e6cc;
+}
+
+.light .code-block {
+  background: #1a1a1a;
+  border-color: #333;
+}
+
+.light .api-type-details > summary > a {
+  color: #0066cc;
+}
+
+.light .chapter-item > a[href*="_type"] {
+  color: #0066cc;
+}
