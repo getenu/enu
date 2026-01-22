@@ -361,6 +361,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   var test_started_at = MonoTime.high
   var last_stats_log = MonoTime.low
   var last_asap_flush = MonoTime.low
+  var was_in_asap = false
   var last_snapshots_flushed = 0
   var last_deltas_flushed = 0
   var tick_count = 0
@@ -404,6 +405,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         if unit of Build and ASAP_MODE in Build(unit).local_flags:
           any_asap = true
           break
+
+      # Reset flush timer when entering ASAP mode
+      if any_asap and not was_in_asap:
+        last_asap_flush = frame_start
+      was_in_asap = any_asap
 
       while Ed.thread_ctx.pressure < 0.9 and to_process.len > 0 and
           (any_asap or state.voxel_tasks <= 10) and get_mono_time() < timeout:
