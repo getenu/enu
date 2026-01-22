@@ -515,14 +515,14 @@ proc restore(self: Build, name: string) =
 
 proc begin_asap(self: Build) {.gcsafe.} =
   ## Enable ASAP mode - defers rendering.
-  self.local_flags += ASAP_MODE
+  self.global_flags += ASAP_MODE
 
 proc end_asap*(self: Build) {.gcsafe.} =
   ## Exit ASAP mode. Flushes all dirty chunks and clears the flag.
-  if ASAP_MODE in self.local_flags:
+  if ASAP_MODE in self.global_flags:
     self.reset_bounds()  # Update bounds now that all voxels are drawn
     self.voxels.flush_dirty_chunks()
-    self.local_flags -= ASAP_MODE  # Clear immediately - triggers redraw in build_node
+    self.global_flags -= ASAP_MODE
 
 # Player binding
 

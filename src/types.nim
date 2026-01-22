@@ -89,7 +89,6 @@ type
     TARGET_MOVED
     HIGHLIGHT
     HIDE
-    ASAP_MODE
 
   GlobalModelFlags* = enum
     GLOBAL
@@ -101,6 +100,7 @@ type
     DIRTY
     RESETTING
     HIGHLIGHT_ERROR
+    ASAP_MODE
 
   Tools* = enum
     CODE_MODE

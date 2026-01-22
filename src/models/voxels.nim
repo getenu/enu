@@ -845,16 +845,17 @@ proc begin_asap*(self: VoxelRenderer) =
   self.asap_active = true
   self.last_paste_time = get_mono_time()
 
-proc tick_asap*(self: VoxelRenderer) =
-  if not self.asap_active:
-    return
-  let now = get_mono_time()
-  let elapsed = now - self.last_paste_time
-  if elapsed >= ASAP_PASTE_INTERVAL:
-    if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:
-      self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
-      self.dirty = false
-    self.last_paste_time = now
+proc tick*(self: VoxelRenderer, is_local: bool) =
+  ## Periodic paste for local ASAP mode only (visual progress feedback).
+  ## Remote ASAP buffers without periodic paste - final paste via end_asap().
+  if self.asap_active and is_local:
+    let now = get_mono_time()
+    let elapsed = now - self.last_paste_time
+    if elapsed >= ASAP_PASTE_INTERVAL:
+      if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:
+        self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
+        self.dirty = false
+      self.last_paste_time = now
 
 proc end_asap*(self: VoxelRenderer) =
   if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:

@@ -39,7 +39,7 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
 proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
   let ctx = unit.script_ctx
   if ?ctx and ctx.running:
-    if ASAP_MODE notin unit.local_flags:
+    if ASAP_MODE notin unit.global_flags:
       unit.current_line = ctx.current_line.line.int
     if unit of Build:
       let unit = Build(unit)
@@ -402,7 +402,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       # because periodic paste will cause many tasks to queue up
       var any_asap = false
       for unit in to_process:
-        if unit of Build and ASAP_MODE in Build(unit).local_flags:
+        if unit of Build and ASAP_MODE in Build(unit).global_flags:
           any_asap = true
           break
 
@@ -429,7 +429,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       state.units.value.walk_tree proc(unit: Unit) =
         if unit of Build:
           let build = Build(unit)
-          let in_asap = ASAP_MODE in build.local_flags
+          let in_asap = ASAP_MODE in build.global_flags
           # Flush if not in ASAP mode, or if in ASAP mode and we can flush
           let should_flush = not in_asap or can_flush_asap
           if should_flush:

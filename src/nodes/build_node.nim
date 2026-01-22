@@ -57,7 +57,7 @@ gdobj BuildNode of VoxelTerrain:
 
     let zid = delta_seq.watch:
       if added:
-        if ASAP_MODE in self.model.local_flags:
+        if ASAP_MODE in self.model.global_flags:
           self.renderer.buffer_delta(chunk_id, change.item)
         else:
           render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
@@ -128,7 +128,7 @@ gdobj BuildNode of VoxelTerrain:
     # Watch packed_chunks for snapshots
     self.model.voxels.packed_chunks.watch:
       if added:
-        if ASAP_MODE in self.model.local_flags:
+        if ASAP_MODE in self.model.global_flags:
           self.renderer.buffer_snapshot(change.item.key, change.item.value)
         else:
           render_snapshot_direct(
@@ -143,7 +143,7 @@ gdobj BuildNode of VoxelTerrain:
         if not delta_seq.isNil:
           # Render any existing deltas
           for delta in delta_seq:
-            if ASAP_MODE in self.model.local_flags:
+            if ASAP_MODE in self.model.global_flags:
               self.renderer.buffer_delta(chunk_id, delta)
             else:
               render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
@@ -175,15 +175,15 @@ gdobj BuildNode of VoxelTerrain:
         self.toggle_error_highlight_at = MonoTime.high
         self.error_highlight_on = false
         self.set_highlight
-
-    self.model.local_flags.watch:
-      if change.item == HIGHLIGHT:
-        self.set_highlight
       elif change.item == ASAP_MODE:
         if added:
           self.renderer.begin_asap()
         elif removed:
           self.renderer.end_asap()
+
+    self.model.local_flags.watch:
+      if change.item == HIGHLIGHT:
+        self.set_highlight
 
     state.local_flags.watch:
       if change.item == GOD:
@@ -221,8 +221,8 @@ gdobj BuildNode of VoxelTerrain:
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
 
-      if ASAP_MODE in self.model.local_flags:
-        self.renderer.tick_asap()
+      let is_local = self.model.code.owner == state.worker_ctx_name
+      self.renderer.tick(is_local)
 
   proc setup*() =
     let was_skipping_join = dont_join
