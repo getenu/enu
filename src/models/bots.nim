@@ -84,7 +84,7 @@ proc init*(
   var self = Bot(
     id: id,
     start_transform: transform,
-    animation_value: ~"auto",
+    animation_value: ed("auto"),
     speed: 1.0,
     clone_of: clone_of,
     start_color: ACTION_COLORS[BLACK],
@@ -117,7 +117,7 @@ method worker_thread_joined*(self: Bot) =
       changes = change.changes,
       item = change.item,
       unit = self.id,
-      zen_id = self.local_flags.id
+      ed_id = self.local_flags.id
 
     if HOVER in self.local_flags:
       if PRIMARY_DOWN.added and state.tool == CODE_MODE:
@@ -142,7 +142,7 @@ method worker_thread_joined*(self: Bot) =
       changes = change.changes,
       item = change.item,
       unit = self.id,
-      zen_id = self.local_flags.id
+      ed_id = self.local_flags.id
 
     if HOVER.added:
       state.push_flag RETICLE_VISIBLE

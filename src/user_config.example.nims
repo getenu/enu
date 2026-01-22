@@ -4,15 +4,15 @@
 # --define:"chronicles_line_numbers"
 # --define:"metrics"
 
-# --define:"zen_trace"
-# --define:"dump_zen_objects"
+# --define:"ed_trace"
+# --define:"dump_ed_objects"
 
 # Release mode options that may need to be enabled for debugging:
 # --define:"chronicles_colors=None"
 # --assertions:off
-# --define:"zen_lax_free"
+# --define:"ed_lax_free"
 
 # Sequential ids and no timestamps for better log diffs.
 # Sequential ids can only be enabled for a single client.
-# --define:"zen_sequential_ids"
+# --define:"ed_sequential_ids"
 # --define:"chronicles_timestamps=None"

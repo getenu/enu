@@ -15,26 +15,26 @@ proc init_shared*(self: Unit) =
   elif not ?self.shared:
     self.shared_value.init
     var shared = Shared(id: self.id & "-shared")
-    shared.init_zen_fields
+    shared.init_ed_fields
     self.shared = shared
 
 proc init_unit*[T: Unit](self: T, shared = true) =
   with self:
-    units = ~seq[Unit]
-    transform_value = ~self.start_transform
-    global_flags = ~set[GlobalModelFlags]
-    local_flags = ~(set[LocalModelFlags], flags = {SyncLocal})
-    code_value = ~Code
-    velocity_value = ~Vector3
-    scale_value = ~1.0
-    glow_value = ~float
-    color_value = ~self.start_color
+    units = EdSeq[Unit].init()
+    transform_value = ed(self.start_transform)
+    global_flags = EdSet[GlobalModelFlags].init()
+    local_flags = EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL})
+    code_value = EdValue[Code].init()
+    velocity_value = EdValue[Vector3].init()
+    scale_value = ed(1.0)
+    glow_value = EdValue[float].init()
+    color_value = ed(self.start_color)
     errors = ScriptErrors.init
-    current_line_value = ~0
-    collisions = ~(seq[(string, Vector3)], flags = {SyncLocal})
-    shared_value = ~Shared
-    sight_query_value = ~(SightQuery, flags = {SyncLocal})
-    eval_value = ~("", flags = {SyncLocal})
+    current_line_value = ed(0)
+    collisions = EdSeq[(string, Vector3)].init(flags = {SYNC_LOCAL})
+    shared_value = EdValue[Shared].init()
+    sight_query_value = EdValue[SightQuery].init(flags = {SYNC_LOCAL})
+    eval_value = EdValue[string].init("", flags = {SYNC_LOCAL})
 
   self.init_shared
   self.global_flags += VISIBLE
@@ -143,14 +143,14 @@ proc destroy_impl*(self: Bot | Build | Sign) =
     if ?shared.edit_deltas:
       shared.edit_deltas.destroy
     self.shared = nil
-    Zen.thread_ctx.free(shared)
+    Ed.thread_ctx.free(shared)
   else:
     self.shared = nil
 
   let parent = self.parent
   self.parent = nil
   for field in self[].fields:
-    when field is Zen:
+    when field is Ed:
       # :(
       if ?field and not field.destroyed:
         field.destroy
@@ -165,9 +165,9 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   if ?parent:
     parent.units.pause:
       parent.units -= self
-  Zen.thread_ctx.free(self)
+  Ed.thread_ctx.free(self)
 
-proc clear_all*(units: ZenSeq[Unit]) =
+proc clear_all*(units: EdSeq[Unit]) =
   var roots = units.value
   for unit in roots:
     if not (unit of Player):

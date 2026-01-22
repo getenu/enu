@@ -7,7 +7,7 @@ proc write_value*(w: var JsonWriter, self: set[LocalStateFlags]) =
 
 log_scope:
   topics = "state"
-  ctx = Zen.thread_ctx.id
+  ctx = Ed.thread_ctx.id
 
 # only one flag from the group is active at a time
 const groups =
@@ -122,11 +122,11 @@ proc toggle_flag*(self: GameState, flag: LocalStateFlags) =
     self.pop_flag flag
 
 proc `+=`*(
-  self: ZenSet[LocalStateFlags], flag: LocalStateFlags
+  self: EdSet[LocalStateFlags], flag: LocalStateFlags
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc `-=`*(
-  self: ZenSet[LocalStateFlags], flag: LocalStateFlags
+  self: EdSet[LocalStateFlags], flag: LocalStateFlags
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc selected_color*(self: GameState): Color =
@@ -142,28 +142,28 @@ proc init_logger*(self: GameState) =
     state.console.log += msg & "\n"
 
 proc init*(_: type GameState): GameState =
-  let flags = {SyncLocal}
+  let flags = {SYNC_LOCAL}
   let self = GameState(
-    player_value: ~(Player, flags),
-    local_flags: ~(set[LocalStateFlags], flags),
-    global_flags: ~(set[GlobalStateFlags], id = "state_global_flags"),
-    units: ~(seq[Unit], id = "root_units"),
-    open_unit_value: ~(Unit, flags),
-    config_value: ~(Config, flags, id = "config"),
-    tool_value: ~(BLUE_BLOCK, flags),
+    player_value: EdValue[Player].init(flags = flags),
+    local_flags: EdSet[LocalStateFlags].init(flags = flags),
+    global_flags: EdSet[GlobalStateFlags].init(id = "state_global_flags"),
+    units: EdSeq[Unit].init(id = "root_units"),
+    open_unit_value: EdValue[Unit].init(flags = flags),
+    config_value: EdValue[Config].init(flags = flags, id = "config"),
+    tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
     gravity: -80.0,
-    console: ConsoleModel(log: ~(seq[string], flags)),
-    open_sign_value: ~(Sign, flags),
-    wants: ~(seq[LocalStateFlags], flags),
-    level_name_value: ~("", id = "level_name"),
-    queued_action_value: ~("", flags),
-    server_ctx_name_value: ~("", flags),
-    status_message_value: ~("", flags),
-    voxel_tasks_value: ~(0, flags),
-    test_exit_code_value: ~(-1, flags),
-    net_bytes_sent_value: ~(0'i64, flags),
-    net_bytes_received_value: ~(0'i64, flags),
-    net_connections_value: ~(0, flags),
+    console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
+    open_sign_value: EdValue[Sign].init(flags = flags),
+    wants: EdSeq[LocalStateFlags].init(flags = flags),
+    level_name_value: EdValue[string].init("", id = "level_name"),
+    queued_action_value: EdValue[string].init("", flags = flags),
+    server_ctx_name_value: EdValue[string].init("", flags = flags),
+    status_message_value: EdValue[string].init("", flags = flags),
+    voxel_tasks_value: EdValue[int].init(0, flags = flags),
+    test_exit_code_value: EdValue[int].init(-1, flags = flags),
+    net_bytes_sent_value: EdValue[int64].init(0'i64, flags = flags),
+    net_bytes_received_value: EdValue[int64].init(0'i64, flags = flags),
+    net_connections_value: EdValue[int].init(0, flags = flags),
   )
 
   self.init_logger

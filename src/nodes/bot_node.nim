@@ -18,7 +18,7 @@ gdobj BotNode of KinematicBody:
     skin: Spatial
     mesh: MeshInstance
     animation_player: AnimationPlayer
-    transform_zid: ZID
+    transform_zid: EID
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -115,7 +115,7 @@ gdobj BotNode of KinematicBody:
       if change.item == GOD:
         self.set_visibility
 
-    var velocity_zid: ZID
+    var velocity_zid: EID
     if self.model of Bot:
       let bot = Bot(self.model)
       velocity_zid = bot.velocity_value.watch:

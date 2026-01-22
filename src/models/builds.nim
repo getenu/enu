@@ -47,7 +47,7 @@ proc voxel_info*(self: Build, position: Vector3): VoxelInfo =
 proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
   self.voxels.find_voxel(position)
 
-proc find_first*(units: ZenSeq[Unit], positions: open_array[Vector3]): Build =
+proc find_first*(units: EdSeq[Unit], positions: open_array[Vector3]): Build =
   for unit in units:
     if unit of Build:
       let unit = Build(unit)
@@ -105,7 +105,7 @@ proc maybe_join_previous_build(
             current_build = dest
             return
 
-proc expand_bounds_to_chunk(self: Build, chunk_id: Vector3) =
+proc expand_bounds_to_chunk*(self: Build, chunk_id: Vector3) =
   let range = chunk_id * ChunkSize
   let min = range - ChunkSize - vec3(1, 1, 1)
   let max = range + ChunkSize
@@ -355,10 +355,10 @@ proc init*(
     id: id,
     voxels: voxels,
     start_transform: transform,
-    draw_transform_value: ~(Transform.init, flags = {}),
+    draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
     start_color: color,
     drawing: true,
-    bounds_value: ~init_aabb(vec3(), vec3(-1, -1, -1)),
+    bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
     speed: 1.0,
     clone_of: clone_of,
     bot_collisions: bot_collisions,
@@ -372,6 +372,11 @@ proc init*(
   self.voxels.edit_deltas = self.shared.edit_deltas
   self.voxels.rebuild_local_edits()
 
+  # Expand bounds as chunks are created (for early chunk loading)
+  let build = self
+  self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
+    build.expand_bounds_to_chunk(chunk_id)
+
   if global:
     self.global_flags += GLOBAL
   self.reset()
@@ -381,21 +386,25 @@ proc init_voxels_if_needed*(self: Build) =
   ## Initialize voxels if nil (happens when Build is synced between threads)
   if self.voxels.isNil:
     let voxel_id = self.id & ".voxels"
-    let ctx = Zen.thread_ctx
+    let ctx = Ed.thread_ctx
     self.voxels = VoxelStore(
       id: voxel_id,
       ctx: ctx,
       unit_id: self.id,
-      packed_chunks: ZenTable[Vector3, SnapshotData](ctx[voxel_id & ".packed_chunks"]),
-      chunk_deltas: ZenTable[Vector3, ZenSeq[DeltaUpdate]](ctx[voxel_id & ".chunk_deltas"]),
+      packed_chunks: EdTable[Vector3, SnapshotData](ctx[voxel_id & ".packed_chunks"]),
+      chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]](ctx[voxel_id & ".chunk_deltas"]),
       edit_snapshots: self.shared.edit_snapshots,
       edit_deltas: self.shared.edit_deltas,
     )
     self.voxels.rebuild_local_edits()
+    # Expand bounds as chunks are created
+    let build = self
+    self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
+      build.expand_bounds_to_chunk(chunk_id)
 
 proc setup_packed_chunk_watches(self: Build) =
   ## Set up watches for packed_chunks and chunk_deltas to reconstruct local voxels on clients.
-  proc watch_delta_seq(chunk_id: Vector3, delta_seq: ZenSeq[DeltaUpdate]) =
+  proc watch_delta_seq(chunk_id: Vector3, delta_seq: EdSeq[DeltaUpdate]) =
     delta_seq.watch:
       if added:
         self.voxels.apply_delta(chunk_id, change.item)

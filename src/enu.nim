@@ -1,6 +1,5 @@
 {.warning[UnusedImport]: off.}
 
-import pkg / libbacktrace
 import core, game
 
 import
@@ -14,4 +13,4 @@ import
     sign_node,
   ]
 
-Zen.bootstrap
+Ed.bootstrap

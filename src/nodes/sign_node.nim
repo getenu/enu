@@ -13,7 +13,7 @@ const
 
 gdobj SignNode of Spatial:
   var model*: Sign
-  var zid: ZID
+  var zid: EID
   var material: SpatialMaterial
   var viewport: Viewport
   var label: MarkdownLabel

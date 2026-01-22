@@ -15,16 +15,16 @@ proc init*(
 ): Sign =
   var self = Sign(
     id: "sign_" & generate_id(),
-    message_value: ~message,
-    more_value: ~more,
-    width_value: ~width,
-    height_value: ~height,
-    size_value: ~size,
-    billboard_value: ~billboard,
+    message_value: ed(message),
+    more_value: ed(more),
+    width_value: ed(width),
+    height_value: ed(height),
+    size_value: ed(size),
+    billboard_value: ed(billboard),
     frame_created: state.frame_count,
     start_color: ACTION_COLORS[BLACK],
     start_transform: transform,
-    owner_value: ~owner,
+    owner_value: ed(owner),
     text_only: text_only,
     parent: owner,
   )

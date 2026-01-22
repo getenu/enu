@@ -1,7 +1,7 @@
 import types
 export types
 
-import pkg/model_citizen/utils
+import ed/utils
 import
   std/[
     sequtils, strutils, sugar, macros, asyncfutures, importutils, typetraits,
@@ -230,8 +230,8 @@ export transforms
 
 import pkg/godot
 
-import pkg/model_citizen
-export model_citizen
+import ed
+export ed
 
 proc global_from*(self: Vector3, unit: Unit): Vector3 =
   result = self
@@ -247,21 +247,21 @@ proc local_to*(self: Vector3, unit: Unit): Vector3 =
     result -= unit.transform.origin
     unit = unit.parent
 
-proc `+=`*(self: ZenValue[string], str: string) =
+proc `+=`*(self: EdValue[string], str: string) =
   self.value = self.value & str
 
-proc origin*(self: ZenValue[Transform]): Vector3 =
+proc origin*(self: EdValue[Transform]): Vector3 =
   self.value.origin
 
-proc `origin=`*(self: ZenValue[Transform], value: Vector3) =
+proc `origin=`*(self: EdValue[Transform], value: Vector3) =
   var transform = self.value
   transform.origin = value
   self.value = transform
 
-proc basis*(self: ZenValue[Transform]): Basis =
+proc basis*(self: EdValue[Transform]): Basis =
   self.value.basis
 
-proc `basis=`*(self: ZenValue[Transform], value: Basis) =
+proc `basis=`*(self: EdValue[Transform], value: Basis) =
   var transform = self.value
   transform.basis = value
   self.value = transform
@@ -285,12 +285,12 @@ proc update_action_index*(state: GameState, change: int) =
 
   state.tool = Tools(index)
 
-template watch*[T, O](zen: Zen[T, O], unit: untyped, body: untyped) =
+template watch*[T, O](zen: Ed[T, O], unit: untyped, body: untyped) =
   when unit is Unit:
     mixin thread_ctx
     let zid = zen.changes:
       body
-    unit.zids.add(zid)
+    unit.eids.add(zid)
     make_discardable(zid)
   else:
     {.
@@ -300,7 +300,7 @@ template watch*[T, O](zen: Zen[T, O], unit: untyped, body: untyped) =
         "`self.model`, then `self`."
     .}
 
-template watch*[T, O](zen: Zen[T, O], body: untyped) =
+template watch*[T, O](zen: Ed[T, O], body: untyped) =
   when compiles(self.model):
     watch(zen, self.model, body)
   else:
@@ -318,7 +318,7 @@ macro enum_fields*(n: typed): untyped =
     else:
       discard
 
-template value*(self: ZenValue, body: untyped) {.dirty.} =
+template value*(self: EdValue, body: untyped) {.dirty.} =
   block:
     var value = self.value
     with value:

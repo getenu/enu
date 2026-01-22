@@ -3,7 +3,7 @@ import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
-import pkg/[model_citizen]
+import ed
 import models/colors, libs/[eval]
 
 from pkg/godot import NimGodotObject
@@ -119,19 +119,19 @@ type
     NEXT_TASK
 
   ConsoleModel* = ref object
-    log*: ZenSeq[string]
+    log*: EdSeq[string]
 
   GameState* = ref object
-    local_flags*: ZenSet[LocalStateFlags]
-    wants*: ZenSeq[LocalStateFlags]
-    global_flags*: ZenSet[GlobalStateFlags]
-    config_value*: ZenValue[Config]
-    open_unit_value*: ZenValue[Unit]
-    tool_value*: ZenValue[Tools]
+    local_flags*: EdSet[LocalStateFlags]
+    wants*: EdSeq[LocalStateFlags]
+    global_flags*: EdSet[GlobalStateFlags]
+    config_value*: EdValue[Config]
+    open_unit_value*: EdValue[Unit]
+    tool_value*: EdValue[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
-    player_value*: ZenValue[Player]
-    units*: ZenSeq[Unit]
+    player_value*: EdValue[Player]
+    units*: EdSeq[Unit]
     ground*: Ground
     draw_unit_id*: string
     console*: ConsoleModel
@@ -139,29 +139,29 @@ type
     frame_count*: int
     skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format
-    open_sign_value*: ZenValue[Sign]
-    queued_action_value*: ZenValue[string]
+    open_sign_value*: EdValue[Sign]
+    queued_action_value*: EdValue[string]
     scale_factor*: float
     worker_ctx_name*: string
-    server_ctx_name_value*: ZenValue[string]
+    server_ctx_name_value*: EdValue[string]
       # Context running scripts (self if Server, remote otherwise)
-    level_name_value*: ZenValue[string]
-    status_message_value*: ZenValue[string]
-    voxel_tasks_value*: ZenValue[int]
+    level_name_value*: EdValue[string]
+    status_message_value*: EdValue[string]
+    voxel_tasks_value*: EdValue[int]
     ignored_touches*: set[byte]
     logger*: proc(level, msg: string) {.gcsafe.}
-    test_exit_code_value*: ZenValue[int]
+    test_exit_code_value*: EdValue[int]
       # -1 = not set, 0 = success, 1+ = failure count
-    net_bytes_sent_value*: ZenValue[int64]
-    net_bytes_received_value*: ZenValue[int64]
-    net_connections_value*: ZenValue[int]
+    net_bytes_sent_value*: EdValue[int64]
+    net_bytes_received_value*: EdValue[int64]
+    net_connections_value*: EdValue[int]
 
   Model* = ref object of RootObj
     id*: string
     target_point*: Vector3
     target_normal*: Vector3
-    local_flags*: ZenSet[LocalModelFlags]
-    global_flags*: ZenSet[GlobalModelFlags]
+    local_flags*: EdSet[LocalModelFlags]
+    global_flags*: EdSet[GlobalModelFlags]
     node*: Spatial
 
   Ground* = ref object of Model
@@ -170,21 +170,21 @@ type
     id*: string
     materials*: seq[ShaderMaterial]
     emission_colors*: seq[godot.Color]
-    edit_snapshots*: ZenTable[EditKey, SnapshotData]
-    edit_deltas*: ZenTable[EditKey, ZenSeq[DeltaUpdate]]
+    edit_snapshots*: EdTable[EditKey, SnapshotData]
+    edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
 
   VoxelStore* = ref object
     id*: string
-    ctx*: ZenContext
+    ctx*: EdContext
     unit_id*: string # For edit key construction
 
     # Regular chunks (owned)
-    packed_chunks*: ZenTable[Vector3, SnapshotData]
-    chunk_deltas*: ZenTable[Vector3, ZenSeq[DeltaUpdate]]
+    packed_chunks*: EdTable[Vector3, SnapshotData]
+    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
 
     # Edits - references to tables in Shared (not owned)
-    edit_snapshots*: ZenTable[EditKey, SnapshotData]
-    edit_deltas*: ZenTable[EditKey, ZenSeq[DeltaUpdate]]
+    edit_snapshots*: EdTable[EditKey, SnapshotData]
+    edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
 
     # Local caches (plain Tables)
     local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
@@ -196,12 +196,15 @@ type
 
     block_count*: int
 
+    # Callback when a new chunk is created (for bounds expansion)
+    on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
+
     # Stats
     snapshots_flushed*: int
     deltas_flushed*: int
 
   ScriptErrors* =
-    ZenSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
+    EdSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
 
   SightQuery* = object
     target*: Unit
@@ -210,55 +213,55 @@ type
 
   Unit* = ref object of Model
     parent*: Unit
-    units*: ZenSeq[Unit]
+    units*: EdSeq[Unit]
     start_transform*: Transform
-    scale_value*: ZenValue[float]
-    glow_value*: ZenValue[float]
+    scale_value*: EdValue[float]
+    glow_value*: EdValue[float]
     speed*: float
-    code_value*: ZenValue[Code]
+    code_value*: EdValue[Code]
     script_ctx*: ScriptCtx
     disabled*: bool
-    velocity_value*: ZenValue[Vector3]
-    transform_value*: ZenValue[Transform]
+    velocity_value*: EdValue[Vector3]
+    transform_value*: EdValue[Transform]
     clone_of*: Unit
-    collisions*: ZenSeq[tuple[id: string, normal: Vector3]]
-    shared_value*: ZenValue[Shared]
+    collisions*: EdSeq[tuple[id: string, normal: Vector3]]
+    shared_value*: EdValue[Shared]
     start_color*: Color
-    color_value*: ZenValue[Color]
+    color_value*: EdValue[Color]
     sight_ray*: RayCast
     frame_created*: int
-    zids* {.zen_ignore.}: seq[ZID]
+    eids* {.ed_ignore.}: seq[EID]
     errors*: ScriptErrors
-    current_line_value*: ZenValue[int]
-    sight_query_value*: ZenValue[SightQuery]
-    eval_value*: ZenValue[string]
+    current_line_value*: EdValue[int]
+    sight_query_value*: EdValue[SightQuery]
+    eval_value*: EdValue[string]
 
   Player* = ref object of Unit
     colliders*: HashSet[Model]
-    rotation_value*: ZenValue[float]
-    input_direction_value*: ZenValue[Vector3]
-    cursor_position_value*: ZenValue[tuple[line: int, col: int]]
+    rotation_value*: EdValue[float]
+    input_direction_value*: EdValue[Vector3]
+    cursor_position_value*: EdValue[tuple[line: int, col: int]]
 
   Bot* = ref object of Unit
-    animation_value*: ZenValue[string]
+    animation_value*: EdValue[string]
 
   Sign* = ref object of Unit
-    message_value*, more_value*: ZenValue[string]
-    width_value*, height_value*: ZenValue[float]
-    size_value*: ZenValue[int]
-    billboard_value*: ZenValue[bool]
-    owner_value*: ZenValue[Unit]
+    message_value*, more_value*: EdValue[string]
+    width_value*, height_value*: EdValue[float]
+    size_value*: EdValue[int]
+    billboard_value*: EdValue[bool]
+    owner_value*: EdValue[Unit]
     text_only*: bool
 
   Build* = ref object of Unit
     voxels*: VoxelStore
-    draw_transform_value*: ZenValue[Transform]
+    draw_transform_value*: EdValue[Transform]
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
     drawing*: bool
     save_points*:
       Table[string, tuple[position: Transform, color: Color, drawing: bool]]
-    bounds_value*: ZenValue[AABB]
+    bounds_value*: EdValue[AABB]
     bot_collisions*: bool
 
   Config* = object
@@ -360,7 +363,7 @@ type
   Callback* = proc(delta: float, timeout: MonoTime): TaskStates {.gcsafe.}
 
   ScriptController* = ref object
-    worker_thread*: system.Thread[tuple[ctx: ZenContext, state: GameState]]
+    worker_thread*: system.Thread[tuple[ctx: EdContext, state: GameState]]
 
   Worker* = ref object
     retry_failures*: bool
@@ -397,15 +400,15 @@ proc from_flatty*(s: string, i: var int, n: var ScriptCtx) =
 proc to_flatty*(s: var string, n: ScriptCtx) =
   discard
 
-proc from_flatty*(s: string, i: var int, n: var ZenContext) =
+proc from_flatty*(s: string, i: var int, n: var EdContext) =
   discard
 
-proc to_flatty*(s: var string, n: ZenContext) =
+proc to_flatty*(s: var string, n: EdContext) =
   discard
 
-Zen.register(Player)
-Zen.register(Build)
-Zen.register(Sign)
-Zen.register(Bot)
-Zen.register(Shared)
-Zen.build_accessors(GameState)
+Ed.register(Player)
+Ed.register(Build)
+Ed.register(Sign)
+Ed.register(Bot)
+Ed.register(Shared)
+Ed.build_accessors(GameState)

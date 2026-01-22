@@ -231,75 +231,43 @@ proc find_and_copy_dlls(dep_path, dest: string, dlls: varargs[string]) =
     cp_file dep_path.join_path(dep), join_path(dest, dep)
 
 proc copy_fonts() =
-  p "Coping fonts..."
-  when host_os == "macosx":
-    with_dir "fonts/mono/SFMonoFonts.pkg/Payload/Library/Fonts":
-      let dest = "../../../../../../app/themes"
-      cp_file "SF-Mono-Regular.otf", dest / "mono.otf"
-      cp_file "SF-Mono-RegularItalic.otf", dest / "mono-italic.otf"
-      cp_file "SF-Mono-Bold.otf", dest / "mono-bold.otf"
-      cp_file "SF-Mono-BoldItalic.otf", dest / "mono-bold-italic.otf"
+  p "Copying fonts..."
+  let dest = "app/themes"
 
-    with_dir "fonts/pro/SFProFonts.pkg/Payload/Library/Fonts":
-      let dest = "../../../../../../app/themes"
-      cp_file "SF-Pro-Text-Regular.otf", dest / "text.otf"
-      cp_file "SF-Pro-Text-RegularItalic.otf", dest / "text-italic.otf"
-      cp_file "SF-Pro-Text-Bold.otf", dest / "text-bold.otf"
-      cp_file "SF-Pro-Text-BoldItalic.otf", dest / "text-bold-italic.otf"
+  # IBM Plex Mono - monospace font (same on all platforms, OFL licensed)
+  with_dir "fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf":
+    cp_file "IBMPlexMono-Regular.otf", "../../../../../" & dest / "mono.otf"
+    cp_file "IBMPlexMono-Italic.otf", "../../../../../" & dest / "mono-italic.otf"
+    cp_file "IBMPlexMono-Bold.otf", "../../../../../" & dest / "mono-bold.otf"
+    cp_file "IBMPlexMono-BoldItalic.otf", "../../../../../" & dest / "mono-bold-italic.otf"
 
-      cp_file "SF-Pro-Display-Regular.otf", dest / "display.otf"
-      cp_file "SF-Pro-Display-RegularItalic.otf", dest / "display-italic.otf"
-      cp_file "SF-Pro-Display-Bold.otf", dest / "display-bold.otf"
-      cp_file "SF-Pro-Display-BoldItalic.otf", dest / "display-bold-italic.otf"
-  else:
-    with_dir "fonts/Roboto Mono/static":
-      let dest = "../../../app/themes"
-      cp_file "RobotoMono-Regular.ttf", dest / "mono.otf"
-      cp_file "RobotoMono-Italic.ttf", dest / "mono-italic.otf"
-      cp_file "RobotoMono-Bold.ttf", dest / "mono-bold.otf"
-      cp_file "RobotoMono-BoldItalic.ttf", dest / "mono-bold-italic.otf"
+  # Jost - proportional font (same on all platforms, OFL licensed)
+  with_dir "fonts/jost/Jost-master/fonts/otf":
+    cp_file "Jost-400-Book.otf", "../../../../../" & dest / "text.otf"
+    cp_file "Jost-400-BookItalic.otf", "../../../../../" & dest / "text-italic.otf"
+    cp_file "Jost-700-Bold.otf", "../../../../../" & dest / "text-bold.otf"
+    cp_file "Jost-700-BoldItalic.otf", "../../../../../" & dest / "text-bold-italic.otf"
 
-    with_dir "fonts/Roboto":
-      let dest = "../../app/themes"
-      cp_file "Roboto-Regular.ttf", dest / "text.otf"
-      cp_file "Roboto-Italic.ttf", dest / "text-italic.otf"
-      cp_file "Roboto-Bold.ttf", dest / "text-bold.otf"
-      cp_file "Roboto-BoldItalic.ttf", dest / "text-bold-italic.otf"
-
-      # Roboto doesn't have a display version. Consider using something else
-      # here.
-      cp_file "Roboto-Regular.ttf", dest / "display.otf"
-      cp_file "Roboto-Italic.ttf", dest / "display-italic.otf"
-      cp_file "Roboto-Bold.ttf", dest / "display-bold.otf"
-      cp_file "Roboto-BoldItalic.ttf", dest / "display-bold-italic.otf"
+    cp_file "Jost-400-Book.otf", "../../../../../" & dest / "display.otf"
+    cp_file "Jost-400-BookItalic.otf", "../../../../../" & dest / "display-italic.otf"
+    cp_file "Jost-700-Bold.otf", "../../../../../" & dest / "display-bold.otf"
+    cp_file "Jost-700-BoldItalic.otf", "../../../../../" & dest / "display-bold-italic.otf"
 
   with_dir "fonts/fontawesome-free-6.7.2-desktop/otfs":
-    let dest = "../../../app/themes"
-    cp_file "Font Awesome 6 Free-Solid-900.otf", dest / "icons.otf"
+    cp_file "Font Awesome 6 Free-Solid-900.otf", "../../../" & dest / "icons.otf"
 
-proc download_fonts() =
-  p "Downloading fonts..."
-  rm_dir "fonts"
-  mk_dir "fonts"
-  with_dir "fonts":
-    when host_os == "macosx":
-      exec "curl -OJL https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg"
-      exec "curl -OJL https://devimages-cdn.apple.com/design/resources/download/SF-Mono.dmg"
-      exec "hdiutil attach SF-Mono.dmg"
-      exec "pkgutil --expand-full '/Volumes/SFMonoFonts/SF Mono Fonts.pkg' mono"
-      exec "hdiutil detach /Volumes/SFMonoFonts"
-
-      exec "hdiutil attach SF-Pro.dmg"
-      exec "pkgutil --expand-full '/Volumes/SFProFonts/SF Pro Fonts.pkg' pro"
-      exec "hdiutil detach /Volumes/SFProFonts"
-    else:
-      exec "curl -Lo Roboto.zip \"https://github.com/mobiledesres/Google-UI-fonts/blob/main/zip/Roboto.zip?raw=true\""
-      exec "curl -Lo RobotoMono.zip \"https://github.com/mobiledesres/Google-UI-fonts/blob/main/zip/Roboto%20Mono.zip?raw=true\""
-      exec "unzip Roboto.zip"
-      exec "unzip -o RobotoMono.zip"
-
-    exec "curl -OJL https://github.com/FortAwesome/Font-Awesome/releases/download/6.7.2/fontawesome-free-6.7.2-desktop.zip"
-    exec "unzip -o fontawesome-free-6.7.2-desktop.zip"
+proc verify_fonts() =
+  ## Fonts are now committed to the repo (OFL licensed).
+  ## This just verifies they exist.
+  p "Verifying fonts..."
+  let required = [
+    "fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf/IBMPlexMono-Regular.otf",
+    "fonts/jost/Jost-master/fonts/otf/Jost-400-Book.otf",
+    "fonts/fontawesome-free-6.7.2-desktop/otfs/Font Awesome 6 Free-Solid-900.otf"
+  ]
+  for path in required:
+    if not file_exists(path):
+      raise new_exception(IOError, "Missing font: " & path)
 
 proc mingw_path(): string =
   var pre, match: string
@@ -340,7 +308,7 @@ task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   else:
     echo "extract_dlls is only needed on Windows"
 
-task prereqs, "Build godot, download fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
+task prereqs, "Build godot, verify fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
   # Persist arch if specified
   when host_os == "linux":
     if parse_arch_arg() != "":
@@ -351,7 +319,7 @@ task prereqs, "Build godot, download fonts, generate binding and stdlib. Use 'am
   when host_os == "windows":
     extract_dlls_task()
   build_godot(force = "--force" in command_line_params())
-  download_fonts()
+  verify_fonts()
   copy_fonts()
   gen_binding_and_copy_stdlib()
 
@@ -381,7 +349,7 @@ task gen, "Generate build_helpers":
 proc code_sign(id, path: string) =
   exec &"codesign --force -s '{id}' --options runtime {path} -v"
 
-task dist_prereqs, "Build godot debug and release versions, and download fonts":
+task dist_prereqs, "Build godot debug and release versions, and verify fonts":
   p "Buiding distribution prereqs..."
   exec "atlas install"
   exec "atlas rep"
@@ -391,7 +359,7 @@ task dist_prereqs, "Build godot debug and release versions, and download fonts":
     build_godot(target = "server")
   else:
     build_godot()
-  download_fonts()
+  verify_fonts()
 
   let release_opts = "target=release tools=no"
   build_godot(cpu = "64", opts = release_opts)

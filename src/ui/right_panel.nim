@@ -23,7 +23,7 @@ proc md(self: Sign, md: string): string =
 gdobj RightPanel of MarginContainer:
   var
     label: MarkdownLabel
-    zid: ZID
+    zid: EID
     margin = 3.0
     center = 1.0
 

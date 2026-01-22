@@ -224,12 +224,12 @@ gdobj Editor of MarginContainer:
     discard self.tween.tween_callback(self, "_rescale")
 
   proc watch_open_unit() =
-    var line_zid: ZID
+    var line_zid: EID
     state.open_unit_value.changes:
       if removed:
         let unit = state.open_unit
         if unit.is_nil:
-          Zen.thread_ctx.untrack(line_zid)
+          Ed.thread_ctx.untrack(line_zid)
           self.close_editor()
           state.player.open_code = ""
         else:

@@ -12,7 +12,7 @@ gdobj Toolbar of HBoxContainer:
     objects = @["bot"]
     preview_result: Option[PreviewResult]
     waiting = false
-    zid: ZID
+    zid: EID
 
   method ready*() =
     self.bind_signals self, "action_changed"

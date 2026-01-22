@@ -11,9 +11,9 @@ proc remove_from_scene(unit: Unit) =
   if unit == current_build:
     current_build = nil
 
-  for zid in unit.zids:
-    Zen.thread_ctx.untrack zid
-  unit.zids = @[]
+  for zid in unit.eids:
+    Ed.thread_ctx.untrack zid
+  unit.eids = @[]
 
   unit.global_flags -= READY
 
@@ -145,7 +145,7 @@ proc watch*(self: NodeController, state: GameState) =
     elif removed:
       change.item.remove_from_scene()
       let unit = change.item
-      Zen.thread_ctx.queue_free(unit)
+      Ed.thread_ctx.queue_free(unit)
 
 proc init*(_: type NodeController): NodeController =
   result = NodeController()

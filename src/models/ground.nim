@@ -32,8 +32,8 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
 
 proc init*(_: type Ground, node: Spatial): Ground =
   let self = Ground(
-    global_flags: ~set[GlobalModelFlags],
-    local_flags: ~(set[LocalModelFlags], {SyncLocal}),
+    global_flags: EdSet[GlobalModelFlags].init(),
+    local_flags: EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL}),
   )
 
   state.local_flags.changes:

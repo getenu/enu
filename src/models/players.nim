@@ -4,11 +4,11 @@ import core, models/units
 
 proc init*(_: type Player): Player =
   let self = Player(
-    id: \"player-{Zen.thread_ctx.id}",
-    rotation_value: ~0.0,
+    id: \"player-{Ed.thread_ctx.id}",
+    rotation_value: ed(0.0),
     start_transform: Transform.init(origin = vec3(0, 1, 0)),
-    input_direction_value: ~Vector3,
-    cursor_position_value: ~((0, 0)),
+    input_direction_value: EdValue[Vector3].init(),
+    cursor_position_value: ed((0, 0)),
   )
   self.init_unit(shared = false)
   self.global_flags += GLOBAL

@@ -41,7 +41,7 @@ gdobj MarkdownLabel of ScrollContainer:
     local_bold_italic_font: DynamicFont
     local_header_font: DynamicFont
     local_mono_font: DynamicFont
-    zid: ZID
+    zid: EID
 
   proc add_label() =
     self.current_label = self.og_label.duplicate as RichTextLabel

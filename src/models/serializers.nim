@@ -44,10 +44,10 @@ proc from_json_hook(self: var Vector3, json: JsonNode) =
   self.z = json[2].get_float
 
 proc from_json_hook(
-    self: var ZenTable[Vector3, VoxelInfo], json: JsonNode
+    self: var EdTable[Vector3, VoxelInfo], json: JsonNode
 ) {.gcsafe.} =
   assert load_chunks
-  self = ~Table[Vector3, VoxelInfo]
+  self = EdTable[Vector3, VoxelInfo].init()
   for chunks in json:
     for chunk in chunks[1]:
       let location = chunk[0].json_to(Vector3)
@@ -160,7 +160,7 @@ proc `$`(self: VoxelInfo): string =
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
   \"[{$[self.voxel.x, self.voxel.y, self.voxel.z]}, [{int self.info.kind}, {self.info.color}]]"
 
-proc edits_to_string(edit_snapshots: ZenTable[EditKey, SnapshotData]): string =
+proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
   ## Serialize edit_snapshots to JSON format for backwards compatibility
   # Group edits by unit_id
   var by_unit: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
