@@ -21,7 +21,7 @@ if file_exists(".env"):
 when defined(metrics):
   set_system_metrics_automatic_update(false)
 
-ZenContext.init_metrics "main", "worker"
+EdContext.init_metrics "main", "worker"
 
 proc format_bytes(bytes: SomeNumber): string =
   let b = bytes.float
@@ -66,7 +66,7 @@ gdobj Game of Node:
     left_stick: VirtualJoystick
 
   method process*(delta: float) =
-    Zen.thread_ctx.tick
+    Ed.thread_ctx.tick
     inc state.frame_count
     let time = get_mono_time()
     when defined(metrics):
@@ -92,7 +92,7 @@ gdobj Game of Node:
         scale_factor: {state.scale_factor}
         vram: {vram}
         units: {unit_count}
-        zen objects: {Zen.thread_ctx.len}
+        zen objects: {Ed.thread_ctx.len}
         level: {state.level_name}
         {get_network_stats()}
         {get_stats()}
@@ -147,7 +147,7 @@ gdobj Game of Node:
         erase_action(action)
 
   proc init*() =
-    echo "=== Enu game.init() starting ==="
+    info "game.init() starting"
     self.process_priority = -100
 
     let screen_scale =
@@ -158,7 +158,7 @@ gdobj Game of Node:
 
     var initial_user_config = load_user_config(get_user_data_dir())
 
-    Zen.thread_ctx = ZenContext.init(
+    Ed.thread_ctx = EdContext.init(
       id = \"main-{generate_id()}",
       chan_size = 2000,
       buffer = true,
@@ -276,7 +276,7 @@ gdobj Game of Node:
         world = world_dir_path.split_path.tail
 
     if test_mode:
-      echo "=== Enu: TestMode enabled ==="
+      notice "test mode enabled"
       state.push_flag TEST_MODE
 
     state.set_flag(GOD, uc.god_mode ||= false)
@@ -308,7 +308,7 @@ gdobj Game of Node:
     self.script_controller = ScriptController.init
 
     # save_user_config(uc)  # Temporarily disabled
-    echo "=== Enu game.init() complete ==="
+    info "game.init() complete"
 
   proc set_panel_width() =
     let
@@ -441,7 +441,7 @@ gdobj Game of Node:
         # stuck, killed, or hasn't fully started because it's trying to connect
         # to a server, it won't pop the flag, so we force it after a timeout.
         if TEST_MODE in state.local_flags:
-          # In test mode, pop immediately - test_exit_code is a ZenValue so it syncs with the flag
+          # In test mode, pop immediately - test_exit_code is a EdValue so it syncs with the flag
           state.pop_flag QUITTING
         else:
           self.force_quit_at = get_mono_time() + 2.seconds
