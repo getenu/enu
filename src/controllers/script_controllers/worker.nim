@@ -119,7 +119,7 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
 proc watch_code(self: Worker, unit: Unit) =
   unit.code_value.changes:
     if added or touched:
-      if change.item.runner == Zen.thread_ctx.id:
+      if change.item.runner == Ed.thread_ctx.id:
         save_level(state.config.level_dir)
         self.change_code(unit, change.item)
         if change.item.nim == "":
@@ -135,9 +135,9 @@ proc watch_code(self: Worker, unit: Unit) =
       except VMQuit as e:
         self.script_error(unit, e)
 
-  unit.zids.add:
+  unit.eids.add:
     unit.errors.changes:
-      if unit.code.owner == Zen.thread_ctx.id:
+      if unit.code.owner == Ed.thread_ctx.id:
         if added and change.item.log:
           state.err(
             \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
@@ -155,7 +155,7 @@ proc watch_code(self: Worker, unit: Unit) =
 
 proc watch_units(
     self: Worker,
-    units: ZenSeq[Unit],
+    units: EdSeq[Unit],
     parent: Unit,
     body: proc(unit: Unit, change: Change[Unit], added: bool, removed: bool) {.
       gcsafe
@@ -183,12 +183,12 @@ template for_all_units(self: Worker, body: untyped) {.dirty.} =
     ) {.gcsafe.} =
       body
 
-proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
+proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   let (ctx, main_thread_state) = params
   worker_lock.acquire
 
   var listen_address = main_thread_state.config.listen_address
-  let worker_ctx = ZenContext.init(
+  let worker_ctx = EdContext.init(
     id = \"work-{generate_id()}",
     chan_size = 500,
     buffer = false,
@@ -196,8 +196,8 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     label = "worker",
   )
 
-  Zen.thread_ctx = worker_ctx
-  ctx.subscribe(Zen.thread_ctx)
+  Ed.thread_ctx = worker_ctx
+  ctx.subscribe(Ed.thread_ctx)
 
   state = GameState.init_from(main_thread_state)
   state.init_logger
@@ -206,7 +206,7 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     state.push_flag SERVER
     state.server_ctx_name = worker_ctx.id
 
-  state.config_value = ZenValue[Config](Zen.thread_ctx["config"])
+  state.config_value = EdValue[Config](Ed.thread_ctx["config"])
   state.console = ConsoleModel.init_from(main_thread_state.console)
   state.worker_ctx_name = worker_ctx.id
   main_thread_state.worker_ctx_name = worker_ctx.id
@@ -236,10 +236,10 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           remove_file unit.script_ctx.script
           remove_dir unit.data_dir
 
-      for zid in unit.zids:
+      for zid in unit.eids:
         debug "untracking zid", zid, unit = unit.id
-        Zen.thread_ctx.untrack zid
-      unit.zids = @[]
+        Ed.thread_ctx.untrack zid
+      unit.eids = @[]
       unit.destroy
 
   let player = state.player
@@ -287,10 +287,10 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     var connected = false
     while not connected and get_mono_time() < timeout_at:
       try:
-        Zen.thread_ctx.subscribe(connect_address)
+        Ed.thread_ctx.subscribe(connect_address)
         connected = true
         # Get the remote server's context ID from subscribers
-        for sub in Zen.thread_ctx.subscribers:
+        for sub in Ed.thread_ctx.subscribers:
           if sub.kind == Remote:
             state.server_ctx_name = sub.ctx_id
             break
@@ -355,10 +355,12 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
   const backup_interval = 15.minutes
   const test_timeout = 5.minutes
   const stats_log_interval = 5.seconds
+  const asap_flush_interval = 2.seconds
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
   var test_started_at = MonoTime.high
   var last_stats_log = MonoTime.low
+  var last_asap_flush = MonoTime.low
   var last_snapshots_flushed = 0
   var last_deltas_flushed = 0
   var tick_count = 0
@@ -374,14 +376,14 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
       var to_process: seq[Unit]
       state.units.value.walk_tree proc(unit: Unit) =
-        if unit.code.runner == Zen.thread_ctx.id and ?unit.script_ctx:
+        if unit.code.runner == Ed.thread_ctx.id and ?unit.script_ctx:
           if unit.script_ctx.running:
             unit.global_flags += SCRIPT_RUNNING
           else:
             unit.global_flags -= SCRIPT_RUNNING
         to_process.add unit
 
-      for ctx_name in Zen.thread_ctx.unsubscribed:
+      for ctx_name in Ed.thread_ctx.unsubscribed:
         var i = 0
         while i < state.units.len:
           if state.units[i].id == \"player-{ctx_name}":
@@ -395,8 +397,16 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
           break
       to_process.shuffle
 
-      while Zen.thread_ctx.pressure < 0.9 and to_process.len > 0 and
-          state.voxel_tasks <= 10 and get_mono_time() < timeout:
+      # Check if any unit is in ASAP mode - if so, skip voxel_tasks check
+      # because periodic paste will cause many tasks to queue up
+      var any_asap = false
+      for unit in to_process:
+        if unit of Build and ASAP_MODE in Build(unit).local_flags:
+          any_asap = true
+          break
+
+      while Ed.thread_ctx.pressure < 0.9 and to_process.len > 0 and
+          (any_asap or state.voxel_tasks <= 10) and get_mono_time() < timeout:
         let units = to_process
         to_process = @[]
         for unit in units:
@@ -405,23 +415,34 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
             if worker.advance_unit(unit, timeout):
               to_process.add(unit)
 
-      # Flush pending changes for all Builds (no rate limiting)
+      # Flush pending changes for all Builds
+      let asap_interval_elapsed = frame_start > last_asap_flush + asap_flush_interval
+      # Only flush ASAP builds if interval elapsed AND voxel_tasks is low enough
+      let can_flush_asap = asap_interval_elapsed and state.voxel_tasks <= 10
+      var did_flush_asap = false
       state.units.value.walk_tree proc(unit: Unit) =
         if unit of Build:
           let build = Build(unit)
-          # Only flush if NOT in ASAP mode (ASAP mode flushes on end_asap)
-          if ASAP_MODE notin build.local_flags:
+          let in_asap = ASAP_MODE in build.local_flags
+          # Flush if not in ASAP mode, or if in ASAP mode and we can flush
+          let should_flush = not in_asap or can_flush_asap
+          if should_flush:
             if build.voxels.pending_chunks.len > 0:
               build.voxels.flush_dirty_chunks()
+              if in_asap:
+                did_flush_asap = true
             if build.voxels.pending_edits.len > 0:
               build.voxels.flush_dirty_edits()
+      # Only reset timer if we actually flushed during ASAP mode
+      if did_flush_asap:
+        last_asap_flush = frame_start
 
-      Zen.thread_ctx.tick
+      Ed.thread_ctx.tick
       run_deferred()
 
       # Update network stats for main thread
-      if not Zen.thread_ctx.reactor.isNil:
-        state.net_connections = Zen.thread_ctx.reactor.connections.len
+      if not Ed.thread_ctx.reactor.isNil:
+        state.net_connections = Ed.thread_ctx.reactor.connections.len
       else:
         state.net_connections = 0
 
@@ -492,12 +513,12 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
 
       if now > save_at:
         save_level(state.config.level_dir)
-        Zen.thread_ctx.tick_keepalives()
+        Ed.thread_ctx.tick_keepalives()
         save_at = now + auto_save_interval
 
       if now > backup_at and TEST_MODE notin state.local_flags:
         backup_level(state.config.level_dir)
-        Zen.thread_ctx.tick_keepalives()
+        Ed.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
 
       # Track max tick time for debugging
@@ -519,16 +540,16 @@ proc worker_thread(params: (ZenContext, GameState)) {.gcsafe.} =
     if NEEDS_RESTART in state.local_flags:
       if ?listen_address:
         private_access Reactor
-        Zen.thread_ctx.reactor.socket.close
+        Ed.thread_ctx.reactor.socket.close
       state.pop_flag NEEDS_RESTART
 
-    Zen.thread_ctx.tick
+    Ed.thread_ctx.tick
   except Exception:
     discard
 
 proc launch_worker*(
-    ctx: ZenContext, state: GameState
-): system.Thread[tuple[ctx: ZenContext, state: GameState]] =
+    ctx: EdContext, state: GameState
+): system.Thread[tuple[ctx: EdContext, state: GameState]] =
   worker_lock.acquire
   result.create_thread(worker_thread, (ctx, state))
   work_done.wait(worker_lock)

@@ -21,12 +21,12 @@ var hidden_shader {.threadvar.}: Shader
 gdobj BuildNode of VoxelTerrain:
   var
     model*: Build
-    transform_zid: ZID
+    transform_zid: EID
     default_view_distance: int
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
     loaded_chunks: HashSet[Vector3]
-    tracked_delta_seqs: Table[Vector3, ZID]
+    tracked_delta_seqs: Table[Vector3, EID]
     renderer: VoxelRenderer
 
   proc init*() =
@@ -51,13 +51,16 @@ gdobj BuildNode of VoxelTerrain:
     for i, material in self.model.shared.materials:
       self.set_material(i, material)
 
-  proc watch_delta_seq(chunk_id: Vector3, delta_seq: ZenSeq[DeltaUpdate]) =
+  proc watch_delta_seq(chunk_id: Vector3, delta_seq: EdSeq[DeltaUpdate]) =
     if chunk_id in self.tracked_delta_seqs:
       return
 
     let zid = delta_seq.watch:
       if added:
-        self.renderer.render_delta(chunk_id, change.item)
+        if ASAP_MODE in self.model.local_flags:
+          self.renderer.buffer_delta(chunk_id, change.item)
+        else:
+          render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
 
     self.tracked_delta_seqs[chunk_id] = zid
 
@@ -119,13 +122,18 @@ gdobj BuildNode of VoxelTerrain:
     self.bounds = self.model.bounds
     self.model.bounds_value.watch:
       if added:
-        debug "changing bounds", new = change.item
+        notice "changing bounds", new = change.item, id = self.model.id
         self.bounds = change.item
 
-    # Watch packed_chunks for snapshots - renderer handles rendering
+    # Watch packed_chunks for snapshots
     self.model.voxels.packed_chunks.watch:
       if added:
-        self.renderer.render_snapshot(change.item.key, change.item.value)
+        if ASAP_MODE in self.model.local_flags:
+          self.renderer.buffer_snapshot(change.item.key, change.item.value)
+        else:
+          render_snapshot_direct(
+            self.renderer.voxel_tool, change.item.key, change.item.value
+          )
 
     # Watch chunk_deltas for incremental updates
     self.model.voxels.chunk_deltas.watch:
@@ -135,13 +143,16 @@ gdobj BuildNode of VoxelTerrain:
         if not delta_seq.isNil:
           # Render any existing deltas
           for delta in delta_seq:
-            self.renderer.render_delta(chunk_id, delta)
+            if ASAP_MODE in self.model.local_flags:
+              self.renderer.buffer_delta(chunk_id, delta)
+            else:
+              render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
           # Watch for future deltas
           self.watch_delta_seq(chunk_id, delta_seq)
       elif removed:
         let chunk_id = change.item.key
         if chunk_id in self.tracked_delta_seqs:
-          Zen.thread_ctx.untrack(self.tracked_delta_seqs[chunk_id])
+          Ed.thread_ctx.untrack(self.tracked_delta_seqs[chunk_id])
           self.tracked_delta_seqs.del(chunk_id)
 
     self.model.global_flags.watch:
@@ -210,9 +221,8 @@ gdobj BuildNode of VoxelTerrain:
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
 
-      # Paste buffered voxels when not in ASAP mode
-      if ASAP_MODE notin self.model.local_flags:
-        self.renderer.paste_if_dirty()
+      if ASAP_MODE in self.model.local_flags:
+        self.renderer.tick_asap()
 
   proc setup*() =
     let was_skipping_join = dont_join
@@ -220,7 +230,7 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.init_voxels_if_needed()
 
-    # Create renderer for direct buffer rendering
+    # Create renderer for ASAP mode buffer operations
     self.renderer = VoxelRenderer.init()
     self.renderer.voxel_tool = self.get_voxel_tool()
 

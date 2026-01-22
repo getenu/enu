@@ -10,16 +10,13 @@ import godotapi/[voxel_buffer, voxel_tool]
 import core
 import models/colors
 
-type
-  ChunkFormat* {.size: sizeof(uint8).} = enum
-    FMT_RLE = 0x00
-    FMT_SPARSE_FULL = 0x01
-    FMT_SPARSE_DELTA = 0x02
-    FMT_EMPTY = 0x03
+type ChunkFormat* {.size: sizeof(uint8).} = enum
+  FMT_RLE = 0x00
+  FMT_SPARSE_FULL = 0x01
+  FMT_SPARSE_DELTA = 0x02
+  FMT_EMPTY = 0x03
 
-const
-  CMD_REPEAT* = 241'u8
-  MASK_VALUE* = 255
+const CMD_REPEAT* = 241'u8
 
 # =============================================================================
 # Packing/Unpacking
@@ -68,7 +65,6 @@ proc buffer*(position: Vector3): Vector3 =
   (position / ChunkSize).floor
 
 proc chunk_id_for_pos*(position: Vector3): Vector3 =
-  ## Get chunk ID for a world position (16x16x16 chunks)
   vec3(
     math.floor(position.x / ChunkDim).int.float,
     math.floor(position.y / ChunkDim).int.float,
@@ -76,7 +72,6 @@ proc chunk_id_for_pos*(position: Vector3): Vector3 =
   )
 
 proc local_pos_in_chunk*(position: Vector3): Vector3 =
-  ## Get local position within chunk (0-15 for each axis)
   let chunk_id = chunk_id_for_pos(position)
   vec3(
     position.x - chunk_id.x * ChunkDim,
@@ -305,21 +300,25 @@ proc decode_delta*(
 proc init*(
     _: type VoxelStore,
     id: string,
-    ctx: ZenContext = nil,
+    ctx: EdContext = nil,
     unit_id: string = "",
-    edit_snapshots: ZenTable[EditKey, SnapshotData] = nil,
-    edit_deltas: ZenTable[EditKey, ZenSeq[DeltaUpdate]] = nil,
+    edit_snapshots: EdTable[EditKey, SnapshotData] = nil,
+    edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]] = nil,
 ): VoxelStore =
-  let use_ctx = if ctx.isNil: Zen.thread_ctx else: ctx
+  let use_ctx = if ctx.isNil: Ed.thread_ctx else: ctx
   VoxelStore(
     id: id,
     ctx: use_ctx,
     unit_id: unit_id,
-    packed_chunks: ZenTable[Vector3, SnapshotData].init(
-      id = id & ".packed_chunks", ctx = use_ctx, flags = {SyncLocal, SyncRemote}
+    packed_chunks: EdTable[Vector3, SnapshotData].init(
+      id = id & ".packed_chunks",
+      ctx = use_ctx,
+      flags = {SYNC_LOCAL, SYNC_REMOTE},
     ),
-    chunk_deltas: ZenTable[Vector3, ZenSeq[DeltaUpdate]].init(
-      id = id & ".chunk_deltas", ctx = use_ctx, flags = {SyncLocal, SyncRemote}
+    chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]].init(
+      id = id & ".chunk_deltas",
+      ctx = use_ctx,
+      flags = {SYNC_LOCAL, SYNC_REMOTE},
     ),
     edit_snapshots: edit_snapshots,
     edit_deltas: edit_deltas,
@@ -351,9 +350,11 @@ proc find_voxel*(self: VoxelStore, position: Vector3): Option[VoxelInfo] =
 proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   let chunk_id = position.buffer
 
-  # Update local cache
-  if chunk_id notin self.local_voxels:
+  let is_new_chunk = chunk_id notin self.local_voxels
+  if is_new_chunk:
     self.local_voxels[chunk_id] = Table[Vector3, VoxelInfo].init
+    if not self.on_chunk_created.isNil:
+      self.on_chunk_created(chunk_id)
 
   let existed = position in self.local_voxels[chunk_id]
   if not existed:
@@ -361,7 +362,6 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
 
   self.local_voxels[chunk_id][position] = voxel
 
-  # Track change for sync (using local position within chunk)
   let local_pos = vec3(
     floor_mod(position.x.int, 16).float,
     floor_mod(position.y.int, 16).float,
@@ -376,7 +376,6 @@ proc del_voxel*(self: VoxelStore, position: Vector3) =
     dec self.block_count
     self.local_voxels[chunk_id].del(position)
 
-    # Track deletion for sync
     let local_pos = vec3(
       floor_mod(position.x.int, 16).float,
       floor_mod(position.y.int, 16).float,
@@ -402,12 +401,10 @@ proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
   let chunk_id = chunk_id_for_pos(position)
   let local_pos = local_pos_in_chunk(position)
 
-  # Update local cache
   if chunk_id notin self.local_edits:
     self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
   self.local_edits[chunk_id][local_pos] = info
 
-  # Queue for packed sync
   let packed = pack_voxel(info.color.action_index.ord, info.kind.ord)
   self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
 
@@ -420,12 +417,9 @@ proc del_edit*(self: VoxelStore, position: Vector3) =
     if self.local_edits[chunk_id].len == 0:
       self.local_edits.del(chunk_id)
 
-    # Queue deletion for packed sync
     self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, EMPTY_VOXEL)
 
 template for_all_edits*(self: VoxelStore, body: untyped) =
-  ## Iterate over all edits (world positions)
-  ## Body receives: pos (world position), info (VoxelInfo)
   for chunk_id, chunk in self.local_edits:
     for local_pos, info {.inject.} in chunk:
       let pos {.inject.} = vec3(
@@ -436,13 +430,11 @@ template for_all_edits*(self: VoxelStore, body: untyped) =
       body
 
 proc rebuild_local_edits*(self: VoxelStore) =
-  ## Rebuild local_edits cache from packed edit_snapshots + edit_deltas
   self.local_edits.clear()
 
   if self.edit_snapshots.isNil:
     return
 
-  # Apply snapshots
   for key, snapshot in self.edit_snapshots:
     if key.id != self.unit_id:
       continue
@@ -458,7 +450,6 @@ proc rebuild_local_edits*(self: VoxelStore) =
         self.local_edits[chunk_id][local_pos] =
           (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
 
-  # Apply deltas on top
   if self.edit_deltas.isNil:
     return
 
@@ -535,7 +526,7 @@ proc flush_chunk_delta(
 
   if chunk_id notin self.chunk_deltas:
     self.chunk_deltas[chunk_id] =
-      ZenSeq[DeltaUpdate].init(flags = {SyncLocal, SyncRemote})
+      EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
 
   self.chunk_deltas[chunk_id].add delta
   inc self.deltas_flushed
@@ -589,7 +580,7 @@ proc flush_edit_delta(
 
   if key notin self.edit_deltas:
     self.edit_deltas[key] =
-      ZenSeq[DeltaUpdate].init(ctx = self.ctx, flags = {SyncLocal, SyncRemote})
+      EdSeq[DeltaUpdate].init(ctx = self.ctx, flags = {SYNC_LOCAL, SYNC_REMOTE})
 
   self.edit_deltas[key].add delta
   inc self.deltas_flushed
@@ -628,14 +619,12 @@ proc apply_snapshot*(
 
   let voxels = decode_chunk(snapshot)
 
-  # Clear existing chunk
   if chunk_id in self.local_voxels:
     for pos, info in self.local_voxels[chunk_id]:
       if info.kind != HOLE:
         dec self.block_count
     self.local_voxels.del(chunk_id)
 
-  # Check for voxels
   var has_voxels = false
   for v in voxels:
     if v != EMPTY_VOXEL:
@@ -661,7 +650,6 @@ proc apply_snapshot*(
           inc self.block_count
 
 proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
-  ## Apply a delta update to local_voxels
   let changes = decode_delta(delta)
   for (local_pos, packed_voxel) in changes:
     let world_pos = vec3(
@@ -716,18 +704,54 @@ iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
       yield (pos, info)
 
 # =============================================================================
-# VoxelRenderer - Direct Buffer Rendering
+# Direct Rendering (non-ASAP mode) - uses set_voxel for each voxel
 # =============================================================================
 
-type
-  VoxelRenderer* = ref object
-    voxel_tool*: VoxelTool
-    buffer*: VoxelBuffer
-    min_pos*: Vector3
-    max_pos*: Vector3
-    buffer_size*: Vector3
-    dirty*: bool
-    asap_mode*: bool
+proc render_snapshot_direct*(
+    voxel_tool: VoxelTool, chunk_id: Vector3, snapshot: SnapshotData
+) =
+  if snapshot.data.len == 0:
+    return
+  let voxels = decode_chunk(snapshot)
+  for linear in 0 ..< CHUNK_VOLUME:
+    let packed_voxel = voxels[linear]
+    if packed_voxel != EMPTY_VOXEL:
+      let local_pos = from_linear(linear)
+      let world_pos = chunk_id * ChunkDim + local_pos
+      let (color_idx, _) = unpack_voxel(packed_voxel)
+      voxel_tool.set_voxel(world_pos, color_idx.int64)
+
+proc render_delta_direct*(
+    voxel_tool: VoxelTool, chunk_id: Vector3, delta: DeltaUpdate
+) =
+  if delta.data.len == 0:
+    return
+  let changes = decode_delta(delta)
+  for (local_pos, packed_voxel) in changes:
+    let world_pos = chunk_id * ChunkDim + local_pos
+    if packed_voxel == EMPTY_VOXEL:
+      voxel_tool.set_voxel(world_pos, 0)
+    else:
+      let (color_idx, _) = unpack_voxel(packed_voxel)
+      voxel_tool.set_voxel(world_pos, color_idx.int64)
+
+# =============================================================================
+# VoxelRenderer - ASAP Mode Buffer Rendering
+# =============================================================================
+
+import std/[monotimes, times]
+
+const ASAP_PASTE_INTERVAL = initDuration(seconds = 2)
+
+type VoxelRenderer* = ref object
+  voxel_tool*: VoxelTool
+  buffer: VoxelBuffer
+  min_pos: Vector3
+  max_pos: Vector3
+  buffer_size: Vector3
+  dirty: bool
+  asap_active: bool
+  last_paste_time: MonoTime
 
 proc init*(_: type VoxelRenderer): VoxelRenderer =
   VoxelRenderer()
@@ -742,11 +766,10 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
     self.buffer_size = vec3(ChunkDim, ChunkDim, ChunkDim)
     self.buffer = gdnew[VoxelBuffer]()
     self.buffer.create(ChunkDim, ChunkDim, ChunkDim)
-    self.buffer.fill(MASK_VALUE)
+    self.buffer.fill(0)
   elif chunk_min.x < self.min_pos.x or chunk_min.y < self.min_pos.y or
       chunk_min.z < self.min_pos.z or chunk_max.x > self.max_pos.x or
       chunk_max.y > self.max_pos.y or chunk_max.z > self.max_pos.z:
-    # Need to expand - create new buffer, copy old data
     let new_min = vec3(
       min(chunk_min.x, self.min_pos.x),
       min(chunk_min.y, self.min_pos.y),
@@ -761,17 +784,11 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
 
     let new_buffer = gdnew[VoxelBuffer]()
     new_buffer.create(new_size.x.int64, new_size.y.int64, new_size.z.int64)
-    new_buffer.fill(MASK_VALUE)
+    new_buffer.fill(0)
 
-    # Copy old buffer data to new buffer at offset
     let offset = self.min_pos - new_min
-    let old_size = self.buffer_size
     new_buffer.copy_channel_from_area(
-      self.buffer,
-      vec3(0, 0, 0),
-      old_size - vec3(1, 1, 1),
-      offset,
-      0,
+      self.buffer, vec3(0, 0, 0), self.buffer_size, offset, 0
     )
 
     self.buffer = new_buffer
@@ -779,20 +796,12 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
     self.max_pos = new_max
     self.buffer_size = new_size
 
-proc zero_chunk_region(self: VoxelRenderer, chunk_id: Vector3) =
-  let chunk_origin = chunk_id * ChunkDim
-  for x in 0 ..< ChunkDim:
-    for y in 0 ..< ChunkDim:
-      for z in 0 ..< ChunkDim:
-        let world_pos = chunk_origin + vec3(x.float, y.float, z.float)
-        let buffer_pos = world_pos - self.min_pos
-        self.buffer.set_voxel(0, buffer_pos.x.int64, buffer_pos.y.int64, buffer_pos.z.int64)
-
-proc render_snapshot*(self: VoxelRenderer, chunk_id: Vector3, snapshot: SnapshotData) =
+proc buffer_snapshot*(
+    self: VoxelRenderer, chunk_id: Vector3, snapshot: SnapshotData
+) =
   if snapshot.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
-  self.zero_chunk_region(chunk_id)
   let voxels = decode_chunk(snapshot)
   for linear in 0 ..< CHUNK_VOLUME:
     let packed_voxel = voxels[linear]
@@ -801,10 +810,13 @@ proc render_snapshot*(self: VoxelRenderer, chunk_id: Vector3, snapshot: Snapshot
       let world_pos = chunk_id * ChunkDim + local_pos
       let buffer_pos = world_pos - self.min_pos
       let (color_idx, _) = unpack_voxel(packed_voxel)
-      self.buffer.set_voxel(color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64, buffer_pos.z.int64)
+      self.buffer.set_voxel(
+        color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64,
+        buffer_pos.z.int64,
+      )
   self.dirty = true
 
-proc render_delta*(self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate) =
+proc buffer_delta*(self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate) =
   if delta.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
@@ -813,33 +825,43 @@ proc render_delta*(self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate) =
     let world_pos = chunk_id * ChunkDim + local_pos
     let buffer_pos = world_pos - self.min_pos
     if packed_voxel == EMPTY_VOXEL:
-      self.buffer.set_voxel(0, buffer_pos.x.int64, buffer_pos.y.int64, buffer_pos.z.int64)
+      self.buffer.set_voxel(
+        0, buffer_pos.x.int64, buffer_pos.y.int64, buffer_pos.z.int64
+      )
     else:
       let (color_idx, _) = unpack_voxel(packed_voxel)
-      self.buffer.set_voxel(color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64, buffer_pos.z.int64)
+      self.buffer.set_voxel(
+        color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64,
+        buffer_pos.z.int64,
+      )
   self.dirty = true
 
-proc recreate_buffer(self: VoxelRenderer) =
-  if self.buffer_size != vec3(0, 0, 0):
-    self.buffer = gdnew[VoxelBuffer]()
-    self.buffer.create(self.buffer_size.x.int64, self.buffer_size.y.int64, self.buffer_size.z.int64)
-    self.buffer.fill(MASK_VALUE)
-  else:
-    self.buffer = nil
-
-proc paste_if_dirty*(self: VoxelRenderer) =
-  if not self.dirty or self.buffer.isNil or self.voxel_tool.isNil:
-    return
-  self.voxel_tool.paste(self.min_pos, self.buffer, 1, MASK_VALUE)
-  self.dirty = false
-  self.recreate_buffer()
-
 proc begin_asap*(self: VoxelRenderer) =
-  self.asap_mode = true
+  self.buffer = nil
+  self.min_pos = vec3()
+  self.max_pos = vec3()
+  self.buffer_size = vec3()
+  self.dirty = false
+  self.asap_active = true
+  self.last_paste_time = get_mono_time()
+
+proc tick_asap*(self: VoxelRenderer) =
+  if not self.asap_active:
+    return
+  let now = get_mono_time()
+  let elapsed = now - self.last_paste_time
+  if elapsed >= ASAP_PASTE_INTERVAL:
+    if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:
+      self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
+      self.dirty = false
+    self.last_paste_time = now
 
 proc end_asap*(self: VoxelRenderer) =
   if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:
-    self.voxel_tool.paste(self.min_pos, self.buffer, 1, MASK_VALUE)
-    self.dirty = false
-  self.asap_mode = false
-  self.recreate_buffer()
+    self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
+  self.buffer = nil
+  self.min_pos = vec3()
+  self.max_pos = vec3()
+  self.buffer_size = vec3()
+  self.dirty = false
+  self.asap_active = false
