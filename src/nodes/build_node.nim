@@ -125,7 +125,11 @@ gdobj BuildNode of VoxelTerrain:
         notice "changing bounds", new = change.item, id = self.model.id
         self.bounds = change.item
 
-    # Watch packed_chunks for snapshots
+    # Render existing packed_chunks (for clients connecting to existing builds)
+    for chunk_id, snapshot in self.model.voxels.packed_chunks:
+      render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
+
+    # Watch packed_chunks for new snapshots
     self.model.voxels.packed_chunks.watch:
       if added:
         if ASAP_MODE in self.model.global_flags:
@@ -135,13 +139,20 @@ gdobj BuildNode of VoxelTerrain:
             self.renderer.voxel_tool, change.item.key, change.item.value
           )
 
-    # Watch chunk_deltas for incremental updates
+    # Render existing chunk_deltas and set up watches
+    for chunk_id, delta_seq in self.model.voxels.chunk_deltas:
+      if not delta_seq.isNil:
+        for delta in delta_seq:
+          render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+        self.watch_delta_seq(chunk_id, delta_seq)
+
+    # Watch chunk_deltas for new chunks
     self.model.voxels.chunk_deltas.watch:
       if added:
         let chunk_id = change.item.key
         let delta_seq = change.item.value
         if not delta_seq.isNil:
-          # Render any existing deltas
+          # Render any existing deltas in the new chunk
           for delta in delta_seq:
             if ASAP_MODE in self.model.global_flags:
               self.renderer.buffer_delta(chunk_id, delta)
