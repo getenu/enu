@@ -17,7 +17,7 @@ tools/build_helpers.exe
 logs/
 *.exe
 *.out
-
+*.log
 
 app/.import
 .DS_Store

@@ -13,7 +13,8 @@ import
   ]
 
 import ui/virtual_joystick
-import core, types, gdutils, controllers, models/[serializers, units, colors]
+import
+  core, types, gdutils, controllers, models/[serializers, units, colors, builds]
 
 if file_exists(".env"):
   dotenv.overload()
@@ -39,9 +40,11 @@ proc get_network_stats(): string =
   let bytes_recv = state.net_bytes_received
 
   if conn_count == 0:
-    result = fmt"net: no conn (sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)})"
+    result =
+      \"net: no conn (sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)})"
   else:
-    result = fmt"net: {conn_count} conn, sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)}"
+    result =
+      \"net: {conn_count} conn, sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)}"
 
 # saved state when restarting worker thread
 const savable_flags =
@@ -156,7 +159,19 @@ gdobj Game of Node:
       else:
         get_screen_dpi(-1).float / 96.0
 
-    var initial_user_config = load_user_config(get_user_data_dir())
+    var args = get_cmdline_args().to_seq
+    let work_dir =
+      if (let i = args.find("--temp-workdir"); i) > -1:
+        args.delete(i)
+        let temp = get_temp_dir() / ("enu-test-" & $get_current_process_id())
+        create_dir temp
+        temp
+      else:
+        get_user_data_dir()
+
+    var initial_user_config = load_user_config(work_dir)
+
+    echo "== WORKDIR " & work_dir
 
     Ed.thread_ctx = EdContext.init(
       id = \"main-{generate_id()}",
@@ -173,8 +188,6 @@ gdobj Game of Node:
     assert not state.is_nil
 
     randomize()
-
-    var args = get_cmdline_args().to_seq
 
     var connect_address = ""
     var listen_address = ""
@@ -197,6 +210,11 @@ gdobj Game of Node:
     if (let i = args.find("--enu-test"); i) > -1:
       test_mode = true
       args.delete(i)
+    if (let i = args.find("--level"); i) > -1:
+      let parts = args[i + 1].split("/")
+      uc.world = some(parts[0])
+      uc.level = some(parts[1])
+      args.delete(i .. i + 1)
 
     if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address:
       listen_address = get_env("ENU_LISTEN_ADDRESS")
@@ -229,7 +247,7 @@ gdobj Game of Node:
 
     state.config_value.value:
       screen_scale = screen_scale
-      work_dir = get_user_data_dir()
+      work_dir = work_dir
       font_size = uc.font_size ||= 20
       toolbar_size = uc.toolbar_size ||= 100
       world = uc.world ||= "tutorial"
@@ -269,11 +287,17 @@ gdobj Game of Node:
         fail "Level not found: " & level_dir_override & " (no level.json)"
       let parts = level_dir_override.split_path
       let world_dir_path = parts.head
+
+      let new_level = parts.tail
+      let new_world = world_dir_path.split_path.tail
+      var final_world_dir = world_dir_path
+      var final_level_dir = level_dir_override
+
       state.config_value.value:
-        level_dir = level_dir_override
-        level = parts.tail
-        world_dir = world_dir_path
-        world = world_dir_path.split_path.tail
+        level = new_level
+        world = new_world
+        world_dir = final_world_dir
+        level_dir = final_level_dir
 
     if test_mode:
       notice "test mode enabled"
@@ -307,7 +331,7 @@ gdobj Game of Node:
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init
 
-    # save_user_config(uc)  # Temporarily disabled
+    save_user_config(uc)
     info "game.init() complete"
 
   proc set_panel_width() =
@@ -384,22 +408,28 @@ gdobj Game of Node:
     info "Changed game mode", environment
 
   method ready*() =
-    state.nodes.data = state.nodes.game.find_node("Level").get_node("data")
-    assert not state.nodes.data.is_nil
-    self.scaled_viewport =
-      self.get_node("ViewportContainer/Viewport") as Viewport
+    try:
+      info "game.ready() starting"
+      state.nodes.data = state.nodes.game.find_node("Level").get_node("data")
+      assert not state.nodes.data.is_nil
+      self.scaled_viewport =
+        self.get_node("ViewportContainer/Viewport") as Viewport
 
-    self.bind_signals(self.get_viewport(), "size_changed")
-    self.bind_signals(self.get_tree(), "global_menu_action")
-    assert not self.scaled_viewport.is_nil
-    self.get_tree().auto_accept_quit = false
-    self.set_font_size(state.config.font_size)
-    self.load_environment(state.config.environment)
-    info "config", config = state.config
-    self.reticle = self.find_node("Reticle").as(Control)
-    self.stats = self.find_node("stats").as(Label)
-    self.left_stick = find("LeftStick", VirtualJoystick)
-    self.stats.visible = state.config.show_stats
+      self.bind_signals(self.get_viewport(), "size_changed")
+      self.bind_signals(self.get_tree(), "global_menu_action")
+      assert not self.scaled_viewport.is_nil
+      self.get_tree().auto_accept_quit = false
+      self.set_font_size(state.config.font_size)
+      info "loading environment", env = state.config.environment
+      self.load_environment(state.config.environment)
+      info "config", config = state.config
+      self.reticle = self.find_node("Reticle").as(Control)
+      self.stats = self.find_node("stats").as(Label)
+      self.left_stick = find("LeftStick", VirtualJoystick)
+      self.stats.visible = state.config.show_stats
+    except Exception as e:
+      error "game.ready() failed", msg = e.msg, stacktrace = e.get_stack_trace()
+      raise e
 
     state.config_value.changes:
       if change.item.full_screen != state.config.full_screen:
@@ -446,10 +476,11 @@ gdobj Game of Node:
         else:
           self.force_quit_at = get_mono_time() + 2.seconds
       elif QUITTING.removed:
-        let exit_code = if TEST_MODE in state.local_flags and state.test_exit_code >= 0:
-          state.test_exit_code
-        else:
-          0
+        let exit_code =
+          if TEST_MODE in state.local_flags and state.test_exit_code >= 0:
+            state.test_exit_code
+          else:
+            0
         self.get_tree().quit(exit_code)
 
       if NEEDS_RESTART.removed:

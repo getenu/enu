@@ -13,6 +13,14 @@ bridged_to_host:
   proc block_color_at*(position: Vector3): Colors
   proc begin_asap*(self: Build)
   proc end_asap*(self: Build)
+  proc place_block*(self: Build, position: Vector3, color: Colors)
+    ## Places a MANUAL block at the given position. Used for testing persistence.
+
+  proc save_level_now*()
+    ## Triggers an immediate level save. Used for testing persistence.
+
+  proc reload_unit*(self: Build)
+    ## Reloads the Build's voxel data from disk without stopping the script.
 
 template asap*(body: untyped) =
   ## Execute build commands instantly without incremental updates.

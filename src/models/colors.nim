@@ -1,5 +1,6 @@
 import pkg/core/godotcoretypes as godot except Color
 import pkg/chroma
+import std/[json, strutils]
 
 export chroma
 
@@ -48,7 +49,7 @@ const IR_BLACK* = [
   TEXT: col"A8FF60",
   NUMBER: col"FF73FD",
   VARIABLE: col"C6C5FE",
-  INVALID: col"FD5FF1"
+  INVALID: col"FD5FF1",
 ]
 
 const ACTION_COLORS* = [
@@ -58,7 +59,7 @@ const ACTION_COLORS* = [
   GREEN: col"14f707",
   BLACK: col"000000",
   WHITE: col"d9eed8",
-  BROWN: col"3f302b"
+  BROWN: col"3f302b",
 ]
 
 proc action_index*(self: Color): Colors =
@@ -66,5 +67,23 @@ proc action_index*(self: Color): Colors =
     if value == self:
       return key
 
-when is_main_module:
-  print ACTION_COLORS[WHITE]
+proc to_json_hook*(self: Color): JsonNode =
+  result =
+    if self == ACTION_COLORS[ERASER]:
+      %""
+    else:
+      for c in Colors:
+        if self == ACTION_COLORS[c]:
+          return %($c)
+      %self.to_html_hex
+
+proc from_json_hook*(self: var Color, json: JsonNode) =
+  let hex = json.get_str
+  if hex == "":
+    self = ACTION_COLORS[ERASER]
+  else:
+    for c in Colors:
+      if ($c).toLowerAscii == hex.toLowerAscii:
+        self = ACTION_COLORS[c]
+        return
+    self = hex.parse_html_hex

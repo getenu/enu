@@ -1,15 +1,16 @@
 import
   std/[
-    tables, sets, options, sequtils, math, monotimes, sugar,
-    macros, base64, strformat, strutils,
+    tables, sets, options, sequtils, math, monotimes, sugar, macros, base64,
+    strformat, strutils,
   ]
 import godotapi/spatial
 import core, models/[states, bots, colors, units, voxels]
 
 # Re-export from voxels
-export encode_chunk, decode_chunk, encode_delta, decode_delta,
-       pack_voxel, unpack_voxel, linear_position, from_linear,
-       is_empty, flush_dirty_chunks, flush_dirty_edits, chunk_id_for_pos
+export
+  encode_chunk, decode_chunk, encode_delta, decode_delta, pack_voxel,
+  unpack_voxel, linear_position, from_linear, is_empty, flush_dirty_chunks,
+  flush_dirty_edits, chunk_id_for_pos
 
 include "build_code_template.nim.nimf"
 
@@ -120,7 +121,19 @@ proc reset_bounds*(self: Build) =
   for chunk_id, chunk in self.voxels.local_voxels:
     self.expand_bounds_to_chunk(chunk_id)
 
-proc add_voxel(self: Build, position: Vector3, voxel: VoxelInfo) =
+proc begin_asap*(self: Build) {.gcsafe.} =
+  if ASAP_MODE notin self.global_flags:
+    debug "ASAP mode BEGIN", build_id = self.id
+  self.global_flags += ASAP_MODE
+
+proc end_asap*(self: Build) {.gcsafe.} =
+  if ASAP_MODE in self.global_flags:
+    debug "ASAP mode END", build_id = self.id
+    self.reset_bounds()
+    self.voxels.flush_dirty_chunks()
+    self.global_flags -= ASAP_MODE
+
+proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
   self.voxels.add_voxel(position, voxel)
 
 proc del_voxel(self: Build, position: Vector3) =
@@ -149,8 +162,7 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
         return
       elif edit.kind == MANUAL and edit.color == voxel.color:
         self.voxels.del_edit(position)
-    elif ?self.clone_of and
-        Build(self.clone_of).voxels.has_edit(position) and
+    elif ?self.clone_of and Build(self.clone_of).voxels.has_edit(position) and
         Build(self.clone_of).voxels.get_edit(position).kind == HOLE:
       return
     else:
@@ -227,6 +239,7 @@ method on_begin_move*(
 ): Callback =
   let move = self.is_moving(move_mode)
   if move:
+    self.end_asap() # Exit ASAP mode when switching to movement
     let steps = steps.float
     var duration = 0.0
     let
@@ -277,6 +290,7 @@ method on_begin_turn*(
   let axis = map[axis]
   let move = self.is_moving(move_mode)
   if move:
+    self.end_asap()
     self.voxels_per_frame = 0
     var duration = 0.0
     let axis = self.transform.basis.orthonormalized.xform(axis)
@@ -384,18 +398,38 @@ proc init*(
 
 proc init_voxels_if_needed*(self: Build) =
   ## Initialize voxels if nil (happens when Build is synced between threads)
+  self.init_shared()
   if self.voxels.isNil:
     let voxel_id = self.id & ".voxels"
     let ctx = Ed.thread_ctx
-    self.voxels = VoxelStore(
-      id: voxel_id,
-      ctx: ctx,
-      unit_id: self.id,
-      packed_chunks: EdTable[Vector3, SnapshotData](ctx[voxel_id & ".packed_chunks"]),
-      chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]](ctx[voxel_id & ".chunk_deltas"]),
-      edit_snapshots: self.shared.edit_snapshots,
-      edit_deltas: self.shared.edit_deltas,
-    )
+    let packed_id = voxel_id & ".packed_chunks"
+    let deltas_id = voxel_id & ".chunk_deltas"
+    notice "init_voxels_if_needed",
+      build_id = self.id,
+      packed_id,
+      deltas_id,
+      packed_exists = (packed_id in ctx),
+      deltas_exists = (deltas_id in ctx)
+    if packed_id notin ctx or deltas_id notin ctx:
+      notice "voxel EdTables not in context, creating new ones",
+        build_id = self.id
+      self.voxels = VoxelStore.init(
+        id = voxel_id,
+        unit_id = self.id,
+        ctx = ctx,
+        edit_snapshots = self.shared.edit_snapshots,
+        edit_deltas = self.shared.edit_deltas,
+      )
+    else:
+      self.voxels = VoxelStore(
+        id: voxel_id,
+        ctx: ctx,
+        unit_id: self.id,
+        packed_chunks: EdTable[Vector3, SnapshotData](ctx[packed_id]),
+        chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]](ctx[deltas_id]),
+        edit_snapshots: self.shared.edit_snapshots,
+        edit_deltas: self.shared.edit_deltas,
+      )
     self.voxels.rebuild_local_edits()
     # Expand bounds as chunks are created
     let build = self
@@ -435,6 +469,7 @@ proc setup_packed_chunk_watches(self: Build) =
 
 method worker_thread_joined*(self: Build) =
   proc_call worker_thread_joined(Unit(self))
+  self.init_shared()
   self.init_voxels_if_needed()
   # Only clients need to apply packed chunks received from server
   if SERVER notin state.local_flags:

@@ -191,7 +191,8 @@ type
     local_edits*: Table[Vector3, Table[Vector3, VoxelInfo]]
 
     # Pending changes
-    pending_chunks*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
+    pending_chunks*:
+      Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
     pending_edits*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
 
     block_count*: int

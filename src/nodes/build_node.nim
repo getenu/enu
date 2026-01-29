@@ -56,10 +56,10 @@ gdobj BuildNode of VoxelTerrain:
       return
 
     let zid = delta_seq.watch:
-      if added:
+      if added and chunk_id in self.loaded_chunks:
         if ASAP_MODE in self.model.global_flags:
           self.renderer.buffer_delta(chunk_id, change.item)
-        else:
+        elif not self.renderer.voxel_tool.isNil:
           render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
 
     self.tracked_delta_seqs[chunk_id] = zid
@@ -67,6 +67,24 @@ gdobj BuildNode of VoxelTerrain:
   method on_block_loaded(chunk_id: Vector3) =
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
+
+      if chunk_id in self.model.voxels.packed_chunks:
+        let snapshot = self.model.voxels.packed_chunks[chunk_id]
+        if ASAP_MODE in self.model.global_flags:
+          self.renderer.buffer_snapshot(chunk_id, snapshot)
+        elif not self.renderer.voxel_tool.isNil:
+          render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
+
+      if chunk_id in self.model.voxels.chunk_deltas:
+        let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
+        if not delta_seq.isNil:
+          for delta in delta_seq:
+            if ASAP_MODE in self.model.global_flags:
+              self.renderer.buffer_delta(chunk_id, delta)
+            elif not self.renderer.voxel_tool.isNil:
+              render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+
+          self.watch_delta_seq(chunk_id, delta_seq)
 
   method on_block_unloaded(chunk_id: Vector3) =
     if ?self.model:
@@ -125,26 +143,22 @@ gdobj BuildNode of VoxelTerrain:
         notice "changing bounds", new = change.item, id = self.model.id
         self.bounds = change.item
 
-    # Render existing packed_chunks (for clients connecting to existing builds)
-    for chunk_id, snapshot in self.model.voxels.packed_chunks:
-      render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
-
     # Watch packed_chunks for new snapshots
     self.model.voxels.packed_chunks.watch:
       if added:
-        if ASAP_MODE in self.model.global_flags:
-          self.renderer.buffer_snapshot(change.item.key, change.item.value)
-        else:
-          render_snapshot_direct(
-            self.renderer.voxel_tool, change.item.key, change.item.value
-          )
+        if change.item.key in self.loaded_chunks:
+          if ASAP_MODE in self.model.global_flags:
+            self.renderer.buffer_snapshot(change.item.key, change.item.value)
+          elif not self.renderer.voxel_tool.isNil:
+            render_snapshot_direct(
+              self.renderer.voxel_tool, change.item.key, change.item.value
+            )
 
-    # Render existing chunk_deltas and set up watches
-    for chunk_id, delta_seq in self.model.voxels.chunk_deltas:
-      if not delta_seq.isNil:
-        for delta in delta_seq:
-          render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
-        self.watch_delta_seq(chunk_id, delta_seq)
+    # Render existing packed_chunks (for clients connecting to existing builds)
+    if not self.renderer.voxel_tool.is_nil:
+      for chunk_id, snapshot in self.model.voxels.packed_chunks:
+        if chunk_id in self.loaded_chunks:
+          render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
 
     # Watch chunk_deltas for new chunks
     self.model.voxels.chunk_deltas.watch:
@@ -153,11 +167,12 @@ gdobj BuildNode of VoxelTerrain:
         let delta_seq = change.item.value
         if not delta_seq.isNil:
           # Render any existing deltas in the new chunk
-          for delta in delta_seq:
-            if ASAP_MODE in self.model.global_flags:
-              self.renderer.buffer_delta(chunk_id, delta)
-            else:
-              render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+          if chunk_id in self.loaded_chunks:
+            for delta in delta_seq:
+              if ASAP_MODE in self.model.global_flags:
+                self.renderer.buffer_delta(chunk_id, delta)
+              elif not self.renderer.voxel_tool.isNil:
+                render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
           # Watch for future deltas
           self.watch_delta_seq(chunk_id, delta_seq)
       elif removed:
@@ -165,6 +180,15 @@ gdobj BuildNode of VoxelTerrain:
         if chunk_id in self.tracked_delta_seqs:
           Ed.thread_ctx.untrack(self.tracked_delta_seqs[chunk_id])
           self.tracked_delta_seqs.del(chunk_id)
+
+    # Render existing chunk_deltas and set up watches
+    if not self.renderer.voxel_tool.is_nil:
+      for chunk_id, delta_seq in self.model.voxels.chunk_deltas:
+        if not delta_seq.isNil:
+          if chunk_id in self.loaded_chunks:
+            for delta in delta_seq:
+              render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+          self.watch_delta_seq(chunk_id, delta_seq)
 
     self.model.global_flags.watch:
       if (

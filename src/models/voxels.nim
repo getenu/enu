@@ -4,7 +4,7 @@
 ## Chunks start with a snapshot, then use deltas for incremental changes.
 ## Re-snapshot when: >100 voxels change at once, or >100 deltas accumulated.
 
-import std/[varints, options, math]
+import std/[varints, options, math, tables]
 import pkg/godot except print, Color
 import godotapi/[voxel_buffer, voxel_tool]
 import core
@@ -267,6 +267,32 @@ proc encode_delta*(
       result.data.add char(buf[j])
     result.data.add char(voxel)
 
+proc pack_and_store_edited_voxels*(
+    shared: Shared, id: string, edits: openArray[(Vector3, VoxelInfo)]
+) =
+  ## Takes a list of world-space edits, groups them by chunk,
+  ## packs them, and stores in shared.edit_snapshots.
+  var chunks: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
+
+  for (world_pos, info) in edits:
+    let chunk_id = chunk_id_for_pos(world_pos)
+    let local_pos = local_pos_in_chunk(world_pos)
+    let linear = linear_position(local_pos)
+
+    if linear >= 0 and linear < CHUNK_VOLUME:
+      if chunk_id notin chunks:
+        var empty_chunk: array[CHUNK_VOLUME, PackedVoxel]
+        chunks[chunk_id] = empty_chunk
+
+      chunks[chunk_id][linear] =
+        pack_voxel(info.color.action_index.ord, info.kind.ord)
+
+  for chunk_id, voxels in chunks:
+    let packed = encode_chunk(voxels)
+    if not packed.is_empty:
+      let key: EditKey = (id, chunk_id)
+      shared.edit_snapshots[key] = packed
+
 proc decode_delta*(
     delta: DeltaUpdate
 ): seq[tuple[pos: Vector3, voxel: PackedVoxel]] =
@@ -346,129 +372,6 @@ proc find_voxel*(self: VoxelStore, position: Vector3): Option[VoxelInfo] =
 # =============================================================================
 # Voxel Modification
 # =============================================================================
-
-proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
-  let chunk_id = position.buffer
-
-  let is_new_chunk = chunk_id notin self.local_voxels
-  if is_new_chunk:
-    self.local_voxels[chunk_id] = Table[Vector3, VoxelInfo].init
-    if not self.on_chunk_created.isNil:
-      self.on_chunk_created(chunk_id)
-
-  let existed = position in self.local_voxels[chunk_id]
-  if not existed:
-    inc self.block_count
-
-  self.local_voxels[chunk_id][position] = voxel
-
-  let local_pos = vec3(
-    floor_mod(position.x.int, 16).float,
-    floor_mod(position.y.int, 16).float,
-    floor_mod(position.z.int, 16).float,
-  )
-  let packed = pack_voxel(voxel.color.action_index.ord, voxel.kind.ord)
-  self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
-
-proc del_voxel*(self: VoxelStore, position: Vector3) =
-  let chunk_id = position.buffer
-  if chunk_id in self.local_voxels and position in self.local_voxels[chunk_id]:
-    dec self.block_count
-    self.local_voxels[chunk_id].del(position)
-
-    let local_pos = vec3(
-      floor_mod(position.x.int, 16).float,
-      floor_mod(position.y.int, 16).float,
-      floor_mod(position.z.int, 16).float,
-    )
-    self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, EMPTY_VOXEL)
-
-# =============================================================================
-# Edit Access (uses local_edits cache)
-# =============================================================================
-
-proc has_edit*(self: VoxelStore, position: Vector3): bool =
-  let chunk_id = chunk_id_for_pos(position)
-  let local_pos = local_pos_in_chunk(position)
-  chunk_id in self.local_edits and local_pos in self.local_edits[chunk_id]
-
-proc get_edit*(self: VoxelStore, position: Vector3): VoxelInfo =
-  let chunk_id = chunk_id_for_pos(position)
-  let local_pos = local_pos_in_chunk(position)
-  self.local_edits[chunk_id][local_pos]
-
-proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
-  let chunk_id = chunk_id_for_pos(position)
-  let local_pos = local_pos_in_chunk(position)
-
-  if chunk_id notin self.local_edits:
-    self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
-  self.local_edits[chunk_id][local_pos] = info
-
-  let packed = pack_voxel(info.color.action_index.ord, info.kind.ord)
-  self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
-
-proc del_edit*(self: VoxelStore, position: Vector3) =
-  let chunk_id = chunk_id_for_pos(position)
-  let local_pos = local_pos_in_chunk(position)
-
-  if chunk_id in self.local_edits and local_pos in self.local_edits[chunk_id]:
-    self.local_edits[chunk_id].del(local_pos)
-    if self.local_edits[chunk_id].len == 0:
-      self.local_edits.del(chunk_id)
-
-    self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, EMPTY_VOXEL)
-
-template for_all_edits*(self: VoxelStore, body: untyped) =
-  for chunk_id, chunk in self.local_edits:
-    for local_pos, info {.inject.} in chunk:
-      let pos {.inject.} = vec3(
-        chunk_id.x * ChunkDim + local_pos.x,
-        chunk_id.y * ChunkDim + local_pos.y,
-        chunk_id.z * ChunkDim + local_pos.z,
-      )
-      body
-
-proc rebuild_local_edits*(self: VoxelStore) =
-  self.local_edits.clear()
-
-  if self.edit_snapshots.isNil:
-    return
-
-  for key, snapshot in self.edit_snapshots:
-    if key.id != self.unit_id:
-      continue
-    let chunk_id = key.loc
-    let voxels = decode_chunk(snapshot)
-    for linear in 0 ..< CHUNK_VOLUME:
-      let packed_voxel = voxels[linear]
-      if packed_voxel != EMPTY_VOXEL:
-        let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
-        let local_pos = from_linear(linear)
-        if chunk_id notin self.local_edits:
-          self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
-        self.local_edits[chunk_id][local_pos] =
-          (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
-
-  if self.edit_deltas.isNil:
-    return
-
-  for key, delta_seq in self.edit_deltas:
-    if key.id != self.unit_id or delta_seq.isNil:
-      continue
-    let chunk_id = key.loc
-    for delta in delta_seq:
-      let changes = decode_delta(delta)
-      for (local_pos, packed_voxel) in changes:
-        if packed_voxel == EMPTY_VOXEL:
-          if chunk_id in self.local_edits:
-            self.local_edits[chunk_id].del(local_pos)
-        else:
-          let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
-          if chunk_id notin self.local_edits:
-            self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
-          self.local_edits[chunk_id][local_pos] =
-            (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
 
 # =============================================================================
 # Unified Flush Helpers
@@ -606,6 +509,198 @@ proc flush_dirty_edits*(self: VoxelStore) =
       self.flush_edit_delta(chunk_id, changes)
 
   self.pending_edits.clear
+
+proc rebuild_local_edits*(self: VoxelStore)
+proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo)
+proc flush_edits_for_save*(self: VoxelStore) =
+  ## Flushes all pending edits to snapshots so they are included in save data
+  self.flush_dirty_edits()
+  {.cast(gcsafe).}:
+    self.rebuild_local_edits()
+  for chunk_id in self.local_edits.keys:
+    self.flush_edit_snapshot(chunk_id)
+
+proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
+  let chunk_id = position.buffer
+
+  let is_new_chunk = chunk_id notin self.local_voxels
+  if is_new_chunk:
+    self.local_voxels[chunk_id] = Table[Vector3, VoxelInfo].init
+    if not self.on_chunk_created.isNil:
+      self.on_chunk_created(chunk_id)
+
+  let existed = position in self.local_voxels[chunk_id]
+  if not existed:
+    inc self.block_count
+
+  self.local_voxels[chunk_id][position] = voxel
+
+  let local_pos = vec3(
+    floor_mod(position.x.int, 16).float,
+    floor_mod(position.y.int, 16).float,
+    floor_mod(position.z.int, 16).float,
+  )
+  let packed = pack_voxel(voxel.color.action_index.ord, voxel.kind.ord)
+
+  if self.ctx.metrics_label == "main":
+    self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
+    let delta_count =
+      if chunk_id in self.chunk_deltas:
+        self.chunk_deltas[chunk_id].len
+      else:
+        0
+    if should_use_snapshot(
+      chunk_id in self.packed_chunks, 1, delta_count, false
+    ):
+      self.flush_chunk_snapshot(chunk_id)
+  else:
+    self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+
+  if voxel.kind == MANUAL:
+    {.cast(gcsafe).}:
+      self.set_edit(position, voxel)
+
+proc del_voxel*(self: VoxelStore, position: Vector3) =
+  let chunk_id = position.buffer
+  if chunk_id in self.local_voxels and position in self.local_voxels[chunk_id]:
+    dec self.block_count
+    self.local_voxels[chunk_id].del(position)
+
+    let local_pos = vec3(
+      floor_mod(position.x.int, 16).float,
+      floor_mod(position.y.int, 16).float,
+      floor_mod(position.z.int, 16).float,
+    )
+    let packed = EMPTY_VOXEL
+
+    if self.ctx.metrics_label == "main":
+      self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
+      let delta_count =
+        if chunk_id in self.chunk_deltas:
+          self.chunk_deltas[chunk_id].len
+        else:
+          0
+      let chunk_empty = self.local_voxels[chunk_id].len == 0
+      if should_use_snapshot(
+        chunk_id in self.packed_chunks, 1, delta_count, chunk_empty
+      ):
+        self.flush_chunk_snapshot(chunk_id)
+    else:
+      self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+
+# Edit Access (uses local_edits cache)
+# =============================================================================
+
+proc has_edit*(self: VoxelStore, position: Vector3): bool =
+  let chunk_id = chunk_id_for_pos(position)
+  let local_pos = local_pos_in_chunk(position)
+  chunk_id in self.local_edits and local_pos in self.local_edits[chunk_id]
+
+proc get_edit*(self: VoxelStore, position: Vector3): VoxelInfo =
+  let chunk_id = chunk_id_for_pos(position)
+  let local_pos = local_pos_in_chunk(position)
+  self.local_edits[chunk_id][local_pos]
+
+proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
+  let chunk_id = chunk_id_for_pos(position)
+  let local_pos = local_pos_in_chunk(position)
+
+  if chunk_id notin self.local_edits:
+    self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
+  self.local_edits[chunk_id][local_pos] = info
+
+  let packed = pack_voxel(info.color.action_index.ord, info.kind.ord)
+
+  if self.ctx.metrics_label == "main":
+    self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
+    let key: EditKey = (self.unit_id, chunk_id)
+    let delta_count =
+      if key in self.edit_deltas:
+        self.edit_deltas[key].len
+      else:
+        0
+    if should_use_snapshot(key in self.edit_snapshots, 1, delta_count, false):
+      self.flush_edit_snapshot(chunk_id)
+  else:
+    self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+
+proc del_edit*(self: VoxelStore, position: Vector3) =
+  let chunk_id = chunk_id_for_pos(position)
+  let local_pos = local_pos_in_chunk(position)
+
+  if chunk_id in self.local_edits and local_pos in self.local_edits[chunk_id]:
+    self.local_edits[chunk_id].del(local_pos)
+    if self.local_edits[chunk_id].len == 0:
+      self.local_edits.del(chunk_id)
+
+    let packed = EMPTY_VOXEL
+    if self.ctx.metrics_label == "main":
+      self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
+      let key: EditKey = (self.unit_id, chunk_id)
+      let delta_count =
+        if key in self.edit_deltas:
+          self.edit_deltas[key].len
+        else:
+          0
+      let chunk_empty =
+        chunk_id notin self.local_edits or self.local_edits[chunk_id].len == 0
+      if should_use_snapshot(
+        key in self.edit_snapshots, 1, delta_count, chunk_empty
+      ):
+        self.flush_edit_snapshot(chunk_id)
+    else:
+      self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+
+template for_all_edits*(self: VoxelStore, body: untyped) =
+  for chunk_id, chunk in self.local_edits:
+    for local_pos, info {.inject.} in chunk:
+      let pos {.inject.} = vec3(
+        chunk_id.x * ChunkDim + local_pos.x,
+        chunk_id.y * ChunkDim + local_pos.y,
+        chunk_id.z * ChunkDim + local_pos.z,
+      )
+      body
+
+proc rebuild_local_edits*(self: VoxelStore) =
+  self.local_edits.clear()
+
+  if self.edit_snapshots.isNil:
+    return
+
+  for key, snapshot in self.edit_snapshots:
+    if key.id != self.unit_id:
+      continue
+    let chunk_id = key.loc
+    let voxels = decode_chunk(snapshot)
+    for linear in 0 ..< CHUNK_VOLUME:
+      let packed_voxel = voxels[linear]
+      if packed_voxel != EMPTY_VOXEL:
+        let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
+        let local_pos = from_linear(linear)
+        if chunk_id notin self.local_edits:
+          self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
+        self.local_edits[chunk_id][local_pos] =
+          (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
+
+  if self.edit_deltas.isNil:
+    return
+
+  for key, delta_seq in self.edit_deltas:
+    if key.id != self.unit_id or delta_seq.isNil:
+      continue
+    let chunk_id = key.loc
+    for delta in delta_seq:
+      let changes = decode_delta(delta)
+      for (local_pos, packed_voxel) in changes:
+        if packed_voxel == EMPTY_VOXEL:
+          if chunk_id in self.local_edits:
+            self.local_edits[chunk_id].del(local_pos)
+        else:
+          let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
+          if chunk_id notin self.local_edits:
+            self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
+          self.local_edits[chunk_id][local_pos] =
+            (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
 
 # =============================================================================
 # Receiving (for rebuilding local_voxels from packed data)

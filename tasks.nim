@@ -51,17 +51,17 @@ proc determine_cpu(): string =
     return persisted
 
   # Default to native arch
-  if machine_arch == "aarch64":
-    "arm64"
-  else:
-    "64"
+  if machine_arch == "aarch64": "arm64" else: "64"
 
 let
   cpu = determine_cpu()
-  cross_compile = host_os == "linux" and machine_arch == "aarch64" and cpu == "64"
+  cross_compile =
+    host_os == "linux" and machine_arch == "aarch64" and cpu == "64"
   cross_compile_opts =
-    if cross_compile: "CC=x86_64-linux-gnu-gcc CXX=x86_64-linux-gnu-g++ module_webm_enabled=no "
-    else: ""
+    if cross_compile:
+      "CC=x86_64-linux-gnu-gcc CXX=x86_64-linux-gnu-g++ module_webm_enabled=no "
+    else:
+      ""
 
 # Set PKG_CONFIG_PATH for cross-compilation
 if cross_compile:
@@ -130,17 +130,23 @@ const arch_args = ["amd64", "x86_64", "x64", "64", "arm64", "aarch64"]
 
 task build, "Build enu":
   when host_os == "linux":
-    echo &"Target architecture: {cpu}" & (if cross_compile: " (cross-compiling)" else: "")
+    echo &"Target architecture: {cpu}" &
+      (if cross_compile: " (cross-compiling)" else: "")
   let
     output = "app/enu" & lib_ext
-    params = command_line_params()[1..^1].filterIt(it notin arch_args)
-    extra = if params.len > 0: " " & params.join(" ") else: ""
+    params = command_line_params()[1 ..^ 1].filterIt(it notin arch_args)
+    extra =
+      if params.len > 0:
+        " " & params.join(" ")
+      else:
+        ""
     cross_opts =
       if cross_compile:
         " --cpu:amd64 --gcc.exe:x86_64-linux-gnu-gcc --gcc.linkerexe:x86_64-linux-gnu-gcc"
       elif cpu == "arm64" and target == "x11":
         " --cpu:arm64"
-      else: ""
+      else:
+        ""
   exec &"nim c -o:{output}{cross_opts}{extra} src/enu.nim"
 
 task build_godot, "Build godot. Use --force to re-init submodules":
@@ -165,7 +171,7 @@ task godot_tests, "run godot tests":
 task world_tests,
   "run in-world tests (headless for server build, dist for dist build)":
   let
-    test_level = this_dir() / "vmlib/worlds/tests/unit-tests"
+    test_level = "tests/unit-tests"
     params = command_line_params()
     headless = "headless" in params
     use_dist = "dist" in params
@@ -192,9 +198,10 @@ task world_tests,
 
   let cmd =
     if use_dist:
-      bin & " --level-dir " & test_level & " --enu-test"
+      bin & " --level '" & test_level & "' --enu-test --temp-workdir"
     else:
-      "cd app && " & bin & " --level-dir " & test_level & " --enu-test scenes/game.tscn"
+      "cd app && " & bin & " --level '" & test_level &
+        "' --enu-test scenes/game.tscn --temp-workdir"
 
   exec cmd
 
@@ -237,24 +244,31 @@ proc copy_fonts() =
   # IBM Plex Mono - monospace font (same on all platforms, OFL licensed)
   with_dir "fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf":
     cp_file "IBMPlexMono-Regular.otf", "../../../../../" & dest / "mono.otf"
-    cp_file "IBMPlexMono-Italic.otf", "../../../../../" & dest / "mono-italic.otf"
+    cp_file "IBMPlexMono-Italic.otf",
+      "../../../../../" & dest / "mono-italic.otf"
     cp_file "IBMPlexMono-Bold.otf", "../../../../../" & dest / "mono-bold.otf"
-    cp_file "IBMPlexMono-BoldItalic.otf", "../../../../../" & dest / "mono-bold-italic.otf"
+    cp_file "IBMPlexMono-BoldItalic.otf",
+      "../../../../../" & dest / "mono-bold-italic.otf"
 
   # Jost - proportional font (same on all platforms, OFL licensed)
   with_dir "fonts/jost/Jost-master/fonts/otf":
     cp_file "Jost-400-Book.otf", "../../../../../" & dest / "text.otf"
-    cp_file "Jost-400-BookItalic.otf", "../../../../../" & dest / "text-italic.otf"
+    cp_file "Jost-400-BookItalic.otf",
+      "../../../../../" & dest / "text-italic.otf"
     cp_file "Jost-700-Bold.otf", "../../../../../" & dest / "text-bold.otf"
-    cp_file "Jost-700-BoldItalic.otf", "../../../../../" & dest / "text-bold-italic.otf"
+    cp_file "Jost-700-BoldItalic.otf",
+      "../../../../../" & dest / "text-bold-italic.otf"
 
     cp_file "Jost-400-Book.otf", "../../../../../" & dest / "display.otf"
-    cp_file "Jost-400-BookItalic.otf", "../../../../../" & dest / "display-italic.otf"
+    cp_file "Jost-400-BookItalic.otf",
+      "../../../../../" & dest / "display-italic.otf"
     cp_file "Jost-700-Bold.otf", "../../../../../" & dest / "display-bold.otf"
-    cp_file "Jost-700-BoldItalic.otf", "../../../../../" & dest / "display-bold-italic.otf"
+    cp_file "Jost-700-BoldItalic.otf",
+      "../../../../../" & dest / "display-bold-italic.otf"
 
   with_dir "fonts/fontawesome-free-6.7.2-desktop/otfs":
-    cp_file "Font Awesome 6 Free-Solid-900.otf", "../../../" & dest / "icons.otf"
+    cp_file "Font Awesome 6 Free-Solid-900.otf",
+      "../../../" & dest / "icons.otf"
 
 proc verify_fonts() =
   ## Fonts are now committed to the repo (OFL licensed).
@@ -263,7 +277,7 @@ proc verify_fonts() =
   let required = [
     "fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf/IBMPlexMono-Regular.otf",
     "fonts/jost/Jost-master/fonts/otf/Jost-400-Book.otf",
-    "fonts/fontawesome-free-6.7.2-desktop/otfs/Font Awesome 6 Free-Solid-900.otf"
+    "fonts/fontawesome-free-6.7.2-desktop/otfs/Font Awesome 6 Free-Solid-900.otf",
   ]
   for path in required:
     if not file_exists(path):
@@ -308,12 +322,14 @@ task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   else:
     echo "extract_dlls is only needed on Windows"
 
-task prereqs, "Build godot, verify fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
+task prereqs,
+  "Build godot, verify fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
   # Persist arch if specified
   when host_os == "linux":
     if parse_arch_arg() != "":
       save_arch(cpu)
-    echo &"Target architecture: {cpu}" & (if cross_compile: " (cross-compiling)" else: "")
+    echo &"Target architecture: {cpu}" &
+      (if cross_compile: " (cross-compiling)" else: "")
   exec "atlas install"
   exec "atlas rep"
   when host_os == "windows":

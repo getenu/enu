@@ -2,7 +2,7 @@ proc get_int(a: VmArgs, i: Natural): int =
   int vm.get_int(a, i)
 
 proc get_colors(a: VmArgs, i: Natural): Colors =
-  Colors(vm.get_int(a, 1))
+  Colors(vm.get_int(a, i))
 
 proc get_pnode(a: VmArgs, pos: int): PNode {.inline.} =
   a.get_node(pos)

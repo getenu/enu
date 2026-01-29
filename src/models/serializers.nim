@@ -1,7 +1,12 @@
-import std/[json, jsonutils, sugar, tables, strutils, strformat, os, times, algorithm, math]
+import
+  std/[
+    json, jsonutils, sugar, tables, strutils, strformat, os, times, algorithm,
+    math,
+  ]
 import pkg/zippy/ziparchives_v1
 import core except to_json
 import models
+import models/voxels
 import controllers/script_controllers/scripting
 import libs/eval
 
@@ -31,7 +36,10 @@ proc from_json_hook(self: var Color, json: JsonNode) =
         return
     self = hex.parse_html_hex
 
-proc from_json_hook(self: var VoxelInfo, json: JsonNode) =
+proc to_json_hook*(self: VoxelInfo): JsonNode =
+  %[%self.kind.ord, self.color.to_json_hook]
+
+proc from_json_hook*(self: var VoxelInfo, json: JsonNode) =
   self.kind = VoxelKind(json[0].get_int)
   self.color = json[1].json_to(Color)
 
@@ -54,50 +62,6 @@ proc from_json_hook(
       let info = chunk[1].json_to(VoxelInfo)
       self[location] = info
 
-proc chunk_id_for_world_pos(pos: Vector3): Vector3 =
-  ## Get chunk ID for a world position (16x16x16 chunks)
-  vec3(
-    math.floor(pos.x / ChunkDim).int.float,
-    math.floor(pos.y / ChunkDim).int.float,
-    math.floor(pos.z / ChunkDim).int.float,
-  )
-
-proc local_pos_for_world_pos(pos: Vector3): Vector3 =
-  ## Get local position within chunk (0-15 for each axis)
-  let chunk_id = chunk_id_for_world_pos(pos)
-  vec3(
-    pos.x - chunk_id.x * ChunkDim,
-    pos.y - chunk_id.y * ChunkDim,
-    pos.z - chunk_id.z * ChunkDim,
-  )
-
-proc load_edits_from_json(
-    shared: Shared, json: JsonNode
-) =
-  ## Load edits from JSON format into the new packed edit_snapshots format
-  ## Supports both old format (single chunk per unit) and new format (chunked with composite keys)
-  for id, edits in json:
-    # Group edits by chunk
-    var chunks: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
-    for edit in edits:
-      let world_pos = edit[0].json_to(Vector3)
-      let info = edit[1].json_to(VoxelInfo)
-      let chunk_id = chunk_id_for_world_pos(world_pos)
-      let local_pos = local_pos_for_world_pos(world_pos)
-      let linear = linear_position(local_pos)
-      if linear >= 0 and linear < CHUNK_VOLUME:
-        if chunk_id notin chunks:
-          var empty_chunk: array[CHUNK_VOLUME, PackedVoxel]
-          chunks[chunk_id] = empty_chunk
-        chunks[chunk_id][linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
-
-    # Encode and store each chunk with EditKey
-    for chunk_id, voxels in chunks:
-      let packed = encode_chunk(voxels)
-      if not packed.is_empty:
-        let key: EditKey = (id, chunk_id)
-        shared.edit_snapshots[key] = packed
-
 proc from_json_hook(self: var Transform, json: JsonNode) =
   self = Transform.init(origin = json["origin"].json_to(Vector3))
   let elements =
@@ -119,28 +83,30 @@ proc from_json_hook(self: var Build, json: JsonNode) =
 
   if load_chunks:
     # Old chunks format - group by chunk and load with EditKey
-    var chunks: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
+    # This is a bit inefficient as it creates a big list, but safe for migration
+    var all_voxels: seq[(Vector3, VoxelInfo)] = @[]
     for chunk_data in json["chunks"]:
       for voxel_data in chunk_data[1]:
         let world_pos = voxel_data[0].json_to(Vector3)
         let info = voxel_data[1].json_to(VoxelInfo)
-        let chunk_id = chunk_id_for_world_pos(world_pos)
-        let local_pos = local_pos_for_world_pos(world_pos)
-        let linear = linear_position(local_pos)
-        if linear >= 0 and linear < CHUNK_VOLUME:
-          if chunk_id notin chunks:
-            var empty_chunk: array[CHUNK_VOLUME, PackedVoxel]
-            chunks[chunk_id] = empty_chunk
-          chunks[chunk_id][linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
-    for chunk_id, voxels in chunks:
-      let packed = encode_chunk(voxels)
-      if not packed.is_empty:
-        let key: EditKey = (self.id, chunk_id)
-        self.shared.edit_snapshots[key] = packed
+        all_voxels.add((world_pos, info))
+
+    if all_voxels.len > 0:
+      self.shared.pack_and_store_edited_voxels(self.id, all_voxels)
   else:
     # New edits format
     if "edits" in json:
-      load_edits_from_json(self.shared, json["edits"])
+      for id, edits in json["edits"]:
+        var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
+        for edit in edits:
+          let world_pos = edit[0].json_to(Vector3)
+          let info = edit[1].json_to(VoxelInfo)
+          current_chunk_edits.add((world_pos, info))
+
+        if current_chunk_edits.len > 0:
+          self.shared.pack_and_store_edited_voxels(id, current_chunk_edits)
+
+    self.voxels.rebuild_local_edits()
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   self = Bot.init(
@@ -149,7 +115,15 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
   )
 
   if not load_chunks and "edits" in json:
-    load_edits_from_json(self.shared, json["edits"])
+    for id, edits in json["edits"]:
+      var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
+      for edit in edits:
+        let world_pos = edit[0].json_to(Vector3)
+        let info = edit[1].json_to(VoxelInfo)
+        current_chunk_edits.add((world_pos, info))
+
+      if current_chunk_edits.len > 0:
+        self.shared.pack_and_store_edited_voxels(id, current_chunk_edits)
 
 proc `$`(self: Color): string =
   $json_utils.to_json(self)
@@ -196,7 +170,8 @@ proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
   result = edits.join(",\n")
 
 proc `$`(self: Unit): string =
-  let elements = self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
+  let elements =
+    self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
   let edits = edits_to_string(self.shared.edit_snapshots)
   result =
@@ -218,6 +193,9 @@ proc `$`(self: Unit): string =
 
 proc save*(unit: Unit) =
   if not ?unit.clone_of:
+    if unit of Build:
+      Build(unit).voxels.flush_edits_for_save()
+
     let data =
       if unit of Build or unit of Bot:
         $unit
@@ -229,8 +207,8 @@ proc save*(unit: Unit) =
     for unit in unit.units:
       unit.save
 
-proc save_level*(level_dir: string, save_all = false) =
-  if SERVER in state.local_flags and TEST_MODE notin state.local_flags:
+proc save_level*(level_dir: string, save_all = false, force = false) =
+  if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
     debug "saving level"
     let level = LevelInfo(enu_version: enu_version, format_version: "v0.9.2")
     write_file level_dir / "level.json", jsonutils.to_json(level).pretty

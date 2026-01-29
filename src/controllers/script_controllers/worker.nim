@@ -1,8 +1,7 @@
 import std/[locks, os, random, net]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
-import
-  core, models, models/serializers, libs/[interpreters, eval]
+import core, models, models/serializers, libs/[interpreters, eval]
 import ./[vars, host_bridge, scripting]
 
 var
@@ -66,12 +65,13 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         self.active_unit = unit
         ctx.timeout_at = now + script_timeout
         ctx.running = ctx.resume()
-        if not ctx.running and not ?unit.clone_of:
+        if not ctx.running:
           if unit of Build:
             Build(unit).end_asap()
-          unit.collect_garbage
-          unit.ensure_visible
-          unit.current_line = 0
+          if not ?unit.clone_of:
+            unit.collect_garbage
+            unit.ensure_visible
+            unit.current_line = 0
 
         result = ctx.running and task_state == NEXT_TASK
       elif now >= ctx.timer:
@@ -187,9 +187,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   let (ctx, main_thread_state) = params
   worker_lock.acquire
 
-  var listen_address = main_thread_state.config.listen_address
-  let worker_ctx = EdContext.init(
-    id = \"work-{generate_id()}",
+  var
+    listen_address = main_thread_state.config.listen_address
+    connect_address = main_thread_state.config.connect_address
+    worker_ctx: EdContext
+
+  worker_ctx = EdContext.init(
+    id = "work-" & generate_id(),
     chan_size = 500,
     buffer = false,
     listen_address = listen_address,
@@ -201,7 +205,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   state = GameState.init_from(main_thread_state)
   state.init_logger
-  let connect_address = main_thread_state.config.connect_address
+
   if ?listen_address or not ?connect_address:
     state.push_flag SERVER
     state.server_ctx_name = worker_ctx.id
@@ -343,8 +347,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   state.config_value.changes:
     if added:
-      discard # let uc = state.config.build_user_config
-      # save_user_config(uc)  # Temporarily disabled
+      let uc = state.config.build_user_config
+      save_user_config(uc)
 
     if state.config.player_color != change.item.player_color:
       player.color = state.config.player_color
@@ -422,12 +426,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
               to_process.add(unit)
 
       # Flush pending changes for all Builds
-      let asap_interval_elapsed = frame_start > last_asap_flush + asap_flush_interval
+      let asap_interval_elapsed =
+        frame_start > last_asap_flush + asap_flush_interval
       # Only flush ASAP builds if interval elapsed AND voxel_tasks is low enough
       let can_flush_asap = asap_interval_elapsed and state.voxel_tasks <= 10
       var did_flush_asap = false
       state.units.value.walk_tree proc(unit: Unit) =
-        if unit of Build:
+        if unit of Build and not Build(unit).voxels.isNil:
           let build = Build(unit)
           let in_asap = ASAP_MODE in build.global_flags
           # Flush if not in ASAP mode, or if in ASAP mode and we can flush
@@ -457,7 +462,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         var total_snapshots = 0
         var total_deltas = 0
         state.units.value.walk_tree proc(unit: Unit) =
-          if unit of Build:
+          if unit of Build and not Build(unit).voxels.isNil:
             total_snapshots += Build(unit).voxels.snapshots_flushed
             total_deltas += Build(unit).voxels.deltas_flushed
 

@@ -8,7 +8,8 @@ import pkg/compiler/[vmdef, renderer, msgs]
 import pkg/metrics
 
 import godotapi/[spatial, ray_cast]
-import core, models/[states, bots, builds, units, colors, signs, serializers]
+import
+  core, models/[states, bots, builds, units, colors, signs, serializers, voxels]
 import libs/[interpreters, eval]
 import shared/errors
 
@@ -363,10 +364,6 @@ proc speed(self: Unit): float =
 
 const ASAP_VALUE = float.high
 
-# Forward declarations for ASAP mode
-proc begin_asap(self: Build) {.gcsafe.}
-proc end_asap*(self: Build) {.gcsafe.}
-
 proc `speed=`(self: Unit, speed: float) =
   if self of Build and speed == ASAP_VALUE:
     Build(self).begin_asap()
@@ -512,17 +509,6 @@ proc save(self: Build, name: string) =
 proc restore(self: Build, name: string) =
   (self.draw_transform, self.color_value.value, self.drawing) =
     self.save_points[name]
-
-proc begin_asap(self: Build) {.gcsafe.} =
-  ## Enable ASAP mode - defers rendering.
-  self.global_flags += ASAP_MODE
-
-proc end_asap*(self: Build) {.gcsafe.} =
-  ## Exit ASAP mode. Flushes all dirty chunks and clears the flag.
-  if ASAP_MODE in self.global_flags:
-    self.reset_bounds()  # Update bounds now that all voxels are drawn
-    self.voxels.flush_dirty_chunks()
-    self.global_flags -= ASAP_MODE
 
 # Player binding
 
@@ -706,6 +692,26 @@ proc block_color_at(position: Vector3): Colors =
   else:
     ERASER
 
+proc place_block(self: Build, position: Vector3, color: Colors) =
+  ## Places a MANUAL block at the given position. Used for testing persistence.
+  var info: VoxelInfo
+  info.kind = MANUAL
+  info.color = ACTION_COLORS[color]
+  self.add_voxel(position, info)
+  self.voxels.set_edit(position, info) # Persist as edit for save/reload
+
+proc save_level_now() =
+  ## Triggers an immediate level save. Used for testing persistence.
+  serializers.save_level(state.config.level_dir, force = true)
+
+proc reload_unit(self: Build) =
+  ## Reloads a Build's voxel data from disk without stopping the script.
+  ## Used for testing serialization persistence.
+  self.voxels.clear() # Clear in-memory voxels
+  self.voxels.rebuild_local_edits() # Rebuild edits from persistent store
+  self.restore_edits() # Apply edits to voxels
+  self.reset_bounds() # Rebuild bounds
+
 # End of bindings
 
 proc bridge_to_vm*(worker: Worker) =
@@ -734,7 +740,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, draw_position,
-    draw_position_set, has_block_at, block_color_at, begin_asap, end_asap
+    draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
+    place_block, save_level_now, reload_unit
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,
