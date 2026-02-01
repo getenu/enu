@@ -242,42 +242,36 @@ proc copy_fonts() =
   let dest = "app/themes"
 
   # IBM Plex Mono - monospace font (same on all platforms, OFL licensed)
-  with_dir "fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf":
-    cp_file "IBMPlexMono-Regular.otf", "../../../../../" & dest / "mono.otf"
-    cp_file "IBMPlexMono-Italic.otf",
-      "../../../../../" & dest / "mono-italic.otf"
-    cp_file "IBMPlexMono-Bold.otf", "../../../../../" & dest / "mono-bold.otf"
+  with_dir "fonts/ibm":
+    cp_file "IBMPlexMono-Regular.otf", "../../" & dest / "mono.otf"
+    cp_file "IBMPlexMono-Italic.otf", "../../" & dest / "mono-italic.otf"
+    cp_file "IBMPlexMono-Bold.otf", "../../" & dest / "mono-bold.otf"
     cp_file "IBMPlexMono-BoldItalic.otf",
-      "../../../../../" & dest / "mono-bold-italic.otf"
+      "../../" & dest / "mono-bold-italic.otf"
 
   # Jost - proportional font (same on all platforms, OFL licensed)
-  with_dir "fonts/jost/Jost-master/fonts/otf":
-    cp_file "Jost-400-Book.otf", "../../../../../" & dest / "text.otf"
-    cp_file "Jost-400-BookItalic.otf",
-      "../../../../../" & dest / "text-italic.otf"
-    cp_file "Jost-700-Bold.otf", "../../../../../" & dest / "text-bold.otf"
-    cp_file "Jost-700-BoldItalic.otf",
-      "../../../../../" & dest / "text-bold-italic.otf"
+  with_dir "fonts/jost":
+    cp_file "Jost-400-Book.otf", "../../" & dest / "text.otf"
+    cp_file "Jost-400-BookItalic.otf", "../../" & dest / "text-italic.otf"
+    cp_file "Jost-700-Bold.otf", "../../" & dest / "text-bold.otf"
+    cp_file "Jost-700-BoldItalic.otf", "../../" & dest / "text-bold-italic.otf"
 
-    cp_file "Jost-400-Book.otf", "../../../../../" & dest / "display.otf"
-    cp_file "Jost-400-BookItalic.otf",
-      "../../../../../" & dest / "display-italic.otf"
-    cp_file "Jost-700-Bold.otf", "../../../../../" & dest / "display-bold.otf"
+    cp_file "Jost-400-Book.otf", "../../" & dest / "display.otf"
+    cp_file "Jost-400-BookItalic.otf", "../../" & dest / "display-italic.otf"
+    cp_file "Jost-700-Bold.otf", "../../" & dest / "display-bold.otf"
     cp_file "Jost-700-BoldItalic.otf",
-      "../../../../../" & dest / "display-bold-italic.otf"
+      "../../" & dest / "display-bold-italic.otf"
 
-  with_dir "fonts/fontawesome-free-6.7.2-desktop/otfs":
-    cp_file "Font Awesome 6 Free-Solid-900.otf",
-      "../../../" & dest / "icons.otf"
+  with_dir "fonts/fa":
+    cp_file "Font Awesome 6 Free-Solid-900.otf", "../../" & dest / "icons.otf"
 
 proc verify_fonts() =
   ## Fonts are now committed to the repo (OFL licensed).
   ## This just verifies they exist.
   p "Verifying fonts..."
   let required = [
-    "fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf/IBMPlexMono-Regular.otf",
-    "fonts/jost/Jost-master/fonts/otf/Jost-400-Book.otf",
-    "fonts/fontawesome-free-6.7.2-desktop/otfs/Font Awesome 6 Free-Solid-900.otf",
+    "fonts/ibm/IBMPlexMono-Regular.otf", "fonts/jost/Jost-400-Book.otf",
+    "fonts/fa/Font Awesome 6 Free-Solid-900.otf",
   ]
   for path in required:
     if not file_exists(path):
@@ -487,6 +481,7 @@ task dist_package, "Build distribution binaries":
   elif host_os == "linux":
     gen_binding_and_copy_stdlib("server")
     let release_bin = &"vendor/godot/bin/godot.{target}.opt.{cpu}{exe_ext}"
+    let release_bin_exists = file_exists(release_bin)
     let root = &"dist/enu-{git_version}"
     mk_dir root & "/bin"
     mk_dir root & "/lib"
@@ -513,8 +508,6 @@ task dist_package, "Build distribution binaries":
       exec "curl -OJL https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
       exec "chmod a+x appimagetool-x86_64.AppImage"
       exec &"./appimagetool-x86_64.AppImage Enu.AppDir enu-{git_version}-x86_64.AppImage"
-  else:
-    quit &"dist is currently unsupported on {host_os}"
 
 task dist, "Build distribution":
   dist_prereqs_task()
