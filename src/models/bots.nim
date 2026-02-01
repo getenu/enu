@@ -13,24 +13,21 @@ method code_template*(self: Bot, imports: string): string =
 method on_begin_move*(
     self: Bot, direction: Vector3, steps: float, moving_mode: int
 ): Callback =
-  # move_mode param is ignored
+  # Move mode param is ignored
   var duration = 0.0
   let
     moving = -self.transform.basis.z
     finish = self.transform.origin + moving * steps
     finish_time = 1.0 / self.speed * steps
-    target_velocity = moving * self.speed
-
-  # Set velocity once at start
-  self.velocity = target_velocity
 
   result = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
     if duration >= finish_time:
-      self.velocity = vec3()
+      self.velocity_value.touch(vec3())
       self.transform_value.origin = finish.snapped(vec3(0.1, 0.1, 0.1))
       return DONE
     else:
+      self.velocity_value.touch(moving * self.speed)
       return RUNNING
 
 method on_begin_turn*(

@@ -171,7 +171,7 @@ task godot_tests, "run godot tests":
 task world_tests,
   "run in-world tests (headless for server build, dist for dist build)":
   let
-    test_level = "tests/unit-tests"
+    test_level = this_dir() / "vmlib/worlds/tests/unit-tests"
     params = command_line_params()
     headless = "headless" in params
     use_dist = "dist" in params
@@ -198,10 +198,10 @@ task world_tests,
 
   let cmd =
     if use_dist:
-      bin & " --level '" & test_level & "' --enu-test --temp-workdir"
+      bin & " --level-dir " & test_level & " --enu-test --temp-workdir"
     else:
-      "cd app && " & bin & " --level '" & test_level &
-        "' --enu-test scenes/game.tscn --temp-workdir"
+      "cd app && " & bin & " --level-dir " & test_level &
+        " --enu-test scenes/game.tscn --temp-workdir"
 
   exec cmd
 

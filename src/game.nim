@@ -189,20 +189,20 @@ gdobj Game of Node:
 
     randomize()
 
-    var connect_address = ""
-    var listen_address = ""
+    var connect_address_override = ""
+    var listen_address_override = ""
     var level_dir_override = ""
     var test_mode = false
 
     if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
-      connect_address = args[i + 1]
+      connect_address_override = args[i + 1]
       args.delete(i .. i + 1)
     if (let i = args.find("--listen"); i) > -1:
       if args.len > i + 1:
-        listen_address = args[i + 1]
+        listen_address_override = args[i + 1]
         args.delete(i .. i + 1)
       else:
-        listen_address = "0.0.0.0"
+        listen_address_override = "0.0.0.0"
         args.delete(i)
     if (let i = args.find("--level-dir"); i) > -1 and args.len > i + 1:
       level_dir_override = args[i + 1]
@@ -216,22 +216,22 @@ gdobj Game of Node:
       uc.level = some(parts[1])
       args.delete(i .. i + 1)
 
-    if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address:
-      listen_address = get_env("ENU_LISTEN_ADDRESS")
-    if ?get_env("ENU_CONNECT_ADDRESS") and not ?connect_address:
-      connect_address = get_env("ENU_CONNECT_ADDRESS")
-    if ?listen_address and ?connect_address:
+    if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address_override:
+      listen_address_override = get_env("ENU_LISTEN_ADDRESS")
+    if ?get_env("ENU_CONNECT_ADDRESS") and not ?connect_address_override:
+      connect_address_override = get_env("ENU_CONNECT_ADDRESS")
+    if ?listen_address_override and ?connect_address_override:
       fail "Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS"
 
     if ?saved_state.connect_address:
-      connect_address = saved_state.connect_address
+      connect_address_override = saved_state.connect_address
 
     if host_os == "macosx" and not saved_state.restarting:
       global_menu_add_item(
         "Help", "Documentation", "help".to_variant, "".to_variant
       )
       global_menu_add_item("Help", "Web Site", "site".to_variant, "".to_variant)
-      if connect_address == "":
+      if connect_address_override == "":
         global_menu_add_separator("Help")
         global_menu_add_item(
           "Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant
@@ -273,13 +273,13 @@ gdobj Game of Node:
       environment = uc.environment ||= "default"
       megapixels_override = environments[value.environment]
 
-    if ?listen_address:
+    if ?listen_address_override:
       state.config_value.value:
-        listen_address = listen_address
+        listen_address_override = listen_address_override
 
-    if ?connect_address:
+    if ?connect_address_override:
       state.config_value.value:
-        connect_address = connect_address
+        connect_address_override = connect_address_override
 
     if ?level_dir_override:
       let level_file = level_dir_override / "level.json"

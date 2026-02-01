@@ -37,7 +37,6 @@ user_config.nims
 nimble.develop
 nimble.paths
 /t.nim
-fonts/
 .submodules.tmp
 
 *.previous

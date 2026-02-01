@@ -284,7 +284,9 @@ type
     full_screen*: bool
     semicolon_as_colon*: bool
     listen_address*: string
+    listen_address_override*: string
     connect_address*: string
+    connect_address_override*: string
     run_server*: bool
     player_color*: Color
     work_dir*: string

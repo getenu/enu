@@ -188,8 +188,12 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   worker_lock.acquire
 
   var
-    listen_address = main_thread_state.config.listen_address
-    connect_address = main_thread_state.config.connect_address
+    listen_address =
+      main_thread_state.config.listen_address_override ||
+      main_thread_state.config.listen_address
+    connect_address =
+      main_thread_state.config.connect_address_override ||
+      main_thread_state.config.connect_address
     worker_ctx: EdContext
 
   worker_ctx = EdContext.init(
@@ -421,7 +425,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         to_process = @[]
         for unit in units:
           if READY in unit.global_flags:
-            discard unit.batch_changes
             if worker.advance_unit(unit, timeout):
               to_process.add(unit)
 
