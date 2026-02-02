@@ -8,29 +8,29 @@ import models/serializers {.all.}
 
 suite "Color Serialization":
   test "color to json and back - blue":
-    let blue = action_colors[Blue]
+    let blue = ACTION_COLORS[Blue]
     let json_node = json_utils.to_json(blue)
-    check json_node.get_str == "Blue"
+    check json_node.get_str == "BLUE"
 
   test "color to json and back - red":
-    let red = action_colors[Red]
+    let red = ACTION_COLORS[RED]
     let json_node = json_utils.to_json(red)
-    check json_node.get_str == "Red"
+    check json_node.get_str == "RED"
 
   test "eraser color serializes to empty string":
-    let eraser = action_colors[Eraser]
+    let eraser = ACTION_COLORS[Eraser]
     let json_node = json_utils.to_json(eraser)
     check json_node.get_str == ""
 
   test "color from json - named color":
     var restored: Color
     restored.from_json(%"green")
-    check restored == action_colors[Green]
+    check restored == ACTION_COLORS[Green]
 
   test "color from json - empty string is eraser":
     var restored: Color
     restored.from_json(%"")
-    check restored == action_colors[Eraser]
+    check restored == ACTION_COLORS[Eraser]
 
   test "hex color round-trip":
     let custom = col"ff5500"
@@ -60,7 +60,8 @@ suite "Vector3 Serialization":
 
 suite "Transform Serialization":
   test "transform from json":
-    let json_str = """
+    let json_str =
+      """
     {
       "basis": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
       "origin": [10.0, 20.0, 30.0]
@@ -74,7 +75,8 @@ suite "Transform Serialization":
     check t.origin.z == 30.0
 
   test "transform from json with old basis format":
-    let json_str = """
+    let json_str =
+      """
     {
       "basis": {"elements": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]},
       "origin": [5.0, 10.0, 15.0]
@@ -92,12 +94,12 @@ suite "Build Serialization":
     let build = Build.init(
       id = "build_test123",
       transform = Transform.init(origin = vec3(10.0, 20.0, 30.0)),
-      color = action_colors[Blue],
+      color = ACTION_COLORS[BLUE],
     )
     let json_str = $build
     let json_node = parse_json(json_str)
     check json_node["id"].get_str == "build_test123"
-    check json_node["start_color"].get_str == "Blue"
+    check json_node["start_color"].get_str == "BLUE"
     check json_node["start_transform"]["origin"][0].get_float == 10.0
     check json_node["start_transform"]["origin"][1].get_float == 20.0
     check json_node["start_transform"]["origin"][2].get_float == 30.0
@@ -106,7 +108,7 @@ suite "Build Serialization":
     let original = Build.init(
       id = "build_roundtrip",
       transform = Transform.init(origin = vec3(5.0, 10.0, 15.0)),
-      color = action_colors[Red],
+      color = ACTION_COLORS[Red],
     )
     let json_str = $original
     let json_node = parse_json(json_str)
