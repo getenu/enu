@@ -1,29 +1,17 @@
 {
-    "id": "build_serialization_test",
-    "start_transform": {
-        "basis": [
-            [
-                1.0,
-                0.0,
-                0.0
-            ],
-            [
-                0.0,
-                1.0,
-                0.0
-            ],
-            [
-                0.0,
-                0.0,
-                1.0
-            ]
-        ],
-        "origin": [
-            0.0,
-            0.0,
-            0.0
-        ]
-    },
-    "start_color": "Blue",
-    "edits": {}
+  "id": "build_serialization_test",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [0.0, 0.0, 0.0]
+  },
+  "start_color": "BLUE",
+  "edits": {
+    "build_serialization_test": [
+      [[5.0, 5.0, 5.0], [1, "GREEN"]]
+    ]
+  }
 }

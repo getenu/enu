@@ -121,6 +121,9 @@ proc reset_bounds*(self: Build) =
   for chunk_id, chunk in self.voxels.local_voxels:
     self.expand_bounds_to_chunk(chunk_id)
 
+  for chunk_id, _ in self.voxels.packed_chunks:
+    self.expand_bounds_to_chunk(chunk_id)
+
 proc begin_asap*(self: Build) {.gcsafe.} =
   if ASAP_MODE notin self.global_flags:
     debug "ASAP mode BEGIN", build_id = self.id

@@ -23,10 +23,7 @@ const CMD_REPEAT* = 241'u8
 # =============================================================================
 
 proc pack_voxel*(color_index: int, kind_ord: int): PackedVoxel =
-  if color_index == 0 and kind_ord == 0: # Hole
-    EMPTY_VOXEL
-  else:
-    ((color_index * 3) + kind_ord + 1).PackedVoxel
+  ((color_index * 3) + kind_ord + 1).PackedVoxel
 
 proc unpack_voxel*(
     packed: PackedVoxel
