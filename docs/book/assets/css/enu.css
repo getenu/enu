@@ -105,9 +105,7 @@ code:not(pre code) {
 }
 
 /* Code block container text should be white (default for unhighlighted text) */
-pre,
 pre code,
-.code-block,
 .code-block code,
 .hljs {
   color: #F6F3E8 !important;
@@ -120,8 +118,16 @@ pre code,
 /* Keywords - Blue */
 .hljs-keyword,
 .hljs-built_in,
-.hljs-type,
 .hljs-variable.language_ {
+  color: #96CBFE !important;
+}
+
+.hljs-type {
+  color: #C6C5FE !important;
+}
+
+/* Constants and Enums - Blue (applied via JS heuristic) */
+.hljs-constant {
   color: #96CBFE !important;
 }
 

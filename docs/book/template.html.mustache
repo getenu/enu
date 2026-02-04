@@ -255,7 +255,7 @@
               {{#description}}
               <p class="description">{{{ description }}}</p>
               {{/description}}
-              <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+              <pre class="code-block constant-block"><code class="language-nim">{{{ code }}}</code></pre>
               <p class="source">Source: <code>{{ module }}</code></p>
             </article>
             {{/api.constants}}
@@ -271,7 +271,7 @@
               {{#description}}
               <p class="description">{{{ description }}}</p>
               {{/description}}
-              <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+              <pre class="code-block enum-block"><code class="language-nim">{{{ code }}}</code></pre>
               <p class="source">Source: <code>{{ module }}</code></p>
             </article>
             {{/api.enums}}
@@ -488,5 +488,57 @@
   {{/mathjax_support}}
 {{/is_print}}
 
+  <script>
+    window.addEventListener("load", function() {
+      // refinement script - wait for highlight.js
+      setTimeout(() => {
+        // 1. SCREAMING_SNAKE_CASE -> Constant (Blue)
+        const types = document.querySelectorAll('.hljs-type');
+        types.forEach(el => {
+          const text = el.innerText;
+          if (/^[A-Z][A-Z0-9_]+$/.test(text)) {
+            el.classList.remove('hljs-type');
+            el.classList.add('hljs-constant');
+          }
+        });
+
+        // 2. Single Uppercase (Generic Params) -> Type (Purple)
+        // Walk text nodes to find 'T', 'O', etc. that highlight.js missed
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        const nodesToReplace = [];
+
+        while(node = walker.nextNode()) {
+          // Skip if inside a comment, string, or already highlighted element
+          const parent = node.parentElement;
+          if (parent.classList.contains('hljs-comment') ||
+              parent.classList.contains('hljs-string') ||
+              parent.classList.contains('hljs-literal') ||
+              parent.classList.contains('hljs-type') ||
+              parent.classList.contains('hljs-constant') ||
+              parent.tagName !== 'CODE' && !parent.classList.contains('hljs')) {
+             // Only target direct children of code/pre/unhighlighted spans mostly
+             continue;
+          }
+
+          if (/\b[A-Z]\b/.test(node.nodeValue)) {
+             nodesToReplace.push(node);
+          }
+        }
+
+        nodesToReplace.forEach(node => {
+          const span = document.createElement('span');
+          span.innerHTML = node.nodeValue.replace(/\b([A-Z])\b/g, '<span class="hljs-type">$1</span>');
+          node.parentNode.replaceChild(span, node);
+          // Unwrap the span container to keep DOM clean
+          while (span.firstChild) {
+            span.parentNode.insertBefore(span.firstChild, span);
+          }
+          span.parentNode.removeChild(span);
+        });
+
+      }, 0);
+    });
+  </script>
 </body>
 </html>
