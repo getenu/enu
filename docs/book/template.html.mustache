@@ -232,9 +232,110 @@
 
     <div id="content" class="content">
       <main>
+        {{#is_readme}}
+        <!-- README Section -->
+        <section id="readme">
+          {{#blocks}}
+          {{&.}}
+          {{/blocks}}
+        </section>
+        {{/is_readme}}
+
+        {{#is_api_docs}}
+        <!-- API Reference Section -->
+        <section id="api-reference">
+          <h1>Ed API Reference</h1>
+
+          {{#api.hasConstants}}
+          <section id="constants">
+            <h3>Constants</h3>
+            {{#api.constants}}
+            <article class="symbol" id="{{ anchor }}">
+              <h4><a href="#{{ anchor }}">{{ name }}</a></h4>
+              {{#description}}
+              <p class="description">{{{ description }}}</p>
+              {{/description}}
+              <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+              <p class="source">Source: <code>{{ module }}</code></p>
+            </article>
+            {{/api.constants}}
+          </section>
+          {{/api.hasConstants}}
+
+          {{#api.hasEnums}}
+          <section id="enums">
+            <h3>Enums</h3>
+            {{#api.enums}}
+            <article class="symbol" id="{{ anchor }}">
+              <h4><a href="#{{ anchor }}">{{ name }}</a></h4>
+              {{#description}}
+              <p class="description">{{{ description }}}</p>
+              {{/description}}
+              <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+              <p class="source">Source: <code>{{ module }}</code></p>
+            </article>
+            {{/api.enums}}
+          </section>
+          {{/api.hasEnums}}
+
+          <section id="types">
+            <h3>Types</h3>
+            {{#api.types}}
+            <article class="type-section" id="{{ anchor }}">
+              <h4 class="type-heading"><a href="#{{ anchor }}">{{ name }}</a></h4>
+
+              {{#hasType}}
+              {{#description}}
+              <p class="description">{{{ description }}}</p>
+              {{/description}}
+              <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+              <p class="source">Source: <code>{{ module }}</code></p>
+              {{/hasType}}
+
+              {{#hasStaticProcs}}
+              {{#staticProcs}}
+              <div class="operation" id="{{ anchor }}">
+                <h5><a href="#{{ anchor }}">{{ name }}</a></h5>
+                {{#groups}}
+                <div class="overload-group">
+                  {{#hasDescription}}
+                  <p class="description">{{{ description }}}</p>
+                  {{/hasDescription}}
+                  <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+                </div>
+                {{/groups}}
+              </div>
+              {{/staticProcs}}
+              {{/hasStaticProcs}}
+
+              {{#hasProcs}}
+              {{#procs}}
+              <div class="operation" id="{{ anchor }}">
+                <h5><a href="#{{ anchor }}">{{ name }}</a></h5>
+                {{#groups}}
+                <div class="overload-group">
+                  {{#hasDescription}}
+                  <p class="description">{{{ description }}}</p>
+                  {{/hasDescription}}
+                  <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+                </div>
+                {{/groups}}
+              </div>
+              {{/procs}}
+              {{/hasProcs}}
+            </article>
+            {{/api.types}}
+          </section>
+        </section>
+        {{/is_api_docs}}
+
+        {{^is_readme}}
+        {{^is_api_docs}}
         {{#blocks}}
           {{&.}}
         {{/blocks}}
+        {{/is_api_docs}}
+        {{/is_readme}}
       </main>
 
       <nav class="nav-wrapper" aria-label="Page navigation">

@@ -1,0 +1,51 @@
+    <ol class="chapter">
+      <li class="chapter-item expanded">
+        <a href="ed_readme.html"{{#is_readme}} class="active"{{/is_readme}} tabindex="0"><strong aria-hidden="true">1.</strong> README</a>
+      </li>
+      <li class="chapter-item expanded">
+        <a href="ed_api.html"{{^is_readme}} class="active"{{/is_readme}} tabindex="0"><strong aria-hidden="true">2.</strong> API Reference</a>
+        <ol class="section api-nav-content">
+          {{#api.hasConstants}}
+          <li class="chapter-item">
+            <div class="api-nav-header">Constants</div>
+          </li>
+          {{#api.constants}}
+          <li class="chapter-item api-nav-item"><a href="{{#is_readme}}ed_api.html{{/is_readme}}#{{ anchor }}">{{ name }}</a></li>
+          {{/api.constants}}
+          {{/api.hasConstants}}
+
+          {{#api.hasEnums}}
+          <li class="chapter-item">
+            <div class="api-nav-header">Enums</div>
+          </li>
+          {{#api.enums}}
+          <li class="chapter-item api-nav-item"><a href="{{#is_readme}}ed_api.html{{/is_readme}}#{{ anchor }}">{{ name }}</a></li>
+          {{/api.enums}}
+          {{/api.hasEnums}}
+
+          <li class="chapter-item">
+            <div class="api-nav-header api-types-toggle" data-expanded="true">Types</div>
+          </li>
+          {{#api.types}}
+          {{#hasOps}}
+          <li class="chapter-item api-nav-item">
+            <details class="api-type-details" data-type="{{ name }}">
+              <summary><a href="{{#is_readme}}ed_api.html{{/is_readme}}#{{ anchor }}">{{ name }}</a></summary>
+              <ol class="section">
+                {{#staticProcNames}}
+                <li class="chapter-item"><a href="{{#is_readme}}ed_api.html{{/is_readme}}#{{ anchor }}">{{ name }}</a></li>
+                {{/staticProcNames}}
+                {{#procNames}}
+                <li class="chapter-item"><a href="{{#is_readme}}ed_api.html{{/is_readme}}#{{ anchor }}">{{ name }}</a></li>
+                {{/procNames}}
+              </ol>
+            </details>
+          </li>
+          {{/hasOps}}
+          {{^hasOps}}
+          <li class="chapter-item api-nav-item"><a href="{{#is_readme}}ed_api.html{{/is_readme}}#{{ anchor }}">{{ name }}</a></li>
+          {{/hasOps}}
+          {{/api.types}}
+        </ol>
+      </li>
+    </ol>

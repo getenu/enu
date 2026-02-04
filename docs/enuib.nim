@@ -8,7 +8,8 @@ export api_docs
 # adapted from https://raw.githubusercontent.com/pietroppeter/nimibook/ef700f646db8ec0bbe8a3319cbb3561aaac89a34/src/nimibook/themes.nim
 
 const document* = hl_html static_read("./book/template.html.mustache")
-const api_document* = hl_html static_read("./book/templates/api.html.mustache")
+const ed_toc* = hl_html static_read("./book/templates/ed_toc.html.mustache")
+const use_api_document = false
 
 proc use_enu*(doc: var NbDoc) =
   doc.context["path_to_root"] = doc.src_dir_rel.string & "/"
@@ -60,16 +61,16 @@ proc use_enu*(doc: var NbDoc) =
 
 proc use_api_docs*(doc: var NbDoc) =
   ## Theme for API documentation pages
-  ## Uses the API-specific template with sidebar navigation for types
+  ## Uses the unified template but overrides the TOC with the API sidebar
   use_enu(doc)
-  doc.partials["document"] = api_document
+  doc.partials["toc"] = ed_toc
   doc.context["is_api_docs"] = true
 
 proc use_ed_readme*(doc: var NbDoc) =
   ## Theme for Ed README page
-  ## Uses the same template as API docs but with README marked as active
+  ## Uses the unified template but overrides the TOC with the API sidebar
   use_enu(doc)
-  doc.partials["document"] = api_document
+  doc.partials["toc"] = ed_toc
   doc.context["is_readme"] = true
 
 template load_md*(file) =

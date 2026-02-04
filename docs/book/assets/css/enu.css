@@ -1,28 +1,188 @@
-.dark code:not(.hljs){
-  color: #FF73FD
+@font-face {
+  font-family: 'Jost';
+  src: url('../fonts/jost/Jost-400-Book.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
 }
 
-.dark h1, h2, h3, h4, h5 {
+@font-face {
+  font-family: 'Jost';
+  src: url('../fonts/jost/Jost-400-BookItalic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Jost';
+  src: url('../fonts/jost/Jost-700-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Jost';
+  src: url('../fonts/jost/Jost-700-BoldItalic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('../fonts/ibm/IBMPlexMono-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('../fonts/ibm/IBMPlexMono-Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('../fonts/ibm/IBMPlexMono-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('../fonts/ibm/IBMPlexMono-BoldItalic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+}
+
+:root {
+  --font-sans: 'Jost', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+}
+
+code,
+pre,
+.hljs,
+.code-block code,
+.api-nav-item>a {
+  font-family: var(--font-mono) !important;
+}
+
+.dark code:not(.hljs) {
   color: #96CBFE;
 }
 
-.dark h2, h3 {
+/* H1 stays blue, H2-H5 become hot pink */
+.dark h1 {
+  color: #96CBFE;
+}
+
+.dark h2,
+h3,
+h4,
+h5 {
+  color: #FF73FD;
+}
+
+.dark h2,
+h3 {
   margin-top: 1em;
 }
 
+/* Force dark background for all code blocks (API and non-API) */
+pre,
+.code-block {
+  background-color: #000000 !important;
+  border: 1px solid var(--quote-border);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+/* Remove !important from color to allow syntax highlighting to work */
+/* Inline code (not in pre) should be blue */
+code:not(pre code) {
+  color: #96CBFE !important;
+  background-color: transparent !important;
+}
+
+/* Code block container text should be white (default for unhighlighted text) */
+pre,
+pre code,
+.code-block,
+.code-block code,
+.hljs {
+  color: #F6F3E8 !important;
+  background-color: transparent !important;
+}
+
+/* Syntax highlighting - Match API Theme (IR_BLACK) for general docs */
+/* Usage of !important here ensures these colors override the default white above */
+
+/* Keywords - Blue */
+.hljs-keyword,
+.hljs-built_in,
+.hljs-type,
+.hljs-variable.language_ {
+  color: #96CBFE !important;
+}
+
+/* Strings - Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+  color: #A8FF60 !important;
+}
+
+/* Numbers/Literals - Pink */
+.hljs-number,
+.hljs-literal,
+.hljs-link {
+  color: #FF73FD !important;
+}
+
+/* Comments - Gray */
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: #7C7C7C !important;
+}
+
+/* Operators/Punctuation - Yellow/White */
+.hljs-operator,
+.hljs-punctuation {
+  color: #FFFFB6 !important;
+}
+
+/* Functions/Methods - Blue or White */
+.hljs-title.function_,
+.hljs-title.class_ {
+  color: #96CBFE !important;
+}
+
+/* Params - White */
+.hljs-params {
+  color: #F6F3E8 !important;
+}
+
+/* Ensure pre also has the correct font */
+pre {
+  font-family: var(--font-mono) !important;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
   font-size: 16pt;
 }
 
 .dark {
+  color-scheme: dark;
   --bg: #0b0517;
   --fg: #F6F3E8;
 
   --sidebar-bg: #000000;
   --sidebar-fg: #F6F3E8;
   --sidebar-non-existant: #505274;
-  --sidebar-active: #C6C5FE;
+  --sidebar-active: #FF73FD;
   --sidebar-spacer: #2d334f;
 
   --scrollbar: #F6F3E8;
@@ -32,7 +192,8 @@ body {
 
   --links: #C6C5FE;
 
-  --inline-code-color: #c5c8c6;;
+  --inline-code-color: #c5c8c6;
+  ;
 
   --theme-popup-bg: #161923;
   --theme-popup-border: #737480;
@@ -58,7 +219,214 @@ body {
 details.note {
   font-style: italic;
 }
-details.note > summary {
+
+details.note>summary {
   font-weight: bold;
   cursor: pointer;
+}
+
+/* ========================================= */
+/* API Documentation Styles (Merged from api.css) */
+/* ========================================= */
+
+/* Fix sidebar layout: chapter items with nested sections should stack vertically */
+.sidebar .chapter>li.chapter-item {
+  display: block;
+}
+
+/* Nested section inside API Reference */
+.sidebar .api-nav-content {
+  padding-left: 20px;
+}
+
+/* API Nav Section Headers */
+.api-nav-header {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sidebar-non-existant);
+  padding: 5px 0;
+  margin: 0;
+}
+
+/* Type items with details/summary for collapsing operations */
+.api-type-details {
+  margin: 0;
+}
+
+.api-type-details>summary {
+  cursor: pointer;
+  list-style: none;
+  display: block;
+}
+
+.api-type-details>summary::-webkit-details-marker {
+  display: none;
+}
+
+.api-type-details>summary>a {
+  color: #96CBFE;
+  text-decoration: none;
+}
+
+.api-type-details>summary>a:hover {
+  color: var(--sidebar-active);
+}
+
+/* Chevron after the type name */
+.api-type-details>summary>a::after {
+  content: " \25B6";
+  font-size: 0.6em;
+  display: inline-block;
+  transition: transform 0.15s;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.api-type-details[open]>summary>a::after {
+  transform: rotate(90deg);
+}
+
+/* Types without operations - light blue */
+.chapter-item>a[href*="_type"] {
+  color: #96CBFE;
+}
+
+/* Main Content Styling */
+.readme-section {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin-top: 0;
+}
+
+.warning {
+  background: #1a1a0a;
+  border: 1px solid #444400;
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-size: 0.9em;
+}
+
+.intro {
+  margin-bottom: 2rem;
+}
+
+/* Symbols (constants, enums) */
+.symbol {
+  margin: 2rem 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.symbol:last-child {
+  border-bottom: none;
+}
+
+.symbol h3,
+.symbol h4 {
+  margin-top: 0;
+}
+
+.symbol h3 a,
+.symbol h4 a {
+  color: var(--links);
+}
+
+.symbol h3 a:hover,
+.symbol h4 a:hover {
+  text-decoration: none;
+}
+
+.description {
+  margin: 0.5em 0;
+  color: var(--fg);
+}
+
+.source {
+  font-size: 0.8em;
+  color: #7C7C7C;
+  margin-top: 0.5em;
+}
+
+.source code {
+  color: #7C7C7C;
+}
+
+.overload {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 2px solid var(--quote-border);
+}
+
+.overload:first-child {
+  margin-top: 0;
+}
+
+/* Type sections */
+.type-section {
+  margin: 2.5rem 0;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+.type-section:last-child {
+  border-bottom: none;
+}
+
+.type-heading {
+  font-size: 1.4em;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.type-heading a {
+  color: var(--links);
+}
+
+.operation {
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  border-left: 3px solid var(--quote-border);
+}
+
+.operation h4,
+.operation h5 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.1em;
+}
+
+.operation h4 a,
+.operation h5 a {
+  color: var(--links);
+}
+
+/* Section headers */
+section>h2,
+section>h3 {
+  border-bottom: 1px solid var(--quote-border);
+  padding-bottom: 0.3em;
+}
+
+/* Light theme adjustments */
+.light .warning {
+  background: #fffff0;
+  border-color: #e6e6cc;
+}
+
+.light .api-type-details>summary>a {
+  color: #0066cc;
+}
+
+.light .chapter-item>a[href*="_type"] {
+  color: #0066cc;
 }

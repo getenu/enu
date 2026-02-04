@@ -1,7 +1,7 @@
 ## API Documentation Generator Module
 ## Extracts and formats API documentation from jsondoc output for Mustache templates.
 
-import std/[json, tables, strutils, sequtils, algorithm, sets, re]
+import std/[json, tables, strutils, sequtils, algorithm, sets, re, sugar]
 
 type
   SymbolKind* = enum
@@ -129,7 +129,9 @@ proc collect_symbols*(modules: seq[ModuleConfig]): DocData =
       if name.starts_with("_") or name.contains("gensym"):
         continue
 
-      let unique_key = name & ":" & entry_type & ":" & module_name
+      # Include code signature to distinguish overloads
+      let code = entry["code"].get_str
+      let unique_key = name & ":" & entry_type & ":" & module_name & ":" & code
       if unique_key in seen_names:
         continue
       seen_names.incl(unique_key)
@@ -183,19 +185,31 @@ proc to_display_name*(s: string): string =
   ## Remove backticks and decode HTML entities for display
   s.replace("`", "").decode_html_entities
 
-proc highlight_code*(code: string): string =
-  result = escape_html(code)
-  let keywords = ["proc", "template", "macro", "iterator", "type", "const",
-                  "var", "let", "object", "ref", "enum", "tuple", "set", "seq",
-                  "Table", "string", "int", "bool", "float", "void", "auto",
-                  "discardable", "gcsafe", "raises", "tags", "forbids", "for", "in"]
+proc strip_pragmas*(code: string): string =
+  ## Remove pragma annotations like {.gcsafe.} from code
+  result = code.replace(re"\s*\{\.[^}]*\.?\}", "")
 
-  for kw in keywords:
-    result = result.replace(" " & kw & " ", " <span class=\"kw\">" & kw & "</span> ")
-    result = result.replace(" " & kw & "[", " <span class=\"kw\">" & kw & "</span>[")
-    result = result.replace(" " & kw & "\n", " <span class=\"kw\">" & kw & "</span>\n")
-    if result.starts_with(kw & " "):
-      result = "<span class=\"kw\">" & kw & "</span>" & result[kw.len..^1]
+proc highlight_code*(code: string): string =
+  ## Strip pragmas and escape HTML - highlight.js will handle syntax highlighting
+  escape_html(strip_pragmas(code))
+
+proc join_code_blocks*(codes: seq[string]): string =
+  ## Join code blocks, adding a blank line after multi-line blocks (except the last)
+  if codes.len == 0:
+    return ""
+  if codes.len == 1:
+    return highlight_code(codes[0])
+
+  var parts: seq[string] = @[]
+  for i, code in codes:
+    let highlighted = highlight_code(code)
+    if i < codes.len - 1 and code.contains("\n"):
+      # Multi-line block, not the last - add blank line after
+      parts.add(highlighted & "\n")
+    else:
+      parts.add(highlighted)
+
+  result = parts.join("\n")
 
 proc generate_anchor*(name: string, suffix: string = ""): string =
   var base = name
@@ -206,6 +220,44 @@ proc generate_anchor*(name: string, suffix: string = ""): string =
     ("(", ""), (")", ""), ("*", ""), ("+", "plus"), ("-", ""),
     ("&", "amp"), ("?", "q"), ("$", "dollar"), ("`", ""), (".", "_")
   ])
+
+type
+  OverloadGroup* = object
+    description*: string
+    codes*: seq[string]
+    modules*: seq[string]
+
+proc group_overloads_by_comment*(overloads: seq[Symbol]): seq[OverloadGroup] =
+  ## Group overloads by doc comments.
+  ## Functions with a comment start a new group.
+  ## Functions without comments join the current group.
+  if overloads.len == 0:
+    return @[]
+
+  var groups: seq[OverloadGroup] = @[]
+  var current_group = OverloadGroup(description: "", codes: @[], modules: @[])
+
+  for ovl in overloads:
+    if ovl.description.len > 0:
+      # This overload has a comment - start a new group
+      if current_group.codes.len > 0:
+        # Save the previous group first
+        groups.add(current_group)
+      current_group = OverloadGroup(
+        description: ovl.description,
+        codes: @[ovl.code],
+        modules: @[ovl.module]
+      )
+    else:
+      # No comment - add to current group
+      current_group.codes.add(ovl.code)
+      current_group.modules.add(ovl.module)
+
+  # Don't forget the last group
+  if current_group.codes.len > 0:
+    groups.add(current_group)
+
+  result = groups
 
 # Mustache context generation - returns JsonNode for direct use with Mustache
 
@@ -263,7 +315,7 @@ proc to_api_json*(data: DocData): JsonNode =
       tc["code"] = %highlight_code(td.type_symbol.code)
       tc["module"] = %td.type_symbol.module
 
-    # Static procs - group by display name
+    # Static procs - group by display name, then by doc comments
     if td.static_procs.len > 0:
       var static_by_name = init_table[string, seq[Symbol]]()
       for p in td.static_procs:
@@ -277,23 +329,26 @@ proc to_api_json*(data: DocData): JsonNode =
       for disp_name in static_names:
         let overloads = static_by_name[disp_name]
         let proc_anchor = generate_anchor(disp_name.decode_html_entities)
+        let groups = group_overloads_by_comment(overloads)
+
         var pc = %*{
           "name": disp_name.to_display_name,
           "anchor": proc_anchor,
-          "overloads": new_j_array()
+          "groups": new_j_array()
         }
 
-        for ovl in overloads:
-          pc["overloads"].add(%*{
-            "description": ovl.description,
-            "code": highlight_code(ovl.code),
-            "module": ovl.module
+        for group in groups:
+          let combined_code = join_code_blocks(group.codes)
+          pc["groups"].add(%*{
+            "description": group.description,
+            "hasDescription": group.description.len > 0,
+            "code": combined_code
           })
 
         tc["staticProcs"].add(pc)
         tc["staticProcNames"].add(%*{"name": disp_name.to_display_name, "anchor": proc_anchor})
 
-    # Regular procs - group by name
+    # Regular procs - group by name, then by doc comments
     if td.procs.len > 0:
       var procs_by_name = init_table[string, seq[Symbol]]()
       for p in td.procs:
@@ -307,17 +362,20 @@ proc to_api_json*(data: DocData): JsonNode =
       for proc_name in proc_names:
         let overloads = procs_by_name[proc_name]
         let proc_anchor = generate_anchor(proc_name.decode_html_entities, type_name)
+        let groups = group_overloads_by_comment(overloads)
+
         var pc = %*{
           "name": proc_name.to_display_name,
           "anchor": proc_anchor,
-          "overloads": new_j_array()
+          "groups": new_j_array()
         }
 
-        for ovl in overloads:
-          pc["overloads"].add(%*{
-            "description": ovl.description,
-            "code": highlight_code(ovl.code),
-            "module": ovl.module
+        for group in groups:
+          let combined_code = join_code_blocks(group.codes)
+          pc["groups"].add(%*{
+            "description": group.description,
+            "hasDescription": group.description.len > 0,
+            "code": combined_code
           })
 
         tc["procs"].add(pc)
