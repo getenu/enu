@@ -271,7 +271,7 @@ details.note>summary {
 }
 
 .api-type-details>summary>a {
-  color: #96CBFE;
+  color: #C6C5FE;
   text-decoration: none;
 }
 
@@ -293,9 +293,14 @@ details.note>summary {
   transform: rotate(90deg);
 }
 
-/* Types without operations - light blue */
+/* Types without operations - lavender */
 .chapter-item>a[href*="_type"] {
-  color: #96CBFE;
+  color: #C6C5FE;
+}
+
+/* Functions/Templates in sidebar - White */
+.chapter-item>a:not([href*="_type"]) {
+  color: #F6F3E8;
 }
 
 /* Main Content Styling */
@@ -413,7 +418,7 @@ details.note>summary {
 
 .operation h4 a,
 .operation h5 a {
-  color: var(--links);
+  color: #F6F3E8 !important;
 }
 
 /* Section headers */

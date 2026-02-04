@@ -526,6 +526,7 @@
           }
         }
 
+
         nodesToReplace.forEach(node => {
           const span = document.createElement('span');
           span.innerHTML = node.nodeValue.replace(/\b([A-Z])\b/g, '<span class="hljs-type">$1</span>');
@@ -538,6 +539,88 @@
         });
 
       }, 0);
+
+      // Sidebar Logic
+      // 1. "TYPES" Header Toggle
+      const headers = document.querySelectorAll('.api-nav-header');
+      let typesHeader = null;
+      for (const h of headers) {
+        if (h.textContent.trim() === 'Types') {
+          typesHeader = h;
+          break;
+        }
+      }
+
+      if (typesHeader) {
+        typesHeader.style.cursor = 'pointer';
+
+        const updateHeaderState = () => {
+          const allDetails = document.querySelectorAll('.api-type-details');
+          const anyOpen = Array.from(allDetails).some(d => d.open);
+          typesHeader.innerHTML = 'Types <span style="float:right; font-family: monospace;">' + (anyOpen ? '[-]' : '[+]') + '</span>';
+        };
+
+        // Initial state
+        updateHeaderState();
+
+        typesHeader.addEventListener('click', () => {
+          const allDetails = document.querySelectorAll('.api-type-details');
+          const isCurrentlyExpanded = typesHeader.textContent.includes('[-]');
+
+          allDetails.forEach(d => {
+            d.open = !isCurrentlyExpanded;
+          });
+          updateHeaderState();
+        });
+
+        // Update header when individual items are toggled
+        const allDetails = document.querySelectorAll('.api-type-details');
+        allDetails.forEach(d => {
+          d.addEventListener('toggle', updateHeaderState);
+        });
+      }
+
+      // 2. Type Item Click Logic
+      const typeLinks = document.querySelectorAll('.api-type-details > summary > a');
+      typeLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+          // Allow default navigation (scrolling) to happen first
+          // But we need to detect if it actually moved
+          const startScroll = window.scrollY;
+
+          // Let the browser handle the jump
+          setTimeout(() => {
+            const endScroll = window.scrollY;
+            const details = this.closest('details');
+            const userScrolled = Math.abs(endScroll - startScroll) > 5;
+
+            if (!details.open) {
+              // Collapsed -> Expand (always)
+              details.open = true;
+            } else {
+              // Expanded -> Collapse ONLY if we didn't scroll
+              if (!userScrolled) {
+                details.open = false;
+              }
+            }
+          }, 0);
+        });
+      });
+
+      // 3. Highlight Class Methods in Main Headers (Type.method)
+      // We want Type in Lavender (#C6C5FE) and method in White (#F6F3E8)
+      // Standard functions are already White via CSS.
+      const opHeaders = document.querySelectorAll('.operation h4 a, .operation h5 a');
+      opHeaders.forEach(link => {
+        const text = link.textContent;
+        if (text.includes('.')) {
+          const parts = text.split('.');
+          if (parts.length === 2) {
+             link.innerHTML = `<span style="color: #C6C5FE;">${parts[0]}</span>.${parts[1]}`;
+          }
+        }
+      });
+
     });
   </script>
 </body>
