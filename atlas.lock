@@ -12,9 +12,9 @@
       "commit": "3aeb5a61f306a0ad4f5a7292cfdc69af2fa35e4d",
       "version": ""
     },
-    "model_citizen.getenu.github.com": {
-      "dir": "$deps/model_citizen.getenu.github.com",
-      "url": "https://github.com/getenu/model_citizen",
+    "ed.getenu.github.com": {
+      "dir": "$deps/ed.getenu.github.com",
+      "url": "https://github.com/getenu/ed",
       "commit": "c12f6d673c46d4d765e1cfb3ccfdf86a8306d946",
       "version": ""
     },
@@ -246,7 +246,7 @@
     "--noNimblePath",
     "--path:\"deps/Nim.getenu.github.com\"",
     "--path:\"deps/godot-nim.getenu.github.com/godot\"",
-    "--path:\"deps/model_citizen.getenu.github.com/src\"",
+    "--path:\"deps/ed.getenu.github.com/src\"",
     "--path:\"deps/nanoid.nim.getenu.github.com/src\"",
     "--path:\"deps/pretty/src\"",
     "--path:\"deps/cligen\"",
@@ -300,7 +300,7 @@
       "",
       "requires \"https://github.com/getenu/Nim#77d820e1\",",
       "  \"https://github.com/getenu/godot-nim 0.8.6\",",
-      "  \"https://github.com/getenu/model_citizen 0.19.12\",",
+      "  \"https://github.com/getenu/ed 0.20.0\",",
       "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
       "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
       "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\",",
