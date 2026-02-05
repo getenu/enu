@@ -273,6 +273,7 @@ details.note>summary {
 .api-type-details>summary>a {
   color: #C6C5FE;
   text-decoration: none;
+  font-family: var(--font-mono);
 }
 
 .api-type-details>summary>a:hover {
@@ -296,11 +297,13 @@ details.note>summary {
 /* Types without operations - lavender */
 .chapter-item>a[href*="_type"] {
   color: #C6C5FE;
+  font-family: var(--font-mono);
 }
 
 /* Functions/Templates in sidebar - White */
 .chapter-item>a:not([href*="_type"]) {
   color: #F6F3E8;
+  font-family: var(--font-mono);
 }
 
 /* Main Content Styling */
@@ -350,6 +353,7 @@ details.note>summary {
 .symbol h3 a,
 .symbol h4 a {
   color: var(--links);
+  font-family: var(--font-mono);
 }
 
 .symbol h3 a:hover,
@@ -401,6 +405,7 @@ details.note>summary {
 
 .type-heading a {
   color: var(--links);
+  font-family: var(--font-mono);
 }
 
 .operation {
@@ -419,6 +424,7 @@ details.note>summary {
 .operation h4 a,
 .operation h5 a {
   color: #F6F3E8 !important;
+  font-family: var(--font-mono);
 }
 
 /* Section headers */
