@@ -322,6 +322,13 @@ task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   else:
     echo "extract_dlls is only needed on Windows"
 
+task setup_checksums, "setup checksum module in nim dependency":
+  p "Setting up Nim checksums..."
+  with_dir "deps/Nim.getenu.github.com":
+    exec "nim c koch"
+    let koch_cmd = if host_os == "windows": "koch.exe" else: "./koch"
+    exec koch_cmd & " checksums"
+
 task prereqs,
   "Build godot, verify fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
   # Persist arch if specified
@@ -330,8 +337,8 @@ task prereqs,
       save_arch(cpu)
     echo &"Target architecture: {cpu}" &
       (if cross_compile: " (cross-compiling)" else: "")
-  exec "atlas install"
   exec "atlas rep"
+  setup_checksums_task()
   when host_os == "windows":
     extract_dlls_task()
   build_godot(force = "--force" in command_line_params())
@@ -367,8 +374,8 @@ proc code_sign(id, path: string) =
 
 task dist_prereqs, "Build godot debug and release versions, and verify fonts":
   p "Buiding distribution prereqs..."
-  exec "atlas install"
   exec "atlas rep"
+  setup_checksums_task()
   when host_os == "windows":
     extract_dlls_task()
   if target == "x11":
