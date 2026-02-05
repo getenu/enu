@@ -1,10 +1,4 @@
-## Voxel Storage and Encoding
-##
-## Simplified voxel management - packed format is the sync mechanism.
-## Chunks start with a snapshot, then use deltas for incremental changes.
-## Re-snapshot when: >100 voxels change at once, or >100 deltas accumulated.
-
-import std/[varints, options, math, tables]
+import std/[varints, options, math, tables, monotimes, times]
 import pkg/godot except print, Color
 import godotapi/[voxel_buffer, voxel_tool]
 import core
@@ -18,10 +12,6 @@ type ChunkFormat* {.size: sizeof(uint8).} = enum
 
 const CMD_REPEAT* = 241'u8
 
-# =============================================================================
-# Packing/Unpacking
-# =============================================================================
-
 proc pack_voxel*(color_index: int, kind_ord: int): PackedVoxel =
   ((color_index * 3) + kind_ord + 1).PackedVoxel
 
@@ -33,10 +23,6 @@ proc unpack_voxel*(
   else:
     let val = packed.int - 1
     (val div 3, val mod 3)
-
-# =============================================================================
-# Position Conversion
-# =============================================================================
 
 proc linear_position*(x, y, z: int): int {.inline.} =
   z + y * ChunkDim + x * ChunkDim * ChunkDim
@@ -82,10 +68,6 @@ proc chunk_to_local*(chunk_id: Vector3, pos: Vector3): int =
   let local_z = floor_mod(pos.z.int - (chunk_id.z.int * 16), 16)
   linear_position(local_x, local_y, local_z)
 
-# =============================================================================
-# Varint Helpers
-# =============================================================================
-
 proc write_varint*(s: var string, value: uint64) =
   var buf: array[max_var_int_len, byte]
   let len = write_vu64(buf, value)
@@ -109,10 +91,6 @@ proc to_bytes(s: string): seq[byte] =
   result = new_seq[byte](s.len)
   if s.len > 0:
     copyMem(addr result[0], unsafeAddr s[0], s.len)
-
-# =============================================================================
-# RLE Encoding/Decoding
-# =============================================================================
 
 proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
   result = @[FMT_RLE.byte]
@@ -159,10 +137,6 @@ proc decode_rle_data*(
       inc out_idx
       inc i
 
-# =============================================================================
-# Sparse Encoding/Decoding
-# =============================================================================
-
 proc encode_sparse_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
   result = @[FMT_SPARSE_FULL.byte]
   var count = 0
@@ -206,10 +180,6 @@ proc decode_sparse_data*(
     if pos < CHUNK_VOLUME.uint64:
       result[pos.int] = voxel
 
-# =============================================================================
-# Chunk Encoding/Decoding
-# =============================================================================
-
 proc encode_chunk*(voxels: array[CHUNK_VOLUME, PackedVoxel]): PackedChunk =
   var has_voxels = false
   for v in voxels:
@@ -243,10 +213,6 @@ proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
 proc is_empty*(packed: PackedChunk): bool =
   packed.data.len == 0 or
     (packed.data.len == 1 and packed.data[0].byte == FMT_EMPTY.byte)
-
-# =============================================================================
-# Delta Encoding/Decoding
-# =============================================================================
 
 proc encode_delta*(
     changes: openArray[tuple[pos: Vector3, voxel: PackedVoxel]]
@@ -316,10 +282,6 @@ proc decode_delta*(
     inc i
     result.add (from_linear(linear.int), voxel)
 
-# =============================================================================
-# VoxelStore Init
-# =============================================================================
-
 proc init*(
     _: type VoxelStore,
     id: string,
@@ -328,7 +290,7 @@ proc init*(
     edit_snapshots: EdTable[EditKey, SnapshotData] = nil,
     edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]] = nil,
 ): VoxelStore =
-  let use_ctx = if ctx.isNil: Ed.thread_ctx else: ctx
+  let use_ctx = if not ?ctx: Ed.thread_ctx else: ctx
   VoxelStore(
     id: id,
     ctx: use_ctx,
@@ -347,10 +309,6 @@ proc init*(
     edit_deltas: edit_deltas,
   )
 
-# =============================================================================
-# Local Voxel Access
-# =============================================================================
-
 proc contains*(self: VoxelStore, position: Vector3): bool =
   let chunk_id = position.buffer
   chunk_id in self.local_voxels and position in self.local_voxels[chunk_id]
@@ -365,14 +323,6 @@ proc find_voxel*(self: VoxelStore, position: Vector3): Option[VoxelInfo] =
     some(self.local_voxels[chunk_id][position])
   else:
     none(VoxelInfo)
-
-# =============================================================================
-# Voxel Modification
-# =============================================================================
-
-# =============================================================================
-# Unified Flush Helpers
-# =============================================================================
 
 proc should_use_snapshot(
     has_existing: bool, change_count, delta_count: int, is_empty: bool
@@ -396,10 +346,6 @@ proc build_edit_state(
       let linear = linear_position(local_pos)
       if linear >= 0 and linear < CHUNK_VOLUME:
         result[linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
-
-# =============================================================================
-# Flush Chunks
-# =============================================================================
 
 proc flush_chunk_snapshot(self: VoxelStore, chunk_id: Vector3) =
   let voxels = self.build_chunk_state(chunk_id)
@@ -449,10 +395,6 @@ proc flush_dirty_chunks*(self: VoxelStore) =
 
   self.pending_chunks.clear
 
-# =============================================================================
-# Flush Edits
-# =============================================================================
-
 proc flush_edit_snapshot(self: VoxelStore, chunk_id: Vector3) =
   let key: EditKey = (self.unit_id, chunk_id)
   let voxels = self.build_edit_state(chunk_id)
@@ -486,7 +428,7 @@ proc flush_edit_delta(
   inc self.deltas_flushed
 
 proc flush_dirty_edits*(self: VoxelStore) =
-  if self.edit_snapshots.isNil:
+  if not ?self.edit_snapshots:
     return
 
   for chunk_id, changes in self.pending_edits:
@@ -523,7 +465,7 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   let is_new_chunk = chunk_id notin self.local_voxels
   if is_new_chunk:
     self.local_voxels[chunk_id] = Table[Vector3, VoxelInfo].init
-    if not self.on_chunk_created.isNil:
+    if not self.on_chunk_created.is_nil:
       self.on_chunk_created(chunk_id)
 
   let existed = position in self.local_voxels[chunk_id]
@@ -584,9 +526,6 @@ proc del_voxel*(self: VoxelStore, position: Vector3) =
         self.flush_chunk_snapshot(chunk_id)
     else:
       self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
-
-# Edit Access (uses local_edits cache)
-# =============================================================================
 
 proc has_edit*(self: VoxelStore, position: Vector3): bool =
   let chunk_id = chunk_id_for_pos(position)
@@ -661,7 +600,7 @@ template for_all_edits*(self: VoxelStore, body: untyped) =
 proc rebuild_local_edits*(self: VoxelStore) =
   self.local_edits.clear()
 
-  if self.edit_snapshots.isNil:
+  if not ?self.edit_snapshots:
     return
 
   for key, snapshot in self.edit_snapshots:
@@ -679,11 +618,11 @@ proc rebuild_local_edits*(self: VoxelStore) =
         self.local_edits[chunk_id][local_pos] =
           (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
 
-  if self.edit_deltas.isNil:
+  if not ?self.edit_deltas:
     return
 
   for key, delta_seq in self.edit_deltas:
-    if key.id != self.unit_id or delta_seq.isNil:
+    if key.id != self.unit_id or not ?delta_seq:
       continue
     let chunk_id = key.loc
     for delta in delta_seq:
@@ -698,10 +637,6 @@ proc rebuild_local_edits*(self: VoxelStore) =
             self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
           self.local_edits[chunk_id][local_pos] =
             (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
-
-# =============================================================================
-# Receiving (for rebuilding local_voxels from packed data)
-# =============================================================================
 
 proc apply_snapshot*(
     self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData
@@ -786,18 +721,10 @@ proc clear*(self: VoxelStore) =
   self.pending_chunks.clear
   self.block_count = 0
 
-# =============================================================================
-# Iterator for all voxels
-# =============================================================================
-
 iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
   for chunk_id, chunk in self.local_voxels:
     for pos, info in chunk:
       yield (pos, info)
-
-# =============================================================================
-# Direct Rendering (non-ASAP mode) - uses set_voxel for each voxel
-# =============================================================================
 
 proc render_snapshot_direct*(
     voxel_tool: VoxelTool, chunk_id: Vector3, snapshot: SnapshotData
@@ -827,32 +754,17 @@ proc render_delta_direct*(
       let (color_idx, _) = unpack_voxel(packed_voxel)
       voxel_tool.set_voxel(world_pos, color_idx.int64)
 
-# =============================================================================
-# VoxelRenderer - ASAP Mode Buffer Rendering
-# =============================================================================
+const ASAP_PASTE_INTERVAL = init_duration(seconds = 2)
 
-import std/[monotimes, times]
-
-const ASAP_PASTE_INTERVAL = initDuration(seconds = 2)
-
-type VoxelRenderer* = ref object
-  voxel_tool*: VoxelTool
-  buffer: VoxelBuffer
-  min_pos: Vector3
-  max_pos: Vector3
-  buffer_size: Vector3
-  dirty: bool
-  asap_active: bool
-  last_paste_time: MonoTime
-
-proc init*(_: type VoxelRenderer): VoxelRenderer =
-  VoxelRenderer()
+proc init*(_: type VoxelRenderer, voxel_tool: VoxelTool): VoxelRenderer =
+  assert ?voxel_tool
+  VoxelRenderer(voxel_tool: voxel_tool)
 
 proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
   let chunk_min = chunk_id * ChunkDim
   let chunk_max = chunk_min + vec3(ChunkDim - 1, ChunkDim - 1, ChunkDim - 1)
 
-  if self.buffer.isNil:
+  if not ?self.buffer:
     self.min_pos = chunk_min
     self.max_pos = chunk_max
     self.buffer_size = vec3(ChunkDim, ChunkDim, ChunkDim)
@@ -944,13 +856,13 @@ proc tick*(self: VoxelRenderer, is_local: bool) =
     let now = get_mono_time()
     let elapsed = now - self.last_paste_time
     if elapsed >= ASAP_PASTE_INTERVAL:
-      if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:
+      if ?self.buffer and self.dirty:
         self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
         self.dirty = false
       self.last_paste_time = now
 
 proc end_asap*(self: VoxelRenderer) =
-  if not self.buffer.isNil and self.dirty and not self.voxel_tool.isNil:
+  if ?self.buffer and self.dirty:
     self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
   self.buffer = nil
   self.min_pos = vec3()

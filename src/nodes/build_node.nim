@@ -37,7 +37,7 @@ gdobj BuildNode of VoxelTerrain:
     if self.model.shared.materials.len == 0:
       for i in 0 .. int.high:
         let m = self.get_material(i)
-        if m.is_nil:
+        if not ?m:
           break
         else:
           let m = m.duplicate.as(ShaderMaterial)
@@ -59,7 +59,7 @@ gdobj BuildNode of VoxelTerrain:
       if added and chunk_id in self.loaded_chunks:
         if ASAP_MODE in self.model.global_flags:
           self.renderer.buffer_delta(chunk_id, change.item)
-        elif not self.renderer.voxel_tool.isNil:
+        elif ?self.renderer.voxel_tool:
           render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
 
     self.tracked_delta_seqs[chunk_id] = zid
@@ -72,16 +72,16 @@ gdobj BuildNode of VoxelTerrain:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
         if ASAP_MODE in self.model.global_flags:
           self.renderer.buffer_snapshot(chunk_id, snapshot)
-        elif not self.renderer.voxel_tool.isNil:
+        elif ?self.renderer.voxel_tool:
           render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
 
       if chunk_id in self.model.voxels.chunk_deltas:
         let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
-        if not delta_seq.isNil:
+        if ?delta_seq:
           for delta in delta_seq:
             if ASAP_MODE in self.model.global_flags:
               self.renderer.buffer_delta(chunk_id, delta)
-            elif not self.renderer.voxel_tool.isNil:
+            elif ?self.renderer.voxel_tool:
               render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
 
           self.watch_delta_seq(chunk_id, delta_seq)
@@ -94,14 +94,14 @@ gdobj BuildNode of VoxelTerrain:
     let library = self.mesher.as(VoxelMesherBlocky).library
     for i in 0 ..< library.voxel_count.int:
       let m = self.get_material(i).as(ShaderMaterial)
-      if not m.is_nil:
+      if ?m:
         m.set_shader_param("emission_energy", glow.to_variant)
 
   proc set_highlight() =
     let library = self.mesher.as(VoxelMesherBlocky).library
     for i in 0 ..< library.voxel_count.int:
       let m = self.get_material(i).as(ShaderMaterial)
-      if not m.is_nil:
+      if ?m:
         if self.error_highlight_on:
           m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
         else:
@@ -149,13 +149,13 @@ gdobj BuildNode of VoxelTerrain:
         if change.item.key in self.loaded_chunks:
           if ASAP_MODE in self.model.global_flags:
             self.renderer.buffer_snapshot(change.item.key, change.item.value)
-          elif not self.renderer.voxel_tool.isNil:
+          elif ?self.renderer.voxel_tool:
             render_snapshot_direct(
               self.renderer.voxel_tool, change.item.key, change.item.value
             )
 
     # Render existing packed_chunks (for clients connecting to existing builds)
-    if not self.renderer.voxel_tool.is_nil:
+    if ?self.renderer.voxel_tool:
       for chunk_id, snapshot in self.model.voxels.packed_chunks:
         if chunk_id in self.loaded_chunks:
           render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
@@ -165,13 +165,13 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         let chunk_id = change.item.key
         let delta_seq = change.item.value
-        if not delta_seq.isNil:
+        if ?delta_seq:
           # Render any existing deltas in the new chunk
           if chunk_id in self.loaded_chunks:
             for delta in delta_seq:
               if ASAP_MODE in self.model.global_flags:
                 self.renderer.buffer_delta(chunk_id, delta)
-              elif not self.renderer.voxel_tool.isNil:
+              elif ?self.renderer.voxel_tool:
                 render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
           # Watch for future deltas
           self.watch_delta_seq(chunk_id, delta_seq)
@@ -182,9 +182,9 @@ gdobj BuildNode of VoxelTerrain:
           self.tracked_delta_seqs.del(chunk_id)
 
     # Render existing chunk_deltas and set up watches
-    if not self.renderer.voxel_tool.is_nil:
+    if ?self.renderer.voxel_tool:
       for chunk_id, delta_seq in self.model.voxels.chunk_deltas:
-        if not delta_seq.isNil:
+        if ?delta_seq:
           if chunk_id in self.loaded_chunks:
             for delta in delta_seq:
               render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
@@ -266,8 +266,7 @@ gdobj BuildNode of VoxelTerrain:
     self.model.init_voxels_if_needed()
 
     # Create renderer for ASAP mode buffer operations
-    self.renderer = VoxelRenderer.init()
-    self.renderer.voxel_tool = self.get_voxel_tool()
+    self.renderer = VoxelRenderer.init(self.get_voxel_tool())
 
     self.track_changes
 
@@ -281,7 +280,7 @@ gdobj BuildNode of VoxelTerrain:
     self.prepare_materials()
 
 proc init*(_: type BuildNode): BuildNode =
-  if build_scene.is_nil:
+  if not ?build_scene:
     build_scene = load("res://components/BuildNode.tscn") as PackedScene
     shader = load("res://shaders/terrain_voxel.shader") as Shader
     hidden_shader = load("res://shaders/terrain_voxel_hidden.shader") as Shader

@@ -693,7 +693,6 @@ proc block_color_at(position: Vector3): Colors =
     ERASER
 
 proc place_block(self: Build, position: Vector3, color: Colors) =
-  ## Places a MANUAL block at the given position. Used for testing persistence.
   var info: VoxelInfo
   info.kind = MANUAL
   info.color = ACTION_COLORS[color]
@@ -701,16 +700,13 @@ proc place_block(self: Build, position: Vector3, color: Colors) =
   self.voxels.set_edit(position, info) # Persist as edit for save/reload
 
 proc save_level_now() =
-  ## Triggers an immediate level save. Used for testing persistence.
   serializers.save_level(state.config.level_dir, force = true)
 
 proc reload_unit(self: Build) =
-  ## Reloads a Build's voxel data from disk without stopping the script.
-  ## Used for testing serialization persistence.
-  self.voxels.clear() # Clear in-memory voxels
-  self.voxels.rebuild_local_edits() # Rebuild edits from persistent store
-  self.restore_edits() # Apply edits to voxels
-  self.reset_bounds() # Rebuild bounds
+  self.voxels.clear()
+  self.voxels.rebuild_local_edits()
+  self.restore_edits()
+  self.reset_bounds()
 
 # End of bindings
 

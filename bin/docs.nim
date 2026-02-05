@@ -1,7 +1,7 @@
 import std/[asynchttpserver, asyncdispatch, os, strutils, mimetypes]
 
 const
-  project_path = currentSourcePath().parent_dir().parent_dir()
+  project_path = current_source_path().parent_dir().parent_dir()
   vendor_path = project_path / "vendor"
   voxel_docs_path = vendor_path / "modules/voxel/doc/site"
   godot_docs_path = vendor_path / "godot/doc/_build/html"
@@ -17,16 +17,17 @@ proc handle_request(req: Request) {.async, gcsafe.} =
 
   if path.starts_with("/voxel"):
     docs_path = voxel_docs_path
-    relative_path = path[6..^1]  # Strip "/voxel"
+    relative_path = path[6 ..^ 1] # Strip "/voxel"
   elif path.starts_with("/godot"):
     docs_path = godot_docs_path
-    relative_path = path[6..^1]  # Strip "/godot"
+    relative_path = path[6 ..^ 1] # Strip "/godot"
   elif path.starts_with("/enu"):
     docs_path = enu_docs_path
-    relative_path = path[4..^1]  # Strip "/enu"
+    relative_path = path[4 ..^ 1] # Strip "/enu"
   elif path == "/" or path == "":
     # Serve index page with links to all
-    let index_html = """<!DOCTYPE html>
+    let index_html =
+      """<!DOCTYPE html>
 <html><head><title>Docs</title></head>
 <body>
 <h1>Local Documentation</h1>
@@ -36,7 +37,9 @@ proc handle_request(req: Request) {.async, gcsafe.} =
   <li><a href="/godot/">Godot 3.5 class reference</a></li>
 </ul>
 </body></html>"""
-    await req.respond(HTTP200, index_html, new_http_headers([("Content-Type", "text/html")]))
+    await req.respond(
+      HTTP200, index_html, new_http_headers([("Content-Type", "text/html")])
+    )
     return
   else:
     await req.respond(HTTP404, "Not found. Try <a href=\"/\">/</a> for index.")
@@ -54,8 +57,11 @@ proc handle_request(req: Request) {.async, gcsafe.} =
     let content = read_file(file_path)
     let ext = file_path.split_file().ext
     let mimes = new_mimetypes()
-    let mime = mimes.get_mimetype(ext.strip(chars = {'.'}), default = "text/html")
-    await req.respond(Http200, content, new_http_headers([("Content-Type", mime)]))
+    let mime =
+      mimes.get_mimetype(ext.strip(chars = {'.'}), default = "text/html")
+    await req.respond(
+      Http200, content, new_http_headers([("Content-Type", mime)])
+    )
   else:
     await req.respond(Http404, "Not found: " & path)
 

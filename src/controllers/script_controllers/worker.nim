@@ -435,7 +435,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       let can_flush_asap = asap_interval_elapsed and state.voxel_tasks <= 10
       var did_flush_asap = false
       state.units.value.walk_tree proc(unit: Unit) =
-        if unit of Build and not Build(unit).voxels.isNil:
+        if unit of Build and ?Build(unit).voxels:
           let build = Build(unit)
           let in_asap = ASAP_MODE in build.global_flags
           # Flush if not in ASAP mode, or if in ASAP mode and we can flush
@@ -455,7 +455,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       run_deferred()
 
       # Update network stats for main thread
-      if not Ed.thread_ctx.reactor.isNil:
+      if ?Ed.thread_ctx.reactor:
         state.net_connections = Ed.thread_ctx.reactor.connections.len
       else:
         state.net_connections = 0
@@ -465,7 +465,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         var total_snapshots = 0
         var total_deltas = 0
         state.units.value.walk_tree proc(unit: Unit) =
-          if unit of Build and not Build(unit).voxels.isNil:
+          if unit of Build and ?Build(unit).voxels:
             total_snapshots += Build(unit).voxels.snapshots_flushed
             total_deltas += Build(unit).voxels.deltas_flushed
 

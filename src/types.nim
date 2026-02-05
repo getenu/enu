@@ -177,32 +177,29 @@ type
     id*: string
     ctx*: EdContext
     unit_id*: string # For edit key construction
-
-    # Regular chunks (owned)
     packed_chunks*: EdTable[Vector3, SnapshotData]
     chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
-
-    # Edits - references to tables in Shared (not owned)
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
-
-    # Local caches (plain Tables)
     local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
     local_edits*: Table[Vector3, Table[Vector3, VoxelInfo]]
-
-    # Pending changes
     pending_chunks*:
       Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
     pending_edits*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
-
     block_count*: int
-
-    # Callback when a new chunk is created (for bounds expansion)
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
-
-    # Stats
     snapshots_flushed*: int
     deltas_flushed*: int
+
+  VoxelRenderer* = ref object
+    voxel_tool*: VoxelTool
+    buffer*: VoxelBuffer
+    min_pos*: Vector3
+    max_pos*: Vector3
+    buffer_size*: Vector3
+    dirty*: bool
+    asap_active*: bool
+    last_paste_time*: MonoTime
 
   ScriptErrors* =
     EdSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]

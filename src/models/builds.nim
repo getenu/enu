@@ -402,7 +402,7 @@ proc init*(
 proc init_voxels_if_needed*(self: Build) =
   ## Initialize voxels if nil (happens when Build is synced between threads)
   self.init_shared()
-  if self.voxels.isNil:
+  if not ?self.voxels:
     let voxel_id = self.id & ".voxels"
     let ctx = Ed.thread_ctx
     let packed_id = voxel_id & ".packed_chunks"
@@ -452,7 +452,7 @@ proc setup_packed_chunk_watches(self: Build) =
 
   # Process any deltas that arrived before the watch was set up
   for chunk_id, delta_seq in self.voxels.chunk_deltas:
-    if not delta_seq.isNil:
+    if ?delta_seq:
       for delta in delta_seq:
         self.voxels.apply_delta(chunk_id, delta)
       watch_delta_seq(chunk_id, delta_seq)
@@ -465,7 +465,7 @@ proc setup_packed_chunk_watches(self: Build) =
     if added:
       let chunk_id = change.item.key
       let delta_seq = change.item.value
-      if not delta_seq.isNil:
+      if ?delta_seq:
         for delta in delta_seq:
           self.voxels.apply_delta(chunk_id, delta)
         watch_delta_seq(chunk_id, delta_seq)
