@@ -501,12 +501,12 @@ proc load_level*(worker: Worker, level_dir: string) =
   worker.retry_failures = true
   load_units(nil, load_order)
 
-  # Save the level immediately to persist any updated dependency graph or state
-  save_level(state.config.level_dir, save_all = true)
-
   worker.retry_failed_scripts()
   worker.retry_failures = false
   dont_join = false
+
+  # Save after retry so all deps (including those from retried scripts) are captured
+  save_level(state.config.level_dir, save_all = true)
 
   for unit in state.units:
     unit.global_flags -= DIRTY
