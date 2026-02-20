@@ -108,6 +108,11 @@ This project follows Ruby-like casing conventions. Nim is style-insensitive for 
 
 Only use `lowerCamelCase` when `snake_case` doesn't work, which should only happen with third-party macros that don't properly normalize identifiers.
 
+### Additional Coding Style Rules
+
+1. **Naming Conventions:** Never use `camelCase` for Nim code. Enu strictly uses `snake_case` for everything (variables, procs, types in some parts, but standard Nim types are strictly `PascalCase`).
+2. **Exceptions:** Do not use `newException(ExceptionType, "msg")`. Use the helper method `ExceptionType.init("msg")` (e.g., `ValueError.init("Circular dependency detected")`).
+
 ### Important Notes
 - Use `nim build` to verify changes compile correctly
 - The project uses ZenContext for metrics and threading

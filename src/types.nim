@@ -343,10 +343,10 @@ type
     running*: bool
     interpreter*: Interpreter
     code*: string
-    dependents*: HashSet[string]
     pass_context*: PContext
     last_ran*: MonoTime
     file_index*: int
+    dependencies*: seq[string]
 
   VMError* = object of CatchableError
   QuitKind* = enum
@@ -368,7 +368,6 @@ type
   Worker* = ref object
     retry_failures*: bool
     interpreter*: Interpreter
-    module_names*: HashSet[string]
     active_unit*: Unit
     unit_map*: Table[PNode, Unit]
     node_map*: Table[Unit, PNode]
@@ -377,6 +376,7 @@ type
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
     initial_load_done*: bool
+    module_names*: HashSet[string]
 
   NodeController* = ref object
 

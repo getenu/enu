@@ -158,6 +158,7 @@ task build_headless, "build headless godot":
 task unit_tests, "run unit tests":
   exec "nim c -r tests/unit/script_ctx_test"
   exec "nim c -r tests/unit/serializers_test"
+  exec "nim c -r tests/unit/dependency_graph_test"
 
 task vm_tests, "run VM script tests":
   exec "nim c -r tests/vm/runner"

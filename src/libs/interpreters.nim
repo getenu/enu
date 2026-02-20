@@ -1,6 +1,6 @@
 import std/[os, strformat, importutils]
 import pkg/compiler/ast except new_node
-import pkg/compiler/[vm, vmdef]
+import pkg/compiler/[vm, vmdef, lineinfos]
 import core, eval
 
 export Interpreter, VmArgs, set_result
@@ -23,6 +23,8 @@ proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
       defines = @{"nimscript": "true", "nimconfig": "true"},
     )
     result.config.max_loop_iterations_vm = int.high
+    result.config.notes.incl(warnUnusedImportX)
+    result.config.notes.incl(hintXDeclaredButNotUsed)
 
 proc pause*(ctx: ScriptCtx) =
   ctx.pause_requested = true
@@ -35,12 +37,26 @@ proc load*(self: ScriptCtx, file_name, code: string) =
   self.module_name = file_name.split_file.name
   self.file_name = file_name
 
+  self.dependencies = @[]
+
 proc run*(self: ScriptCtx): bool =
   private_access ScriptCtx
   self.exit_code = none(int)
 
   try:
-    self.interpreter.load_module(self.file_name, self.code, self.pass_context)
+    var raw_dependencies = newSeq[string]()
+    self.interpreter.load_module(
+      self.file_name, self.code, self.pass_context, raw_dependencies
+    )
+
+    self.dependencies = @[]
+    let script_dir = self.file_name.split_file.dir
+    for dep in raw_dependencies:
+      if dep == "players":
+        continue
+      let expected_path = script_dir / (dep & ".nim")
+      if file_exists(expected_path):
+        self.dependencies.add(expected_path.relative_path(script_dir))
 
     result = false
   except VMPause:

@@ -101,7 +101,6 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
     self.interpreter.reset_module(unit.script_ctx.module_name)
     debug "reset module", module = unit.script_ctx.module_name
     unit.script_ctx.running = false
-    self.module_names.excl unit.script_ctx.module_name
     remove_file unit.script_ctx.script
   elif code.nim.strip != "":
     debug "loading unit", unit_id = unit.id
@@ -234,8 +233,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
     if removed:
       worker.unmap_unit(unit)
-      if not ?unit.clone_of and ?unit.script_ctx:
-        worker.module_names.excl unit.script_ctx.module_name
+
       if ?unit.script_ctx:
         unit.script_ctx.running = false
         unit.script_ctx.callback = nil

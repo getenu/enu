@@ -5,7 +5,7 @@ import base_api, macro_helpers
 const private_props = ["lock"]
 const public_props = [
   "position", "start_position", "speed", "scale", "glow", "global", "seed",
-  "color", "height", "show", "sign"
+  "color", "height", "show", "sign",
 ]
 
 proc params_to_assignments(nodes: seq[NimNode]): NimNode =
@@ -17,8 +17,6 @@ proc params_to_assignments(nodes: seq[NimNode]): NimNode =
       result.add quote do:
         if not is_instance:
           me.`prop` = `value`
-    result.add quote do:
-      link_dependency(me.`prop`)
 
 proc params_to_ident_defs(nodes: seq[NimNode]): seq[NimNode] =
   for node in nodes:
@@ -68,13 +66,10 @@ proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
 
       result.add quote do:
         proc `getter`*(self: `type_name`): `typ` =
-          link_dependency(self.`getter`)
           self.`getter`
 
         proc `setter`*(self: `type_name`, value: `typ`) =
           if value != self.`getter`:
-            link_dependency(value)
-            link_dependency(self)
             self.`getter` = value
             self.wake
 
@@ -83,7 +78,7 @@ proc build_ctors(
 ): NimNode =
   var ctor_body = quote:
     assert not instance.is_nil
-    link_dependency(instance)
+
     result = `type_name`()
     result.seed = active_unit().seed
     new_instance(instance, result)
@@ -92,7 +87,6 @@ proc build_ctors(
     let prop = param[0]
     ctor_body.add quote do:
       result.`prop` = `prop`
-      link_dependency(`prop`)
 
   let vars = params_to_ident_defs(params)
   let var_names = vars.map_it $it[0]

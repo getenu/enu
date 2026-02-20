@@ -1,13 +1,18 @@
-import std/[os, re, posix]
+import std/[os, re, posix, sets]
 
 import pkg/godot except print
 import pkg/compiler/ast except new_node
-import pkg/compiler/[lineinfos, renderer, msgs, vmdef]
+import
+  pkg/compiler/
+    [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents]
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, units, signs, players]
 import libs/[interpreters, eval]
 import ./vars
+
+type ScriptCycleError* = object of VMQuit
+  scripts*: seq[string]
 
 proc init*(
     _: type ScriptCtx,
@@ -45,6 +50,15 @@ proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
   unit.global_flags += HIGHLIGHT_ERROR
   unit.global_flags -= SCRIPT_INITIALIZING
   unit.ensure_visible
+
+  if e of ScriptCycleError:
+    let cycle_err = (ref ScriptCycleError)(e)
+    for script_name in cycle_err.scripts:
+      for u in state.units:
+        if ?u.script_ctx and
+            u.script_ctx.file_name.extract_filename == script_name:
+          u.global_flags += HIGHLIGHT_ERROR
+          u.ensure_visible
 
   # In test mode, track script errors for exit code
   if TEST_MODE in state.local_flags:
@@ -175,6 +189,27 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
     if not state.paused:
       ctx.timeout_at = get_mono_time() + timeout
       ctx.running = ctx.run()
+
+      var temp_visited: HashSet[string]
+      proc visit(node: string) =
+        if node in temp_visited:
+          let msg = "Circular dependency detected involving script: " & node
+          var scripts: seq[string] = @[]
+          for v in temp_visited:
+            scripts.add(v)
+          scripts.add(node)
+          raise (ref ScriptCycleError)(msg: msg, scripts: scripts)
+        temp_visited.incl(node)
+        for u in state.units:
+          if u.script_ctx != nil and
+              u.script_ctx.file_name.extract_filename == node:
+            for dep in u.script_ctx.dependencies:
+              visit(dep)
+            break
+        temp_visited.excl(node)
+
+      visit(ctx.file_name.extract_filename)
+
       if not ctx.running and not ?unit.clone_of:
         unit.collect_garbage
         unit.ensure_visible
@@ -197,28 +232,36 @@ proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
       debug "retrying", script = f.unit.script_ctx.script
       self.load_script(f.unit)
 
+  if prev_failed.len == self.failed.len and self.failed.len > 0:
+    debug "retry loop terminated because no progress was made",
+      failed_count = self.failed.len
+
   for f in prev_failed:
     self.script_error(f.unit, f.e)
   self.failed = @[]
 
 proc load_script_and_dependents*(self: Worker, unit: Unit) =
-  var previous: HashSet[Unit]
-  var units_by_module: Table[string, Unit]
   var units_to_reload: HashSet[Unit]
-
   units_to_reload.incl unit
+
   state.push_flag LOADING_SCRIPT
   self.retry_failures = true
 
-  for other in state.units.value:
-    if ?other.script_ctx:
-      units_by_module[other.script_ctx.module_name] = other
-
-  while units_to_reload != previous:
-    previous = units_to_reload
-    for unit in previous:
-      for dep in unit.script_ctx.dependents:
-        units_to_reload.incl units_by_module[dep]
+  var previous_count = 0
+  while units_to_reload.card != previous_count:
+    previous_count = units_to_reload.card
+    for other in state.units.value:
+      if other notin units_to_reload and ?other.script_ctx:
+        for dep in other.script_ctx.dependencies:
+          # dependencies are full paths. Check if they match any reloading unit's file.
+          var found = false
+          for reloading in units_to_reload:
+            if reloading.script_ctx.file_name == dep:
+              found = true
+              break
+          if found:
+            units_to_reload.incl other
+            break
 
   for other in units_to_reload:
     if other != unit:
@@ -227,7 +270,8 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
 
   debug "loading unit", unit_id = unit.id
   # Use longer timeout for first script load (system.nim compilation can be slow)
-  let timeout = if not self.initial_load_done: initial_script_timeout else: script_timeout
+  let timeout =
+    if not self.initial_load_done: initial_script_timeout else: script_timeout
   self.load_script(unit, timeout)
   self.initial_load_done = true
 

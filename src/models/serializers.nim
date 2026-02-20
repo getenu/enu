@@ -1,7 +1,7 @@
 import
   std/[
     json, jsonutils, sugar, tables, strutils, strformat, os, times, algorithm,
-    math,
+    math, sets,
   ]
 import pkg/zippy/ziparchives_v1
 import core except to_json
@@ -13,7 +13,17 @@ import libs/eval
 var load_chunks {.threadvar.}: bool
 
 type LevelInfo = object
-  enu_version, format_version: string
+  enu_version*, format_version*: string
+  load_order*: seq[string]
+
+proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
+  self.enu_version = json{"enu_version"}.get_str
+  self.format_version = json{"format_version"}.get_str
+
+  if "load_order" in json:
+    self.load_order = json["load_order"].json_to(seq[string])
+  else:
+    self.load_order = @[]
 
 proc to_json_hook(self: Color): JsonNode =
   result =
@@ -207,10 +217,159 @@ proc save*(unit: Unit) =
     for unit in unit.units:
       unit.save
 
+proc topo_sort(
+    nodes: seq[string], graph: Table[string, seq[string]]
+): seq[string] =
+  var
+    visited = initHashSet[string]()
+    temp_visited = initHashSet[string]()
+    order = newSeq[string]()
+
+  proc visit(node: string) =
+    if node in temp_visited:
+      raise ValueError.init(
+        "Circular dependency detected involving script: " & node
+      )
+    if node in visited:
+      return
+
+    temp_visited.incl(node)
+
+    if node in graph:
+      for dep_path in graph[node]:
+        visit(dep_path.extract_filename)
+
+    temp_visited.excl(node)
+    visited.incl(node)
+    order.add(node)
+
+  for node in nodes:
+    visit(node)
+
+  result = order
+
+proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
+  let opts = JOptions(allow_missing_keys: true)
+  let path = if ?parent: parent.data_dir else: state.config.data_dir
+
+  var loaded_data:
+    seq[tuple[id: string, dir: string, json: JsonNode, script: string]] = @[]
+  var sort_nodes = newSeq[string]()
+  var script_to_data = initTable[string, int]()
+
+  for dir in walk_dirs(path / "*"):
+    let unit_id = dir.split_path.tail
+    let file_name = dir / unit_id & ".json"
+    if not file_exists(file_name):
+      continue
+
+    try:
+      let data_file = read_file(file_name).parse_json
+      let script_name = unit_id
+      loaded_data.add((unit_id, dir, data_file, script_name))
+      # players.nim is loaded separately or always first, so exclude it from
+      # the dependency graph sort to avoid circular dependency issues or
+      # confusion.
+      if script_name != "players":
+        sort_nodes.add(script_name)
+      script_to_data[script_name] = loaded_data.high
+    except Exception as e:
+      error "Failed to read unit file", unit_id, error = e
+
+  var sorted_scripts = load_order
+
+  # Add any scripts that might have been missed by the saved list
+  # and players.nim if it exists in loaded_data
+  for (id, _, _, script) in loaded_data:
+    if script notin sorted_scripts:
+      sorted_scripts.add script
+
+  for script_name in sorted_scripts:
+    if script_name notin script_to_data:
+      continue
+
+    let idx = script_to_data[script_name]
+    let (unit_id, dir, data_file, _) = loaded_data[idx]
+
+    try:
+      var unit: Unit
+      if unit_id.starts_with("bot_"):
+        unit = data_file.json_to(Bot, opts)
+      elif unit_id.starts_with("build_"):
+        unit = data_file.json_to(Build, opts)
+      else:
+        # quit "Unknown unit type: " & unit_id
+        error "Unknown unit type", unit_id
+        continue
+
+      unit.global_flags += SCRIPT_INITIALIZING
+      if parent.is_nil:
+        state.units.add(unit)
+      else:
+        parent.units.add(unit)
+      if unit of Build:
+        Build(unit).reset_bounds
+        Build(unit).restore_edits
+
+      if file_exists(unit.script_ctx.script):
+        unit.code = Code.init(read_file(unit.script_ctx.script))
+      else:
+        unit.global_flags -= SCRIPT_INITIALIZING
+    except Exception as e:
+      error "Failed to load unit", unit_id, error = e
+
 proc save_level*(level_dir: string, save_all = false, force = false) =
   if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
     debug "saving level"
-    let level = LevelInfo(enu_version: enu_version, format_version: "v0.9.2")
+
+    var graph = initTable[string, seq[string]]()
+    var sort_nodes = newSeq[string]()
+    var error_nodes = newSeq[string]()
+
+    for unit in state.units:
+      if unit.script_ctx != nil:
+        let filename = unit.script_ctx.file_name.extract_filename
+        if filename != "players.nim" and filename != "":
+          let name =
+            if filename.ends_with(".nim"):
+              filename[0 .. ^5]
+            else:
+              filename
+          if unit.errors.value.len > 0:
+            if name notin error_nodes:
+              error_nodes.add(name)
+          else:
+            if name notin sort_nodes:
+              sort_nodes.add(name)
+            if unit.script_ctx.dependencies.len > 0:
+              var deps: seq[string] = @[]
+              for dep in unit.script_ctx.dependencies:
+                let dep_name = dep.extract_filename
+                deps.add(
+                  if dep_name.ends_with(".nim"):
+                    dep_name[0 .. ^5]
+                  else:
+                    dep_name
+                )
+              graph[name] = deps
+
+    var sorted_scripts: seq[string]
+    try:
+      sorted_scripts = error_nodes & topo_sort(sort_nodes, graph)
+      debug "saving level sorted scripts", scripts_len = sorted_scripts.len
+    except ValueError as e:
+      error "Cannot save level script order due to circular dependency",
+        error = e.msg
+      sorted_scripts = error_nodes & sort_nodes # fallback: save unordered
+
+    if sorted_scripts.len > 0:
+      debug "load_order content", load_order = sorted_scripts
+
+    let level = LevelInfo(
+      enu_version: enu_version,
+      format_version: "v0.9.2",
+      load_order: sorted_scripts,
+    )
     write_file level_dir / "level.json", jsonutils.to_json(level).pretty
 
     for unit in state.units:
@@ -238,42 +397,6 @@ proc backup_level*(level_dir: string) =
         remove_file file
 
     create_zip_archive(level_dir, backup_file)
-
-proc load_units(parent: Unit) =
-  let opts = JOptions(allow_missing_keys: true)
-  let path = if ?parent: parent.data_dir else: state.config.data_dir
-  for dir in walk_dirs(path / "*"):
-    let unit_id = dir.split_path.tail
-    let file_name = dir / unit_id & ".json"
-    if not file_exists(file_name):
-      notice "Missing unit file", file_name
-      continue
-
-    try:
-      let data_file = read_file(dir / unit_id & ".json").parse_json
-      var unit: Unit
-      if unit_id.starts_with("bot_"):
-        unit = data_file.json_to(Bot, opts)
-      elif unit_id.starts_with("build_"):
-        unit = data_file.json_to(Build, opts)
-      else:
-        quit "Unknown unit type: " & unit_id
-
-      unit.global_flags += SCRIPT_INITIALIZING
-      if parent.is_nil:
-        state.units.add(unit)
-      else:
-        parent.units.add(unit)
-      if unit of Build:
-        Build(unit).reset_bounds
-        Build(unit).restore_edits
-
-      if file_exists(unit.script_ctx.script):
-        unit.code = Code.init(read_file(unit.script_ctx.script))
-      else:
-        unit.global_flags -= SCRIPT_INITIALIZING
-    except Exception as e:
-      error "Failed to load unit", unit_id, error = e
 
 proc load_user_config*(dir = ""): UserConfig =
   var work_dir = dir
@@ -346,11 +469,15 @@ proc load_level*(worker: Worker, level_dir: string) =
   state.config = config
 
   debug "loading ", level_file
+  var load_order = newSeq[string]()
+
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
       let level = level_json.parse_json.json_to(LevelInfo)
       load_chunks = level.format_version == "v0.9"
+      if level.load_order.len > 0:
+        load_order = level.load_order
     except Exception as e:
       error "Failed to load level", error = e
 
@@ -372,7 +499,11 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   dont_join = true
   worker.retry_failures = true
-  load_units(nil)
+  load_units(nil, load_order)
+
+  # Save the level immediately to persist any updated dependency graph or state
+  save_level(state.config.level_dir, save_all = true)
+
   worker.retry_failed_scripts()
   worker.retry_failures = false
   dont_join = false

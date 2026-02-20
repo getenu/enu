@@ -39,13 +39,6 @@ proc `position=`*(self: Unit, unit: Unit) =
 proc go*(self: Unit, position: Unit | Vector3) =
   self.position = position
 
-proc link_dependency*(dep: Unit) =
-  if not dep.is_nil:
-    link_dependency_impl(dep)
-
-proc link_dependency*(dep: not Unit) =
-  discard
-
 proc `seed=`*(self: Unit, seed: int) =
   private_access Unit
   self.rng = init_rand(seed)
