@@ -1,7 +1,7 @@
 ## VM Test Runner
 ## Runs test scripts inside the Nim VM to test vmlib/enu API
 
-{.push warning[GcUnsafe2]:off.}
+{.push warning[GcUnsafe2]: off.}
 
 import std/[os, strutils, sequtils, algorithm]
 import core
@@ -26,7 +26,9 @@ proc setup_mock_functions(interp: Interpreter) =
   const pkg = "enu"
 
   # Mock echo_console to capture output
-  interp.implement_routine pkg, "base_bridge", "echo_console_impl",
+  interp.implement_routine pkg,
+    "base_bridge",
+    "echo_console_impl",
     proc(args: VmArgs) =
       {.cast(gcsafe).}:
         let msg = args.get_string(0)
@@ -34,68 +36,92 @@ proc setup_mock_functions(interp: Interpreter) =
         echo "  [VM] ", msg
 
   # Mock frame_count
-  interp.implement_routine pkg, "base_bridge", "frame_count_impl",
+  interp.implement_routine pkg,
+    "base_bridge",
+    "frame_count_impl",
     proc(args: VmArgs) =
       {.cast(gcsafe).}:
         inc runner.frame
         args.set_result(runner.frame)
 
   # Mock yield_script to allow execution to continue
-  interp.implement_routine pkg, "base_bridge_private", "yield_script_impl",
+  interp.implement_routine pkg,
+    "base_bridge_private",
+    "yield_script_impl",
     proc(args: VmArgs) =
       discard
 
   # Mock action_running getter
-  interp.implement_routine pkg, "base_bridge_private", "action_running_impl",
+  interp.implement_routine pkg,
+    "base_bridge_private",
+    "action_running_impl",
     proc(args: VmArgs) =
-      args.set_result(BiggestInt(0))  # false - not running
+      args.set_result(BiggestInt(0)) # false - not running
 
   # Mock action_running setter
-  interp.implement_routine pkg, "base_bridge_private", "action_running_set_impl",
+  interp.implement_routine pkg,
+    "base_bridge_private",
+    "action_running_set_impl",
     proc(args: VmArgs) =
-      discard  # ignore setting action_running in tests
+      discard # ignore setting action_running in tests
 
   # Mock sleep_impl - the bridged_to_host macro creates sleep_impl_impl
-  interp.implement_routine pkg, "base_bridge_private", "sleep_impl_impl",
+  interp.implement_routine pkg,
+    "base_bridge_private",
+    "sleep_impl_impl",
     proc(args: VmArgs) =
-      discard  # sleep is a no-op in tests
+      discard # sleep is a no-op in tests
 
   # Mock write_stack_trace
-  interp.implement_routine pkg, "base_bridge", "write_stack_trace_impl",
+  interp.implement_routine pkg,
+    "base_bridge",
+    "write_stack_trace_impl",
     proc(args: VmArgs) =
       echo "  [VM] Stack trace requested"
 
   # Mock exit
-  interp.implement_routine pkg, "base_bridge_private", "exit_impl",
+  interp.implement_routine pkg,
+    "base_bridge_private",
+    "exit_impl",
     proc(args: VmArgs) =
       let code = args.get_int(0)
       echo "  [VM] Exit called with code: ", code
 
   # Mock register_template_node - called when types like Player, Bot, etc are registered
-  interp.implement_routine pkg, "base_bridge", "register_template_node_impl",
+  interp.implement_routine pkg,
+    "base_bridge",
+    "register_template_node_impl",
     proc(args: VmArgs) =
       discard
 
   # Mock signal_test_complete - called by testing framework
-  interp.implement_routine pkg, "base_bridge", "signal_test_complete_impl",
+  interp.implement_routine pkg,
+    "base_bridge",
+    "signal_test_complete_impl",
     proc(args: VmArgs) =
       let exit_code = args.get_int(0)
       echo "  [VM] Test complete with exit code: ", exit_code
 
   # Mock has_block_at - returns false (no blocks in test environment)
-  interp.implement_routine pkg, "builds", "has_block_at_impl",
+  interp.implement_routine pkg,
+    "builds",
+    "has_block_at_impl",
     proc(args: VmArgs) =
       args.set_result(false)
 
   # Mock block_color_at - returns 0 (Eraser) since no blocks exist
-  interp.implement_routine pkg, "builds", "block_color_at_impl",
+  interp.implement_routine pkg,
+    "builds",
+    "block_color_at_impl",
     proc(args: VmArgs) =
       args.set_result(BiggestInt(0))
 
   # Note: register_active_impl is NOT mocked - let the stub set current_active_unit
 
   # Mock get_last_error for error checking - returns ErrorData tuple (id: int, msg: string)
-  interp.implement_routine pkg, "vm_bridge_utils", "get_last_error_impl",
+  interp.implement_routine pkg,
+    "vm_bridge_utils",
+    "get_last_error_impl",
     proc(args: VmArgs) =
       # Return (0, "") - no error
       var result_node = nkTupleConstr.new_tree
@@ -105,7 +131,9 @@ proc setup_mock_functions(interp: Interpreter) =
 
   # Mock now_seconds - returns seconds since test start
   var test_start_time = 0.0
-  interp.implement_routine pkg, "base_bridge", "now_seconds_impl",
+  interp.implement_routine pkg,
+    "base_bridge",
+    "now_seconds_impl",
     proc(args: VmArgs) =
       {.cast(gcsafe).}:
         # Increment by small amount each call to simulate time passing
@@ -120,7 +148,8 @@ proc run_test_script(script_path: string): TestResult =
   runner.output.set_len(0)
 
   try:
-    ctx.load(script_path.extract_filename, code)
+    ctx.load(script_path, code)
+
     discard ctx.run()
     result.passed = true
   except CatchableError as e:

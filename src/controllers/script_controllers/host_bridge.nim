@@ -39,14 +39,6 @@ proc unmap_unit*(self: Worker, unit: Unit) =
     self.unit_map.del self.node_map[unit]
     self.node_map.del unit
 
-proc link_dependency(self: Worker, dep: Unit) =
-  let dep = dep.find_root
-  let active = self.active_unit.find_root
-  debug "linking dependency",
-    dependency = dep.script_ctx.module_name,
-    will_reload = active.script_ctx.module_name
-  dep.script_ctx.dependents.incl active.script_ctx.module_name
-
 proc write_stack_trace(self: Worker) =
   private_access ScriptCtx
 
@@ -728,9 +720,8 @@ proc bridge_to_vm*(worker: Worker) =
     dump_stats
 
   result.bridged_from_vm "base_bridge_private",
-    link_dependency, action_running, `action_running=`, yield_script,
-    begin_turn, begin_move, sleep_impl, position_set, new_markdown_sign,
-    update_markdown_sign
+    action_running, `action_running=`, yield_script, begin_turn, begin_move,
+    sleep_impl, position_set, new_markdown_sign, update_markdown_sign
 
   result.bridged_from_vm "bots", play
 

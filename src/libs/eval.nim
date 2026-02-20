@@ -1,7 +1,8 @@
-import std/options
+import std/[options, os, strutils]
 import pkg/pretty
 import compiler/[syntaxes, reorder, vmdef, msgs]
 import compiler/passes {.all.}
+import compiler/lineinfos
 
 {.warning[UnusedImport]: off.}
 include compiler/[nimeval, pipelines]
@@ -17,12 +18,21 @@ export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 # https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
 # Normal module loading procedure, but makes PContext a param so it can be
 # passed to extend_module
+# Recursive proc to find import statements in AST
+proc getImports(n: PNode, result: var seq[PNode]) =
+  if n.kind in {nkImportStmt, nkFromStmt}:
+    result.add n
+  else:
+    for i in 0 ..< n.safeLen:
+      getImports(n[i], result)
+
 proc processModule*(
     graph: ModuleGraph,
     module: PSym,
     idgen: IdGenerator,
     stream: PLLStream,
     ctx: var PContext,
+    dependencies: var seq[string],
 ): bool {.discardable.} =
   if graph.stopCompile():
     return true
@@ -34,6 +44,8 @@ proc processModule*(
     fileIdx = module.fileIdx
 
   prepareConfigNotes(graph, module)
+  graph.config.notes.incl(warnUnusedImportX)
+  graph.config.notes.incl(hintXDeclaredButNotUsed)
   if stream == nil:
     let filename = toFullPathConsiderDirty(graph.config, fileIdx)
     s = llStreamOpen(filename, fmRead)
@@ -77,14 +89,43 @@ proc processModule*(
         sl.add n
 
       prePass(ctx, sl)
+
+      # Extract dependencies by searching the AST for identifiers
+      var pendingModules = newSeq[string]()
+
+      proc findDependencies(n: PNode) =
+        if n == nil:
+          return
+        if n.kind == nkImportStmt:
+          # skip injected import statements
+          return
+
+        if n.kind == nkIdent:
+          let s = n.ident.s
+          if s notin pendingModules:
+            pendingModules.add(s)
+
+        for i in 0 ..< n.safeLen:
+          findDependencies(n[i])
+
+      findDependencies(sl)
+
       var semNode = semWithPContext(ctx, sl)
+
       discard processPipeline(graph, semNode, bModule)
+
+      # Add found dependencies that exist as active files
+      for name in pendingModules:
+        if name notin dependencies:
+          dependencies.add(name)
 
     closeParser(p)
     if s.kind != llsStdIn:
       break
 
   assert graph.pipelinePass == EvalPass
+  # Old unusedImports handling logic removed as we processed it above
+
   let finalNode = closePContext(graph, ctx, nil)
   discard interpreterCode(bModule, finalNode)
 
@@ -143,10 +184,13 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       iface.module.ast = nil
       break
 
-import std / posix
+import std/posix
 
 proc loadModule*(
-    i: Interpreter, fileName, code: string, ctx: var PContext
+    i: Interpreter,
+    fileName, code: string,
+    ctx: var PContext,
+    dependencies: var seq[string],
 ) {.gcsafe.} =
   assert i != nil
 
@@ -174,7 +218,7 @@ proc loadModule*(
   ctx = preparePContext(i.graph, module, i.idgen)
 
   {.gcsafe.}:
-    discard processModule(i.graph, module, i.idgen, stream, ctx)
+    discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
 
 # adapted from
 # https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
@@ -253,10 +297,13 @@ proc `enter_hook=`*(
 ) =
   (PCtx i.graph.vm).enterHook = hook
 
-proc `error_hook=`*(
+proc error_hook*(
     i: Interpreter,
     hook: proc(
       config: ConfigRef, info: TLineInfo, msg: string, severity: Severity
     ) {.gcsafe.},
 ) =
   i.registerErrorHook(hook)
+
+proc get_graph*(i: Interpreter): ModuleGraph =
+  i.graph
