@@ -3,6 +3,11 @@ import std/[tables, sets, sequtils]
 
 import models/serializers {.all.}
 
+import compiler/ast
+import compiler/parser
+import compiler/llstream
+import compiler/idents
+
 suite "Dependency Graph Topology":
   test "linear dependency":
     # A -> B -> C

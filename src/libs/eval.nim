@@ -90,34 +90,57 @@ proc processModule*(
 
       prePass(ctx, sl)
 
-      # Extract dependencies by searching the AST for identifiers
+      # Extract dependencies by examining resolved symbols in the typed AST
       var pendingModules = newSeq[string]()
+
+      proc checkModule(ownerSym: PSym) =
+        if ownerSym == nil or ownerSym.kind != skModule:
+          return
+        let modName = ownerSym.name.s
+        # Only track sibling build/bot scripts as dependencies.
+        # Directory comparison doesn't work because scripts are compiled from
+        # vmlib/ but previously-loaded deps live in Library/Application Support/.
+        let depPath =
+          toFullPathConsiderDirty(graph.config, ownerSym.info.fileIndex).string
+        # Check if the module is located in a /scripts/ directory. This ensures
+        # we only track actual user-generated level scripts, and ignore enu core files.
+        if modName notin pendingModules and modName != module.name.s:
+          if "/scripts/" in depPath:
+            pendingModules.add(modName)
 
       proc findDependencies(n: PNode) =
         if n == nil:
           return
-        if n.kind == nkImportStmt:
-          # skip injected import statements
-          return
 
-        if n.kind == nkIdent:
-          let s = n.ident.s
-          if s notin pendingModules:
-            pendingModules.add(s)
+        if n.kind == nkSym and n.sym != nil:
+          let sym = n.sym
+          # Only track deps via actual symbol USAGE, not import statement nodes.
+          # sym.kind==skModule captures injected imports giving false all-to-all deps.
+          if sym.kind != skModule:
+            # sym's owner is a sibling build/bot script
+            if sym.owner != nil and sym.owner.kind == skModule:
+              checkModule(sym.owner)
+            # sym's type is defined in a sibling build/bot script
+            if sym.typ != nil and sym.typ.sym != nil:
+              checkModule(sym.typ.sym.owner)
 
         for i in 0 ..< n.safeLen:
           findDependencies(n[i])
 
-      findDependencies(sl)
-
       var semNode = semWithPContext(ctx, sl)
+
+      echo "=== eval: ", module.name.s, " ==="
+      findDependencies(semNode)
 
       discard processPipeline(graph, semNode, bModule)
 
-      # Add found dependencies that exist as active files
+      # Collect deps after processPipeline (only for successful parses)
       for name in pendingModules:
+        echo "  dep: ", name
         if name notin dependencies:
           dependencies.add(name)
+      if pendingModules.len == 0:
+        echo "  (no deps found)"
 
     closeParser(p)
     if s.kind != llsStdIn:

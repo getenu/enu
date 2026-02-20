@@ -1,4 +1,24 @@
 {
-  "enu_version": "enu-0.3-pre-godot-upgrade-14-gc3cb91e6",
-  "format_version": "v0.9.2"
+  "enu_version": "v0.2.2-170-g2ba80687",
+  "format_version": "v0.9.2",
+  "load_order": [
+    "build_hiywqqyzha3r9",
+    "build_p3pwvry0wznqb",
+    "build_9mcxd85a34ph6",
+    "build_0kqsf4kugz22b",
+    "build_2evt18x9goyxs",
+    "build_f4qf20mu45gj8",
+    "build_p3rokg2vii39x",
+    "build_m64zp4mnhqib3",
+    "build_r7e4b8cvf0hk7",
+    "build_7acqeexn0l7r2",
+    "build_8lap32sqeqlok",
+    "build_m6d84ocmrei97",
+    "build_inajs92yvpeo2",
+    "build_qmjxkhcjwnbhb",
+    "build_fsued2iao7tij",
+    "build_zdvcvo11pyd20",
+    "build_uu8u87ua76wp0",
+    "build_em5344si3j457"
+  ]
 }
