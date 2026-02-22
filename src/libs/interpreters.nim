@@ -43,21 +43,11 @@ proc run*(self: ScriptCtx): bool =
   private_access ScriptCtx
   self.exit_code = none(int)
 
+  var raw_dependencies = newSeq[string]()
   try:
-    var raw_dependencies = newSeq[string]()
     self.interpreter.load_module(
       self.file_name, self.code, self.pass_context, raw_dependencies
     )
-
-    self.dependencies = @[]
-    let script_dir = self.file_name.split_file.dir
-    for dep in raw_dependencies:
-      if dep == "players":
-        continue
-      let expected_path = script_dir / (dep & ".nim")
-      if file_exists(expected_path):
-        self.dependencies.add(expected_path.relative_path(script_dir))
-
     result = false
   except VMPause:
     private_access ScriptCtx
@@ -66,6 +56,15 @@ proc run*(self: ScriptCtx): bool =
     self.running = false
     self.exit_code = some(99)
     raise VMQuit.new_exception("Unhandled err", e)
+  finally:
+    self.dependencies = @[]
+    let script_dir = self.file_name.split_file.dir
+    for dep in raw_dependencies:
+      if dep == "players":
+        continue
+      let expected_path = script_dir / (dep & ".nim")
+      if file_exists(expected_path):
+        self.dependencies.add(expected_path.relative_path(script_dir))
 
 proc eval*(self: ScriptCtx, code: string): bool =
   self.exit_code = none(int)

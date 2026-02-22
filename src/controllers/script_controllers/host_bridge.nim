@@ -706,6 +706,27 @@ proc bridge_to_vm*(worker: Worker) =
   # host_bridge_utils.nim is expecting a var called `result`. Fix this.
   var result = worker
 
+  worker.interpreter.implement_routine "enu",
+    "base_bridge_private",
+    "read_enu_script",
+    proc(a: VmArgs) {.gcsafe.} =
+      let filename = getString(a, 0)
+      let full_path =
+        if filename.isAbsolute:
+          filename
+        else:
+          state.config_value.value.level_dir / "generated" / filename
+
+      let normalized_path = full_path.replace("\\", "/").normalizedPath()
+      debug "reading script source", path = normalized_path
+      if "/scripts/" notin normalized_path:
+        raise newException(
+          ValueError,
+          "Direct file access blocked for security. Scripts can only be read from within the scripts directory. Attempted: " &
+            normalized_path,
+        )
+      set_result(a, to_result(readFile(full_path)))
+
   result.bridged_from_vm "vm_bridge_utils", get_last_error
 
   result.bridged_from_vm "base_bridge",

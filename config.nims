@@ -1,1 +1,2 @@
-import tasks
+when not defined(nimsuggest):
+  import tasks

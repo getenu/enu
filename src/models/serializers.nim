@@ -320,12 +320,9 @@ proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
 
 proc save_level*(level_dir: string, save_all = false, force = false) =
   if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
-    debug "saving level"
-
     var graph = initTable[string, seq[string]]()
     var sort_nodes = newSeq[string]()
     var error_nodes = newSeq[string]()
-
     for unit in state.units:
       if unit.script_ctx != nil:
         let filename = unit.script_ctx.file_name.extract_filename
