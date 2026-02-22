@@ -1,5 +1,5 @@
 #? stdtmpl
-#proc bot_code_template(base64_code, file_name, imports: string): string =
+#proc bot_code_template(file_name, imports: string): string =
 import system except echo, quit
 import std / [strutils]
 import types, class_macros, worlds, players, state_machine, base_api, bots,
@@ -12,6 +12,6 @@ ${imports}
 
 {.experimental: "overloadable_enums".}
 
-load_enu_script r"${base64_code}", r"${file_name}", Bot
+load_enu_script r"${file_name}", Bot
 
 exit()

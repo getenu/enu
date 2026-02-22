@@ -94,8 +94,13 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
         else:
           "???"
 
-      if file_exists(file_name) and ?ctx.file_name:
-        if file_name.get_file_info != ctx.file_name.get_file_info:
+      var full_file_name = file_name
+      if not file_name.is_absolute and file_name != "???":
+        full_file_name = state.config.level_dir / "generated" / file_name
+
+      if file_exists(full_file_name) and ?ctx.file_name:
+        let reported_info = get_file_info(full_file_name)
+        if reported_info != get_file_info(ctx.file_name):
           msg_writeln(
             config, "stack trace: (most recent call last)", {msg_no_unit_sep}
           )
@@ -106,10 +111,15 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
             (file_name, info) = file_info
           # discard `raise` SIGINT
           # msg = msg.replace(re"unhandled exception:.*\) Error\: ", "")
+        else:
+          file_name = full_file_name
         # else:
         # msg = msg.replace(re"(?ms);.*", "")
       else:
-        error "File not found handling error", file_name
+        error "File not found handling error",
+          file_name,
+          full_path = full_file_name,
+          level_dir = state.config.level_dir
 
       var loc = \"{file_name}({int info.line},{int info.col})"
       errors.add (msg, info, loc, false)
@@ -181,6 +191,14 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
         else:
           ""
       let code = unit.code_template(imports)
+
+      # Write generated code to a 'generated' directory for tooling like nimlangserver
+      let script_dir = ctx.script.split_file.dir
+      let generated_dir = script_dir.parentDir / "generated"
+      create_dir(generated_dir)
+      let generated_file = generated_dir / ctx.script.split_file.name & ".nim"
+      write_file(generated_file, code)
+
       ctx.timeout_at = get_mono_time() + timeout
       ctx.file_index = -1
       info "loading script", script = ctx.script
@@ -217,6 +235,8 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
     ctx.running = false
     self.interpreter.reset_module(unit.script_ctx.module_name)
     if self.retry_failures and e.kind != TIMEOUT:
+      info "retrying failed script later",
+        script = unit.script_ctx.script, error = e.msg
       self.failed.add (unit, e)
     else:
       self.script_error(unit, e)

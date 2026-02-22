@@ -1,5 +1,8 @@
 import types, vm_bridge_utils
 
+proc read_enu_script*(filename: string): string {.compileTime.} =
+  staticRead(filename)
+
 bridged_to_host:
   proc action_running*(self: Unit): bool
   proc `action_running=`*(self: Unit, value: bool)

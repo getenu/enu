@@ -1,7 +1,7 @@
 import
   std/[
-    tables, sets, options, sequtils, math, monotimes, sugar, macros, base64,
-    strformat, strutils,
+    tables, sets, options, sequtils, math, monotimes, sugar, macros, strformat,
+    strutils, os,
   ]
 import godotapi/spatial
 import core, models/[states, bots, colors, units, voxels]
@@ -34,9 +34,7 @@ proc init_voxels_if_needed*(self: Build) {.gcsafe.}
 
 method code_template*(self: Build, imports: string): string =
   result = build_code_template(
-    read_file(self.script_ctx.script).encode(safe = true),
-    self.script_ctx.script,
-    imports,
+    "../scripts/" & self.script_ctx.script.extractFilename(), imports
   )
 
 proc contains*(self: Build, position: Vector3): bool =

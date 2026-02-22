@@ -1,17 +1,6 @@
-import std/[macros, strutils, sequtils, os]
+import std/[macros, strutils, sequtils]
 import types
-import base_api, macro_helpers, base_bridge_private
-
-template with_line_info(node, source: NimNode): NimNode =
-  let n = node
-  n.copy_line_info(source)
-  n
-
-proc fix_line_info(node, source: NimNode): NimNode =
-  node.copy_line_info(source)
-  for child in node:
-    discard fix_line_info(child, source)
-  node
+import base_api, macro_helpers
 
 const private_props = ["lock"]
 const public_props = [
@@ -156,19 +145,14 @@ proc extract_class_info(
         name_node,
       )
 
+      return
+
 proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
   let (name, params) = extract_class_info(name_node)
 
   let
-    name_node_actual =
-      if name_node.kind == nnkIdent:
-        name_node
-      else:
-        name_node[0]
-    type_name = (name & "Type").to_upper_ascii.nim_ident_normalize.ident.with_line_info(
-      name_node_actual
-    )
-    var_name = name.ident.with_line_info(name_node_actual)
+    type_name = (name & "Type").to_upper_ascii.nim_ident_normalize.ident
+    var_name = name.ident
     ctors = build_ctors(name, type_name, params)
 
   result = new_stmt_list()
@@ -176,23 +160,20 @@ proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
   let name_str = name
   var type_def = quote:
     type `type_name`* = ref object of `base_type`
-  type_def.copy_line_info(name_node_actual)
 
   type_def[0][2][0][2] = params_to_properties(params)
   let accessors = params_to_accessors(type_name, params)
-  result.add (
-    quote do:
-      `type_def`
-      `accessors`
-      let me {.inject.} = `type_name`(name: `name_str`)
-      var enu_target {.inject.} = me
-      include loops
+  result.add quote do:
+    `type_def`
+    `accessors`
+    let me {.inject.} = `type_name`(name: `name_str`)
+    var enu_target {.inject.} = me
+    include loops
 
-      register_active(me)
-      let home {.inject.} = PositionOffset(position: me.local_position)
-      let `var_name`* {.inject.} = me
-      `ctors`
-  ).fix_line_info(name_node_actual)
+    register_active(me)
+    let home {.inject.} = PositionOffset(position: me.local_position)
+    let `var_name`* {.inject.} = me
+    `ctors`
 
 proc pop_name_node(ast: NimNode): tuple[start: NimNode, name_node: NimNode] =
   let ident_name = "name"
@@ -227,13 +208,11 @@ proc visit_tree(
           if i == 0:
             alias[].add node
           elif i == 2 and node notin alias[]:
-            parent[i] = new_dot_expr(ident(receiver).with_line_info(node), node)
-              .with_line_info(node)
+            parent[i] = new_dot_expr(ident receiver, node)
         elif $node in convert and node notin alias[] and
             parent.kind != nnk_expr_eq_expr and
             not (parent.kind == nnk_dot_expr and i == 1):
-          parent[i] = new_dot_expr(ident(receiver).with_line_info(node), node)
-            .with_line_info(node)
+          parent[i] = new_dot_expr(ident receiver, node)
       visit_tree(node, convert, receiver, alias)
 
 # Converts variable access to property access. Ex. `speed = 1` -> `me.speed = 1`
@@ -253,11 +232,11 @@ proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
   let (name, params, vars) = sig.parse_sig(return_type)
   let new_body = new_stmt_list(vars, body)
   result = new_proc(
-    name = ident(name).with_line_info(sig),
+    name = ident(name),
     params = params,
     body = new_body,
     pragmas = new_nim_node(nnkPragma).add(ident"discardable"),
-  ).fix_line_info(sig)
+  )
 
 proc transform_commands(parent: NimNode): NimNode =
   for i, node in parent:
@@ -278,21 +257,20 @@ proc transform_commands(parent: NimNode): NimNode =
   parent
 
 macro load_enu_script*(
+    base64_code: string,
     file_name: string,
     base_type: untyped,
     class_specific_props: varargs[untyped],
 ): untyped =
   var class_specific_props = class_specific_props.map_it($it)
-  let raw_file_name = file_name.str_val
-  let resolved_file_name =
-    if raw_file_name.isAbsolute:
-      raw_file_name
-    else:
-      file_name.lineInfoObj.filename.parentDir / raw_file_name
-
-  let code = read_enu_script(resolved_file_name)
-  when compiles(parse_stmt(code, resolved_file_name)):
-    var ast = parse_stmt(code, resolved_file_name).transform_commands
+  let file_name = file_name.str_val
+  # `static_read` has been disabled for security, so we can't read the code
+  # ourselves. Instead it's passed to us, but because this coming from a nim
+  # string literal in a .nimf template it comes base64 encoded.
+  let base_code = base64_code.str_val
+  let code = decode(base_code)
+  when compiles(parse_stmt(file_name, file_name)):
+    var ast = parse_stmt(code, file_name).transform_commands
   else:
     # Just for tests running in Nim <= 1.6. Enu VM and Nim 2.0 can take both
     # Nim code and a file name.
@@ -321,12 +299,6 @@ macro load_enu_script*(
 
   inner.add ast
   result.add script_start
-  result.add quote do:
-    when defined(nimsuggest):
-      block:
-        var me {.inject, used.}: `base_type`
-        var enu_target {.inject, used.}: Unit = me
-        include `resolved_file_name`
   result.add quote do:
     proc run_script*(me {.inject.}: me.type, is_instance {.inject.}: bool) =
       var enu_target {.inject.}: Unit = me

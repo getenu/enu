@@ -97,15 +97,13 @@ proc processModule*(
         if ownerSym == nil or ownerSym.kind != skModule:
           return
         let modName = ownerSym.name.s
-        # Only track sibling build/bot scripts as dependencies.
-        # Directory comparison doesn't work because scripts are compiled from
-        # vmlib/ but previously-loaded deps live in Library/Application Support/.
         let depPath =
           toFullPathConsiderDirty(graph.config, ownerSym.info.fileIndex).string
-        # Check if the module is located in a /scripts/ directory. This ensures
-        # we only track actual user-generated level scripts, and ignore enu core files.
+
+        # Only track sibling build/bot scripts as dependencies.
         if modName notin pendingModules and modName != module.name.s:
-          if "/scripts/" in depPath:
+          let is_script = "/scripts/" in depPath or "/generated/" in depPath
+          if is_script:
             pendingModules.add(modName)
 
       proc findDependencies(n: PNode) =
@@ -129,18 +127,14 @@ proc processModule*(
 
       var semNode = semWithPContext(ctx, sl)
 
-      echo "=== eval: ", module.name.s, " ==="
       findDependencies(semNode)
 
-      discard processPipeline(graph, semNode, bModule)
-
-      # Collect deps after processPipeline (only for successful parses)
+      # Collect deps before processPipeline so they are preserved even if we pause
       for name in pendingModules:
-        echo "  dep: ", name
         if name notin dependencies:
           dependencies.add(name)
-      if pendingModules.len == 0:
-        echo "  (no deps found)"
+
+      discard processPipeline(graph, semNode, bModule)
 
     closeParser(p)
     if s.kind != llsStdIn:
