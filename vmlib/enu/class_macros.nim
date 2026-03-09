@@ -336,6 +336,6 @@ macro load_enu_script*(
       `inner`
       # If a new instance doesn't ever yield the interpreter can crash. Unsure
       # why, but probably fixable. Sleep before exit as a workaround.
-      sleep 0
+      sleep 0.0
 
     run_script(me, false)
