@@ -322,12 +322,6 @@ macro load_enu_script*(
   inner.add ast
   result.add script_start
   result.add quote do:
-    when defined(nimsuggest):
-      block:
-        var me {.inject, used.}: `base_type`
-        var enu_target {.inject, used.}: Unit = me
-        include `resolved_file_name`
-  result.add quote do:
     proc run_script*(me {.inject.}: me.type, is_instance {.inject.}: bool) =
       var enu_target {.inject.}: Unit = me
       let home {.inject.} = PositionOffset(position: me.local_position)

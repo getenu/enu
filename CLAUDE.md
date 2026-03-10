@@ -42,6 +42,8 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 - `nim docs` - Build documentation using nimibook
 - `nim clean` - Remove build artifacts
 
+Relevant tests must pass before calling a feature done.
+
 ### Platform-Specific
 - `nim ios` - Build iOS package
 - `nim ios_prereqs` - Build Godot for iOS (requires macOS)

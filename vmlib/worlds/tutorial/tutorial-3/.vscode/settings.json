@@ -1,0 +1,6 @@
+{
+    "nim.nimbleAutoSetup": false,
+    "nim.project": [
+        "project.nim"
+    ]
+}
