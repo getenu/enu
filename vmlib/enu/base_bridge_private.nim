@@ -1,7 +1,15 @@
 import types, vm_bridge_utils
 
 proc read_enu_script*(filename: string): string {.compileTime.} =
-  staticRead(filename)
+  # In nimsuggest mode, staticRead registers the script as a dependency and
+  # confuses nimsuggest about the module's source file, returning ??? for
+  # module navigation. gorge reads without that side effect; parse_stmt in
+  # the macro still uses the script path so line info and symbol navigation
+  # point to the real script file.
+  when defined(nimsuggest):
+    gorge("cat " & filename)
+  else:
+    staticRead(filename)
 
 bridged_to_host:
   proc action_running*(self: Unit): bool

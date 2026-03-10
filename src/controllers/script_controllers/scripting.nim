@@ -196,7 +196,7 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
       let script_dir = ctx.script.split_file.dir
       let generated_dir = script_dir.parentDir / "generated"
       create_dir(generated_dir)
-      let generated_file = generated_dir / ctx.script.split_file.name & ".nim"
+      let generated_file = generated_dir / module_name & ".nim"
       write_file(generated_file, code)
 
       ctx.timeout_at = get_mono_time() + timeout
