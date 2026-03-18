@@ -227,13 +227,11 @@ proc visit_tree(
           if i == 0:
             alias[].add node
           elif i == 2 and node notin alias[]:
-            parent[i] = new_dot_expr(ident(receiver).with_line_info(node), node)
-              .with_line_info(node)
+            parent[i] = new_dot_expr(ident(receiver), node).with_line_info(node)
         elif $node in convert and node notin alias[] and
             parent.kind != nnk_expr_eq_expr and
             not (parent.kind == nnk_dot_expr and i == 1):
-          parent[i] = new_dot_expr(ident(receiver).with_line_info(node), node)
-            .with_line_info(node)
+          parent[i] = new_dot_expr(ident(receiver), node).with_line_info(node)
       visit_tree(node, convert, receiver, alias)
 
 # Converts variable access to property access. Ex. `speed = 1` -> `me.speed = 1`
@@ -288,7 +286,7 @@ macro load_enu_script*(
     if raw_file_name.isAbsolute:
       raw_file_name
     else:
-      file_name.lineInfoObj.filename.parentDir / raw_file_name
+      (file_name.lineInfoObj.filename.parent_dir / raw_file_name).normalized_path
 
   let code = read_enu_script(resolved_file_name)
   when compiles(parse_stmt(code, resolved_file_name)):
@@ -321,7 +319,7 @@ macro load_enu_script*(
 
   inner.add ast
   result.add script_start
-  result.add quote do:
+  let run_script_def = quote do:
     proc run_script*(me {.inject.}: me.type, is_instance {.inject.}: bool) =
       var enu_target {.inject.}: Unit = me
       let home {.inject.} = PositionOffset(position: me.local_position)
@@ -333,3 +331,8 @@ macro load_enu_script*(
       sleep 0.0
 
     run_script(me, false)
+  # Set the proc body's line info to the script file so nimsuggest's cursorInProc
+  # check passes and the body gets processed, enabling go-to-definition in scripts.
+  if ast.len > 0:
+    run_script_def[0].body.copy_line_info(ast[0])
+  result.add run_script_def
