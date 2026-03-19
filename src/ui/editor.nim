@@ -224,12 +224,13 @@ gdobj Editor of MarginContainer:
     discard self.tween.tween_callback(self, "_rescale")
 
   proc watch_open_unit() =
-    var line_zid: EID
+    var line_zid, code_zid: EID
     state.open_unit_value.changes:
       if removed:
         let unit = state.open_unit
         if unit.is_nil:
           Ed.thread_ctx.untrack(line_zid)
+          Ed.thread_ctx.untrack(code_zid)
           self.close_editor()
           state.player.open_code = ""
         else:
@@ -241,6 +242,13 @@ gdobj Editor of MarginContainer:
                 self.executing_line = change.item - 1
               else:
                 self.text_edit.clear_executing_line()
+
+          code_zid = unit.code_value.changes:
+            if added or touched:
+              let new_code = change.item.nim
+              if new_code != "" and new_code != self.text_edit.text:
+                self.text_edit.text = new_code
+                state.player.open_code = new_code
 
           self.text_edit.text = state.open_unit.code.nim
           state.player.open_code = self.text_edit.text

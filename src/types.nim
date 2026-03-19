@@ -1,4 +1,4 @@
-import std/[tables, monotimes, sets, options, macros]
+import std/[tables, monotimes, times, sets, options, macros]
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
@@ -347,6 +347,7 @@ type
     last_ran*: MonoTime
     file_index*: int
     dependencies*: seq[string]
+    last_saved_mtime*: Time
 
   VMError* = object of CatchableError
   QuitKind* = enum

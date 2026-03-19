@@ -89,6 +89,14 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
     finally:
       self.active_unit = nil
 
+proc write_script_file(unit: Unit, code: string) =
+  write_file(unit.script_ctx.script, code)
+  try:
+    unit.script_ctx.last_saved_mtime =
+      get_last_modification_time(unit.script_ctx.script)
+  except OSError:
+    discard
+
 proc change_code(self: Worker, unit: Unit, code: Code) =
   debug "code changing", unit = unit.id
   unit.errors.clear
@@ -105,7 +113,7 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
   elif code.nim.strip != "":
     debug "loading unit", unit_id = unit.id
     if LOADING_SCRIPT notin state.local_flags and not self.retry_failures:
-      write_file(unit.script_ctx.script, code.nim)
+      unit.write_script_file(code.nim)
       if not self.interpreter.is_nil:
         self.load_script_and_dependents(unit)
       else:
@@ -124,7 +132,7 @@ proc watch_code(self: Worker, unit: Unit) =
         if change.item.nim == "":
           remove_file unit.script_ctx.script
         else:
-          write_file(unit.script_ctx.script, change.item.nim)
+          unit.write_script_file(change.item.nim)
 
   unit.eval_value.changes:
     if added or touched and change.item != "":
@@ -151,6 +159,11 @@ proc watch_code(self: Worker, unit: Unit) =
       ScriptCtx.init(owner = unit, interpreter = self.interpreter)
 
     unit.script_ctx.script = script_file_for unit
+    try:
+      unit.script_ctx.last_saved_mtime =
+        get_last_modification_time(unit.script_ctx.script)
+    except OSError:
+      discard
 
 proc watch_units(
     self: Worker,
@@ -362,8 +375,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   const test_timeout = 5.minutes
   const stats_log_interval = 5.seconds
   const asap_flush_interval = 2.seconds
+  const file_watch_interval = 2.seconds
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
+  var watch_files_at = MonoTime.low
   var test_started_at = MonoTime.high
   var last_stats_log = MonoTime.low
   var last_asap_flush = MonoTime.low
@@ -532,6 +547,19 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         backup_level(state.config.level_dir)
         Ed.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
+
+      if SERVER in state.local_flags and now > watch_files_at:
+        state.units.value.walk_tree proc(unit: Unit) =
+          if ?unit.script_ctx and unit.script_ctx.script != "":
+            try:
+              let mtime = get_last_modification_time(unit.script_ctx.script)
+              if mtime != unit.script_ctx.last_saved_mtime:
+                let code = read_file(unit.script_ctx.script)
+                unit.script_ctx.last_saved_mtime = mtime
+                unit.code = Code.init(code)
+            except OSError:
+              discard
+        watch_files_at = now + file_watch_interval
 
       # Track max tick time for debugging
       let tick_time = get_mono_time() - frame_start
