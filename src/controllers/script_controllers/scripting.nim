@@ -239,6 +239,8 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
         script = unit.script_ctx.script, error = e.msg
       self.failed.add (unit, e)
     else:
+      if e.kind == TIMEOUT and unit.errors.value.len == 0:
+        unit.errors.add (e.msg, e.info, e.location, false)
       self.script_error(unit, e)
   finally:
     self.active_unit = nil
