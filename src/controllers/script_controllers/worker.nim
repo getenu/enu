@@ -1,4 +1,4 @@
-import std/[locks, os, random, net]
+import std/[locks, os, random, net, json, jsonutils]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
 import core, models, models/serializers, libs/[interpreters, eval]
@@ -162,6 +162,11 @@ proc watch_code(self: Worker, unit: Unit) =
     try:
       unit.script_ctx.last_saved_mtime =
         get_last_modification_time(unit.script_ctx.script)
+    except OSError:
+      discard
+    try:
+      unit.script_ctx.last_saved_json_mtime =
+        get_last_modification_time(unit.data_file)
     except OSError:
       discard
 
@@ -376,6 +381,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   const stats_log_interval = 5.seconds
   const asap_flush_interval = 2.seconds
   const file_watch_interval = 2.seconds
+  var orphan_scripts_reported: HashSet[string]
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
   var watch_files_at = MonoTime.low
@@ -549,7 +555,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         backup_at = now + backup_interval
 
       if SERVER in state.local_flags and now > watch_files_at:
-        state.units.value.walk_tree proc(unit: Unit) =
+        # Script mtime scan (root-level units only; nested units handled via deps)
+        for unit in state.units.value:
           if ?unit.script_ctx and unit.script_ctx.script != "":
             try:
               let mtime = get_last_modification_time(unit.script_ctx.script)
@@ -559,6 +566,108 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
                 unit.code = Code.init(code)
             except OSError:
               discard
+
+        # Section A: Reload units whose JSON data file changed
+        let opts = JOptions(allow_missing_keys: true)
+        for unit in state.units.value:
+          if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
+            continue
+          if unit.script_ctx.last_saved_json_mtime == Time.default:
+            continue
+          try:
+            let json_mtime = get_last_modification_time(unit.data_file)
+            if json_mtime != unit.script_ctx.last_saved_json_mtime:
+              let data_file_path = unit.data_file
+              let parent = unit.parent
+              state.push_flag LOADING_SCRIPT
+              if parent.is_nil:
+                state.units -= unit
+              else:
+                parent.units -= unit
+              state.pop_flag LOADING_SCRIPT
+              let data_json = read_file(data_file_path).parse_json
+              var new_unit: Unit
+              if unit of Bot:
+                new_unit = data_json.json_to(Bot, opts)
+              else:
+                new_unit = data_json.json_to(Build, opts)
+              new_unit.global_flags += SCRIPT_INITIALIZING
+              dont_join = true
+              if parent.is_nil:
+                state.units.add(new_unit)
+              else:
+                parent.units.add(new_unit)
+              load_units(new_unit, @[])
+              dont_join = false
+              if new_unit of Build:
+                Build(new_unit).reset_bounds
+                Build(new_unit).restore_edits
+              if ?new_unit.script_ctx:
+                new_unit.script_ctx.last_saved_json_mtime = json_mtime
+                if file_exists(new_unit.script_ctx.script):
+                  new_unit.code =
+                    Code.init(read_file(new_unit.script_ctx.script))
+                else:
+                  new_unit.global_flags -= SCRIPT_INITIALIZING
+          except OSError:
+            discard
+
+        # Section B: Detect and load new JSON files
+        var existing_ids: HashSet[string]
+        state.units.value.walk_tree proc(unit: Unit) =
+          existing_ids.incl(unit.id)
+        for dir in walk_dirs(state.config.data_dir / "*"):
+          let unit_id = dir.split_path.tail
+          if unit_id in existing_ids:
+            continue
+          let json_file = dir / unit_id & ".json"
+          if not file_exists(json_file):
+            continue
+          try:
+            let data_json = read_file(json_file).parse_json
+            var new_unit: Unit
+            if unit_id.starts_with("bot_"):
+              new_unit = data_json.json_to(Bot, opts)
+            elif unit_id.starts_with("build_"):
+              new_unit = data_json.json_to(Build, opts)
+            else:
+              error "Unknown unit type for new JSON file", unit_id
+              continue
+            new_unit.global_flags += SCRIPT_INITIALIZING
+            dont_join = true
+            state.units.add(new_unit)
+            load_units(new_unit, @[])
+            dont_join = false
+            if new_unit of Build:
+              Build(new_unit).reset_bounds
+              Build(new_unit).restore_edits
+            if ?new_unit.script_ctx:
+              new_unit.script_ctx.last_saved_json_mtime =
+                get_last_modification_time(json_file)
+              if file_exists(new_unit.script_ctx.script):
+                new_unit.code =
+                  Code.init(read_file(new_unit.script_ctx.script))
+              else:
+                new_unit.global_flags -= SCRIPT_INITIALIZING
+            save_level(state.config.level_dir)
+          except Exception as e:
+            error "Failed to load new unit from JSON", unit_id, error = e
+
+        # Section C: Detect orphan scripts (report once)
+        for script_path in walk_files(state.config.script_dir / "*.nim"):
+          let stem = script_path.split_file.name
+          if stem == "players":
+            continue
+          if stem notin existing_ids:
+            let json_file =
+              state.config.data_dir / stem / stem & ".json"
+            if not file_exists(json_file) and
+                script_path notin orphan_scripts_reported:
+              state.err(
+                "Orphan script: " & script_path & " (no data file)"
+              )
+              orphan_scripts_reported.incl(script_path)
+
         watch_files_at = now + file_watch_interval
 
       # Track max tick time for debugging
