@@ -299,6 +299,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             worker.init_interpreter("")
             worker.bridge_to_vm
             player.script_ctx.interpreter = worker.interpreter
+            worker.initial_load_done = false
             worker.load_script_and_dependents(player)
           level_dir = change.item.level_dir
           if level_dir != "":
@@ -677,6 +678,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
       if now < wait_until:
         sleep int((wait_until - get_mono_time()).in_milliseconds)
+  except VMQuit as e:
+    error "Unhandled script error in worker thread",
+      kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace
+    state.err(e.msg)
   except Exception as e:
     error "Unhandled worker thread exception",
       kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace

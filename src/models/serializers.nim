@@ -8,6 +8,7 @@ import core except to_json
 import models
 import models/voxels
 import controllers/script_controllers/scripting
+import controllers/script_controllers/vars
 import libs/eval
 
 var load_chunks {.threadvar.}: bool
@@ -525,9 +526,13 @@ proc load_level*(worker: Worker, level_dir: string) =
   # Set player as active unit so VM hooks work correctly during initialization
   assert worker.active_unit.is_nil, "active_unit should be nil at this point"
   worker.active_unit = state.player
+  state.player.script_ctx.timeout_at = get_mono_time() + initial_script_timeout
 
-  {.gcsafe.}:
-    discard worker.interpreter.call_routine(init_proc, [])
+  try:
+    {.gcsafe.}:
+      discard worker.interpreter.call_routine(init_proc, [])
+  except VMQuit as e:
+    state.err(e.msg)
 
   worker.active_unit = nil
 
