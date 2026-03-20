@@ -403,6 +403,12 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
     for unit in state.units:
       if save_all or DIRTY in unit.global_flags:
         unit.save
+        if ?unit.script_ctx:
+          try:
+            unit.script_ctx.last_saved_json_mtime =
+              get_last_modification_time(unit.data_file)
+          except OSError:
+            discard
         unit.global_flags -= DIRTY
   else:
     debug "not server. Skipping save."

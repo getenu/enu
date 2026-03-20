@@ -348,6 +348,7 @@ type
     file_index*: int
     dependencies*: seq[string]
     last_saved_mtime*: Time
+    last_saved_json_mtime*: Time
 
   VMError* = object of CatchableError
   QuitKind* = enum
