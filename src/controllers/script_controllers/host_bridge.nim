@@ -710,22 +710,21 @@ proc bridge_to_vm*(worker: Worker) =
     "base_bridge_private",
     "read_enu_script",
     proc(a: VmArgs) {.gcsafe.} =
-      let filename = getString(a, 0)
+      let filename = get_string(a, 0)
       let full_path =
-        if filename.isAbsolute:
+        if filename.is_absolute:
           filename
         else:
           state.config_value.value.level_dir / "generated" / filename
 
-      let normalized_path = full_path.replace("\\", "/").normalizedPath()
+      let normalized_path = full_path.replace("\\", "/").normalized_path()
       debug "reading script source", path = normalized_path
       if "/scripts/" notin normalized_path:
-        raise newException(
-          ValueError,
+        raise ValueError.init(
           "Direct file access blocked for security. Scripts can only be read from within the scripts directory. Attempted: " &
-            normalized_path,
+            normalized_path
         )
-      set_result(a, to_result(readFile(full_path)))
+      set_result(a, to_result(read_file(full_path)))
 
   result.bridged_from_vm "vm_bridge_utils", get_last_error
 
