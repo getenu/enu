@@ -55,6 +55,41 @@ proc processModule*(
   else:
     s = stream
 
+  # Extract dependencies by examining resolved symbols in the typed AST
+  var pendingModules = newSeq[string]()
+
+  proc checkModule(ownerSym: PSym) =
+    if ownerSym == nil or ownerSym.kind != skModule:
+      return
+    let modName = ownerSym.name.s
+    let depPath =
+      toFullPathConsiderDirty(graph.config, ownerSym.info.fileIndex).string
+
+    # Only track sibling build/bot scripts as dependencies.
+    if modName notin pendingModules and modName != module.name.s:
+      let is_script = "/scripts/" in depPath or "/generated/" in depPath
+      if is_script:
+        pendingModules.add(modName)
+
+  proc findDependencies(n: PNode) =
+    if n == nil:
+      return
+
+    if n.kind == nkSym and n.sym != nil:
+      let sym = n.sym
+      # Only track deps via actual symbol USAGE, not import statement nodes.
+      # sym.kind==skModule captures injected imports giving false all-to-all deps.
+      if sym.kind != skModule:
+        # sym's owner is a sibling build/bot script
+        if sym.owner != nil and sym.owner.kind == skModule:
+          checkModule(sym.owner)
+        # sym's type is defined in a sibling build/bot script
+        if sym.typ != nil and sym.typ.sym != nil:
+          checkModule(sym.typ.sym.owner)
+
+    for i in 0 ..< n.safeLen:
+      findDependencies(n[i])
+
   while true:
     syntaxes.openParser(p, fileIdx, s, graph.cache, graph.config)
 
@@ -90,41 +125,7 @@ proc processModule*(
 
       prePass(ctx, sl)
 
-      # Extract dependencies by examining resolved symbols in the typed AST
-      var pendingModules = newSeq[string]()
-
-      proc checkModule(ownerSym: PSym) =
-        if ownerSym == nil or ownerSym.kind != skModule:
-          return
-        let modName = ownerSym.name.s
-        let depPath =
-          toFullPathConsiderDirty(graph.config, ownerSym.info.fileIndex).string
-
-        # Only track sibling build/bot scripts as dependencies.
-        if modName notin pendingModules and modName != module.name.s:
-          let is_script = "/scripts/" in depPath or "/generated/" in depPath
-          if is_script:
-            pendingModules.add(modName)
-
-      proc findDependencies(n: PNode) =
-        if n == nil:
-          return
-
-        if n.kind == nkSym and n.sym != nil:
-          let sym = n.sym
-          # Only track deps via actual symbol USAGE, not import statement nodes.
-          # sym.kind==skModule captures injected imports giving false all-to-all deps.
-          if sym.kind != skModule:
-            # sym's owner is a sibling build/bot script
-            if sym.owner != nil and sym.owner.kind == skModule:
-              checkModule(sym.owner)
-            # sym's type is defined in a sibling build/bot script
-            if sym.typ != nil and sym.typ.sym != nil:
-              checkModule(sym.typ.sym.owner)
-
-        for i in 0 ..< n.safeLen:
-          findDependencies(n[i])
-
+      pendingModules.set_len(0)
       var semNode = semWithPContext(ctx, sl)
 
       findDependencies(semNode)
