@@ -89,6 +89,33 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
     finally:
       self.active_unit = nil
 
+proc load_unit_from_json(unit_id, json_file: string) =
+  let opts = JOptions(allow_missing_keys: true)
+  let data_json = read_file(json_file).parse_json
+  var new_unit: Unit
+  if unit_id.starts_with("bot_"):
+    new_unit = data_json.json_to(Bot, opts)
+  elif unit_id.starts_with("build_"):
+    new_unit = data_json.json_to(Build, opts)
+  else:
+    error "Unknown unit type for new JSON file", unit_id
+    return
+  new_unit.global_flags += SCRIPT_INITIALIZING
+  dont_join = true
+  state.units.add(new_unit)
+  load_units(new_unit, @[])
+  dont_join = false
+  if new_unit of Build:
+    Build(new_unit).reset_bounds
+    Build(new_unit).restore_edits
+  if ?new_unit.script_ctx:
+    new_unit.script_ctx.last_saved_json_mtime =
+      get_last_modification_time(json_file)
+    if file_exists(new_unit.script_ctx.script):
+      new_unit.code = Code.init(read_file(new_unit.script_ctx.script))
+    else:
+      new_unit.global_flags -= SCRIPT_INITIALIZING
+
 proc write_script_file(unit: Unit, code: string) =
   write_file(unit.script_ctx.script, code)
   try:
@@ -568,100 +595,50 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             except OSError:
               discard
 
-        # Section A: Reload units whose JSON data file changed
-        let opts = JOptions(allow_missing_keys: true)
+        # Build root-unit table once for JSON watch and orphan detection
+        var root_units: Table[string, Unit]
         for unit in state.units.value:
-          if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
-            continue
-          if unit.script_ctx.last_saved_json_mtime == Time.default:
-            continue
-          try:
-            let json_mtime = get_last_modification_time(unit.data_file)
-            if json_mtime != unit.script_ctx.last_saved_json_mtime:
-              let data_file_path = unit.data_file
-              let parent = unit.parent
-              state.push_flag LOADING_SCRIPT
-              if parent.is_nil:
-                state.units -= unit
-              else:
-                parent.units -= unit
-              state.pop_flag LOADING_SCRIPT
-              let data_json = read_file(data_file_path).parse_json
-              var new_unit: Unit
-              if unit of Bot:
-                new_unit = data_json.json_to(Bot, opts)
-              else:
-                new_unit = data_json.json_to(Build, opts)
-              new_unit.global_flags += SCRIPT_INITIALIZING
-              dont_join = true
-              if parent.is_nil:
-                state.units.add(new_unit)
-              else:
-                parent.units.add(new_unit)
-              load_units(new_unit, @[])
-              dont_join = false
-              if new_unit of Build:
-                Build(new_unit).reset_bounds
-                Build(new_unit).restore_edits
-              if ?new_unit.script_ctx:
-                new_unit.script_ctx.last_saved_json_mtime = json_mtime
-                if file_exists(new_unit.script_ctx.script):
-                  new_unit.code =
-                    Code.init(read_file(new_unit.script_ctx.script))
-                else:
-                  new_unit.global_flags -= SCRIPT_INITIALIZING
-          except OSError:
-            discard
+          root_units[unit.id] = unit
 
-        # Section B: Detect and load new JSON files
-        var existing_ids: HashSet[string]
-        state.units.value.walk_tree proc(unit: Unit) =
-          existing_ids.incl(unit.id)
+        # JSON watch: reload changed units and detect new ones in a single pass
         for dir in walk_dirs(state.config.data_dir / "*"):
           let unit_id = dir.split_path.tail
-          if unit_id in existing_ids:
-            continue
           let json_file = dir / unit_id & ".json"
           if not file_exists(json_file):
             continue
-          try:
-            let data_json = read_file(json_file).parse_json
-            var new_unit: Unit
-            if unit_id.starts_with("bot_"):
-              new_unit = data_json.json_to(Bot, opts)
-            elif unit_id.starts_with("build_"):
-              new_unit = data_json.json_to(Build, opts)
-            else:
-              error "Unknown unit type for new JSON file", unit_id
+          if unit_id in root_units:
+            let unit = root_units[unit_id]
+            if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
               continue
-            new_unit.global_flags += SCRIPT_INITIALIZING
-            dont_join = true
-            state.units.add(new_unit)
-            load_units(new_unit, @[])
-            dont_join = false
-            if new_unit of Build:
-              Build(new_unit).reset_bounds
-              Build(new_unit).restore_edits
-            if ?new_unit.script_ctx:
-              new_unit.script_ctx.last_saved_json_mtime =
-                get_last_modification_time(json_file)
-              if file_exists(new_unit.script_ctx.script):
-                new_unit.code =
-                  Code.init(read_file(new_unit.script_ctx.script))
-              else:
-                new_unit.global_flags -= SCRIPT_INITIALIZING
-            save_level(state.config.level_dir)
-          except Exception as e:
-            error "Failed to load new unit from JSON", unit_id, error = e
+            if unit.script_ctx.last_saved_json_mtime == Time.default:
+              continue
+            try:
+              let json_mtime = get_last_modification_time(unit.data_file)
+              if json_mtime != unit.script_ctx.last_saved_json_mtime:
+                let parent = unit.parent
+                state.push_flag LOADING_SCRIPT
+                if parent.is_nil:
+                  state.units -= unit
+                else:
+                  parent.units -= unit
+                state.pop_flag LOADING_SCRIPT
+                load_unit_from_json(unit_id, json_file)
+            except OSError:
+              discard
+          else:
+            try:
+              load_unit_from_json(unit_id, json_file)
+              save_level(state.config.level_dir)
+            except Exception as e:
+              error "Failed to load new unit from JSON", unit_id, error = e
 
-        # Section C: Detect orphan scripts (report once)
+        # Detect orphan scripts (report once)
         for script_path in walk_files(state.config.script_dir / "*.nim"):
           let stem = script_path.split_file.name
           if stem == "players":
             continue
-          if stem notin existing_ids:
-            let json_file =
-              state.config.data_dir / stem / stem & ".json"
+          if stem notin root_units:
+            let json_file = state.config.data_dir / stem / stem & ".json"
             if not file_exists(json_file) and
                 script_path notin orphan_scripts_reported:
               state.err(
