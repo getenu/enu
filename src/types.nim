@@ -1,4 +1,18 @@
 import std/[tables, monotimes, times, sets, options, macros]
+type
+  McpQueryKind* = enum
+    MCP_SCREENSHOT
+    MCP_EVAL
+    MCP_GET_CONSOLE
+    MCP_GET_LEVEL_DIR
+
+  McpQuery* = object
+    kind*: McpQueryKind
+    code*: string
+    result*: string
+    error*: string
+    done*: bool
+
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
@@ -8,7 +22,7 @@ import models/colors, libs/[eval]
 
 from pkg/godot import NimGodotObject
 
-export Vector3, Transform, vector3, basis, AABB, aabb
+export Vector3, Transform, Basis, vector3, basis, AABB, aabb
 export godotbase except print
 export Interpreter
 export lineinfos.`==`
@@ -135,6 +149,7 @@ type
     ground*: Ground
     draw_unit_id*: string
     console*: ConsoleModel
+    mcp_query_value*: EdValue[McpQuery]
     paused*: bool
     frame_count*: int
     skip_block_paint*: bool

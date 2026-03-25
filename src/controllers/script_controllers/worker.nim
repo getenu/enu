@@ -165,7 +165,7 @@ proc watch_code(self: Worker, unit: Unit) =
     if added or touched and change.item != "":
       unit.eval = ""
       try:
-        self.eval(unit, change.item)
+        discard self.eval(unit, change.item)
       except VMQuit as e:
         self.script_error(unit, e)
 
@@ -294,6 +294,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       unit.destroy
 
   let player = state.player
+
   # add player before interpreter is initialized to get to an interactive
   # state quicker
   if SERVER in state.local_flags:
@@ -400,6 +401,51 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
     if state.config.player_color != change.item.player_color:
       player.color = state.config.player_color
+
+  state.mcp_query_value.changes:
+    let q = change.item
+    info "mcp_query_value change",
+      added = added,
+      modified = modified,
+      touched = touched,
+      done = q.done,
+      kind = $q.kind
+    if added and not q.done:
+      info "mcp query received", kind = $q.kind
+      case q.kind
+      of MCP_GET_CONSOLE:
+        let resp = McpQuery(
+          kind: MCP_GET_CONSOLE,
+          result: state.console.log.value.join("\n"),
+          done: true,
+        )
+        info "mcp query responding", kind = $resp.kind
+        state.mcp_query_value.value = resp
+      of MCP_EVAL:
+        var msg = McpQuery(kind: MCP_EVAL, done: true)
+        try:
+          msg.result = worker.eval(player, q.code).get("")
+        except VMQuit as e:
+          msg.error =
+            if e.location.len > 0:
+              "Error at " & e.location & ": " & e.msg
+            else:
+              "Error: " & e.msg
+        except CatchableError as e:
+          msg.error = "Error: " & e.msg
+        info "mcp query responding",
+          kind = $msg.kind,
+          result_len = msg.result.len,
+          error_len = msg.error.len
+        state.mcp_query_value.value = msg
+      of MCP_GET_LEVEL_DIR:
+        let resp = McpQuery(
+          kind: MCP_GET_LEVEL_DIR, result: state.config.level_dir, done: true
+        )
+        info "mcp query responding", kind = $resp.kind
+        state.mcp_query_value.value = resp
+      of MCP_SCREENSHOT:
+        discard
 
   const max_time = (1.0 / 30.0).seconds
   const min_time = (1.0 / 60.0).seconds
@@ -641,9 +687,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             let json_file = state.config.data_dir / stem / stem & ".json"
             if not file_exists(json_file) and
                 script_path notin orphan_scripts_reported:
-              state.err(
-                "Orphan script: " & script_path & " (no data file)"
-              )
+              state.err("Orphan script: " & script_path & " (no data file)")
               orphan_scripts_reported.incl(script_path)
 
         watch_files_at = now + file_watch_interval

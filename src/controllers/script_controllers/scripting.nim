@@ -1,4 +1,4 @@
-import std/[os, re, posix, sets]
+import std/[os, re, posix, sets, options]
 
 import pkg/godot except print
 import pkg/compiler/ast except new_node
@@ -313,7 +313,7 @@ proc script_file_for*(self: Unit): string =
   else:
     ""
 
-proc eval*(self: Worker, unit: Unit, code: string) =
+proc eval*(self: Worker, unit: Unit, code: string): Option[string] =
   let active = self.active_unit
   self.active_unit = unit
   defer:
@@ -321,4 +321,4 @@ proc eval*(self: Worker, unit: Unit, code: string) =
 
   unit.script_ctx.timeout_at = get_mono_time() + script_timeout
   {.gcsafe.}:
-    discard unit.script_ctx.eval(code)
+    result = unit.script_ctx.eval(code)

@@ -256,7 +256,6 @@ method on_begin_move*(
       else:
         self.transform_value.origin =
           self.transform.origin + (moving * self.speed * delta)
-
         return RUNNING
   else:
     if self.speed == 0:
@@ -316,7 +315,6 @@ method on_begin_turn*(
     let axis = self.draw_transform.basis.xform(axis)
     self.draw_transform_value.basis =
       self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
-
     self.draw_transform = self.draw_transform.orthonormalized()
 
 proc reset_state*(self: Build) =

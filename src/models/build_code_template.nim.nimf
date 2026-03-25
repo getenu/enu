@@ -14,5 +14,3 @@ ${imports}
 
 load_enu_script r"${file_name}", Build, drawing,
   draw_position
-
-exit()

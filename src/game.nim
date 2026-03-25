@@ -6,10 +6,10 @@ from dotenv import nil
 import
   godotapi/[
     input, input_event, gd_os, node, scene_tree, packed_scene, sprite, control,
-    viewport, viewport_texture, performance, label, theme, dynamic_font,
-    resource_loader, main_loop, project_settings, input_map, input_event_action,
-    input_event_key, input_event, global_constants, scroll_container,
-    voxel_server, world_environment,
+    viewport, viewport_texture, texture, image, performance, label, theme,
+    dynamic_font, resource_loader, main_loop, project_settings, input_map,
+    input_event_action, input_event_key, input_event, global_constants,
+    scroll_container, voxel_server, world_environment,
   ]
 
 import ui/virtual_joystick
@@ -463,6 +463,23 @@ gdobj Game of Node:
           state.push_flag(flag)
 
         saved_state.restarting = false
+
+    var counter = 0
+    state.mcp_query_value.changes:
+      let req = change.item
+      info "game mcp_query_value change",
+        added = added, modified = modified, touched = touched, done = req.done
+      if added and not req.done:
+        info "taking screenshot"
+        let img = self.scaled_viewport.get_texture.get_data
+        img.flip_y
+        inc counter
+        let path = get_temp_dir() / ("enu_screenshot_" & $counter & ".png")
+        discard img.save_png(path)
+        info "screenshot saved", path
+        state.mcp_query_value.value =
+          McpQuery(kind: MCP_SCREENSHOT, result: path, done: true)
+        info "screenshot response set"
 
     state.local_flags.changes(false):
       if QUITTING.added:

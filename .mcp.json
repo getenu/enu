@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "enu": {
+      "type": "stdio",
+      "command": "nim",
+      "args": ["r", "bin/enu_mcp.nim"]
+    }
+  }
+}

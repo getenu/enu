@@ -1,4 +1,4 @@
-import std/[os, strformat, importutils]
+import std/[os, strformat, importutils, options]
 import pkg/compiler/ast except new_node
 import pkg/compiler/[vm, vmdef, lineinfos]
 import core, eval
@@ -66,7 +66,7 @@ proc run*(self: ScriptCtx): bool =
       if file_exists(expected_path):
         self.dependencies.add(expected_path.relative_path(script_dir))
 
-proc eval*(self: ScriptCtx, code: string): bool =
+proc eval*(self: ScriptCtx, code: string): Option[string] =
   self.exit_code = none(int)
 
   try:
@@ -74,13 +74,12 @@ proc eval*(self: ScriptCtx, code: string): bool =
       ctx = self.ctx
       pc = self.pc
       tos = self.tos
-    self.interpreter.eval(self.pass_context, self.file_name, code)
+    result = self.interpreter.eval(self.pass_context, self.file_name, code)
     self.ctx = ctx
     self.pc = pc
     self.tos = tos
-    result = false
   except VMPause:
-    result = self.exit_code.is_none
+    discard
   except CatchableError:
     self.running = false
     self.exit_code = some(99)

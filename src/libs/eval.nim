@@ -1,6 +1,6 @@
 import std/[options, os, strutils]
 import pkg/pretty
-import compiler/[syntaxes, reorder, vmdef, msgs]
+import compiler/[syntaxes, reorder, vmdef, msgs, renderer, vm]
 import compiler/passes {.all.}
 import compiler/lineinfos
 
@@ -238,6 +238,19 @@ proc loadModule*(
   {.gcsafe.}:
     discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
 
+proc node_to_str(n: PNode): string =
+  case n.kind
+  of nkStrLit .. nkTripleStrLit:
+    n.strVal
+  of nkIntLit .. nkUInt64Lit:
+    $n.intVal
+  of nkFloatLit .. nkFloat128Lit:
+    $n.floatVal
+  of nkNilLit:
+    "nil"
+  else:
+    renderTree(n, {renderNoComments})
+
 # adapted from
 # https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
 proc extendModule*(
@@ -246,9 +259,9 @@ proc extendModule*(
     idgen: IdGenerator,
     stream: PLLStream,
     ctx: var PContext,
-): bool {.discardable.} =
+): Option[string] {.discardable.} =
   if graph.stopCompile():
-    return true
+    return
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
@@ -278,16 +291,57 @@ proc extendModule*(
 
       prePass(ctx, sl)
 
+      # To detect bare expressions (which produce a "has to be used" error in
+      # statement context), we run semWithPContext with a raised errorMax so it
+      # doesn't quit. We capture errors via the hook to replay them if needed.
+      let old_hook = ctx.config.structuredErrorHook
+      let old_error_count = ctx.config.errorCounter
+      let old_error_max = ctx.config.errorMax
+      let old_error_outputs = ctx.config.m.errorOutputs
+      ctx.config.errorMax = high(int)
+      ctx.config.m.errorOutputs = {}
+      type CapturedError = tuple[info: TLineInfo, msg: string, sev: Severity]
+      var captured: seq[CapturedError]
+      let captured_ptr = captured.addr
+      ctx.config.structuredErrorHook = proc(
+          config: ConfigRef, info: TLineInfo, msg: string, severity: Severity
+      ) {.gcsafe.} =
+        {.gcsafe.}: captured_ptr[].add((info, msg, severity))
+
       var semNode = semWithPContext(ctx, sl)
+      let errors_added = ctx.config.errorCounter - old_error_count
+
+      ctx.config.structuredErrorHook = old_hook
+      ctx.config.errorMax = old_error_max
+      ctx.config.m.errorOutputs = old_error_outputs
+
+      # If exactly one error (the "discard" error) and the node has a non-void
+      # type, it's a bare expression — evaluate and return its value.
+      # Note: semStmtList unwraps single-element lists, so semNode is the
+      # expression directly, not a nkStmtList wrapper.
+      if errors_added == 1 and semNode.typ != nil and
+          semNode.typ.kind notin {tyVoid, tyError, tyNone}:
+        ctx.config.errorCounter = old_error_count
+        let r = evalExpr(PCtx(graph.vm), semNode)
+        if r != nil and r.kind notin {nkEmpty, nkError}:
+          result = some(node_to_str(r))
+        break processCode
+
+      # Replay any captured errors through the original hook so they propagate.
+      ctx.config.errorCounter = old_error_count
+      for e in captured:
+        if e.sev == Severity.Error:
+          inc ctx.config.errorCounter
+        if old_hook != nil:
+          old_hook(ctx.config, e.info, e.msg, e.sev)
+
       discard processPipeline(graph, semNode, bModule)
 
     closeParser(p)
     if s.kind != llsStdIn:
       break
 
-  result = true
-
-proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string) =
+proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[string] =
   ## This can also be used to *reload* the script.
   assert i != nil
   var module: PSym
@@ -298,8 +352,16 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string) =
       break
 
   assert module != nil, "no valid module selected"
+  # If closePContext was called (for scripts that complete without VMPause,
+  # e.g. players.nim), restore the context so extendModule can work.
+  # closePContext also pops the proc context and owner, both of which must
+  # be restored or evalAtCompileTime crashes accessing c.p.owner.
+  if ctx.currentScope == nil:
+    ctx.currentScope = ctx.topLevelScope
+    pushProcCon(ctx, module)
+    pushOwner(ctx, module)
   let s = llStreamOpen(code)
-  extendModule(i.graph, module, i.idgen, s, ctx)
+  result = extendModule(i.graph, module, i.idgen, s, ctx)
 
 proc config*(i: Interpreter): ConfigRef =
   i.graph.config
