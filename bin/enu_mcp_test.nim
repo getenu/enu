@@ -11,6 +11,7 @@
 ##   - Tool results have the expected structure
 
 import std/[osproc, streams, json, strutils, os, times]
+import enu_mcp_reconnect_test
 
 type McpSession = object
   process: Process
@@ -33,10 +34,26 @@ proc send(s: McpSession, msg: JsonNode) =
   s.process.input_stream.write($msg & "\n")
   s.process.input_stream.flush()
 
+proc dump_stderr(s: McpSession) =
+  try:
+    let err = s.process.error_stream.read_all()
+    if err != "":
+      echo "--- stderr ---"
+      echo err[0 ..< min(1000, err.len)]
+      echo "--------------"
+  except:
+    discard
+
 proc recv(s: McpSession, timeout_ms = 8000): JsonNode =
   let deadline = epoch_time() + timeout_ms.float / 1000.0
   while epoch_time() < deadline:
-    let line = s.process.output_stream.read_line()
+    let line =
+      try:
+        s.process.output_stream.read_line()
+      except IOError:
+        s.dump_stderr()
+        echo "FAIL: process died (IOError reading stdout)"
+        quit 1
     if line == "":
       sleep 10
       continue
@@ -49,6 +66,7 @@ proc recv(s: McpSession, timeout_ms = 8000): JsonNode =
       quit 1
     return
   echo "FAIL: timed out after " & $timeout_ms & "ms waiting for response"
+  s.dump_stderr()
   quit 1
 
 proc send_recv(s: McpSession, msg: JsonNode, timeout_ms = 8000): JsonNode =
@@ -165,7 +183,7 @@ proc run_protocol_tests() =
     var names: seq[string]
     for t in tools:
       names.add t{"name"}.get_str
-    for expected in ["eval", "get_console", "screenshot"]:
+    for expected in ["eval", "get_console", "screenshot", "set_position"]:
       if expected notin names:
         echo "FAIL: missing tool: " & expected
         quit 1
@@ -292,9 +310,7 @@ proc run_integration_tests() =
     discard s.do_call_tool("eval", %*{"code": "echo \"console_marker_xyz\""})
     let text = s.do_call_tool("get_console", %*{}).tool_text
     if "console_marker_xyz" notin text:
-      echo "FAIL: marker not found in console: " & text[
-        0 ..< min(200, text.len)
-      ]
+      echo "FAIL: marker not found in console: " & text
       quit 1
 
   test "screenshot returns a .png file path":
@@ -333,6 +349,60 @@ proc run_integration_tests() =
     let text = resp.tool_text
     echo "(result: '" & text & "') "
 
+  test "set_position moves MCP bot (no id = default bot)":
+    var s = open_session()
+    defer:
+      s.close()
+    discard s.do_initialize()
+    let text = s.do_call_tool(
+      "set_position", %*{"x": 0.0, "y": 1.0, "z": -40.0}, timeout_ms = 20000
+    ).tool_text
+    if text.starts_with("Error"):
+      echo "FAIL: " & text
+      quit 1
+
+  test "set_position with rotation":
+    var s = open_session()
+    defer:
+      s.close()
+    discard s.do_initialize()
+    let text = s.do_call_tool(
+      "set_position",
+      %*{"x": 5.0, "y": 1.0, "z": -40.0, "rotation": 90.0},
+      timeout_ms = 20000,
+    ).tool_text
+    if text.starts_with("Error"):
+      echo "FAIL: " & text
+      quit 1
+
+  test "set_position then screenshot shows new perspective":
+    var s = open_session()
+    defer:
+      s.close()
+    discard s.do_initialize()
+    discard s.do_call_tool(
+      "set_position", %*{"x": 0.0, "y": 2.0, "z": -35.0}, timeout_ms = 20000
+    )
+    let shot = s.do_call_tool("screenshot", %*{}, timeout_ms = 20000).tool_text
+    if not shot.ends_with(".png"):
+      echo "FAIL: expected .png, got: " & shot[0 ..< min(100, shot.len)]
+      quit 1
+    echo "(path: " & shot & ") "
+
+  test "set_position: 3 sequential moves":
+    var s = open_session()
+    defer:
+      s.close()
+    discard s.do_initialize()
+    let positions = [(0.0, 1.0, -38.0), (3.0, 1.0, -42.0), (-3.0, 1.0, -40.0)]
+    for (x, y, z) in positions:
+      let text = s.do_call_tool(
+        "set_position", %*{"x": x, "y": y, "z": z}, timeout_ms = 20000
+      ).tool_text
+      if text.starts_with("Error"):
+        echo "FAIL: move to (" & $x & "," & $y & "," & $z & "): " & text
+        quit 1
+
   test "stress: 25 alternating screenshot+eval calls all complete":
     var s = open_session()
     defer:
@@ -354,7 +424,7 @@ proc run_integration_tests() =
 
 proc run_hang_repro() =
   echo ""
-  echo "Hang repro (loops until hang or 100 calls):"
+  echo "Hang repro (loops until hang or 500 calls):"
   echo "  eval+screenshot loop..."
   stdout.flush_file()
 
@@ -364,7 +434,7 @@ proc run_hang_repro() =
   discard s.do_initialize()
 
   var call = 0
-  while call < 100:
+  while call < 500:
     inc call
     let ev =
       s.do_call_tool("eval", %*{"code": $call}, timeout_ms = 35000).tool_text
@@ -400,6 +470,7 @@ run_protocol_tests()
 
 if is_integration:
   run_integration_tests()
+  run_reconnect_tests()
   run_hang_repro()
 else:
   echo ""

@@ -80,6 +80,7 @@ proc init*(
     id: id,
     start_transform: transform,
     animation_value: ed("auto"),
+    mcp_query_value: EdValue[McpQuery].init(McpQuery()),
     speed: 1.0,
     clone_of: clone_of,
     start_color: ACTION_COLORS[BLACK],
@@ -105,7 +106,7 @@ method off_collision*(self: Unit, partner: Model) =
     if collision.id == partner.id:
       self.collisions -= collision
 
-method worker_thread_joined*(self: Bot) =
+method worker_thread_joined*(self: Bot, worker: Worker) =
   state.local_flags.watch:
     debug "state flag changed",
       zid,
@@ -150,3 +151,42 @@ method worker_thread_joined*(self: Bot) =
       root.walk_tree proc(unit: Unit) =
         unit.local_flags -= HIGHLIGHT
       state.pop_flag RETICLE_VISIBLE
+
+  if EPHEMERAL in self.global_flags and SERVER in state.local_flags:
+    self.mcp_query_value.changes(false):
+      var q = change.item
+      if added:
+        case q.state
+        of MCP_PENDING:
+          info "mcp query received by worker, running file update",
+            kind = $q.kind, id = self.id
+          worker.mcp_update_files_proc()
+          q.state = MCP_READY
+          self.mcp_query = q
+        of MCP_READY:
+          case q.kind
+          of MCP_GET_CONSOLE:
+            q.result = state.console.log.value.join("\n")
+            q.state = MCP_DONE
+            info "mcp console query responding", kind = q.kind, id = self.id
+            self.mcp_query = q
+          of MCP_EVAL:
+            let (res, err) = worker.mcp_eval_proc(q.code)
+            q.result = res
+            q.error = err
+            q.state = MCP_DONE
+            info "mcp eval query responding",
+              code = q.code, error = q.error, id = self.id
+            self.mcp_query = q
+          of MCP_GET_LEVEL_DIR:
+            q.result = state.config.level_dir
+            q.state = MCP_DONE
+            info "mcp level query responding", kind = q.kind, id = self.id
+            self.mcp_query = q
+          of MCP_SCREENSHOT:
+            info "mcp screenshot query forwarding to game thread",
+              unit_id = q.unit_id
+          of MCP_BLANK:
+            discard
+        of MCP_DONE:
+          info "mcp query done in worker", kind = $q.kind

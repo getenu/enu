@@ -466,8 +466,8 @@ proc setup_packed_chunk_watches(self: Build) =
           self.voxels.apply_delta(chunk_id, delta)
         watch_delta_seq(chunk_id, delta_seq)
 
-method worker_thread_joined*(self: Build) =
-  proc_call worker_thread_joined(Unit(self))
+method worker_thread_joined*(self: Build, worker: Worker) =
+  proc_call worker_thread_joined(Unit(self), worker)
   self.init_shared()
   self.init_voxels_if_needed()
   # Only clients need to apply packed chunks received from server

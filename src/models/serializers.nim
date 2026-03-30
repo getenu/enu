@@ -402,6 +402,8 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
     save_ide_support(level_dir, sorted_scripts)
 
     for unit in state.units:
+      if EPHEMERAL in unit.global_flags:
+        continue
       if save_all or DIRTY in unit.global_flags:
         unit.save
         if ?unit.script_ctx:

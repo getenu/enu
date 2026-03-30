@@ -182,18 +182,25 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
 
     if not state.paused:
       let module_name = ctx.script.split_file.name
+      let script_dir = ctx.script.split_file.dir
       var others = self.module_names
       self.module_names.incl module_name
       others.excl module_name
+      # Only inject imports for modules whose script files exist in the current
+      # script dir. Stale entries (e.g. from a previous level) are silently
+      # dropped rather than causing "cannot open file" errors.
+      var valid_others: HashSet[string]
+      for name in others:
+        if file_exists(script_dir / name & ".nim"):
+          valid_others.incl(name)
       let imports =
-        if others.card > 0:
-          "import " & others.to_seq.join(", ")
+        if valid_others.card > 0:
+          "import " & valid_others.to_seq.join(", ")
         else:
           ""
       let code = unit.code_template(imports)
 
       # Write generated code to a 'generated' directory for tooling like nimlangserver
-      let script_dir = ctx.script.split_file.dir
       let generated_dir = script_dir.parentDir / "generated"
       create_dir(generated_dir)
       let generated_file = generated_dir / module_name & ".nim"

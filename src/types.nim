@@ -1,17 +1,25 @@
 import std/[tables, monotimes, times, sets, options, macros]
+
 type
   McpQueryKind* = enum
+    MCP_BLANK
     MCP_SCREENSHOT
     MCP_EVAL
     MCP_GET_CONSOLE
     MCP_GET_LEVEL_DIR
+
+  McpQueryState* = enum
+    MCP_PENDING
+    MCP_READY
+    MCP_DONE
 
   McpQuery* = object
     kind*: McpQueryKind
     code*: string
     result*: string
     error*: string
-    done*: bool
+    state*: McpQueryState
+    unit_id*: string
 
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
@@ -115,6 +123,7 @@ type
     RESETTING
     HIGHLIGHT_ERROR
     ASAP_MODE
+    EPHEMERAL
 
   Tools* = enum
     CODE_MODE
@@ -144,12 +153,14 @@ type
     tool_value*: EdValue[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
+    mcp_camera*: Node
+    screenshot_viewport*: Node
+    screenshot_counter*: int
     player_value*: EdValue[Player]
     units*: EdSeq[Unit]
     ground*: Ground
     draw_unit_id*: string
     console*: ConsoleModel
-    mcp_query_value*: EdValue[McpQuery]
     paused*: bool
     frame_count*: int
     skip_block_paint*: bool
@@ -257,6 +268,7 @@ type
 
   Bot* = ref object of Unit
     animation_value*: EdValue[string]
+    mcp_query_value*: EdValue[McpQuery]
 
   Sign* = ref object of Unit
     message_value*, more_value*: EdValue[string]
@@ -394,6 +406,11 @@ type
     player_cache*: Table[string, Player]
     initial_load_done*: bool
     module_names*: HashSet[string]
+    watch_files_at*: MonoTime
+    orphan_scripts_reported*: HashSet[string]
+    mcp_eval_proc*:
+      proc(code: string): tuple[result: string, error: string] {.gcsafe.}
+    mcp_update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object
 

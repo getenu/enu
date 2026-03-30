@@ -1,5 +1,7 @@
 patch_file "nph", "phrenderer", "patches/phrenderer"
 
+--threadAnalysis:
+  off
 --define:
   vm_exec_hooks
 --define:
@@ -11,7 +13,7 @@ patch_file "nph", "phrenderer", "patches/phrenderer"
 --define:
   "chronicles_log_level=INFO"
 --define:
-  "chronicles_sinks=textlines[stderr]"
+  "chronicles_sinks=textlines[nocolors, stderr]"
 --define:
   "ed_partial_subscriber"
 --define:

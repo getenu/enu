@@ -15,7 +15,7 @@
     "ed.getenu.github.com": {
       "dir": "$deps/ed.getenu.github.com",
       "url": "https://github.com/getenu/ed",
-      "commit": "c12f6d673c46d4d765e1cfb3ccfdf86a8306d946",
+      "commit": "bbf8a562735bc1447a4e253eb50f3c864246d535",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
@@ -33,7 +33,7 @@
     "cligen": {
       "dir": "$deps/cligen",
       "url": "https://github.com/c-blake/cligen",
-      "commit": "f082560a4bbd4afa1b35e9810b291d17c265b666",
+      "commit": "042bb0175a965c598cf963dac61254c39201e6b1",
       "version": ""
     },
     "chroma": {
@@ -94,6 +94,12 @@
       "dir": "$deps/regex",
       "url": "https://github.com/nitely/nim-regex",
       "commit": "4593305ed1e49731fc75af1dc572dd2559aad19c",
+      "version": ""
+    },
+    "nimcp": {
+      "dir": "$deps/nimcp",
+      "url": "https://github.com/gokr/nimcp",
+      "commit": "4eae6a857cc3152b7388c74421d9a7425327ee04",
       "version": ""
     },
     "nim-libbacktrace.dsrw.github.com": {
@@ -165,7 +171,7 @@
     "chronos": {
       "dir": "$deps/chronos",
       "url": "https://github.com/status-im/nim-chronos",
-      "commit": "0646c444fce7c7ed08ef6f2c9a7abfd172ffe655",
+      "commit": "0d00279e67ad9fadeb944944449adc89f052b8bd",
       "version": ""
     },
     "hldiff": {
@@ -190,6 +196,18 @@
       "dir": "$deps/unicodedb",
       "url": "https://github.com/nitely/nim-unicodedb",
       "commit": "66f2458710dc641dd4640368f9483c8a0ec70561",
+      "version": ""
+    },
+    "mummyx.gokr.github.com": {
+      "dir": "$deps/mummyx.gokr.github.com",
+      "url": "https://github.com/gokr/mummyx",
+      "commit": "32f0ef9769cf65e73bb214983ea9c71b7f834b43",
+      "version": ""
+    },
+    "taskpools": {
+      "dir": "$deps/taskpools",
+      "url": "https://github.com/status-im/nim-taskpools",
+      "commit": "9e8ccc754631ac55ac2fd495e167e74e86293edb",
       "version": ""
     },
     "stew": {
@@ -237,7 +255,25 @@
     "adix": {
       "dir": "$deps/adix",
       "url": "https://github.com/c-blake/adix",
-      "commit": "38a95ee6bd675b31746fa79d318b546495374ffa",
+      "commit": "22811ec9d74d5c1ada3d126fa8b964e185209686",
+      "version": ""
+    },
+    "webby": {
+      "dir": "$deps/webby",
+      "url": "https://github.com/treeform/webby",
+      "commit": "325d6ade0970562bee7d7d53961a2c3287f0c4bc",
+      "version": ""
+    },
+    "crunchy": {
+      "dir": "$deps/crunchy",
+      "url": "https://github.com/guzba/crunchy",
+      "commit": "98eb6526982bb8aae8eec6e8781f4539fa19e049",
+      "version": ""
+    },
+    "nimsimd": {
+      "dir": "$deps/nimsimd",
+      "url": "https://github.com/guzba/nimsimd",
+      "commit": "3f6b2668ffb0867d0bf786a658b817763e611350",
       "version": ""
     }
   },
@@ -261,6 +297,7 @@
     "--path:\"deps/nph/src\"",
     "--path:\"deps/regex/src\"",
     "--path:\"deps/nim-libbacktrace.dsrw.github.com\"",
+    "--path:\"deps/nimcp/src\"",
     "--path:\"deps/threading\"",
     "--path:\"deps/flatty/src\"",
     "--path:\"deps/netty/src\"",
@@ -278,12 +315,17 @@
     "--path:\"deps/glob/src\"",
     "--path:\"deps/toml_serialization\"",
     "--path:\"deps/unicodedb/src\"",
+    "--path:\"deps/taskpools\"",
+    "--path:\"deps/mummyx.gokr.github.com/src\"",
     "--path:\"deps/fusion/src\"",
     "--path:\"deps/mustache/src\"",
     "--path:\"deps/parsetoml/src\"",
     "--path:\"deps/bearssl\"",
     "--path:\"deps/httputils\"",
     "--path:\"deps/adix\"",
+    "--path:\"deps/webby/src\"",
+    "--path:\"deps/crunchy/src\"",
+    "--path:\"deps/nimsimd/src\"",
     "############# end Atlas config section   ##########",
     ""
   ],
@@ -304,7 +346,7 @@
       "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
       "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
       "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\",",
-      "  \"nph\", \"regex\", \"https://github.com/dsrw/nim-libbacktrace\"",
+      "  \"nph\", \"regex\", \"nimcp\", \"https://github.com/dsrw/nim-libbacktrace\"",
       ""
     ]
   },

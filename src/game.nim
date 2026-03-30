@@ -9,7 +9,7 @@ import
     viewport, viewport_texture, texture, image, performance, label, theme,
     dynamic_font, resource_loader, main_loop, project_settings, input_map,
     input_event_action, input_event_key, input_event, global_constants,
-    scroll_container, voxel_server, world_environment,
+    scroll_container, voxel_server, world_environment, camera,
   ]
 
 import ui/virtual_joystick
@@ -67,10 +67,12 @@ gdobj Game of Node:
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
+    mcp_camera_node: Camera
 
   method process*(delta: float) =
     Ed.thread_ctx.tick
     inc state.frame_count
+
     let time = get_mono_time()
     when defined(metrics):
       if self.update_metrics_at < time:
@@ -414,6 +416,11 @@ gdobj Game of Node:
       assert not state.nodes.data.is_nil
       self.scaled_viewport =
         self.get_node("ViewportContainer/Viewport") as Viewport
+      self.mcp_camera_node = gdnew[Camera]()
+      self.mcp_camera_node.name = "McpCamera"
+      self.get_tree.root.add_child(self.mcp_camera_node)
+      state.mcp_camera = self.mcp_camera_node
+      state.screenshot_viewport = self.scaled_viewport
 
       self.bind_signals(self.get_viewport(), "size_changed")
       self.bind_signals(self.get_tree(), "global_menu_action")
@@ -463,23 +470,6 @@ gdobj Game of Node:
           state.push_flag(flag)
 
         saved_state.restarting = false
-
-    var counter = 0
-    state.mcp_query_value.changes:
-      let req = change.item
-      info "game mcp_query_value change",
-        added = added, modified = modified, touched = touched, done = req.done
-      if added and not req.done:
-        info "taking screenshot"
-        let img = self.scaled_viewport.get_texture.get_data
-        img.flip_y
-        inc counter
-        let path = get_temp_dir() / ("enu_screenshot_" & $counter & ".png")
-        discard img.save_png(path)
-        info "screenshot saved", path
-        state.mcp_query_value.value =
-          McpQuery(kind: MCP_SCREENSHOT, result: path, done: true)
-        info "screenshot response set"
 
     state.local_flags.changes(false):
       if QUITTING.added:

@@ -164,9 +164,6 @@ proc init*(_: type GameState): GameState =
     net_bytes_sent_value: EdValue[int64].init(0'i64, flags = flags),
     net_bytes_received_value: EdValue[int64].init(0'i64, flags = flags),
     net_connections_value: EdValue[int].init(0, flags = flags),
-    mcp_query_value: EdValue[McpQuery].init(
-      McpQuery(), id = "mcp_query", flags = {SYNC_LOCAL, SYNC_REMOTE}
-    ),
   )
 
   self.init_logger

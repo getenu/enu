@@ -1,12 +1,13 @@
-import std/[tables, math]
+import std/[tables, math, os]
 import pkg/godot except print
 import pkg/[chroma]
 import
   godotapi/[
     scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
-    animation_player, resource_loader, packed_scene, spatial_material, text_edit
+    animation_player, resource_loader, packed_scene, spatial_material,
+    text_edit, camera, viewport, texture, image,
   ]
-import gdutils, core, models/[colors], ui/markdown_label
+import gdutils, core, models/[colors, units], ui/markdown_label
 import ./queries
 
 gdobj BotNode of KinematicBody:
@@ -19,6 +20,7 @@ gdobj BotNode of KinematicBody:
     mesh: MeshInstance
     animation_player: AnimationPlayer
     transform_zid: EID
+    pending_mcp_screenshot: McpQuery
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -173,9 +175,67 @@ gdobj BotNode of KinematicBody:
     self.model.sight_ray = self.get_node("SightRay") as RayCast
 
     if self.model of Bot:
-      self.set_process(SCRIPT_RUNNING in self.model.global_flags)
+      let bot = Bot(self.model)
+      let is_ephemeral = EPHEMERAL in bot.global_flags
+      if is_ephemeral:
+        info "mcp bot node setup",
+          id = bot.id, has_mcp_query_value = ?bot.mcp_query_value
+      self.set_process(
+        SCRIPT_RUNNING in self.model.global_flags or is_ephemeral
+      )
 
   method process(delta: float) =
+    if self.model of Bot:
+      let bot = Bot(self.model)
+      if EPHEMERAL in bot.global_flags:
+        if self.pending_mcp_screenshot.kind != MCP_BLANK:
+          let vp = Viewport(state.screenshot_viewport)
+          let img = vp.get_texture.get_data
+          img.flip_y
+          inc state.screenshot_counter
+          let path =
+            get_temp_dir() /
+            ("enu_screenshot_" & $state.screenshot_counter & ".png")
+          discard img.save_png(path)
+          info "mcp screenshot captured", path
+          var pq = self.pending_mcp_screenshot
+          pq.result = path
+          pq.state = MCP_DONE
+          bot.mcp_query = pq
+          self.pending_mcp_screenshot = McpQuery()
+          if ?state.player and ?state.player.node:
+            let player_cam = state.player.node.find_node("Camera") as Camera
+            if ?player_cam:
+              player_cam.make_current()
+        else:
+          let q = bot.mcp_query
+          if q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
+            info "mcp screenshot request received", unit_id = q.unit_id
+            let is_player =
+              q.unit_id == "" or (
+                ?state.player and q.unit_id == state.player.id
+              )
+            if is_player:
+              self.pending_mcp_screenshot = q
+            else:
+              var found: Unit
+              state.units.value.walk_tree proc(u: Unit) =
+                if u.id == q.unit_id:
+                  found = u
+              if found.is_nil or not ?found.node:
+                info "mcp screenshot unit not found", unit_id = q.unit_id
+                var eq = q
+                eq.error = "Unit not found: " & q.unit_id
+                eq.state = MCP_DONE
+                bot.mcp_query = eq
+              else:
+                let cam = Camera(state.mcp_camera)
+                var t = Spatial(found.node).global_transform
+                t.origin += vec3(0, 0.8, 0)
+                cam.global_transform = t
+                cam.make_current()
+                self.pending_mcp_screenshot = q
+
     if ?self.model:
       if self.model.code.owner == state.worker_ctx_name:
         self.model.transform_value.pause self.transform_zid:

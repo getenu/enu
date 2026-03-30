@@ -79,7 +79,7 @@ proc data_file*(self: Unit): string =
 method main_thread_joined*(self: Unit) {.base, gcsafe.} =
   discard
 
-method worker_thread_joined*(self: Unit) {.base, gcsafe.} =
+method worker_thread_joined*(self: Unit, worker: Worker) {.base, gcsafe.} =
   discard
 
 method batch_changes*(self: Unit): bool {.base, gcsafe.} =

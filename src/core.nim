@@ -23,7 +23,7 @@ import std/[with, sets, tables]
 import std/times except seconds
 import pkg/[pretty, flatty]
 
-export with, sets, tables, pretty, flatty
+export with, sets, tables, pretty, flatty, times.`<`
 
 template init*[K, V](_: type Table[K, V]): Table[K, V] =
   Table[K, V].default
@@ -269,8 +269,15 @@ proc `basis=`*(self: EdValue[Transform], value: Basis) =
 proc init*(_: type Basis): Basis =
   init_basis()
 
+proc yaw_basis*(degrees: float): Basis =
+  init_basis(vec3(0.0, float32(deg_to_rad(degrees)), 0.0))
+
 proc init*(_: type Transform, origin = vec3()): Transform =
   result = init_transform()
+  result.origin = origin
+
+proc init*(_: type Transform, origin: Vector3, yaw_deg: float): Transform =
+  result.basis = yaw_basis(yaw_deg)
   result.origin = origin
 
 proc init*(_: type Code, nim: string): Code =

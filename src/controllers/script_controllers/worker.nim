@@ -150,6 +150,75 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
     else:
       self.load_script(unit)
 
+const file_watch_interval = 2.seconds
+
+proc update_files*(self: Worker) =
+  if SERVER notin state.local_flags:
+    return
+
+  # Script mtime scan (root-level units only; nested units handled via deps)
+  for unit in state.units.value:
+    if ?unit.script_ctx and unit.script_ctx.script != "":
+      try:
+        let mtime = get_last_modification_time(unit.script_ctx.script)
+        if mtime != unit.script_ctx.last_saved_mtime:
+          let code = read_file(unit.script_ctx.script)
+          unit.script_ctx.last_saved_mtime = mtime
+          unit.code = Code.init(code)
+      except OSError:
+        discard
+
+  # Build root-unit table once for JSON watch and orphan detection
+  var root_units: Table[string, Unit]
+  for unit in state.units.value:
+    root_units[unit.id] = unit
+
+  # JSON watch: reload changed units and detect new ones in a single pass
+  for dir in walk_dirs(state.config.data_dir / "*"):
+    let unit_id = dir.split_path.tail
+    let json_file = dir / unit_id & ".json"
+    if not file_exists(json_file):
+      continue
+    if unit_id in root_units:
+      let unit = root_units[unit_id]
+      if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
+        continue
+      if unit.script_ctx.last_saved_json_mtime == Time.default:
+        continue
+      try:
+        let json_mtime = get_last_modification_time(unit.data_file)
+        if json_mtime != unit.script_ctx.last_saved_json_mtime:
+          let parent = unit.parent
+          state.push_flag LOADING_SCRIPT
+          if parent.is_nil:
+            state.units -= unit
+          else:
+            parent.units -= unit
+          state.pop_flag LOADING_SCRIPT
+          load_unit_from_json(unit_id, json_file)
+      except OSError:
+        discard
+    else:
+      try:
+        load_unit_from_json(unit_id, json_file)
+        save_level(state.config.level_dir)
+      except Exception as e:
+        error "Failed to load new unit from JSON", unit_id, error = e
+
+  # Detect orphan scripts (report once)
+  for script_path in walk_files(state.config.script_dir / "*.nim"):
+    let stem = script_path.split_file.name
+    if stem == "players":
+      continue
+    if stem notin root_units:
+      let json_file = state.config.data_dir / stem / stem & ".json"
+      if not file_exists(json_file) and
+          script_path notin self.orphan_scripts_reported:
+        state.err("Orphan script: " & script_path & " (no data file)")
+        self.orphan_scripts_reported.incl(script_path)
+
+  self.watch_files_at = get_mono_time() + file_watch_interval
+
 proc watch_code(self: Worker, unit: Unit) =
   unit.code_value.changes:
     if added or touched:
@@ -273,7 +342,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   worker.for_all_units:
     if added:
-      unit.worker_thread_joined
+      unit.worker_thread_joined(worker)
       worker.watch_code unit
 
     if removed:
@@ -308,6 +377,25 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   worker.init_interpreter("")
   worker.bridge_to_vm
+
+  worker.mcp_eval_proc = proc(
+      code: string
+  ): tuple[result: string, error: string] {.gcsafe.} =
+    try:
+      (worker.eval(state.player, code).get(""), "")
+    except VMQuit as e:
+      (
+        "",
+        if e.location.len > 0:
+          "Error at " & e.location & ": " & e.msg
+        else:
+          "Error: " & e.msg,
+      )
+    except CatchableError as e:
+      ("", "Error: " & e.msg)
+
+  worker.mcp_update_files_proc = proc() {.gcsafe.} =
+    worker.update_files()
 
   let load_level = proc() =
     var level_dir = state.config.level_dir
@@ -402,51 +490,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     if state.config.player_color != change.item.player_color:
       player.color = state.config.player_color
 
-  state.mcp_query_value.changes:
-    let q = change.item
-    info "mcp_query_value change",
-      added = added,
-      modified = modified,
-      touched = touched,
-      done = q.done,
-      kind = $q.kind
-    if added and not q.done:
-      info "mcp query received", kind = $q.kind
-      case q.kind
-      of MCP_GET_CONSOLE:
-        let resp = McpQuery(
-          kind: MCP_GET_CONSOLE,
-          result: state.console.log.value.join("\n"),
-          done: true,
-        )
-        info "mcp query responding", kind = $resp.kind
-        state.mcp_query_value.value = resp
-      of MCP_EVAL:
-        var msg = McpQuery(kind: MCP_EVAL, done: true)
-        try:
-          msg.result = worker.eval(player, q.code).get("")
-        except VMQuit as e:
-          msg.error =
-            if e.location.len > 0:
-              "Error at " & e.location & ": " & e.msg
-            else:
-              "Error: " & e.msg
-        except CatchableError as e:
-          msg.error = "Error: " & e.msg
-        info "mcp query responding",
-          kind = $msg.kind,
-          result_len = msg.result.len,
-          error_len = msg.error.len
-        state.mcp_query_value.value = msg
-      of MCP_GET_LEVEL_DIR:
-        let resp = McpQuery(
-          kind: MCP_GET_LEVEL_DIR, result: state.config.level_dir, done: true
-        )
-        info "mcp query responding", kind = $resp.kind
-        state.mcp_query_value.value = resp
-      of MCP_SCREENSHOT:
-        discard
-
   const max_time = (1.0 / 30.0).seconds
   const min_time = (1.0 / 60.0).seconds
   const auto_save_interval = 30.seconds
@@ -454,11 +497,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   const test_timeout = 5.minutes
   const stats_log_interval = 5.seconds
   const asap_flush_interval = 2.seconds
-  const file_watch_interval = 2.seconds
-  var orphan_scripts_reported: HashSet[string]
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
-  var watch_files_at = MonoTime.low
   var test_started_at = MonoTime.high
   var last_stats_log = MonoTime.low
   var last_asap_flush = MonoTime.low
@@ -476,6 +516,20 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       let wait_until = frame_start + min_time
       inc tick_count
 
+      for ctx_name in Ed.thread_ctx.unsubscribed:
+        var i = 0
+        while i < state.units.len:
+          let unit = state.units[i]
+          if unit.id == \"player-{ctx_name}" or
+              (EPHEMERAL in unit.global_flags and ctx_name in unit.id):
+            state.units.del i
+          else:
+            i += 1
+
+        if SERVER notin state.local_flags:
+          state.push_flag(NEEDS_RESTART)
+          break
+
       var to_process: seq[Unit]
       state.units.value.walk_tree proc(unit: Unit) =
         if unit.code.runner == Ed.thread_ctx.id and ?unit.script_ctx:
@@ -484,19 +538,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           else:
             unit.global_flags -= SCRIPT_RUNNING
         to_process.add unit
-
-      for ctx_name in Ed.thread_ctx.unsubscribed:
-        var i = 0
-        while i < state.units.len:
-          if state.units[i].id == \"player-{ctx_name}":
-            var player = Player(state.units[i])
-            state.units.del i
-          else:
-            i += 1
-
-        if SERVER notin state.local_flags:
-          state.push_flag(NEEDS_RESTART)
-          break
       to_process.shuffle
 
       # Check if any unit is in ASAP mode - if so, skip voxel_tasks check
@@ -628,69 +669,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         Ed.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
 
-      if SERVER in state.local_flags and now > watch_files_at:
-        # Script mtime scan (root-level units only; nested units handled via deps)
-        for unit in state.units.value:
-          if ?unit.script_ctx and unit.script_ctx.script != "":
-            try:
-              let mtime = get_last_modification_time(unit.script_ctx.script)
-              if mtime != unit.script_ctx.last_saved_mtime:
-                let code = read_file(unit.script_ctx.script)
-                unit.script_ctx.last_saved_mtime = mtime
-                unit.code = Code.init(code)
-            except OSError:
-              discard
-
-        # Build root-unit table once for JSON watch and orphan detection
-        var root_units: Table[string, Unit]
-        for unit in state.units.value:
-          root_units[unit.id] = unit
-
-        # JSON watch: reload changed units and detect new ones in a single pass
-        for dir in walk_dirs(state.config.data_dir / "*"):
-          let unit_id = dir.split_path.tail
-          let json_file = dir / unit_id & ".json"
-          if not file_exists(json_file):
-            continue
-          if unit_id in root_units:
-            let unit = root_units[unit_id]
-            if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
-              continue
-            if unit.script_ctx.last_saved_json_mtime == Time.default:
-              continue
-            try:
-              let json_mtime = get_last_modification_time(unit.data_file)
-              if json_mtime != unit.script_ctx.last_saved_json_mtime:
-                let parent = unit.parent
-                state.push_flag LOADING_SCRIPT
-                if parent.is_nil:
-                  state.units -= unit
-                else:
-                  parent.units -= unit
-                state.pop_flag LOADING_SCRIPT
-                load_unit_from_json(unit_id, json_file)
-            except OSError:
-              discard
-          else:
-            try:
-              load_unit_from_json(unit_id, json_file)
-              save_level(state.config.level_dir)
-            except Exception as e:
-              error "Failed to load new unit from JSON", unit_id, error = e
-
-        # Detect orphan scripts (report once)
-        for script_path in walk_files(state.config.script_dir / "*.nim"):
-          let stem = script_path.split_file.name
-          if stem == "players":
-            continue
-          if stem notin root_units:
-            let json_file = state.config.data_dir / stem / stem & ".json"
-            if not file_exists(json_file) and
-                script_path notin orphan_scripts_reported:
-              state.err("Orphan script: " & script_path & " (no data file)")
-              orphan_scripts_reported.incl(script_path)
-
-        watch_files_at = now + file_watch_interval
+      if now > worker.watch_files_at:
+        worker.update_files()
 
       # Track max tick time for debugging
       let tick_time = get_mono_time() - frame_start
