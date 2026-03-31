@@ -20,6 +20,7 @@ type
     error*: string
     state*: McpQueryState
     unit_id*: string
+    pitch*: float
 
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
@@ -154,6 +155,7 @@ type
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
     mcp_camera*: Node
+    mcp_viewport*: Node
     screenshot_viewport*: Node
     screenshot_counter*: int
     player_value*: EdValue[Player]

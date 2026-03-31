@@ -21,6 +21,7 @@ gdobj BotNode of KinematicBody:
     animation_player: AnimationPlayer
     transform_zid: EID
     pending_mcp_screenshot: McpQuery
+    pending_mcp_hide: Spatial
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -196,6 +197,9 @@ gdobj BotNode of KinematicBody:
             if is_player: Viewport(state.screenshot_viewport)
             else: Viewport(state.mcp_viewport)
           let img = vp.get_texture.get_data
+          if not self.pending_mcp_hide.is_nil:
+            self.pending_mcp_hide.visible = true
+            self.pending_mcp_hide = nil
           img.flip_y
           inc state.screenshot_counter
           let path =
@@ -231,9 +235,16 @@ gdobj BotNode of KinematicBody:
                 bot.mcp_query = eq
               else:
                 let cam = Camera(state.mcp_camera)
-                var t = Spatial(found.node).global_transform
+                let target_spatial = Spatial(found.node)
+                var t = target_spatial.global_transform
                 t.origin += vec3(0, 0.8, 0)
+                if q.pitch != 0.0:
+                  var euler = t.basis.get_euler()
+                  euler.x = float32(deg_to_rad(q.pitch))
+                  t.basis.set_euler(euler)
                 cam.global_transform = t
+                target_spatial.visible = false
+                self.pending_mcp_hide = target_spatial
                 self.pending_mcp_screenshot = q
 
     if ?self.model:
