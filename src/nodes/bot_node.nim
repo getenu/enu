@@ -189,7 +189,12 @@ gdobj BotNode of KinematicBody:
       let bot = Bot(self.model)
       if EPHEMERAL in bot.global_flags:
         if self.pending_mcp_screenshot.kind != MCP_BLANK:
-          let vp = Viewport(state.screenshot_viewport)
+          let is_player =
+            ?state.player and
+            self.pending_mcp_screenshot.unit_id == state.player.id
+          let vp =
+            if is_player: Viewport(state.screenshot_viewport)
+            else: Viewport(state.mcp_viewport)
           let img = vp.get_texture.get_data
           img.flip_y
           inc state.screenshot_counter
@@ -203,29 +208,25 @@ gdobj BotNode of KinematicBody:
           pq.state = MCP_DONE
           bot.mcp_query = pq
           self.pending_mcp_screenshot = McpQuery()
-          if ?state.player and ?state.player.node:
-            let player_cam = state.player.node.find_node("Camera") as Camera
-            if ?player_cam:
-              player_cam.make_current()
         else:
           let q = bot.mcp_query
           if q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
             info "mcp screenshot request received", unit_id = q.unit_id
-            let is_player =
-              q.unit_id == "" or (
-                ?state.player and q.unit_id == state.player.id
-              )
-            if is_player:
+            let use_player_vp =
+              ?state.player and q.unit_id == state.player.id
+            if use_player_vp:
               self.pending_mcp_screenshot = q
             else:
+              let target_id =
+                if q.unit_id == "": bot.id else: q.unit_id
               var found: Unit
               state.units.value.walk_tree proc(u: Unit) =
-                if u.id == q.unit_id:
+                if u.id == target_id:
                   found = u
               if found.is_nil or not ?found.node:
-                info "mcp screenshot unit not found", unit_id = q.unit_id
+                info "mcp screenshot unit not found", unit_id = target_id
                 var eq = q
-                eq.error = "Unit not found: " & q.unit_id
+                eq.error = "Unit not found: " & target_id
                 eq.state = MCP_DONE
                 bot.mcp_query = eq
               else:
@@ -233,7 +234,6 @@ gdobj BotNode of KinematicBody:
                 var t = Spatial(found.node).global_transform
                 t.origin += vec3(0, 0.8, 0)
                 cam.global_transform = t
-                cam.make_current()
                 self.pending_mcp_screenshot = q
 
     if ?self.model:
