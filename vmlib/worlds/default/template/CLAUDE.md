@@ -3,12 +3,20 @@
 This directory is an Enu level. You can create and modify it using file edits and
 the MCP tools provided by the `enu` server.
 
+## Quick Start
+
+1. `get_level_dir` → confirm the level directory path
+2. `screenshot` → see the current state
+3. Edit or create scripts in `scripts/` and JSON in `data/`
+4. Touch modified files, wait 5 seconds, `screenshot` again to verify
+
 ## MCP Tools Available
 
-- `screenshot` — Take a screenshot from the MCP bot's POV. Optional `unit_id` for another unit's view; optional `pitch` in degrees (e.g. `-90` for top-down, `-30` for angled down)
-- `eval` — Run Nim code in the Enu scripting context. Output goes to `get_console`, not returned directly.
+- `screenshot` — Take a screenshot from the MCP bot's POV. Optional `unit_id` for
+  another unit's view; optional `pitch` in degrees (e.g. `-90` for top-down)
+- `eval` — Run Nim code in the Enu scripting context. Output goes to `get_console`
 - `get_console` — Get recent Enu console output (use after `eval` to see results)
-- `get_level_dir` — Returns the absolute path to the current level directory (this directory)
+- `get_level_dir` — Returns the absolute path to the current level directory
 - `set_position` — Move the MCP bot (or any unit by id) to a position for a better view
 
 ## Coordinate System
@@ -21,7 +29,7 @@ the MCP tools provided by the `enu` server.
        Y = height (0 = ground level)
 ```
 
-Player spawns near origin (0, 0, 0) facing north (-Z). Build your world extending northward.
+Player spawns near origin (0, 0, 0) facing north (-Z). Build northward.
 
 ## Available Colors
 
@@ -35,13 +43,15 @@ In scripts: `black`, `brown`, `red`, `green`, `blue`, `white` (lowercase enum va
 <level-dir>/
   level.json          — load order for scripted objects (auto-managed)
   data/
-    <build_id>/
-      <build_id>.json — voxel data (position + block edits)
+    <id>/
+      <id>.json       — voxel data (position + block edits)
   scripts/
-    <build_id>.nim    — optional Nim script for a build or bot
+    <id>.nim          — optional Nim script for a build or bot
 ```
 
-## Voxel Data Format (data/<id>/<id>.json)
+Bot IDs start with `bot_`, build IDs with `build_`.
+
+## Voxel Data Format (`data/<id>/<id>.json`)
 
 ```json
 {
@@ -64,144 +74,75 @@ In scripts: `black`, `brown`, `red`, `green`, `blue`, `white` (lowercase enum va
 - Edit coordinates are **local** to the origin
 - `[1, "COLOR"]` = place voxel; `[0, ""]` = erase voxel
 - `start_color` sets the default color (used by scripted builds)
+- For scripted builds/bots with no static voxels, use `"edits": {"build_name": []}`
 
 ## Creating a Static Build (JSON only)
 
 1. Create `data/<name>/` directory
 2. Write `data/<name>/<name>.json` with voxel edits
-3. **No entry needed in level.json** — static builds load automatically from data/
+3. **No entry in `level.json`** — static builds load automatically
 
-## Creating a Scripted Build (Nim script)
+## Creating a Scripted Build or Bot
 
-1. Create `data/<name>/<name>.json` — sets position and start_color
-2. Create `scripts/<name>.nim` — Nim script that procedurally builds
+1. Create `data/<name>/<name>.json` — sets position and `start_color`
+2. Create `scripts/<name>.nim` — the Nim script
 3. Add `<name>` to `level.json`'s load order array
 
-## Hot-Reload Pattern
+## Hot-Reload
 
 Enu watches JSON files for changes every ~2 seconds. After editing:
 
 1. Write all files
 2. `touch` them to ensure a newer mtime
-3. Wait 4–5 seconds
-4. Take a screenshot to verify
+3. Wait 4–5 seconds, then take a screenshot to verify
 
-For a guaranteed full reload (also reloads vmlib/API changes):
+For a guaranteed full reload (also picks up vmlib/API changes):
 ```nim
 press_action("save_and_reload")
 ```
 
-## Scripting Quick Reference
+---
 
-### Build scripts (procedural voxel drawing)
+## Build Scripts (procedural drawing)
 
 ```nim
-speed = 0          # build instantly
-color = red        # set draw color
-drawing = true     # enable voxel placement (default true for builds)
+speed = 0          # build instantly (default for scripted builds)
+color = brown      # set draw color
+drawing = true     # enable voxel placement (true by default for builds)
 
 # Movement (draws voxels while moving)
 forward 10         # draw 10 voxels forward
-right 5            # draw 5 voxels right
-up 3               # draw 3 voxels up
+right 5
+up 3
 turn right         # turn 90 degrees right
-turn left          # turn 90 degrees left
+turn left
 turn 45.0          # turn by degrees
-lean back, 30      # tilt forward 30 degrees
+lean back, 30      # tilt 30 degrees
 
 # Loops
-5.times:           # repeat 5 times
+5.times:
   forward 3
   turn right
-10.times(i):       # with index variable
-  forward i.float
 
-# Random values
+10.times(i):       # with index
+  forward i.float
+  up 1
+
+# Randomness
 color = random(red, green, blue)
-forward 3 .. 8     # random int in range
-turn -30.0 .. 30.0 # random float in range
-if 1 in 3:         # 1-in-3 chance
+forward 3 .. 8        # random int in range
+turn -30.0 .. 30.0    # random float in range
+if 1 in 3:            # 1-in-3 chance
   color = white
 
-# Save/restore position
-save()             # save current position and orientation
-restore()          # restore saved position
-
-# Switch to move mode (after building)
-move me
-speed = 5
-forward 10         # moves the build object, doesn't draw
+# Save and restore position/orientation
+save()
+restore()
 ```
 
-### Bot scripts (navigation and behavior)
+## Block Placement Helpers
 
-```nim
-color = green
-speed = 3
-
-forward 10         # walk forward
-turn right         # turn
-turn player        # face the player
-say "Hello!"       # show speech bubble
-say "Short text", "# Full markdown sign\n\nMore details..."
-
-# State machine
-loop:
-  nil -> wander
-  wander -> chase if player.near(10)
-  chase -> caught if player.near(3)
-
--wander:
-  forward 3 .. 8
-  turn -45 .. 45
-
--chase:
-  turn player
-  forward 5
-
--caught:
-  say "Got you!"
-  sleep 2
-```
-
-### Named prototypes (reusable builds)
-
-```nim
-# In the build's script:
-name tower(height = 10, sides = 4)
-speed = 0
-height.times:
-  sides.times:
-    forward 10
-    turn 360 / sides
-  up 1
-
-# In another script, create instances:
-tower.new(height = 20, sides = 6, color = blue)
-```
-
-### Animated builds (state machine)
-
-```nim
-name Door(open = false, width = 20, height = 11)
-speed = 0
-height.times:
-  right width
-  turn 180
-  up 1
-
-move me
-speed = 5
-
-loop:
-  nil -> sleep as door_closed
-  if open:
-    door_closed -> left(home + width) as door_open
-  else:
-    door_open -> right(home) as door_closed
-```
-
-### Block placement helpers (use inside build scripts)
+Use these inside build scripts for direct coordinate-based placement:
 
 ```nim
 # Place a single block at local integer coords
@@ -217,52 +158,195 @@ fill_sphere(cx, cy, cz, radius, color)
 fill_cylinder(cx, y1, y2, cz, radius, color)
 
 # Examples:
-fill_box(0, 0, 0, 9, 7, 0, brown)        # 10×8 wall
-fill_box(0, 0, 0, 9, 0, 9, brown)        # 10×10 floor
-fill_sphere(5, 5, 5, 4.0, green)         # sphere canopy
-fill_cylinder(5, 0, 8, 5, 3.0, brown)   # round tower
+fill_box(0, 0, 0, 9, 0, 9, brown)         # 10×10 floor
+fill_box(0, 0, 0, 9, 5, 0, brown)         # 10×6 wall
+fill_sphere(5, 5, 5, 4.0, green)          # sphere canopy
+fill_cylinder(5, 0, 8, 5, 3.0, brown)    # round tower
+fill_box(2, 1, 2, 7, 1, 7, black)        # hollow out a floor area
 ```
 
-## Python Voxel Generator (alternative)
+After drawing, switch to move mode to animate or reposition:
+```nim
+move me
+speed = 5
+forward 10    # moves the build object, doesn't draw
+```
 
-Use Python to generate complex structures as JSON:
+## Named Prototypes (reusable builds)
 
-```python
-import json, os
+```nim
+# Define a reusable prototype in a build script:
+name tower(height = 10, color = brown)
+speed = 0
 
-LEVEL_DIR = "<level_dir>"  # from get_level_dir MCP tool
+# Skip the prototype definition itself (only draw for instances):
+if not is_instance:
+  show = false
+  quit()
 
-def write_build(name, origin, edits, color="BROWN"):
-    data = {
-        "id": name,
-        "start_transform": {
-            "basis": [[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]],
-            "origin": [float(origin[0]), float(origin[1]), float(origin[2])]
-        },
-        "start_color": color,
-        "edits": {name: edits}
-    }
-    path = os.path.join(LEVEL_DIR, "data", name, name + ".json")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f)
+color = color
+height.times:
+  fill_box(0, 0, 0, 3, 0, 3, color)
+  up 1
 
-def vox(x, y, z, color="BROWN"):
-    return [[float(x), float(y), float(z)], [1, color]]
+# Instantiate from any other script:
+tower.new(height = 20, color = red)
+tower.new(height = 15, color = blue, position = vec3(20, 0, -10))
+```
 
-def erase(x, y, z):
-    return [[float(x), float(y), float(z)], [0, ""]]
+## Animated Builds (state machine)
 
-# Example: 5x5x5 cube
-edits = [vox(x, y, z) for x in range(5) for y in range(5) for z in range(5)]
-write_build("build_my_cube", origin=(0, 0, -10), edits=edits, color="RED")
+```nim
+name Door(open = false, width = 20, height = 11)
+speed = 0
+# Drawing phase:
+height.times:
+  right width
+  turn 180
+  up 1
+
+move me     # switch to move mode (sets `home` to current position)
+speed = 5
+
+loop:
+  nil -> sleep as door_closed
+  if open:
+    door_closed -> left(home + width) as door_open
+  else:
+    door_open -> right(home) as door_closed
+```
+
+---
+
+## Bot Scripts
+
+```nim
+color = green
+speed = 3
+lock = true    # prevent player from picking up the bot
+
+forward 10
+turn right
+turn player    # face the player
+turn 45.0
+```
+
+### Say / Signs
+
+```nim
+# Simple speech bubble:
+say "Hello!"
+
+# Bubble + rich text sign (markdown in the second string):
+say "Hello!", """
+  # Greetings
+
+  I am a friendly bot.
+
+  - [Do something](<nim://some_proc()>)
+  - [Next Level](<nim://press_action("next_level")>)
+"""
+
+# Control sign size:
+say overview, details, height = 2, width = 6, size = 610
+
+# Cycle through multiple messages on repeated calls:
+let messages = ["First time!", "Second time!", "Still here."]
+say cycle(messages)
+```
+
+### State Machine
+
+```nim
+loop:
+  nil -> wander                         # start state
+  wander -> chase if player.near(10)    # conditional transition
+  chase -> caught if player.near(3)
+  caught -> wander                      # unconditional (always)
+
+-wander:
+  forward 3 .. 8
+  turn -45.0 .. 45.0
+
+-chase:
+  turn player
+  forward 5
+
+-caught:
+  say "Got you!"
+  sleep 2
+```
+
+State transitions support callbacks and renaming:
+```nim
+wander -> go_home as wander_home if far(start_position, 20)
+(wander, wander_home) ==> chase do:
+  say "I see you!"
+```
+
+### Sensing and Position
+
+```nim
+# Distance checks
+if player.near(5): say "You're close!"
+if player.far(20): turn player
+
+# Exact distance/angle
+let d = distance(player)
+let a = angle_to(player)
+
+# Position math
+let home = position    # save current position
+position = home + vec3(5, 0, 0)   # move east 5 units
+```
+
+### Iterating Units
+
+```nim
+for b in Bot.all:
+  echo b.id
+
+# Find a specific bot created after a point in time:
+let before = frame_created
+some_action()
+for b in Bot.all:
+  if b.frame_created > before:
+    echo "new bot: ", b.id
+```
+
+---
+
+## Scripting Utilities
+
+```nim
+# Console output (read with get_console MCP tool)
+echo "position: ", position
+echo "level: ", level_name()
+
+# Timing
+sleep 1.0
+let t = now()
+# ...do stuff...
+echo "elapsed: ", now() - t
+
+# Nim standard library is available:
+import math
+let angle = sin(0.5) * 180.0 / PI
 ```
 
 ## Eval Tips
 
-`eval` runs Nim code globally (not inside any unit). Useful for:
-- Checking positions: `echo Player.first.position` → see with `get_console`
-- Level info: `echo level_name()`
-- Reloading: `load_level("level-name")`
+`eval` runs Nim code globally (not inside any unit):
 
-Cannot be used to directly create builds (requires unit script context).
+```nim
+# Check a unit's position:
+echo Player.first.position        # → see with get_console
+echo Bot.all.len
+echo level_name()
+
+# Trigger a reload:
+load_level("level-name")
+press_action("save_and_reload")
+```
+
+Cannot be used to directly create builds or call unit-specific procs like `forward`.

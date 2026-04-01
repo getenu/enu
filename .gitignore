@@ -41,6 +41,7 @@ nimble.paths
 
 *.previous
 .claude/
+!vmlib/**/default/template/.claude/
 deps/
 nimbledeps/
 nim.cfg
