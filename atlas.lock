@@ -15,7 +15,7 @@
     "ed.getenu.github.com": {
       "dir": "$deps/ed.getenu.github.com",
       "url": "https://github.com/getenu/ed",
-      "commit": "bbf8a562735bc1447a4e253eb50f3c864246d535",
+      "commit": "10b7b5d4a583627af6dcf75e5537783610a43025",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {

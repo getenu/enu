@@ -68,6 +68,7 @@ gdobj Game of Node:
     script_controller: ScriptController
     left_stick: VirtualJoystick
     mcp_camera_node: Camera
+    mcp_viewport_node: Viewport
 
   method process*(delta: float) =
     Ed.thread_ctx.tick
@@ -416,10 +417,18 @@ gdobj Game of Node:
       assert not state.nodes.data.is_nil
       self.scaled_viewport =
         self.get_node("ViewportContainer/Viewport") as Viewport
+      self.mcp_viewport_node = gdnew[Viewport]()
+      self.mcp_viewport_node.name = "McpViewport"
+      self.mcp_viewport_node.size = vec2(640, 360)
+      self.mcp_viewport_node.render_target_update_mode = UPDATE_ALWAYS
+      self.add_child(self.mcp_viewport_node)
+      self.mcp_viewport_node.world = self.scaled_viewport.find_world()
       self.mcp_camera_node = gdnew[Camera]()
       self.mcp_camera_node.name = "McpCamera"
-      self.get_tree.root.add_child(self.mcp_camera_node)
+      self.mcp_viewport_node.add_child(self.mcp_camera_node)
+      self.mcp_camera_node.make_current()
       state.mcp_camera = self.mcp_camera_node
+      state.mcp_viewport = self.mcp_viewport_node
       state.screenshot_viewport = self.scaled_viewport
 
       self.bind_signals(self.get_viewport(), "size_changed")
