@@ -19,12 +19,7 @@ lock = true    # prevents player from picking up the bot
 turn player
 say "Hello!"
 
-# Or a state machine:
-loop:
-  nil -> idle
-  idle -> follow if player.near(8)
-  follow -> idle if player.far(15)
-
+# Or a state machine (define state procs BEFORE the loop):
 -idle:
   forward 2 .. 5
   turn -45.0 .. 45.0
@@ -32,6 +27,13 @@ loop:
 -follow:
   turn player
   forward 3
+
+loop:
+  nil -> idle
+  if player.near(8):
+    idle -> follow
+  if player.far(15):
+    follow -> idle
 ```
 
 ### Signs and dialog

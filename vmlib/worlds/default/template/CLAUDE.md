@@ -258,12 +258,7 @@ say cycle(messages)
 ### State Machine
 
 ```nim
-loop:
-  nil -> wander                         # start state
-  wander -> chase if player.near(10)    # conditional transition
-  chase -> caught if player.near(3)
-  caught -> wander                      # unconditional (always)
-
+# State procs must be defined BEFORE the loop:
 -wander:
   forward 3 .. 8
   turn -45.0 .. 45.0
@@ -275,11 +270,20 @@ loop:
 -caught:
   say "Got you!"
   sleep 2
+
+loop:
+  nil -> wander                  # start state
+  if player.near(10):
+    wander -> chase              # conditional transition (use if, not inline)
+  if player.near(3):
+    chase -> caught
+  caught -> wander               # unconditional (always)
 ```
 
 State transitions support callbacks and renaming:
 ```nim
-wander -> go_home as wander_home if far(start_position, 20)
+if far(start_position, 20):
+  wander -> go_home as wander_home
 (wander, wander_home) ==> chase do:
   say "I see you!"
 ```
