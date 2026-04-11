@@ -93,6 +93,7 @@ const
   FORWARD* = vec3(0, 0, -1)
   RIGHT* = vec3(1, 0, 0)
   LEFT* = vec3(-1, 0, 0)
+  UNSET_POSITION* = vec3(float.high, float.high, float.high)
 
 # math from https://github.com/pragmagic/godot-nim/blob/7fb22f69af92aa916e56dba14ba3938fc7fa1dd1/godot/core/godotbase.nim
 

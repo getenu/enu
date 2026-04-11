@@ -33,6 +33,10 @@ proc quit*(code = 0, msg = "") =
 proc `position=`*(self: Unit, position: Vector3) =
   self.position_set(position)
 
+proc apply_position*(self: Unit, position: Vector3) =
+  if position.x != float.high:
+    self.position = position
+
 proc `position=`*(self: Unit, unit: Unit) =
   self.position_set(unit.position)
 

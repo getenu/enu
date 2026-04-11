@@ -81,7 +81,7 @@ proc setup_mock_functions(interp: Interpreter) =
 
   # Mock exit
   interp.implement_routine pkg,
-    "base_bridge_private",
+    "base_bridge",
     "exit_impl",
     proc(args: VmArgs) =
       let code = args.get_int(0)
@@ -139,6 +139,59 @@ proc setup_mock_functions(interp: Interpreter) =
         # Increment by small amount each call to simulate time passing
         test_start_time += 0.001
         args.set_result(test_start_time)
+
+  # Mocks needed for load_enu_script tests with Build classes
+
+  # Mock local_position - returns zero vector (tuple[x,y,z: float])
+  interp.implement_routine pkg,
+    "base_bridge",
+    "local_position_impl",
+    proc(args: VmArgs) =
+      var v = nkTupleConstr.new_tree
+      v.add new_float_node(nkFloatLit, 0.0)
+      v.add new_float_node(nkFloatLit, 0.0)
+      v.add new_float_node(nkFloatLit, 0.0)
+      args.set_result(v)
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "new_instance_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "exec_instance_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "wake_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "speed_set_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "global_set_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "color_set_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge",
+    "show_set_impl",
+    proc(args: VmArgs) = discard
+
+  interp.implement_routine pkg,
+    "base_bridge_private",
+    "position_set_impl",
+    proc(args: VmArgs) = discard
 
 proc run_test_script(script_path: string): TestResult =
   result.name = script_path.extract_filename.change_file_ext("")

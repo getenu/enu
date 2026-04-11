@@ -22,7 +22,7 @@ proc params_to_ident_defs(nodes: seq[NimNode]): seq[NimNode] =
   for node in nodes:
     let node = node.copy_nim_tree
     let prop = node[0]
-    if prop.str_val notin ["global", "speed", "color"]:
+    if prop.str_val notin ["global", "speed", "color", "position"]:
       if node.kind == nnkExprEqExpr:
         result.add nnkIdentDefs.new_tree(node[0], new_empty_node(), node[1])
       elif node.kind == nnkExprColonExpr:
@@ -38,7 +38,7 @@ proc params_to_properties(nodes: seq[NimNode]): NimNode =
   for node in nodes:
     let node = node.copy_nim_tree
     let prop = node[0]
-    if prop.str_val notin ["global", "speed", "color"]:
+    if prop.str_val notin ["global", "speed", "color", "position"]:
       if node.kind == nnkExprEqExpr:
         result.add nnkIdentDefs.new_tree(
           node[0], new_call(ident"type", node[1]), empty
@@ -56,7 +56,7 @@ proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
   for node in nodes:
     let node = node.copy_nim_tree
     let getter = node[0]
-    if getter.str_val notin ["global", "speed", "color"]:
+    if getter.str_val notin ["global", "speed", "color", "position"]:
       let setter = ident(getter.str_val & "=")
       let typ =
         if node.kind == nnkExprEqExpr:
@@ -116,6 +116,12 @@ proc build_ctors(
   ctor_body.add quote do:
     if `color` != `eraser`:
       result.color = `color`
+
+  var position = "position".ident
+  if "position" notin var_names:
+    params &= new_ident_defs(position, new_empty_node(), ident"UNSET_POSITION")
+  ctor_body.add quote do:
+    apply_position(result, `position`)
 
   ctor_body.add quote do:
     exec_instance(result)
