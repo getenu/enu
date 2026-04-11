@@ -8,9 +8,9 @@ Steps:
 3. Pick a unique file ID: `build_<name_lowercase>` (e.g., `build_tower`)
 4. Create `LEVEL_DIR/data/<id>/<id>.json` with a world origin and `start_color`
 5. Write `LEVEL_DIR/scripts/<id>.nim` defining the prototype
-6. Add `<id>` to `level.json`
-7. Instantiate it from another script (or from `eval`)
-8. Touch files, wait 5 seconds, `screenshot` to verify
+6. Touch both files — Enu auto-detects the prototype
+7. Create the instantiating script and touch it too
+8. Wait 5 seconds, `screenshot` to verify
 
 ### Prototype script pattern
 
@@ -37,7 +37,7 @@ height.times:
 From any other script:
 ```nim
 Tower.new(height = 20, color = red)
-Tower.new(height = 10, color = blue)
+Tower.new(height = 10, color = blue, position = vec3(20, 0, -10))
 ```
 
 Or from `eval` (for testing):

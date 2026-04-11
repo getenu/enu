@@ -86,7 +86,7 @@ Bot IDs start with `bot_`, build IDs with `build_`.
 
 1. Create `data/<name>/<name>.json` — sets position and `start_color`
 2. Create `scripts/<name>.nim` — the Nim script
-3. Add `<name>` to `level.json`'s load order array
+3. Touch both files — Enu auto-detects and loads them (`level.json` is auto-managed)
 
 ## Hot-Reload
 
@@ -223,7 +223,7 @@ loop:
 ```nim
 color = green
 speed = 3
-lock = true    # prevent player from picking up the bot
+
 
 forward 10
 turn right
@@ -282,7 +282,7 @@ loop:
 
 State transitions support callbacks and renaming:
 ```nim
-if far(start_position, 20):
+if start_position.far(20):
   wander -> go_home as wander_home
 (wander, wander_home) ==> chase do:
   say "I see you!"

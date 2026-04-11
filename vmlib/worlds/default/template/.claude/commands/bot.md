@@ -5,15 +5,13 @@ Steps:
 2. Pick a unique ID: `bot_<descriptive_name>` (lowercase, no spaces)
 3. Create `LEVEL_DIR/data/<id>/<id>.json` — set `origin` to the world spawn position, `start_color`, and `"edits": {"<id>": []}`
 4. Write `LEVEL_DIR/scripts/<id>.nim` with the bot's behavior
-5. Add `<id>` to `level.json`'s load order array
-6. Touch all modified files, wait 5 seconds, `screenshot` to verify
+5. Touch all files, wait 5 seconds, `screenshot` to verify (Enu auto-detects and loads them)
 
 ### Bot script structure
 
 ```nim
 color = green
 speed = 3
-lock = true    # prevents player from picking up the bot
 
 # Simple behavior:
 turn player
