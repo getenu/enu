@@ -1,4 +1,4 @@
-import std/[locks, os, random, net, json, jsonutils]
+import std/[locks, os, random, net, json, jsonutils, strutils]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
 import core, models, models/serializers, libs/[interpreters, eval]
@@ -382,7 +382,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       code: string
   ): tuple[result: string, error: string] {.gcsafe.} =
     try:
-      (worker.eval(state.player, code).get(""), "")
+      let indented = code.split_lines.map_it("  " & it).join("\n")
+      let wrapped = "(block:\n" & indented & "\n)"
+      (worker.eval(state.player, wrapped).get(""), "")
     except VMQuit as e:
       (
         "",
