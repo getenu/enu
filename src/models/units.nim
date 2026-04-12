@@ -127,6 +127,9 @@ method destroy*(self: Unit) {.base, gcsafe.} =
   fail "override me"
 
 proc destroy_impl*(self: Bot | Build | Sign) =
+  if self.is_destroyed:
+    return
+  self.is_destroyed = true
   assert ?self
 
   let units = self.units.value
@@ -147,11 +150,14 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   else:
     self.shared = nil
 
+  for zid in self.eids:
+    Ed.thread_ctx.untrack zid
+  self.eids = @[]
+
   let parent = self.parent
   self.parent = nil
   for field in self[].fields:
     when field is Ed:
-      # :(
       if ?field and not field.destroyed:
         field.destroy
 

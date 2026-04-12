@@ -257,6 +257,7 @@ type
     sight_ray*: RayCast
     frame_created*: int
     eids* {.ed_ignore.}: seq[EID]
+    is_destroyed* {.ed_ignore.}: bool
     errors*: ScriptErrors
     current_line_value*: EdValue[int]
     sight_query_value*: EdValue[SightQuery]

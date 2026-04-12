@@ -21,6 +21,7 @@ gdobj BotNode of KinematicBody:
     animation_player: AnimationPlayer
     transform_zid: EID
     pending_mcp_screenshot: McpQuery
+    pending_mcp_screenshot_delay: int
     pending_mcp_hide: Spatial
 
   proc update_material*(value: Material) =
@@ -190,28 +191,31 @@ gdobj BotNode of KinematicBody:
       let bot = Bot(self.model)
       if EPHEMERAL in bot.global_flags:
         if self.pending_mcp_screenshot.kind != MCP_BLANK:
-          let is_player =
-            ?state.player and
-            self.pending_mcp_screenshot.unit_id == state.player.id
-          let vp =
-            if is_player: Viewport(state.screenshot_viewport)
-            else: Viewport(state.mcp_viewport)
-          let img = vp.get_texture.get_data
-          if not self.pending_mcp_hide.is_nil:
-            self.pending_mcp_hide.visible = true
-            self.pending_mcp_hide = nil
-          img.flip_y
-          inc state.screenshot_counter
-          let path =
-            get_temp_dir() /
-            ("enu_screenshot_" & $state.screenshot_counter & ".png")
-          discard img.save_png(path)
-          info "mcp screenshot captured", path
-          var pq = self.pending_mcp_screenshot
-          pq.result = path
-          pq.state = MCP_DONE
-          bot.mcp_query = pq
-          self.pending_mcp_screenshot = McpQuery()
+          if self.pending_mcp_screenshot_delay > 0:
+            dec self.pending_mcp_screenshot_delay
+          else:
+            let is_player =
+              ?state.player and
+              self.pending_mcp_screenshot.unit_id == state.player.id
+            let vp =
+              if is_player: Viewport(state.screenshot_viewport)
+              else: Viewport(state.mcp_viewport)
+            let img = vp.get_texture.get_data
+            if not self.pending_mcp_hide.is_nil:
+              self.pending_mcp_hide.visible = true
+              self.pending_mcp_hide = nil
+            img.flip_y
+            inc state.screenshot_counter
+            let path =
+              get_temp_dir() /
+              ("enu_screenshot_" & $state.screenshot_counter & ".png")
+            discard img.save_png(path)
+            info "mcp screenshot captured", path
+            var pq = self.pending_mcp_screenshot
+            pq.result = path
+            pq.state = MCP_DONE
+            bot.mcp_query = pq
+            self.pending_mcp_screenshot = McpQuery()
         else:
           let q = bot.mcp_query
           if q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
@@ -220,6 +224,7 @@ gdobj BotNode of KinematicBody:
               ?state.player and q.unit_id == state.player.id
             if use_player_vp:
               self.pending_mcp_screenshot = q
+              self.pending_mcp_screenshot_delay = 0
             else:
               let target_id =
                 if q.unit_id == "": bot.id else: q.unit_id
@@ -237,15 +242,19 @@ gdobj BotNode of KinematicBody:
                 let cam = Camera(state.mcp_camera)
                 let target_spatial = Spatial(found.node)
                 var t = target_spatial.global_transform
+                info "mcp screenshot positioning camera",
+                  unit_id = target_id, origin = t.origin, pitch = q.pitch
                 t.origin += vec3(0, 0.8, 0)
                 if q.pitch != 0.0:
                   var euler = t.basis.get_euler()
                   euler.x = float32(deg_to_rad(q.pitch))
                   t.basis.set_euler(euler)
                 cam.global_transform = t
+                cam.make_current()
                 target_spatial.visible = false
                 self.pending_mcp_hide = target_spatial
                 self.pending_mcp_screenshot = q
+                self.pending_mcp_screenshot_delay = 0
 
     if ?self.model:
       if self.model.code.owner == state.worker_ctx_name:
