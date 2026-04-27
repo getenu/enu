@@ -5,7 +5,13 @@ import core, models, nodes/[bot_node, build_node, sign_node, player_node]
 
 proc remove_from_scene(unit: Unit) =
   debug "removing unit", unit = unit.id
-  assert ?unit.node
+  if not ?unit.node:
+    # Worker added the unit to its parent's `units` collection, but the
+    # main-thread watcher hadn't run `add_to_scene` yet. Nothing to remove
+    # from the scene tree; just destroy the unit.
+    unit.destroy
+    unit.parent = nil
+    return
   if unit == previous_build:
     previous_build = nil
   if unit == current_build:
