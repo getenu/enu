@@ -429,7 +429,6 @@ gdobj Game of Node:
       self.mcp_camera_node.make_current()
       state.mcp_camera = self.mcp_camera_node
       state.mcp_viewport = self.mcp_viewport_node
-      state.screenshot_viewport = self.scaled_viewport
 
       self.bind_signals(self.get_viewport(), "size_changed")
       self.bind_signals(self.get_tree(), "global_menu_action")

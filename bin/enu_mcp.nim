@@ -79,14 +79,9 @@ proc ensure_connected() =
   elif not bot_ok:
     ensure_bot()
 
-proc run_tool(kind: McpQueryKind, code = "", unit_id = "", pitch = 0.0): string =
+proc run_tool(kind: McpQueryKind, code = ""): string =
   ensure_connected()
-
-  info "run_tool", kind, code = code[0 ..< min(80, code.len)]
-
-  bot.mcp_query = McpQuery(
-    kind: kind, code: code, unit_id: unit_id, pitch: pitch, state: MCP_PENDING
-  )
+  bot.mcp_query = McpQuery(kind: kind, code: code, state: MCP_PENDING)
 
   let start = get_mono_time()
   while true:
@@ -103,14 +98,10 @@ proc run_tool(kind: McpQueryKind, code = "", unit_id = "", pitch = 0.0): string 
 
 let enu_server = mcp_server("enu", "1.0.0"):
   mcp_tool:
-    proc screenshot(unit_id: string = "", pitch: float = 0.0): string =
-      ## Take a screenshot from the perspective of a unit (default: MCP bot).
+    proc screenshot(): string =
+      ## Take a screenshot from the MCP bot's perspective.
       ## Returns the file path to the saved PNG image.
-      ## unit_id: optional unit id. Empty string (default) uses the MCP bot.
-      ##   Pass the player's id for a full viewport screenshot with UI.
-      ## pitch: camera tilt in degrees. Negative = look down, positive = look up.
-      ##   Use -90.0 for a top-down view.
-      run_tool(MCP_SCREENSHOT, unit_id = unit_id, pitch = pitch)
+      run_tool(MCP_SCREENSHOT)
 
   mcp_tool:
     proc get_console(): string =

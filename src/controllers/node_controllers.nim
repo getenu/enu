@@ -51,6 +51,7 @@ proc add_to_scene(unit: Unit) =
       VISIBLE in unit.global_flags and
       (SCRIPT_INITIALIZING notin unit.global_flags)
 
+    info "add_to_scene: adding child", unit_id = unit.id, global = (GLOBAL in unit.global_flags)
     parent_node.add_child(unit.node)
     unit.node.owner = parent_node
     when compiles(node.setup):
@@ -139,6 +140,7 @@ proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
 
 proc watch*(self: NodeController, state: GameState) =
   state.units.changes:
+    info "node_ctrl state.units change", added, removed, id = change.item.id
     if added:
       change.item.add_to_scene()
       self.watch_units(change.item)

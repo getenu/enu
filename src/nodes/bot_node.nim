@@ -20,9 +20,6 @@ gdobj BotNode of KinematicBody:
     mesh: MeshInstance
     animation_player: AnimationPlayer
     transform_zid: EID
-    pending_mcp_screenshot: McpQuery
-    pending_mcp_screenshot_delay: int
-    pending_mcp_hide: Spatial
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -190,71 +187,25 @@ gdobj BotNode of KinematicBody:
     if self.model of Bot:
       let bot = Bot(self.model)
       if EPHEMERAL in bot.global_flags:
-        if self.pending_mcp_screenshot.kind != MCP_BLANK:
-          if self.pending_mcp_screenshot_delay > 0:
-            dec self.pending_mcp_screenshot_delay
-          else:
-            let is_player =
-              ?state.player and
-              self.pending_mcp_screenshot.unit_id == state.player.id
-            let vp =
-              if is_player: Viewport(state.screenshot_viewport)
-              else: Viewport(state.mcp_viewport)
-            let img = vp.get_texture.get_data
-            if not self.pending_mcp_hide.is_nil:
-              self.pending_mcp_hide.visible = true
-              self.pending_mcp_hide = nil
-            img.flip_y
-            inc state.screenshot_counter
-            let path =
-              get_temp_dir() /
-              ("enu_screenshot_" & $state.screenshot_counter & ".png")
-            discard img.save_png(path)
-            info "mcp screenshot captured", path
-            var pq = self.pending_mcp_screenshot
-            pq.result = path
-            pq.state = MCP_DONE
-            bot.mcp_query = pq
-            self.pending_mcp_screenshot = McpQuery()
-        else:
-          let q = bot.mcp_query
-          if q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
-            info "mcp screenshot request received", unit_id = q.unit_id
-            let use_player_vp =
-              ?state.player and q.unit_id == state.player.id
-            if use_player_vp:
-              self.pending_mcp_screenshot = q
-              self.pending_mcp_screenshot_delay = 0
-            else:
-              let target_id =
-                if q.unit_id == "": bot.id else: q.unit_id
-              var found: Unit
-              state.units.value.walk_tree proc(u: Unit) =
-                if u.id == target_id:
-                  found = u
-              if found.is_nil or not ?found.node:
-                info "mcp screenshot unit not found", unit_id = target_id
-                var eq = q
-                eq.error = "Unit not found: " & target_id
-                eq.state = MCP_DONE
-                bot.mcp_query = eq
-              else:
-                let cam = Camera(state.mcp_camera)
-                let target_spatial = Spatial(found.node)
-                var t = target_spatial.global_transform
-                info "mcp screenshot positioning camera",
-                  unit_id = target_id, origin = t.origin, pitch = q.pitch
-                t.origin += vec3(0, 0.8, 0)
-                if q.pitch != 0.0:
-                  var euler = t.basis.get_euler()
-                  euler.x = float32(deg_to_rad(q.pitch))
-                  t.basis.set_euler(euler)
-                cam.global_transform = t
-                cam.make_current()
-                target_spatial.visible = false
-                self.pending_mcp_hide = target_spatial
-                self.pending_mcp_screenshot = q
-                self.pending_mcp_screenshot_delay = 0
+        let q = bot.mcp_query
+        if q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
+          let cam = Camera(state.mcp_camera)
+          var t = self.global_transform
+          t.origin += vec3(0, 0.8, 0)
+          cam.transform = t
+          cam.make_current()
+          info "mcp screenshot positioning camera", origin = t.origin
+          let vp = Viewport(state.mcp_viewport)
+          let img = vp.get_texture.get_data
+          img.flip_y
+          inc state.screenshot_counter
+          let path =
+            get_temp_dir() /
+            ("enu_screenshot_" & $state.screenshot_counter & ".png")
+          discard img.save_png(path)
+          info "mcp screenshot captured", path
+          bot.mcp_query =
+            McpQuery(kind: MCP_SCREENSHOT, result: path, state: MCP_DONE)
 
     if ?self.model:
       if self.model.code.owner == state.worker_ctx_name:

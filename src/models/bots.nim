@@ -184,8 +184,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             info "mcp level query responding", kind = q.kind, id = self.id
             self.mcp_query = q
           of MCP_SCREENSHOT:
-            info "mcp screenshot query forwarding to game thread",
-              unit_id = q.unit_id
+            discard
           of MCP_BLANK:
             discard
         of MCP_DONE:

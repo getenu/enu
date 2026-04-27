@@ -206,6 +206,53 @@ task world_tests,
 
   exec cmd
 
+task mcp_repro,
+  "Build enu, restart it, and run MCP integration tests (repeat N times, default 5)":
+  let
+    params = command_line_params()
+    # parse optional count argument, e.g. `nim mcp_repro 10`
+    count_str = params.filter_it(it.all_chars_in_set({'0'..'9'}))
+    iterations = if count_str.len > 0: count_str[0].parse_int else: 5
+
+  p "Building enu..."
+  exec "nim build"
+
+  p "Killing existing enu processes..."
+  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+  discard gorge_ex("pkill -f enu_mcp || true")
+  exec "sleep 1"
+
+  p &"Starting enu in background..."
+  let godot = godot_bin()
+  exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose scenes/game.tscn > /tmp/enu_repro.log 2>&1 &"
+  exec "sleep 4"
+
+  p &"Running MCP integration tests ({iterations} iterations)..."
+  var pass_count = 0
+  var fail_count = 0
+  for i in 1 .. iterations:
+    echo &"\n--- Iteration {i}/{iterations} ---"
+    let result = gorge_ex(
+      "ENU_CONNECT_ADDRESS=127.0.0.1 nim c -r bin/enu_mcp_test.nim 2>&1"
+    )
+    echo result.output
+    if result.exit_code == 0:
+      inc pass_count
+      echo &"PASS ({pass_count} passed, {fail_count} failed so far)"
+    else:
+      inc fail_count
+      echo &"FAIL ({pass_count} passed, {fail_count} failed so far)"
+      # Stop early once we've reproduced the failure
+      echo "Bug reproduced — stopping."
+      break
+
+  p "Killing enu..."
+  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+
+  echo &"\nResult: {pass_count}/{iterations} passed"
+  if fail_count > 0:
+    quit 1
+
 task test, "run all tests":
   var failed: seq[string]
 

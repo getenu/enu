@@ -10,7 +10,7 @@
 ##   - JSON-RPC ids round-trip correctly
 ##   - Tool results have the expected structure
 
-import std/[osproc, streams, json, strutils, os, times]
+import std/[osproc, streams, json, strutils, os, times, md5]
 import enu_mcp_reconnect_test
 
 type McpSession = object
@@ -381,13 +381,25 @@ proc run_integration_tests() =
       s.close()
     discard s.do_initialize()
     discard s.do_call_tool(
-      "set_position", %*{"x": 0.0, "y": 2.0, "z": -35.0}, timeout_ms = 20000
+      "set_position", %*{"x": 0.0, "y": 1.0, "z": -35.0}, timeout_ms = 20000
     )
-    let shot = s.do_call_tool("screenshot", %*{}, timeout_ms = 20000).tool_text
-    if not shot.ends_with(".png"):
-      echo "FAIL: expected .png, got: " & shot[0 ..< min(100, shot.len)]
+    let shot1 = s.do_call_tool("screenshot", %*{}, timeout_ms = 20000).tool_text
+    if not shot1.ends_with(".png"):
+      echo "FAIL: expected .png, got: " & shot1[0 ..< min(100, shot1.len)]
       quit 1
-    echo "(path: " & shot & ") "
+    discard s.do_call_tool(
+      "set_position", %*{"x": 0.0, "y": 50.0, "z": -35.0}, timeout_ms = 20000
+    )
+    let shot2 = s.do_call_tool("screenshot", %*{}, timeout_ms = 20000).tool_text
+    if not shot2.ends_with(".png"):
+      echo "FAIL: expected .png, got: " & shot2[0 ..< min(100, shot2.len)]
+      quit 1
+    let hash1 = get_md5(read_file(shot1))
+    let hash2 = get_md5(read_file(shot2))
+    if hash1 == hash2:
+      echo "FAIL: screenshots from y=1 and y=50 are identical (camera not updating)"
+      quit 1
+    echo "(images differ) "
 
   test "set_position: 3 sequential moves":
     var s = open_session()
@@ -402,6 +414,30 @@ proc run_integration_tests() =
       if text.starts_with("Error"):
         echo "FAIL: move to (" & $x & "," & $y & "," & $z & "): " & text
         quit 1
+
+  test "10 sequential move+screenshot pairs all show distinct images":
+    var s = open_session()
+    defer:
+      s.close()
+    discard s.do_initialize()
+    let ys = [1.0, 10.0, 20.0, 5.0, 40.0, 2.0, 30.0, 8.0, 15.0, 50.0]
+    var prev_hash = ""
+    for i, y in ys:
+      discard s.do_call_tool(
+        "set_position", %*{"x": 0.0, "y": y, "z": -35.0}, timeout_ms = 20000
+      )
+      let shot = s.do_call_tool("screenshot", %*{}, timeout_ms = 20000).tool_text
+      if not shot.ends_with(".png"):
+        echo "FAIL: screenshot " & $i & " expected .png, got: " &
+          shot[0 ..< min(80, shot.len)]
+        quit 1
+      let hash = get_md5(read_file(shot))
+      if hash == prev_hash:
+        echo "FAIL: screenshot " & $i & " (y=" & $y &
+          ") identical to previous (camera not updating)"
+        quit 1
+      prev_hash = hash
+    echo "(10 distinct images) "
 
   test "stress: 25 alternating screenshot+eval calls all complete":
     var s = open_session()
