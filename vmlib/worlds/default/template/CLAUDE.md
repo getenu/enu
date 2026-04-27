@@ -12,8 +12,7 @@ the MCP tools provided by the `enu` server.
 
 ## MCP Tools Available
 
-- `screenshot` — Take a screenshot from the MCP bot's POV. Optional `unit_id` for
-  another unit's view; optional `pitch` in degrees (e.g. `-90` for top-down)
+- `screenshot` — Take a screenshot from the MCP bot's POV
 - `eval` — Run Nim code in the Enu scripting context. Output goes to `get_console`
 - `get_console` — Get recent Enu console output (use after `eval` to see results)
 - `get_level_dir` — Returns the absolute path to the current level directory
