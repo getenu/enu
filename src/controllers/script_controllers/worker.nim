@@ -11,8 +11,11 @@ var
 worker_lock.init_lock
 work_done.init_cond
 
-proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
-  ## Convert CatchableError to VMQuit and display in console with stack trace
+proc handle_catchable_error(self: Worker, unit: Unit, e: ref Exception) =
+  ## Convert host-side exception to VMQuit and display in console.
+  ## Accepts Defect as well as CatchableError so VM-level bugs (e.g.
+  ## IndexDefect from corrupted register frames after module reset) don't
+  ## crash the worker thread.
   let ctx = unit.script_ctx
   let info =
     if ?ctx:
@@ -85,6 +88,12 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       self.interpreter.reset_module(unit.script_ctx.module_name)
       self.script_error(unit, e)
     except CatchableError as e:
+      self.handle_catchable_error(unit, e)
+    except Defect as e:
+      # Bytecode-level defects (e.g. IndexDefect inside vm.nim from a
+      # corrupted register frame after module reset) are bugs in the VM/script
+      # path, not the host. Treat them as script errors so a single bad script
+      # doesn't take down the worker thread.
       self.handle_catchable_error(unit, e)
     finally:
       self.active_unit = nil

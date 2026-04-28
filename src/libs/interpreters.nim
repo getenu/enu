@@ -104,6 +104,10 @@ proc call_proc*(
       self.running = false
       self.exit_code = some(99)
       raise
+    except Defect:
+      self.running = false
+      self.exit_code = some(99)
+      raise
 
 proc get_var*(self: ScriptCtx, var_name: string, module_name: string): PNode =
   let sym =
@@ -124,6 +128,10 @@ proc resume*(self: ScriptCtx): bool =
     except VMPause:
       self.exit_code.is_none
     except CatchableError:
+      self.running = false
+      self.exit_code = some(99)
+      raise
+    except Defect:
       self.running = false
       self.exit_code = some(99)
       raise
