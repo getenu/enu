@@ -15,9 +15,9 @@ export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 # is in `camelCase` rather than `snake_case` like the rest of the project.
 
 # adapted from
-# https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
-# Normal module loading procedure, but makes PContext a param so it can be
-# passed to extend_module
+# https://github.com/nim-lang/Nim/blob/v2.2.10/compiler/pipelines.nim#L94
+# (was originally based on v2.0.2). Normal module loading procedure, but makes
+# PContext a param so it can be passed to extend_module.
 # Recursive proc to find import statements in AST
 proc getImports(n: PNode, result: var seq[PNode]) =
   if n.kind in {nkImportStmt, nkFromStmt}:
@@ -39,7 +39,7 @@ proc processModule*(
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
-    p: Parser
+    p: Parser = default(Parser)
     s: PLLStream
     fileIdx = module.fileIdx
 
@@ -252,7 +252,8 @@ proc node_to_str(n: PNode): string =
     renderTree(n, {renderNoComments})
 
 # adapted from
-# https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
+# https://github.com/nim-lang/Nim/blob/v2.2.10/compiler/pipelines.nim#L94
+# (was originally based on v2.0.2).
 proc extendModule*(
     graph: ModuleGraph,
     module: PSym,
@@ -265,7 +266,7 @@ proc extendModule*(
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
-    p: Parser
+    p: Parser = default(Parser)
     s = stream
     fileIdx = module.fileIdx
 

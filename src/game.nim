@@ -163,8 +163,9 @@ gdobj Game of Node:
         get_screen_dpi(-1).float / 96.0
 
     var args = get_cmdline_args().to_seq
-    let work_dir =
-      if (let i = args.find("--temp-workdir"); i) > -1:
+    let work_dir = block:
+      let i = args.find("--temp-workdir")
+      if i > -1:
         args.delete(i)
         let temp = get_temp_dir() / ("enu-test-" & $get_current_process_id())
         create_dir temp
@@ -197,27 +198,37 @@ gdobj Game of Node:
     var level_dir_override = ""
     var test_mode = false
 
-    if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
-      connect_address_override = args[i + 1]
-      args.delete(i .. i + 1)
-    if (let i = args.find("--listen"); i) > -1:
-      if args.len > i + 1:
-        listen_address_override = args[i + 1]
+    block:
+      let i = args.find("--connect")
+      if i > -1 and args.len > i + 1:
+        connect_address_override = args[i + 1]
         args.delete(i .. i + 1)
-      else:
-        listen_address_override = "0.0.0.0"
+    block:
+      let i = args.find("--listen")
+      if i > -1:
+        if args.len > i + 1:
+          listen_address_override = args[i + 1]
+          args.delete(i .. i + 1)
+        else:
+          listen_address_override = "0.0.0.0"
+          args.delete(i)
+    block:
+      let i = args.find("--level-dir")
+      if i > -1 and args.len > i + 1:
+        level_dir_override = args[i + 1]
+        args.delete(i .. i + 1)
+    block:
+      let i = args.find("--enu-test")
+      if i > -1:
+        test_mode = true
         args.delete(i)
-    if (let i = args.find("--level-dir"); i) > -1 and args.len > i + 1:
-      level_dir_override = args[i + 1]
-      args.delete(i .. i + 1)
-    if (let i = args.find("--enu-test"); i) > -1:
-      test_mode = true
-      args.delete(i)
-    if (let i = args.find("--level"); i) > -1:
-      let parts = args[i + 1].split("/")
-      uc.world = some(parts[0])
-      uc.level = some(parts[1])
-      args.delete(i .. i + 1)
+    block:
+      let i = args.find("--level")
+      if i > -1:
+        let parts = args[i + 1].split("/")
+        uc.world = some(parts[0])
+        uc.level = some(parts[1])
+        args.delete(i .. i + 1)
 
     if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address_override:
       listen_address_override = get_env("ENU_LISTEN_ADDRESS")
