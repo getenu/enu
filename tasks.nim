@@ -163,6 +163,9 @@ task unit_tests, "run unit tests":
 task vm_tests, "run VM script tests":
   exec "nim c -r tests/vm/runner"
 
+task instance_tests, "run heavy-instancing repro for the VM IndexDefect":
+  exec "nim c -r tests/vm/instance_runner"
+
 task godot_tests, "run godot tests":
   exec "nim c tests/godot/tnode_factories"
   cd "tests/godot/app"
