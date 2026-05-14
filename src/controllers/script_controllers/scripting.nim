@@ -4,7 +4,7 @@ import pkg/godot except print
 import pkg/compiler/ast except new_node
 import
   pkg/compiler/
-    [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents]
+    [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents, vm]
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, units, signs, players]
@@ -13,6 +13,76 @@ import ./vars
 
 type ScriptCycleError* = object of VMQuit
   scripts*: seq[string]
+
+# Counts nested host -> VM -> host -> VM re-entries from exec_instance.
+# Lets us correlate defects with re-entry depth.
+var rawExecute_depth* {.threadvar.}: int
+
+proc dump_vm_state_on_defect*(unit: Unit, e: ref Exception) =
+  ## Capture as much VM state as possible at the moment the Defect was
+  ## caught. The frame state is mutated by reset_module and subsequent
+  ## error handling, so this has to happen FIRST.
+  private_access ScriptCtx
+  let ctx = unit.script_ctx
+  if ctx.is_nil:
+    info "DEFECT_DUMP no script_ctx", msg = e.msg, unit = unit.id
+    return
+  let c = ctx.ctx
+  let tos = ctx.tos
+  let pc = ctx.pc
+
+  info "DEFECT_DUMP",
+    msg = e.msg, unit = unit.id, depth = rawExecute_depth, pc
+
+  if c.is_nil or tos.is_nil:
+    info "DEFECT_DUMP no vm state",
+      ctx_nil = c.is_nil, tos_nil = tos.is_nil
+    return
+
+  if pc >= 0 and pc < c.code.len:
+    let instr = c.code[pc]
+    info "DEFECT_DUMP opcode",
+      opcode = $instr.opcode,
+      regA = instr.regA.int,
+      regB = instr.regB.int,
+      regC = instr.regC.int,
+      pc
+
+  var f = tos
+  var level = 0
+  while f != nil:
+    let prc = f.prc
+    let name = if prc.is_nil: "<nil>" else: prc.name.s
+    let pinfo =
+      if prc.is_nil:
+        VmProcInfo(usedRegisters: -1, pc: 0)
+      else:
+        c.procToCodePos.getOrDefault(prc.id, VmProcInfo(usedRegisters: -1))
+    info "DEFECT_DUMP frame",
+      level,
+      prc = name,
+      slots_len = f.slots.len,
+      cached_usedRegisters = pinfo.usedRegisters.int,
+      cached_pc = pinfo.pc.int,
+      comesFrom = f.comesFrom
+    f = f.next
+    inc level
+
+  info "DEFECT_DUMP stack_trace", trace = e.get_stack_trace
+
+  # Bytecode window around the failing pc — useful for diagnosing
+  # future VM defects (which slot index in which opcode blew up).
+  try:
+    var lines = newSeq[string]()
+    let from_pc = max(0, pc - 5)
+    let to_pc = min(c.code.len - 1, pc + 5)
+    for p in from_pc .. to_pc:
+      let i = c.code[p]
+      lines.add $p & ":" & $i.opcode & "/" & $i.regA.int & "/" &
+        $i.regB.int & "/" & $i.regC.int & (if p == pc: "  <==" else: "")
+    info "DEFECT_DUMP bytecode_window", window = lines.join(" | ")
+  except CatchableError as e2:
+    info "DEFECT_DUMP bytecode_window failed", msg = e2.msg
 
 proc init*(
     _: type ScriptCtx,
@@ -240,6 +310,12 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
         unit.ensure_visible
   except VMQuit as e:
     ctx.running = false
+    # If the VMQuit came from interpreters.run wrapping a Defect, the VM
+    # frame state is still intact at this point. Dump it before
+    # reset_module wipes the module's iface — that's our only window to
+    # learn what the bytecode was actually doing when the defect fired.
+    if e.parent != nil:
+      dump_vm_state_on_defect(unit, e.parent)
     self.interpreter.reset_module(unit.script_ctx.module_name)
     if self.retry_failures and e.kind != TIMEOUT:
       info "retrying failed script later",

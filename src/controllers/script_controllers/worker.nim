@@ -94,6 +94,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       # corrupted register frame after module reset) are bugs in the VM/script
       # path, not the host. Treat them as script errors so a single bad script
       # doesn't take down the worker thread.
+      dump_vm_state_on_defect(unit, e)
       self.handle_catchable_error(unit, e)
     finally:
       self.active_unit = nil

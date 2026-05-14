@@ -127,6 +127,9 @@ proc exec_instance(self: Worker, unit: Unit) =
   defer:
     self.active_unit = active
   ctx.timeout_at = get_mono_time() + script_timeout
+  inc rawExecute_depth
+  defer:
+    dec rawExecute_depth
   ctx.running = ctx.call_proc("run_script", self.node_map[unit], true).paused
 
 proc active_unit(self: Worker): Unit =
@@ -354,7 +357,7 @@ proc position_set(self: Unit, position: Vector3) =
 proc speed(self: Unit): float =
   self.speed
 
-const ASAP_VALUE = float.high
+const ASAP_VALUE = 0
 
 proc `speed=`(self: Unit, speed: float) =
   if self of Build and speed == ASAP_VALUE:
