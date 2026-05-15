@@ -13,8 +13,12 @@ bridged_to_host:
   proc block_color_at*(position: Vector3): Colors
   proc begin_asap*(self: Build)
   proc end_asap*(self: Build)
-  proc place_block*(self: Build, position: Vector3, color: Colors)
-    ## Places a MANUAL block at the given position. Used for testing persistence.
+  proc draw_voxel*(self: Build, position: Vector3, color: Colors)
+    ## Paints a COMPUTED block at the given position. Re-runs of the script
+    ## regenerate it, so it isn't persisted to the save file. Used by
+    ## fill_box, fill_sphere, fill_cylinder, and place. For persistent
+    ## placement (eg. user edits via eval, holes for windows) use
+    ## place_block from builds_private, which marks the voxel MANUAL.
 
   proc save_level_now*()
     ## Triggers an immediate level save. Used for testing persistence.
@@ -51,7 +55,7 @@ proc fill_square*(self: Build, length = 1) =
 
 proc place*(self: Build, x, y, z: int, color: Colors) =
   ## Place a single block at local integer coordinates.
-  self.place_block((x.float, y.float, z.float), color)
+  self.draw_voxel((x.float, y.float, z.float), color)
 
 template place*(x, y, z: int, color: Colors) =
   ## Place a single block at local integer coords in a build script.
@@ -62,7 +66,7 @@ proc fill_box*(self: Build, x1, y1, z1, x2, y2, z2: int, color: Colors) =
   for y in min(y1, y2) .. max(y1, y2):
     for x in min(x1, x2) .. max(x1, x2):
       for z in min(z1, z2) .. max(z1, z2):
-        self.place_block((x.float, y.float, z.float), color)
+        self.draw_voxel((x.float, y.float, z.float), color)
 
 template fill_box*(x1, y1, z1, x2, y2, z2: int, color: Colors) =
   ## Fill a box region in a build script.
@@ -78,7 +82,7 @@ proc fill_sphere*(self: Build, cx, cy, cz: int, radius: float, color: Colors) =
         let dy = y - cy
         let dz = z - cz
         if sqrt((dx*dx + dy*dy + dz*dz).float) <= radius:
-          self.place_block((x.float, y.float, z.float), color)
+          self.draw_voxel((x.float, y.float, z.float), color)
 
 template fill_sphere*(cx, cy, cz: int, radius: float, color: Colors) =
   ## Fill a sphere in a build script.
@@ -93,7 +97,7 @@ proc fill_cylinder*(self: Build, cx, y1, y2, cz: int, radius: float, color: Colo
         let dx = x - cx
         let dz = z - cz
         if sqrt((dx*dx + dz*dz).float) <= radius:
-          self.place_block((x.float, y.float, z.float), color)
+          self.draw_voxel((x.float, y.float, z.float), color)
 
 template fill_cylinder*(cx, y1, y2, cz: int, radius: float, color: Colors) =
   ## Fill a vertical cylinder in a build script.

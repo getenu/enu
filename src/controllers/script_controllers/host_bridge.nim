@@ -687,12 +687,20 @@ proc block_color_at(position: Vector3): Colors =
   else:
     ERASER
 
+proc draw_voxel(self: Build, position: Vector3, color: Colors) =
+  ## Paint a COMPUTED voxel. Goes through Build.draw, which only writes to
+  ## local_voxels (not local_edits), so the block is regenerated when the
+  ## script reloads and isn't bloating the save file. Backs fill_box,
+  ## fill_sphere, fill_cylinder, and place.
+  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  self.draw(position, info)
+
 proc place_block(self: Build, position: Vector3, color: Colors) =
-  var info: VoxelInfo
-  info.kind = MANUAL
-  info.color = ACTION_COLORS[color]
+  ## Place a persistent MANUAL voxel. The block is saved to local_edits and
+  ## survives reload. For programmatic block-placement use draw_voxel.
+  let info: VoxelInfo = (MANUAL, ACTION_COLORS[color])
   self.add_voxel(position, info)
-  self.voxels.set_edit(position, info) # Persist as edit for save/reload
+  self.voxels.set_edit(position, info)
 
 proc save_level_now() =
   serializers.save_level(state.config.level_dir, force = true)
@@ -751,7 +759,9 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
-    place_block, save_level_now, reload_unit
+    draw_voxel, save_level_now, reload_unit
+
+  result.bridged_from_vm "builds_private", place_block
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,
