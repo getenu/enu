@@ -1,0 +1,29 @@
+{
+  "id": "build_farm_spawner",
+  "start_transform": {
+    "basis": [
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "origin": [
+      75.0,
+      0.0,
+      -150.0
+    ]
+  },
+  "start_color": "BROWN",
+  "edits": {}
+}

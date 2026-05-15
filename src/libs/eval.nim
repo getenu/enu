@@ -144,6 +144,22 @@ proc processModule*(
   assert graph.pipelinePass == EvalPass
   # Old unusedImports handling logic removed as we processed it above
 
+  # Required: every script's module body must raise VMPause before reaching
+  # here (via exit() at the end of build_code_template.nim.nimf and
+  # bot_code_template.nim.nimf). If a script completes naturally:
+  #   - closePContext below finalizes the PContext and queues generic
+  #     instances (eg. class constructors) into finalNode via
+  #     addCodeForGenerics
+  #   - interpreterCode runs evalStmt+execute on finalNode, which sizes
+  #     tos.slots from the current c.prc.regInfo.len -- often smaller
+  #     than the bytecode the second-execute ends up touching, surfacing
+  #     as cross-script IndexDefects
+  #   - that second-execute also causes spawner scripts to re-run their
+  #     constructor instantiations, producing unbounded unit growth
+  #     (~6.5x over the correct count on the api-test level)
+  # Keeping exit() in the templates is the production fix. Removing it
+  # without first dropping this finalize sequence will re-introduce both
+  # bugs.
   let finalNode = closePContext(graph, ctx, nil)
   discard interpreterCode(bModule, finalNode)
 

@@ -13,3 +13,5 @@ ${imports}
 {.experimental: "overloadable_enums".}
 
 load_enu_script r"${file_name}", Bot
+
+exit()

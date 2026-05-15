@@ -1,0 +1,4 @@
+generated/
+nim.cfg
+project.nim
+project.nimble

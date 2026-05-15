@@ -174,8 +174,28 @@ task godot_tests, "run godot tests":
 
 task world_tests,
   "run in-world tests (headless for server build, dist for dist build)":
+  # Each level here is run in sequence via `--enu-test`. Test mode exits
+  # the process when all scripts settle, with a code derived from script
+  # errors and any signal_test_complete calls from scripts. A non-zero
+  # exit from any level fails the task.
+  #
+  # Add new fixtures here:
+  #   - unit-tests:   bot-driven assertion suite (movement, blocks,
+  #                   serialization).
+  #   - bulk-spawn:   regression test for the "scripts re-execute on
+  #                   close-pass" bug — see src/libs/eval.nim near
+  #                   closePContext. Spawners create a deterministic
+  #                   number of clones; without the exit() workaround
+  #                   in build/bot_code_template, closePContext+
+  #                   interpreterCode re-runs spawner bodies and inflates
+  #                   the unit count. The fixture's build_test_check.nim
+  #                   asserts the count and signal_test_complete(1) on
+  #                   failure.
   let
-    test_level = this_dir() / "vmlib/worlds/tests/unit-tests"
+    test_levels = @[
+      this_dir() / "vmlib/worlds/tests/unit-tests",
+      this_dir() / "vmlib/worlds/tests/bulk-spawn",
+    ]
     params = command_line_params()
     headless = "headless" in params
     use_dist = "dist" in params
@@ -200,14 +220,15 @@ task world_tests,
     else:
       godot_bin()
 
-  let cmd =
-    if use_dist:
-      bin & " --level-dir " & test_level & " --enu-test --temp-workdir"
-    else:
-      "cd app && " & bin & " --level-dir " & test_level &
-        " --enu-test scenes/game.tscn --temp-workdir"
-
-  exec cmd
+  for test_level in test_levels:
+    p &"Running world test: {test_level.split_path.tail}"
+    let cmd =
+      if use_dist:
+        bin & " --level-dir " & test_level & " --enu-test --temp-workdir"
+      else:
+        "cd app && " & bin & " --level-dir " & test_level &
+          " --enu-test scenes/game.tscn --temp-workdir"
+    exec cmd
 
 task mcp_repro,
   "Build enu, restart it, and run MCP integration tests (repeat N times, default 5)":
