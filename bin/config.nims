@@ -11,13 +11,13 @@ patch_file "nph", "phrenderer", "patches/phrenderer"
 --define:
   "chronicles_enabled=on"
 --define:
-  "chronicles_log_level=DEBUG"
+  "chronicles_log_level=INFO"
 --define:
   "chronicles_disabled_topics=publishing"
 --define:
   "chronicles_line_numbers"
 --define:
-  "chronicles_sinks=textlines[nocolors, file]"
+  "chronicles_sinks=textlines[nocolors,file(/tmp/enu_mcp.log,truncate)]"
 --define:
   "ed_partial_subscriber"
 --define:

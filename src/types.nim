@@ -7,6 +7,7 @@ type
     MCP_EVAL
     MCP_GET_CONSOLE
     MCP_GET_LEVEL_DIR
+    MCP_PING
 
   McpQueryState* = enum
     MCP_PENDING

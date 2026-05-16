@@ -184,9 +184,22 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             q.state = MCP_DONE
             info "mcp level query responding", kind = q.kind, id = self.id
             self.mcp_query = q
+          of MCP_PING:
+            q.state = MCP_DONE
+            self.mcp_query = q
           of MCP_SCREENSHOT:
             discard
           of MCP_BLANK:
             discard
         of MCP_DONE:
           info "mcp query done in worker", kind = $q.kind
+
+    # Catch-up: if the agent wrote a query *before* the subscription above
+    # was registered (typical when the bot is brand new), `changes` never
+    # fires for it. Nudge so the handler picks it up.
+    let pending = self.mcp_query
+    if pending.state == MCP_PENDING:
+      var q = pending
+      worker.mcp_update_files_proc()
+      q.state = MCP_READY
+      self.mcp_query = q

@@ -5,12 +5,15 @@ import core, models/[bots, colors]
 
 const
   CLAUDE_ORANGE = col"E8692A"
-  TOOL_TIMEOUT = 10.seconds
+  TOOL_TIMEOUT = 30.seconds
 
 var
   connect_addr = get_env("ENU_CONNECT_ADDRESS", "127.0.0.1")
   bot: Bot
   last_enu_response: MonoTime
+  # Survives reconnects so the new bot lands where the old one was — keeps
+  # things predictable for the agent even when Netty kills our context.
+  last_bot_transform: Option[Transform]
 
 proc bot_id(): string =
   "mcp_bot-" & $Ed.thread_ctx.id
@@ -58,19 +61,20 @@ proc ensure_bot() =
   bot.color = CLAUDE_ORANGE
   bot.global_flags += EPHEMERAL
   units.add(bot)
-  let ready_deadline = get_mono_time() + 5.seconds
-  while READY notin bot.global_flags and get_mono_time() < ready_deadline:
-    Ed.thread_ctx.tick
-    sleep 20
-  if READY in bot.global_flags:
-    last_enu_response = get_mono_time()
+  # Restore the previous bot's position so reconnects are invisible to the
+  # agent. Falls back to (0, 1, 0) on a fresh start so screenshot_at's
+  # transform_value guard doesn't bail out.
+  bot.transform =
+    if last_bot_transform.is_some:
+      last_bot_transform.get
+    else:
+      Transform.init(vec3(0, 1, 0), 0)
+  last_enu_response = get_mono_time()
 
 proc connect() =
   info "connect: subscribing", connect_addr
   Ed.thread_ctx.subscribe(connect_addr)
   ensure_bot()
-
-const STALE_TIMEOUT = 8.seconds
 
 proc reconnect() =
   info "reconnect: creating fresh context"
@@ -81,16 +85,37 @@ proc reconnect() =
   )
   connect()
 
+const PING_TIMEOUT = 0.5.seconds
+
+proc ping_succeeded(): bool =
+  ## Active heartbeat. Cheap when alive (~10-20ms), bounded when dead.
+  ## Definitive: a response means both directions of the conn are live.
+  if bot.is_nil or not ?bot.transform_value:
+    return false
+  bot.mcp_query = McpQuery(kind: MCP_PING, state: MCP_PENDING)
+  let start = get_mono_time()
+  while get_mono_time() - start < PING_TIMEOUT:
+    Ed.thread_ctx.tick
+    if bot.mcp_query.state == MCP_DONE:
+      return true
+    sleep 5
+  false
+
 proc ensure_connected() =
-  Ed.thread_ctx.tick
-  let subs = Ed.thread_ctx.subscribers.len
-  let bot_ok = not bot.is_nil and ?bot.transform_value
-  let stale =
-    ?last_enu_response and get_mono_time() - last_enu_response > STALE_TIMEOUT
-  if subs == 0 or stale:
+  try:
+    Ed.thread_ctx.tick
+  except CatchableError as e:
+    info "tick raised; treating as disconnect", msg = e.msg
     reconnect()
-  elif not bot_ok:
-    ensure_bot()
+    return
+  if not bot.is_nil and ?bot.transform_value:
+    last_bot_transform = some(bot.transform)
+  if Ed.thread_ctx.subscribers.len == 0 or bot.is_nil:
+    reconnect()
+    return
+  if not ping_succeeded():
+    info "ping failed, reconnecting"
+    reconnect()
 
 proc run_tool(
     kind: McpQueryKind, code = "", top_level = false, unit_id = ""
@@ -112,7 +137,10 @@ proc run_tool(
       last_enu_response = get_mono_time()
       return if v.error != "": v.error else: v.result
     elif get_mono_time() - start > TOOL_TIMEOUT:
-      info "timeout", timeout = TOOL_TIMEOUT, value = v
+      info "timeout",
+        kind = kind,
+        query_state = v.state,
+        subs = Ed.thread_ctx.subscribers.len
       bot.mcp_query = McpQuery(state: MCP_DONE)
       return "Error: Enu did not respond within " & $TOOL_TIMEOUT
     sleep 10

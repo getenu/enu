@@ -20,6 +20,9 @@ gdobj BotNode of KinematicBody:
     mesh: MeshInstance
     animation_player: AnimationPlayer
     transform_zid: EID
+    # MCP screenshot is two-phase: positioning the camera doesn't take effect
+    # until the next render. Frame 1 positions, frame 2 captures.
+    screenshot_pending: bool
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -188,13 +191,8 @@ gdobj BotNode of KinematicBody:
       let bot = Bot(self.model)
       if EPHEMERAL in bot.global_flags:
         let q = bot.mcp_query
-        if q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
-          let cam = Camera(state.mcp_camera)
-          var t = self.global_transform
-          t.origin += vec3(0, 0.8, 0)
-          cam.transform = t
-          cam.make_current()
-          info "mcp screenshot positioning camera", origin = t.origin
+        if self.screenshot_pending and q.kind == MCP_SCREENSHOT and
+            q.state == MCP_READY:
           let vp = Viewport(state.mcp_viewport)
           let img = vp.get_texture.get_data
           img.flip_y
@@ -204,8 +202,17 @@ gdobj BotNode of KinematicBody:
             ("enu_screenshot_" & $state.screenshot_counter & ".png")
           discard img.save_png(path)
           info "mcp screenshot captured", path
+          self.screenshot_pending = false
           bot.mcp_query =
             McpQuery(kind: MCP_SCREENSHOT, result: path, state: MCP_DONE)
+        elif q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
+          let cam = Camera(state.mcp_camera)
+          var t = self.global_transform
+          t.origin += vec3(0, 0.8, 0)
+          cam.transform = t
+          cam.make_current()
+          info "mcp screenshot positioning camera", origin = t.origin
+          self.screenshot_pending = true
 
     if ?self.model:
       if self.model.code.owner == state.worker_ctx_name:
