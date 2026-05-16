@@ -17,6 +17,7 @@ bridged_to_host:
   proc position_set*(self: Unit, position: Vector3)
   proc start_position_set*(self: Unit, position: Vector3)
   proc delete*(self: Unit)
+  proc keep_alive*()
 
   proc new_markdown_sign*(
     self: Unit,

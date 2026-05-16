@@ -142,6 +142,12 @@ proc pause_script(self: Worker) =
   self.active_unit.global_flags -= SCRIPT_INITIALIZING
   self.active_unit.script_ctx.pause()
 
+proc keep_alive(ctx: ScriptCtx) =
+  ## Reset the script timeout. For long non-yielding loops (eg. spatial
+  ## queries from eval) that have legitimate work to do but no reason to
+  ## yield. Call periodically — the watchdog kicks in after script_timeout.
+  ctx.timeout_at = get_mono_time() + script_timeout
+
 proc yield_script(self: Worker, unit: Unit) =
   let ctx = unit.script_ctx
   ctx.callback = ctx.saved_callback
@@ -780,8 +786,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
-    sleep_impl, position_set, start_position_set, delete, new_markdown_sign,
-    update_markdown_sign
+    sleep_impl, position_set, start_position_set, delete, keep_alive,
+    new_markdown_sign, update_markdown_sign
 
   result.bridged_from_vm "bots", play
 

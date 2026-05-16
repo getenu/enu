@@ -54,6 +54,11 @@ proc delete*(self: Unit) =
   ## instance. Cannot be undone.
   base_bridge_private.delete(self)
 
+proc keep_alive*() =
+  ## Reset the per-script execution timeout. For long-running non-yielding
+  ## loops that need more than the default ~2s budget. Call periodically.
+  base_bridge_private.keep_alive()
+
 proc go*(self: Unit, position: Unit | Vector3) =
   self.position = position
 
