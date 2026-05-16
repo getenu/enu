@@ -389,12 +389,31 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   worker.bridge_to_vm
 
   worker.mcp_eval_proc = proc(
-      code: string
+      code: string, top_level: bool, unit_id: string
   ): tuple[result: string, error: string] {.gcsafe.} =
     try:
-      let indented = code.split_lines.map_it("  " & it).join("\n")
-      let wrapped = "(block:\n" & indented & "\n)"
-      (worker.eval(state.player, wrapped).get(""), "")
+      var unit: Unit = state.player
+      if unit_id != "":
+        unit = nil
+        proc find_in(units: EdSeq[Unit]): Unit =
+          for u in units.value:
+            if u.id == unit_id:
+              return u
+            let found = find_in(u.units)
+            if not found.is_nil:
+              return found
+        unit = find_in(state.units)
+        if unit.is_nil:
+          return ("", "Error: unit not found: " & unit_id)
+        if unit.script_ctx.is_nil or unit.script_ctx.interpreter.is_nil:
+          return ("", "Error: unit has no script context: " & unit_id)
+      let wrapped =
+        if top_level:
+          code
+        else:
+          let indented = code.split_lines.map_it("  " & it).join("\n")
+          "(block:\n" & indented & "\n)"
+      (worker.eval(unit, wrapped).get(""), "")
     except VMQuit as e:
       (
         "",

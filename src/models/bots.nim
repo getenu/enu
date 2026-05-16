@@ -171,7 +171,8 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             info "mcp console query responding", kind = q.kind, id = self.id
             self.mcp_query = q
           of MCP_EVAL:
-            let (res, err) = worker.mcp_eval_proc(q.code)
+            let (res, err) =
+              worker.mcp_eval_proc(q.code, q.top_level, q.unit_id)
             q.result = res
             q.error = err
             q.state = MCP_DONE

@@ -19,6 +19,8 @@ type
     result*: string
     error*: string
     state*: McpQueryState
+    top_level*: bool
+    unit_id*: string
 
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
@@ -408,8 +410,9 @@ type
     module_names*: HashSet[string]
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
-    mcp_eval_proc*:
-      proc(code: string): tuple[result: string, error: string] {.gcsafe.}
+    mcp_eval_proc*: proc(code: string, top_level: bool, unit_id: string): tuple[
+      result: string, error: string
+    ] {.gcsafe.}
     mcp_update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object

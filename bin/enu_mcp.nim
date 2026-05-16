@@ -32,6 +32,19 @@ proc set_unit_transform(unit: Unit, pos: Vector3, yaw_deg: float) =
   if unit of Player:
     Player(unit).rotation = yaw_deg
 
+proc set_unit_transform_full(
+    unit: Unit, pos: Vector3, yaw_rad, pitch_rad: float
+) =
+  ## Like set_unit_transform but also tilts around the local X axis (pitch),
+  ## which set_unit_transform can't do because Player.rotation only tracks yaw.
+  ## Used by screenshot_at to aim the camera vertically.
+  var t = Transform()
+  t.basis = init_basis(vec3(float32(pitch_rad), float32(yaw_rad), 0.0))
+  t.origin = pos
+  unit.transform = t
+  if unit of Player:
+    Player(unit).rotation = rad_to_deg(yaw_rad)
+
 proc ensure_bot() =
   let units = root_units()
   bot = nil
@@ -79,9 +92,17 @@ proc ensure_connected() =
   elif not bot_ok:
     ensure_bot()
 
-proc run_tool(kind: McpQueryKind, code = ""): string =
+proc run_tool(
+    kind: McpQueryKind, code = "", top_level = false, unit_id = ""
+): string =
   ensure_connected()
-  bot.mcp_query = McpQuery(kind: kind, code: code, state: MCP_PENDING)
+  bot.mcp_query = McpQuery(
+    kind: kind,
+    code: code,
+    state: MCP_PENDING,
+    top_level: top_level,
+    unit_id: unit_id,
+  )
 
   let start = get_mono_time()
   while true:
@@ -109,17 +130,134 @@ let enu_server = mcp_server("enu", "1.0.0"):
       run_tool(MCP_GET_CONSOLE)
 
   mcp_tool:
-    proc eval(code: string): string =
+    proc eval(
+        code: string, top_level: bool = false, unit_id: string = ""
+    ): string =
       ## Evaluate Nim code in the Enu scripting context.
       ## Returns the value of the expression, or empty string for statements.
       ## Returns an error message prefixed with "Error" if evaluation fails.
       ## - code: Nim code to evaluate in the Enu VM
-      run_tool(MCP_EVAL, code)
+      ## - top_level: if true, run as module-level code (allows `import`,
+      ##   top-level `proc`/`type`, etc.) but returns no value. Default false
+      ##   runs inside a `(block: ...)` for scoped locals and return value.
+      ## - unit_id: evaluate in the named unit's script context (so
+      ##   `self`/`active_unit`/locals resolve in that unit's module).
+      ##   Default empty = player.
+      run_tool(MCP_EVAL, code, top_level, unit_id)
 
   mcp_tool:
     proc get_level_dir(): string =
       ## Get the directory path of the currently loaded level.
       run_tool(MCP_GET_LEVEL_DIR)
+
+  mcp_tool:
+    proc units_near(
+        x, y, z: float, radius: float = 30.0
+    ): string =
+      ## Return a sorted table of units within `radius` (xz-plane distance)
+      ## of (x, y, z). One unit per line, formatted "d=DD.D  id  (X, Y, Z)".
+      ## Includes spawner-created clones. Useful for chasing "# CLAUDE:"
+      ## marker blocks or quickly enumerating what's near a position.
+      let code =
+        "units_near(" & $x & ", " & $y & ", " & $z & ", " & $radius & ")"
+      run_tool(MCP_EVAL, code)
+
+  mcp_tool:
+    proc screenshot_at(
+        x, y, z: float,
+        distance: float = 30.0,
+        height: float = 8.0,
+        angle: float = 0.0,
+    ): string =
+      ## Take a framed screenshot of a world position. The bot smoothly
+      ## moves to a vantage `distance` units from (x, y, z), raised by
+      ## `height`, around the target by `angle` degrees in the horizontal
+      ## plane (0 = south of target, 90 = east, 180 = north, 270 = west)
+      ## and rotates to look directly at the target including a downward
+      ## tilt. Returns the path to the saved PNG.
+      ## - x, y, z: target world position to frame.
+      ## - distance: how far back from the target to place the bot (default 30).
+      ## - height: how high above target.y to raise the bot (default 8).
+      ## - angle: viewing direction around the target in degrees (default 0).
+      ensure_connected()
+      let target_pos = vec3(x, y, z)
+      let angle_rad = deg_to_rad(angle)
+      let bot_pos = vec3(
+        x + distance * sin(angle_rad), y + height,
+        z + distance * cos(angle_rad)
+      )
+      let dir = target_pos - bot_pos
+      let horiz_dist = sqrt(dir.x * dir.x + dir.z * dir.z)
+      let yaw_rad = arctan2(float(dir.x), -float(dir.z))
+      let pitch_rad = -arctan2(float(dir.y), float(horiz_dist))
+      let yaw_deg = rad_to_deg(yaw_rad)
+
+      # Move the bot smoothly to bot_pos with target yaw. Same speed/limits
+      # as set_position so the visual feels consistent.
+      let start_pos = bot.transform.origin
+      let start_rotation = unit_rotation(bot)
+      var angle_diff = yaw_deg - start_rotation
+      angle_diff -= round(angle_diff / 360.0) * 360.0
+      let total_dist = start_pos.distance_to(bot_pos)
+      const speed = 50.0
+      const angular_speed = 180.0
+      const frame_ms = 33
+      const frame_sec = frame_ms.float / 1000.0
+      let total_time = max(total_dist / speed, abs(angle_diff) / angular_speed)
+      if total_dist >= 500.0 or total_time < frame_sec:
+        set_unit_transform_full(bot, bot_pos, yaw_rad, pitch_rad)
+      else:
+        var elapsed = 0.0
+        while true:
+          Ed.thread_ctx.tick
+          elapsed += frame_sec
+          let progress = float32(min(elapsed / total_time, 1.0))
+          if not ?bot.transform_value:
+            break
+          set_unit_transform(
+            bot, start_pos + (bot_pos - start_pos) * progress,
+            start_rotation + angle_diff * float(progress)
+          )
+          if progress >= 1.0:
+            # Land in final pitched orientation for the screenshot.
+            set_unit_transform_full(bot, bot_pos, yaw_rad, pitch_rad)
+            Ed.thread_ctx.tick
+            break
+          sleep frame_ms
+      last_enu_response = get_mono_time()
+      # Give the game thread a few ticks to apply the new transform before
+      # capturing the frame.
+      for _ in 0..2:
+        Ed.thread_ctx.tick
+        sleep 20
+      run_tool(MCP_SCREENSHOT)
+
+  mcp_tool:
+    proc move_unit(id: string, x, y, z: float): string =
+      ## Move a unit and persist the new spawn position across reload.
+      ## Updates both the live transform and `start_position` (which is what
+      ## the level saves), so the change survives a restart.
+      ## - id: target unit's id.
+      ## - x, y, z: new world position.
+      let code =
+        "let u = find_by_id(\"" & id & "\")\n" &
+        "if u.is_nil:\n  \"Error: unit not found: " & id & "\"\nelse:\n" &
+        "  u.start_position = vec3(" & $x & ", " & $y & ", " & $z & ")\n" &
+        "  u.position = vec3(" & $x & ", " & $y & ", " & $z & ")\n" &
+        "  \"moved \" & u.id"
+      run_tool(MCP_EVAL, code)
+
+  mcp_tool:
+    proc delete_unit(id: string): string =
+      ## Remove a unit from the level and delete its on-disk script + data
+      ## directory. Cannot be undone. Use sparingly; prefer `move_unit` first
+      ## when the unit might just be in the wrong place.
+      ## - id: target unit's id.
+      let code =
+        "let u = find_by_id(\"" & id & "\")\n" &
+        "if u.is_nil:\n  \"Error: unit not found: " & id & "\"\nelse:\n" &
+        "  u.delete()\n  \"deleted " & id & "\""
+      run_tool(MCP_EVAL, code)
 
   mcp_tool:
     proc set_position(
