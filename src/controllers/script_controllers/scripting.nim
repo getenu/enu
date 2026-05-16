@@ -270,11 +270,18 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
           ""
       let code = unit.code_template(imports)
 
-      # Write generated code to a 'generated' directory for tooling like nimlangserver
+      # Write generated code to a 'generated' directory for tooling like
+      # nimlangserver. Best-effort — this is for tooling only, so don't let
+      # an IOError here kill the worker thread. Should not happen in
+      # practice though — log loudly if it does.
       let generated_dir = script_dir.parentDir / "generated"
-      create_dir(generated_dir)
       let generated_file = generated_dir / module_name & ".nim"
-      write_file(generated_file, code)
+      try:
+        create_dir(generated_dir)
+        write_file(generated_file, code)
+      except CatchableError as e:
+        error "failed to write generated script",
+          path = generated_file, msg = e.msg, exc = e.name
 
       ctx.timeout_at = get_mono_time() + timeout
       ctx.file_index = -1
