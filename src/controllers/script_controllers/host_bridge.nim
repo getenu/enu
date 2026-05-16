@@ -714,6 +714,43 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
 proc has_block_at(position: Vector3): bool =
   find_block_at(position).is_some
 
+proc find_voxel_overlaps(limit: int = 50): string =
+  ## Find world positions where two or more Builds both have a visible
+  ## (non-HOLE, non-eraser) voxel — i.e., actual z-fighting in the
+  ## rendered scene. Returns one line per overlap up to `limit`.
+  var occupants = init_table[Vector3, seq[string]]()
+  proc collect(unit: Unit) =
+    if unit of Build:
+      let build = Build(unit)
+      # Skip scaled/rotated builds — their voxel-to-world mapping isn't a
+      # simple translation and overlap reports would be misleading.
+      let euler = build.transform.basis.get_euler()
+      let basis_is_identity =
+        abs(euler.x) < 0.001 and abs(euler.y) < 0.001 and abs(euler.z) < 0.001
+      let scale_is_one = abs(build.scale - 1.0) < 0.001
+      if basis_is_identity and scale_is_one:
+        for (local_pos, info) in build.voxels.all_voxels:
+          if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
+            continue
+          let global_pos = local_pos.global_from(build)
+          if global_pos notin occupants:
+            occupants[global_pos] = @[]
+          if build.id notin occupants[global_pos]:
+            occupants[global_pos].add(build.id)
+    for child in unit.units.value:
+      collect(child)
+  for unit in state.units.value:
+    collect(unit)
+  var n = 0
+  for pos, ids in occupants:
+    if ids.len < 2: continue
+    result &=
+      "(" & $pos.x & "," & $pos.y & "," & $pos.z & ") " & ids.join(" + ") & "\n"
+    n.inc
+    if n >= limit:
+      result &= "... (truncated at " & $limit & ")\n"
+      return
+
 proc block_color_at(position: Vector3): Colors =
   let block_info = find_block_at(position)
   if block_info.is_some:
@@ -782,7 +819,7 @@ proc bridge_to_vm*(worker: Worker) =
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units, signal_test_complete, now_seconds,
-    dump_stats
+    dump_stats, find_voxel_overlaps
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
