@@ -354,6 +354,34 @@ proc position_set(self: Unit, position: Vector3) =
   else:
     self.transform_value.origin = position.local_to(self.parent)
 
+proc start_position_set(self: Unit, position: Vector3) =
+  if GLOBAL in self.global_flags:
+    self.start_transform.origin = position
+  else:
+    self.start_transform.origin = position.local_to(self.parent)
+  self.global_flags += DIRTY
+
+proc delete(self: Unit) =
+  ## Remove the unit from the level and delete its on-disk script + data.
+  ## Distinct from the `destroy` method, which only tears down the in-memory
+  ## instance.
+  if ?self.script_ctx and self.script_ctx.script != "" and
+      file_exists(self.script_ctx.script):
+    try:
+      remove_file(self.script_ctx.script)
+    except OSError:
+      discard
+  let dir = self.data_dir
+  if dir != "" and dir_exists(dir):
+    try:
+      remove_dir(dir)
+    except OSError:
+      discard
+  if self.parent.is_nil:
+    state.units -= self
+  else:
+    self.parent.units -= self
+
 proc speed(self: Unit): float =
   self.speed
 
@@ -752,7 +780,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
-    sleep_impl, position_set, new_markdown_sign, update_markdown_sign
+    sleep_impl, position_set, start_position_set, delete, new_markdown_sign,
+    update_markdown_sign
 
   result.bridged_from_vm "bots", play
 
