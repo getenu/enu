@@ -244,6 +244,13 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       raise VMPause.new_exception("vm paused")
 
 proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
+  if SCRIPT_LOADING in unit.global_flags:
+    error "load_script re-entered for a unit already being loaded; skipping",
+      unit_id = unit.id, script = unit.script_ctx.script
+    return
+  unit.global_flags += SCRIPT_LOADING
+  defer:
+    unit.global_flags -= SCRIPT_LOADING
   let ctx = unit.script_ctx
   try:
     self.active_unit = unit
