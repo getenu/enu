@@ -407,6 +407,16 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           return ("", "Error: unit not found: " & unit_id)
         if unit.script_ctx.is_nil or unit.script_ctx.interpreter.is_nil:
           return ("", "Error: unit has no script context: " & unit_id)
+        # Clones share the proto's module — they don't have one of their
+        # own. The interpreter.eval below would assert on a missing
+        # module, taking the worker thread down. Surface a clean error
+        # instead.
+        if not unit.clone_of.is_nil:
+          return (
+            "",
+            "Error: unit " & unit_id & " is a clone; eval in clone context " &
+              "isn't supported. Try the proto: " & unit.clone_of.id,
+          )
       let wrapped =
         if top_level:
           code
