@@ -294,7 +294,37 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
       let generated_dir = script_dir.parentDir / "generated"
       create_dir(generated_dir)
       let generated_file = generated_dir / module_name & ".nim"
-      write_file(generated_file, code)
+      try:
+        write_file(generated_file, code)
+      except IOError:
+        # Surface as much OS-level context as possible before re-raising.
+        let err = errno
+        let dir_exists = dir_exists(generated_dir)
+        let file_exists = file_exists(generated_file)
+        var dir_perms = ""
+        var dir_owner = ""
+        try:
+          let info = get_file_info(generated_dir)
+          dir_perms = $info.permissions
+        except CatchableError:
+          discard
+        error "writeFile failed",
+          path = generated_file,
+          unit_id = unit.id,
+          errno = err,
+          strerror = $strerror(err),
+          generated_dir = generated_dir,
+          generated_dir_exists = dir_exists,
+          generated_file_exists = file_exists,
+          generated_dir_permissions = dir_perms,
+          script_loading_flag = (SCRIPT_LOADING in unit.global_flags),
+          script_initializing_flag =
+            (SCRIPT_INITIALIZING in unit.global_flags),
+          stack = get_stack_trace()
+        logger("err",
+          "writeFile failed for " & generated_file & " (errno=" & $err &
+          " " & $strerror(err) & "); see log for details.")
+        raise
 
       ctx.timeout_at = get_mono_time() + timeout
       ctx.file_index = -1
