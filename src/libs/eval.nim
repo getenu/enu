@@ -46,7 +46,8 @@ proc processModule*(
   prepareConfigNotes(graph, module)
   graph.config.notes.incl(warnUnusedImportX)
   graph.config.notes.incl(hintXDeclaredButNotUsed)
-  if stream == nil:
+  let we_opened_stream = stream == nil
+  if we_opened_stream:
     let filename = toFullPathConsiderDirty(graph.config, fileIdx)
     s = llStreamOpen(filename, fmRead)
     if s == nil:
@@ -54,6 +55,11 @@ proc processModule*(
       return false
   else:
     s = stream
+  defer:
+    # Only close streams we opened — caller-provided streams are theirs
+    # to close.
+    if we_opened_stream and s != nil:
+      llStreamClose(s)
 
   # Extract dependencies by examining resolved symbols in the typed AST
   var pendingModules = newSeq[string]()

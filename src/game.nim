@@ -15,6 +15,7 @@ import
 import ui/virtual_joystick
 import
   core, types, gdutils, controllers, models/[serializers, units, colors, builds]
+import libs/fd_tracking
 
 if file_exists(".env"):
   dotenv.overload()
@@ -229,6 +230,8 @@ gdobj Game of Node:
         uc.world = some(parts[0])
         uc.level = some(parts[1])
         args.delete(i .. i + 1)
+
+    raise_fd_limit()
 
     if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address_override:
       listen_address_override = get_env("ENU_LISTEN_ADDRESS")

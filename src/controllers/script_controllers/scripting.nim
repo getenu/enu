@@ -8,7 +8,7 @@ import
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, units, signs, players]
-import libs/[interpreters, eval]
+import libs/[interpreters, eval, fd_tracking]
 import ./vars
 
 type ScriptCycleError* = object of VMQuit
@@ -379,6 +379,8 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
     self.active_unit = nil
 
 proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
+  sample_open_fds()
+  info "retry_failed_scripts entry", fds = open_fd_count()
   var prev_failed: self.failed.type = @[]
   while prev_failed.len != self.failed.len:
     prev_failed = self.failed
@@ -386,6 +388,8 @@ proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
     for f in prev_failed:
       debug "retrying", script = f.unit.script_ctx.script
       self.load_script(f.unit)
+  sample_open_fds()
+  info "retry_failed_scripts exit", fds = open_fd_count()
 
   if prev_failed.len == self.failed.len and self.failed.len > 0:
     debug "retry loop terminated because no progress was made",
