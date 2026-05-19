@@ -245,9 +245,21 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
 
 proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
   if SCRIPT_LOADING in unit.global_flags:
-    error "load_script re-entered for a unit already being loaded; skipping",
-      unit_id = unit.id, script = unit.script_ctx.script
-    return
+    # Re-entry on the same unit is a bug — an Ed callback fired during a
+    # script load that drove back through load_level → retry_failed_scripts.
+    # Crash with as much context as possible so we can diagnose.
+    let outer = if self.active_unit.is_nil: "<nil>" else: self.active_unit.id
+    error "load_script re-entered",
+      unit_id = unit.id,
+      script = unit.script_ctx.script,
+      outer_active_unit = outer,
+      stack = get_stack_trace()
+    logger("err",
+      "load_script re-entered for " & unit.id & " (outer active=" & outer &
+      "); see log for stack trace.")
+    raise (ref AssertionDefect)(
+      msg: "load_script re-entered for " & unit.id & "; outer active=" & outer
+    )
   unit.global_flags += SCRIPT_LOADING
   defer:
     unit.global_flags -= SCRIPT_LOADING
@@ -278,17 +290,11 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
       let code = unit.code_template(imports)
 
       # Write generated code to a 'generated' directory for tooling like
-      # nimlangserver. Best-effort — this is for tooling only, so don't let
-      # an IOError here kill the worker thread. Should not happen in
-      # practice though — log loudly if it does.
+      # nimlangserver.
       let generated_dir = script_dir.parentDir / "generated"
+      create_dir(generated_dir)
       let generated_file = generated_dir / module_name & ".nim"
-      try:
-        create_dir(generated_dir)
-        write_file(generated_file, code)
-      except CatchableError as e:
-        error "failed to write generated script",
-          path = generated_file, msg = e.msg, exc = e.name
+      write_file(generated_file, code)
 
       ctx.timeout_at = get_mono_time() + timeout
       ctx.file_index = -1
