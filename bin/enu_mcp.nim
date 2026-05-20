@@ -199,6 +199,23 @@ let enu_server = mcp_server("enu", "1.0.0"):
       run_tool(MCP_GET_LEVEL_DIR)
 
   mcp_tool:
+    proc get_block_log(): string =
+      ## Recent blocks the local player placed or erased via the in-game
+      ## block tools, oldest first. One entry per line:
+      ##   ago=<sec>s color=<c> unit=<id> local=(x,y,z) global=(x,y,z)
+      ## Bounded to 200 entries; auto-cleared on save_and_reload. The
+      ## human uses this to annotate the world for the agent: "delete
+      ## the units I marked red", "add windows where I erased blocks",
+      ## etc.
+      run_tool(MCP_EVAL, "block_log(active_unit())")
+
+  mcp_tool:
+    proc clear_block_log(): string =
+      ## Empty the block log so subsequent placements start a fresh
+      ## annotation session.
+      run_tool(MCP_EVAL, "clear_block_log(active_unit())\n\"cleared\"")
+
+  mcp_tool:
     proc units_near(
         x, y, z: float, radius: float = 30.0
     ): string =
