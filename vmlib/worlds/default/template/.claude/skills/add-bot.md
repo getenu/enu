@@ -210,7 +210,7 @@ Spawn copies of a bot prototype:
 
 ```nim
 # In bot_soldier.nim:
-name soldier(patrol_z = -20.0)
+name Soldier(patrol_z = -20.0)
 color = white
 speed = 3
 
@@ -226,7 +226,7 @@ forever:
 drawing = false
 speed = 0
 5.times(i):
-  soldier.new(patrol_z = -10.0 - i.float * 8.0)
+  Soldier.new(patrol_z = -10.0 - i.float * 8.0)
 ```
 
 ## Signs from Bots

@@ -105,3 +105,65 @@ Order matters when scripts reference each other (define dependencies first).
 | Ground level (player POV) | 0 | 2 | 5 | 180 |
 | Side view (east) | -40 | 10 | -30 | 90 |
 | Top-down | 0 | 50 | -30 | 0 |
+
+`screenshot_at(x, y, z, distance, height, angle)` is usually nicer —
+the bot smoothly flies to a vantage that frames the target world
+position, no math needed.
+
+`screenshot_from_player()` captures from the human's first-person
+camera (no UI). `screenshot_from_player(with_ui=true)` includes
+toolbar/console — useful when they're pointing at something on
+screen.
+
+## Working With the Human (Block Annotations)
+
+The human can mark things in-world by placing or erasing blocks with
+the in-game block tool, and the agent reads the log via
+`get_block_log`. This is the lightest-weight way to point at specific
+units/positions across a conversation.
+
+Workflow:
+1. **Human places markers**: chooses a color convention ("red = too
+   big, blue = move me, eraser = delete") and clicks blocks onto the
+   relevant units.
+2. **Agent reads**: `get_block_log` returns one line per entry with
+   `unit_id`, color, local position, and global position.
+3. **Plan before acting**: read the log, summarize what each marker
+   means, decide on changes, and confirm with the human if anything
+   is ambiguous.
+4. **Erase markers, then implement**: erase the markers first (so
+   they don't get persisted to the unit's data files), then apply the
+   actual change. Block edits are persistent — leaving them in means
+   they survive reloads.
+5. **`clear_block_log` when done**: empties the log for the next
+   annotation session. (Also auto-cleared on `save_and_reload`.)
+
+Markers on spawner instances move with the instance — if the agent
+relocates a unit before erasing its marker, the eraser will end up at
+the wrong local position. Always erase markers first, *then* edit
+spawner positions.
+
+To erase a block: from the player's eval, call
+`place_block(Build(find_by_id("...")), vec3(x, y, z), eraser)` using
+the `unit_id` and `local_position` from the log entry. The eraser
+covers the placed block with an invisible MANUAL voxel.
+
+## Detecting Voxel Overlaps (z-fighting)
+
+Two builds whose voxels share a world position cause z-fighting —
+flickering between the two colors as the camera moves. Hard to spot
+in screenshots, obvious in motion.
+
+```nim
+# Via eval:
+find_voxel_overlaps(limit = 100)
+```
+
+Returns one line per position with the unit IDs that share it. Skip
+the spawner origins themselves (e.g. `build_market_spawner` at its
+location) — those are markers, not voxels. Real overlaps are between
+two `_proto_*_instance_*` clones, between a proto instance and a
+root build, etc.
+
+Scaled or rotated builds are skipped — their voxel-to-world mapping
+isn't a simple translation and would report spurious results.

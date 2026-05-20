@@ -35,7 +35,7 @@ loop:
 
 ```nim
 # scripts/build_coin.nim
-name coin
+name Coin
 
 speed = 0
 color = yellow  # use white or green as proxy
@@ -89,7 +89,7 @@ for bot in Bot.all:
 
 ```nim
 # scripts/build_win_zone.nim
-name win_spot
+name WinSpot
 
 speed = 0
 show = false   # invisible trigger zone

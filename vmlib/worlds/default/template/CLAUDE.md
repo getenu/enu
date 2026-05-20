@@ -12,11 +12,26 @@ the MCP tools provided by the `enu` server.
 
 ## MCP Tools Available
 
-- `screenshot` — Take a screenshot from the MCP bot's POV
-- `eval` — Run Nim code in the Enu scripting context. Output goes to `get_console`
-- `get_console` — Get recent Enu console output (use after `eval` to see results)
-- `get_level_dir` — Returns the absolute path to the current level directory
-- `set_position` — Move the MCP bot (or any unit by id) to a position for a better view
+**Looking around:**
+- `screenshot` — From the MCP bot's POV
+- `screenshot_at(x, y, z, distance, height, angle)` — Smoothly move the bot to a vantage and frame a world position
+- `screenshot_from_player(with_ui = false)` — From the human's first-person camera; `with_ui = true` includes toolbar/console overlay
+
+**Querying:**
+- `get_level_dir` — Absolute path to the current level directory
+- `units_near(x, y, z, radius)` — Sorted nearest-first list of units within an xz-radius
+- `get_block_log` — Recent blocks the human placed (or erased) in-game; used for annotation (see "Working With the Human" below)
+- `get_console` — Recent Enu console output (use after `eval` to see `echo` results)
+
+**Mutating:**
+- `eval(code, top_level = false, unit_id = "")` — Run Nim code in the Enu scripting context.
+  - Default: runs as an expression inside the player's module, returns the value
+  - `top_level = true`: runs as module-level code (allows `import`, top-level `proc`/`type`); no return value
+  - `unit_id = "..."`: runs in that unit's module instead of the player. Spawner clones (`*_proto_*_instance_*`) can't be targeted; use their proto or another root unit
+- `move_unit(id, x, y, z)` — Move a unit and persist the new spawn position across reload
+- `delete_unit(id)` — Remove a unit and delete its on-disk script + data directory
+- `set_position(x, y, z, rotation, id)` — Smoothly move a unit (default: the MCP bot) for a better view
+- `clear_block_log` — Empty the block log for a fresh annotation session
 
 ## Coordinate System
 
@@ -100,6 +115,36 @@ For a guaranteed full reload (also picks up vmlib/API changes):
 press_action("save_and_reload")
 ```
 
+## Working With the Human (Block Annotations)
+
+The human can mark units in-world by placing or erasing blocks with the
+in-game block tool. `get_block_log` returns the recent placements (per
+local player), each entry with `unit_id`, color, local position, and
+global position. This is the lightest-weight way to point at specific
+things across a conversation.
+
+Workflow when the human gives instructions referencing colored blocks:
+
+1. `get_block_log` — read what they marked
+2. **Plan** — summarize each marker, decide on changes, confirm
+   anything ambiguous before acting
+3. **Erase the markers first** — block edits are persistent and will
+   stick to the unit's data files otherwise. Erasing first also avoids
+   losing track of which local position belonged to which marker if the
+   underlying unit moves
+4. **Implement** — apply the actual changes
+5. `clear_block_log` — empty the log for the next session
+   (also auto-cleared on `save_and_reload`)
+
+To erase a marker from the player's eval:
+```nim
+place_block(Build(find_by_id("build_some_id")), vec3(x, y, z), eraser)
+```
+using the `unit_id` and `local_position` from the log entry.
+
+See `/reload-verify` for the long version and for `find_voxel_overlaps`,
+which detects actual voxel-level z-fighting between two builds.
+
 ---
 
 ## Build Scripts (procedural drawing)
@@ -173,9 +218,19 @@ forward 10    # moves the build object, doesn't draw
 
 ## Named Prototypes (reusable builds)
 
+Use `CamelCase` for prototype names. Lowercased/snake_case names work but
+the convention is `name Tower`, `name WallSegment`, etc. — distinguishes
+type names from regular identifiers.
+
+Origin tip: every Build starts with a default block at local `(0, 0, 0)`
+(it's how the in-game block tool creates the build). If your prototype's
+voxels don't cover that voxel, it'll show through as a stray block. Either
+draw over `(0, 0, 0)` or set spawner positions to `vec3(x, 1, z)` so the
+default block lands above the ground floor.
+
 ```nim
 # Define a reusable prototype in a build script:
-name tower(height = 10, color = brown)
+name Tower(height = 10, color = brown)
 speed = 0
 
 # Skip the prototype definition itself (only draw for instances):
@@ -188,9 +243,10 @@ height.times:
   fill_box(0, 0, 0, 3, 0, 3, color)
   up 1
 
-# Instantiate from any other script:
-tower.new(height = 20, color = red)
-tower.new(height = 15, color = blue, position = vec3(20, 0, -10))
+# Instantiate from any other script. Bump y by 1 so the default block
+# at local (0, 0, 0) sits above the floor instead of in it:
+Tower.new(height = 20, color = red, position = vec3(0, 1, 0))
+Tower.new(height = 15, color = blue, position = vec3(20, 1, -10))
 ```
 
 ## Animated Builds (state machine)

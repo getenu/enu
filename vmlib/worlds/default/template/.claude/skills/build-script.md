@@ -51,11 +51,26 @@ save()          # save position + orientation
 restore()       # restore saved position + orientation
 ```
 
+## Naming Convention
+
+Prototype names use `CamelCase` — `name Tower(...)`, `name WallSegment(...)`,
+`name Door(...)`. The name becomes a type, so it reads as one.
+
+Origin tip: every Build starts with a default block at local `(0, 0, 0)` —
+how the in-game block tool creates a build. If the prototype's voxels don't
+naturally cover that voxel, the default block shows through. Either draw
+over `(0, 0, 0)`, or spawn instances at `y = 1` so the default block lands
+above ground:
+
+```nim
+Tower.new(height = 10, position = vec3(5, 1, -20))
+```
+
 ## Patterns
 
 ### Polygon tower (N sides)
 ```nim
-name tower(height = 50, sides = 4, length = 10, twist = 0.0)
+name Tower(height = 50, sides = 4, length = 10, twist = 0.0)
 speed = 0
 
 height.times:
@@ -65,7 +80,7 @@ height.times:
   up 1
 ```
 
-Spawn multiple: `tower.new(height = 60, sides = 6, color = blue)`
+Spawn multiple: `Tower.new(height = 60, sides = 6, color = blue)`
 
 ### Spiral staircase
 ```nim
