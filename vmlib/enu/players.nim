@@ -16,6 +16,8 @@ bridged_to_host:
   proc open_sign*(self: Player): Sign
   proc `open_sign=`*(self: Player, value: Sign)
   proc executing_player*(): Player
+  proc block_log*(self: Unit): string
+  proc clear_block_log*(self: Unit)
 
 var player*: Player
 template runner*(): Player =

@@ -9,6 +9,7 @@ proc init*(_: type Player): Player =
     start_transform: Transform.init(origin = vec3(0, 1, 0)),
     input_direction_value: EdValue[Vector3].init(),
     cursor_position_value: ed((0, 0)),
+    block_log_entries: EdSeq[BlockLogEntry].init(flags = {SYNC_LOCAL}),
   )
   self.init_unit(shared = false)
   self.global_flags += GLOBAL

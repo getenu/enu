@@ -214,6 +214,36 @@ proc world_name(): string =
 proc level_name(): string =
   state.config.level
 
+proc color_to_lower(c: Colors): string =
+  case c
+  of ERASER: "eraser"
+  of BLUE: "blue"
+  of RED: "red"
+  of GREEN: "green"
+  of BLACK: "black"
+  of WHITE: "white"
+  of BROWN: "brown"
+
+proc block_log(self: Unit): string =
+  ## Recent blocks the player has placed (or erased) via the in-game block
+  ## tools, oldest first. Each line: "ago=<sec>s color=<c> unit=<id>
+  ## local=(x,y,z) global=(x,y,z)". Cap is BLOCK_LOG_CAP from builds.nim.
+  if not (self of Player):
+    return ""
+  let now = get_mono_time()
+  for entry in Player(self).block_log_entries.value:
+    let ago = (now - entry.timestamp).in_milliseconds.float / 1000.0
+    result &=
+      "ago=" & $ago & "s color=" & color_to_lower(entry.color) & " unit=" &
+      entry.unit_id & " local=(" & $entry.local_position.x & "," &
+      $entry.local_position.y & "," & $entry.local_position.z & ") global=(" &
+      $entry.global_position.x & "," & $entry.global_position.y & "," &
+      $entry.global_position.z & ")\n"
+
+proc clear_block_log(self: Unit) =
+  if self of Player:
+    Player(self).block_log_entries.clear
+
 proc begin_turn(
     self: Worker,
     unit: Unit,
@@ -841,7 +871,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`, coding,
-    `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player
+    `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
+    block_log, clear_block_log
 
   result.bridged_from_vm "worlds",
     environment, `environment=`, megapixels, `megapixels=`

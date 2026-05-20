@@ -267,11 +267,19 @@ type
     sight_query_value*: EdValue[SightQuery]
     eval_value*: EdValue[string]
 
+  BlockLogEntry* = tuple
+    unit_id: string
+    color: Colors
+    local_position: Vector3
+    global_position: Vector3
+    timestamp: MonoTime
+
   Player* = ref object of Unit
     colliders*: HashSet[Model]
     rotation_value*: EdValue[float]
     input_direction_value*: EdValue[Vector3]
     cursor_position_value*: EdValue[tuple[line: int, col: int]]
+    block_log_entries*: EdSeq[BlockLogEntry]
 
   Bot* = ref object of Unit
     animation_value*: EdValue[string]

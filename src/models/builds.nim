@@ -197,6 +197,22 @@ proc has_visible_voxels(self: Build): bool =
       return true
   false
 
+const BLOCK_LOG_CAP = 200
+
+proc log_block_placement(self: Build, local: Vector3, color: Colors) =
+  if state.player.is_nil:
+    return
+  let entry: BlockLogEntry = (
+    unit_id: self.id,
+    color: color,
+    local_position: local,
+    global_position: local.global_from(self),
+    timestamp: get_mono_time(),
+  )
+  state.player.block_log_entries.add entry
+  while state.player.block_log_entries.len > BLOCK_LOG_CAP:
+    state.player.block_log_entries.del 0
+
 proc remove(self: Build) =
   if state.tool notin {CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
@@ -208,6 +224,7 @@ proc remove(self: Build) =
     skip_point = vec3()
     last_point = self.target_point
     self.draw(point, (HOLE, ACTION_COLORS[ERASER]))
+    self.log_block_placement(point, ERASER)
 
     if self.units.len == 0 and not self.has_visible_voxels:
       if self.parent.is_nil:
@@ -224,6 +241,7 @@ proc fire(self: Build) =
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
     self.draw(point, (MANUAL, state.selected_color))
+    self.log_block_placement(point, Colors(ord state.tool))
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)

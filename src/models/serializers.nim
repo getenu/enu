@@ -479,6 +479,8 @@ proc unload_level*(worker: Worker) =
 proc load_level*(worker: Worker, level_dir: string) =
   state.global_flags += LOADING_LEVEL
   state.push_flag LOADING_SCRIPT
+  if not state.player.is_nil:
+    state.player.block_log_entries.clear
   var config = state.config
 
   config.level_dir = level_dir
