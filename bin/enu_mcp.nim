@@ -124,6 +124,8 @@ proc run_tool(
     unit_id = "",
     screenshot_from_player = false,
     screenshot_with_ui = false,
+    screenshot_top_down = false,
+    screenshot_size: float = 0.0,
 ): string =
   ensure_connected()
   bot.mcp_query = McpQuery(
@@ -134,6 +136,8 @@ proc run_tool(
     unit_id: unit_id,
     screenshot_from_player: screenshot_from_player,
     screenshot_with_ui: screenshot_with_ui,
+    screenshot_top_down: screenshot_top_down,
+    screenshot_size: screenshot_size,
   )
 
   let start = get_mono_time()
@@ -226,6 +230,52 @@ let enu_server = mcp_server("enu", "1.0.0"):
       let code =
         "units_near(" & $x & ", " & $y & ", " & $z & ", " & $radius & ")"
       run_tool(MCP_EVAL, code)
+
+  mcp_tool:
+    proc screenshot_top_down(
+        x: float, z: float, size: float = 30.0
+    ): string =
+      ## Orthographic top-down screenshot centered on (x, z). `size` is the
+      ## half-extent of the visible area in voxel units (default 30 → a
+      ## 60×60 voxel area is shown). Use for layout planning — true
+      ## top-down map view, no perspective distortion.
+      ## - x, z: center of the view in world coordinates.
+      ## - size: half-width and half-height in voxel units.
+      ensure_connected()
+      # Move the bot to (x, ?, z) so the bot_node positions the ortho
+      # camera there. Keep height around 0 (ortho cam sits 200 above
+      # regardless).
+      let target_pos = vec3(x, 1.0, z)
+      let start_pos = bot.transform.origin
+      let total_dist = start_pos.distance_to(target_pos)
+      const speed = 50.0
+      const frame_ms = 33
+      const frame_sec = frame_ms.float / 1000.0
+      let total_time = max(total_dist / speed, frame_sec)
+      if total_dist >= 500.0 or total_time < frame_sec:
+        set_unit_transform(bot, target_pos, 0.0)
+      else:
+        var elapsed = 0.0
+        while true:
+          Ed.thread_ctx.tick
+          elapsed += frame_sec
+          let progress = float32(min(elapsed / total_time, 1.0))
+          if not ?bot.transform_value:
+            break
+          set_unit_transform(
+            bot, start_pos + (target_pos - start_pos) * progress, 0.0
+          )
+          if progress >= 1.0:
+            Ed.thread_ctx.tick
+            break
+          sleep frame_ms
+      last_enu_response = get_mono_time()
+      for _ in 0..2:
+        Ed.thread_ctx.tick
+        sleep 20
+      run_tool(
+        MCP_SCREENSHOT, screenshot_top_down = true, screenshot_size = size
+      )
 
   mcp_tool:
     proc screenshot_at(

@@ -24,6 +24,8 @@ type
     unit_id*: string
     screenshot_from_player*: bool
     screenshot_with_ui*: bool
+    screenshot_top_down*: bool
+    screenshot_size*: float
 
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color

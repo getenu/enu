@@ -57,6 +57,15 @@ bridged_to_host:
   proc all_players*(): seq[Player]
   proc all_units*(): seq[Unit]
   proc find_voxel_overlaps*(limit: int = 50): string
+  proc units_in_box*(
+    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+  ): string
+
+  proc floor_at*(x: int, z: int): int
+
+  proc clear_box*(
+    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+  ): bool
   proc added_units*(): seq[Unit]
   proc register_template_node*(self: Unit, name: string)
 

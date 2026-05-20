@@ -16,12 +16,19 @@ the MCP tools provided by the `enu` server.
 - `screenshot` — From the MCP bot's POV
 - `screenshot_at(x, y, z, distance, height, angle)` — Smoothly move the bot to a vantage and frame a world position
 - `screenshot_from_player(with_ui = false)` — From the human's first-person camera; `with_ui = true` includes toolbar/console overlay
+- `screenshot_top_down(x, z, size)` — Orthographic top-down map view centered on (x, z), no perspective. Use for layout planning. `size` is the half-extent in voxel units (default 30 → 60×60 area).
 
 **Querying:**
 - `get_level_dir` — Absolute path to the current level directory
 - `units_near(x, y, z, radius)` — Sorted nearest-first list of units within an xz-radius
 - `get_block_log` — Recent blocks the human placed (or erased) in-game; used for annotation (see "Working With the Human" below)
 - `get_console` — Recent Enu console output (use after `eval` to see `echo` results)
+
+**Spatial primitives** (call via `eval`):
+- `units_in_box(x1, y1, z1, x2, y2, z2)` — Units whose origins are inside the inclusive world-space box. "What's in this room?"
+- `floor_at(x, z)` — Top y at (x, z) with a visible voxel, or -1 if column is empty. "Where's the ground here?"
+- `clear_box(x1, y1, z1, x2, y2, z2)` — true if no voxels in the box. "Can I put a structure here?"
+- `find_voxel_overlaps(limit)` — World positions where two builds share a voxel (z-fighting detection)
 
 **Mutating:**
 - `eval(code, top_level = false, unit_id = "")` — Run Nim code in the Enu scripting context.

@@ -744,6 +744,53 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
 proc has_block_at(position: Vector3): bool =
   find_block_at(position).is_some
 
+proc units_in_box(
+    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+): string =
+  ## List units whose positions are inside the inclusive world-space box.
+  ## One per line: "id (x, y, z)". Useful for "what's in this room".
+  let lo = vec3(min(x1, x2).float, min(y1, y2).float, min(z1, z2).float)
+  let hi = vec3(max(x1, x2).float, max(y1, y2).float, max(z1, z2).float)
+  var out_lines = ""
+  proc walk(unit: Unit) =
+    let p = unit.position
+    if p.x >= lo.x and p.x <= hi.x and p.y >= lo.y and p.y <= hi.y and
+        p.z >= lo.z and p.z <= hi.z:
+      out_lines &= unit.id & " (" & $p.x & "," & $p.y & "," & $p.z & ")\n"
+    for c in unit.units.value:
+      walk(c)
+  for u in state.units.value:
+    walk(u)
+  out_lines
+
+proc floor_at(x: int, z: int): int =
+  ## Return the highest y at (x, z) that has a visible voxel, or -1 if the
+  ## column is empty. Walks downward from y=64 to y=-32. Useful for "where
+  ## should I place this on the ground".
+  result = -1
+  for y in countdown(64, -32):
+    if find_block_at(vec3(x.float, y.float, z.float)).is_some:
+      return y
+
+proc clear_box(
+    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+): bool =
+  ## True if no visible voxel exists anywhere inside the inclusive box.
+  ## Use before placing a new structure to confirm the volume is empty.
+  let
+    xlo = min(x1, x2)
+    xhi = max(x1, x2)
+    ylo = min(y1, y2)
+    yhi = max(y1, y2)
+    zlo = min(z1, z2)
+    zhi = max(z1, z2)
+  for x in xlo..xhi:
+    for y in ylo..yhi:
+      for z in zlo..zhi:
+        if find_block_at(vec3(x.float, y.float, z.float)).is_some:
+          return false
+  true
+
 proc find_voxel_overlaps(limit: int = 50): string =
   ## Find world positions where two or more Builds both have a visible
   ## (non-HOLE, non-eraser) voxel — i.e., actual z-fighting in the
@@ -849,7 +896,7 @@ proc bridge_to_vm*(worker: Worker) =
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units, signal_test_complete, now_seconds,
-    dump_stats, find_voxel_overlaps
+    dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,

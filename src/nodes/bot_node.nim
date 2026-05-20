@@ -215,17 +215,31 @@ gdobj BotNode of KinematicBody:
           # composited screen. For without-UI we still drive mcp_camera.
           if not q.screenshot_with_ui:
             let cam = Camera(state.mcp_camera)
-            var t =
-              if q.screenshot_from_player and not state.player_camera.is_nil:
-                Camera(state.player_camera).global_transform
-              else:
-                var bt = self.global_transform
-                bt.origin += vec3(0, 0.8, 0)
-                bt
-            cam.transform = t
+            if q.screenshot_top_down:
+              # Orthographic camera high above the target looking straight
+              # down. Half-extent (screenshot_size) controls coverage.
+              let half = if q.screenshot_size > 0: q.screenshot_size else: 30.0
+              cam.set_orthogonal(half * 2, 0.1, 500.0)
+              var t: Transform
+              t.basis = init_basis(vec3(-PI / 2, 0, 0))
+              t.origin = vec3(self.global_transform.origin.x, 200,
+                self.global_transform.origin.z)
+              cam.transform = t
+            else:
+              cam.projection = PROJECTION_PERSPECTIVE
+              var t =
+                if q.screenshot_from_player and not state.player_camera.is_nil:
+                  Camera(state.player_camera).global_transform
+                else:
+                  var bt = self.global_transform
+                  bt.origin += vec3(0, 0.8, 0)
+                  bt
+              cam.transform = t
             cam.make_current()
             info "mcp screenshot positioning camera",
-              from_player = q.screenshot_from_player, origin = t.origin
+              from_player = q.screenshot_from_player,
+              top_down = q.screenshot_top_down,
+              origin = cam.global_transform.origin
           self.screenshot_pending = true
 
     if ?self.model:
