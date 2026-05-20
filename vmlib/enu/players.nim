@@ -1,4 +1,4 @@
-import types, base_api, vm_bridge_utils
+import types, base_api, vm_bridge_utils, builds_private
 
 bridged_to_host:
   proc tool*(self: Player): Tools
