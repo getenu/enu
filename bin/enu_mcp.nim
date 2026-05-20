@@ -118,7 +118,12 @@ proc ensure_connected() =
     reconnect()
 
 proc run_tool(
-    kind: McpQueryKind, code = "", top_level = false, unit_id = ""
+    kind: McpQueryKind,
+    code = "",
+    top_level = false,
+    unit_id = "",
+    screenshot_from_player = false,
+    screenshot_with_ui = false,
 ): string =
   ensure_connected()
   bot.mcp_query = McpQuery(
@@ -127,6 +132,8 @@ proc run_tool(
     state: MCP_PENDING,
     top_level: top_level,
     unit_id: unit_id,
+    screenshot_from_player: screenshot_from_player,
+    screenshot_with_ui: screenshot_with_ui,
   )
 
   let start = get_mono_time()
@@ -151,6 +158,19 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## Take a screenshot from the MCP bot's perspective.
       ## Returns the file path to the saved PNG image.
       run_tool(MCP_SCREENSHOT)
+
+  mcp_tool:
+    proc screenshot_from_player(with_ui: bool = false): string =
+      ## Take a screenshot from the player's first-person camera.
+      ## - with_ui: include UI overlay (toolbar, console, etc.) in the
+      ##   shot. Default false captures just the rendered world, matching
+      ##   what the player sees with the UI hidden.
+      ## Returns the file path to the saved PNG image.
+      run_tool(
+        MCP_SCREENSHOT,
+        screenshot_from_player = not with_ui,
+        screenshot_with_ui = with_ui,
+      )
 
   mcp_tool:
     proc get_console(): string =

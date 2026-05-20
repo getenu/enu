@@ -22,6 +22,8 @@ type
     state*: McpQueryState
     top_level*: bool
     unit_id*: string
+    screenshot_from_player*: bool
+    screenshot_with_ui*: bool
 
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
@@ -158,6 +160,7 @@ type
     nodes*: tuple[game: Node, data: Node, player: Node]
     mcp_camera*: Node
     mcp_viewport*: Node
+    player_camera*: Node
     screenshot_counter*: int
     player_value*: EdValue[Player]
     units*: EdSeq[Unit]

@@ -156,6 +156,7 @@ gdobj PlayerNode of KinematicBody:
 
     self.position_start = self.camera_rig.translation
     state.nodes.player = self
+    state.player_camera = self.camera
 
     let x = state.config.mouse_sensitivity / 1000.0
     mouse_sensitivity = vec2(x, -x)

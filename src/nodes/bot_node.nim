@@ -193,7 +193,11 @@ gdobj BotNode of KinematicBody:
         let q = bot.mcp_query
         if self.screenshot_pending and q.kind == MCP_SCREENSHOT and
             q.state == MCP_READY:
-          let vp = Viewport(state.mcp_viewport)
+          let vp =
+            if q.screenshot_with_ui:
+              self.get_tree().root
+            else:
+              Viewport(state.mcp_viewport)
           let img = vp.get_texture.get_data
           img.flip_y
           inc state.screenshot_counter
@@ -206,12 +210,22 @@ gdobj BotNode of KinematicBody:
           bot.mcp_query =
             McpQuery(kind: MCP_SCREENSHOT, result: path, state: MCP_DONE)
         elif q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
-          let cam = Camera(state.mcp_camera)
-          var t = self.global_transform
-          t.origin += vec3(0, 0.8, 0)
-          cam.transform = t
-          cam.make_current()
-          info "mcp screenshot positioning camera", origin = t.origin
+          # with_ui captures the root viewport (game + GUI overlay) so the
+          # camera positioning below has no effect — root is already the
+          # composited screen. For without-UI we still drive mcp_camera.
+          if not q.screenshot_with_ui:
+            let cam = Camera(state.mcp_camera)
+            var t =
+              if q.screenshot_from_player and not state.player_camera.is_nil:
+                Camera(state.player_camera).global_transform
+              else:
+                var bt = self.global_transform
+                bt.origin += vec3(0, 0.8, 0)
+                bt
+            cam.transform = t
+            cam.make_current()
+            info "mcp screenshot positioning camera",
+              from_player = q.screenshot_from_player, origin = t.origin
           self.screenshot_pending = true
 
     if ?self.model:
