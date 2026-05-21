@@ -214,6 +214,14 @@ gdobj BotNode of KinematicBody:
           # camera positioning below has no effect — root is already the
           # composited screen. For without-UI we still drive mcp_camera.
           if not q.screenshot_with_ui:
+            # mcp_viewport's `world` reference is captured at game.ready
+            # time, but the world changes on level switches. Refresh it
+            # each shot so the ortho/perspective camera renders against
+            # the current level.
+            let vp = Viewport(state.mcp_viewport)
+            let main_vp = self.get_tree().root
+            if not main_vp.is_nil:
+              vp.world = main_vp.find_world()
             let cam = Camera(state.mcp_camera)
             if q.screenshot_top_down:
               # Orthographic camera high above the target looking straight
@@ -226,7 +234,9 @@ gdobj BotNode of KinematicBody:
                 self.global_transform.origin.z)
               cam.transform = t
             else:
-              cam.projection = PROJECTION_PERSPECTIVE
+              # set_perspective restores FOV/near/far if a prior top-down
+              # shot left the camera in orthogonal mode.
+              cam.set_perspective(70.0, 0.05, 500.0)
               var t =
                 if q.screenshot_from_player and not state.player_camera.is_nil:
                   Camera(state.player_camera).global_transform
