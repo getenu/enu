@@ -1,25 +1,25 @@
 {
   "items": {
     "Nim.getenu.github.com": {
-      "dir": "$deps/Nim.getenu.github.com",
+      "dir": "$deps/nim",
       "url": "https://github.com/getenu/Nim",
-      "commit": "77d820e16de1bed2b0836b2e680903829f5be433",
+      "commit": "bea4c144a3a5330cd480d0010f96b88b49d65022",
       "version": ""
     },
     "godot-nim.getenu.github.com": {
-      "dir": "$deps/godot-nim.getenu.github.com",
+      "dir": "$deps/godot-nim",
       "url": "https://github.com/getenu/godot-nim",
       "commit": "3aeb5a61f306a0ad4f5a7292cfdc69af2fa35e4d",
       "version": ""
     },
     "ed.getenu.github.com": {
-      "dir": "$deps/ed.getenu.github.com",
+      "dir": "$deps/ed",
       "url": "https://github.com/getenu/ed",
-      "commit": "10025c1ff221ea51078f8f3e9309785724f59a43",
+      "commit": "074ebaadd96fa742b4ab603aed2626c18149d347",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
-      "dir": "$deps/nanoid.nim.getenu.github.com",
+      "dir": "$deps/nanoid.nim",
       "url": "https://github.com/getenu/nanoid.nim",
       "commit": "bbbf8f5ac6e1ee7fa088d648cc29ade859c0bc05",
       "version": ""
@@ -33,7 +33,7 @@
     "cligen": {
       "dir": "$deps/cligen",
       "url": "https://github.com/c-blake/cligen",
-      "commit": "042bb0175a965c598cf963dac61254c39201e6b1",
+      "commit": "a9511be3b12f3117a142e3490dc5653933df7d42",
       "version": ""
     },
     "chroma": {
@@ -69,25 +69,25 @@
     "metrics": {
       "dir": "$deps/metrics",
       "url": "https://github.com/status-im/nim-metrics",
-      "commit": "51f1227d0fd04ce84b1ef784b11280cb7875348c",
+      "commit": "a1296caf3ebb5f30f51a5feae7749a30df2824c2",
       "version": ""
     },
     "zippy": {
       "dir": "$deps/zippy",
       "url": "https://github.com/guzba/zippy",
-      "commit": "9ab82da84edfd6483d273dfcf8a921309945861e",
+      "commit": "bcb8c1e1be6abb0a0e35a3c6040cdd9391cc993f",
       "version": ""
     },
     "unittest2": {
       "dir": "$deps/unittest2",
       "url": "https://github.com/status-im/nim-unittest2",
-      "commit": "1efa65bb037185f0983ac4fa65932e8d3450825d",
+      "commit": "253e23e2bfc1de7aae6492e69018f32d69f436df",
       "version": ""
     },
     "nph": {
       "dir": "$deps/nph",
       "url": "https://github.com/arnetheduck/nph",
-      "commit": "1c6d7813f9f6d6a4fbcd36dfd1489b18982d0d55",
+      "commit": "2cacf6cc28116e4046e0b67a13545af5c4e756bd",
       "version": ""
     },
     "regex": {
@@ -102,8 +102,14 @@
       "commit": "4eae6a857cc3152b7388c74421d9a7425327ee04",
       "version": ""
     },
+    "mummyx.gokr.github.com": {
+      "dir": "$deps/mummyx",
+      "url": "https://github.com/gokr/mummyx",
+      "commit": "32f0ef9769cf65e73bb214983ea9c71b7f834b43",
+      "version": ""
+    },
     "nim-libbacktrace.dsrw.github.com": {
-      "dir": "$deps/nim-libbacktrace.dsrw.github.com",
+      "dir": "$deps/nim-libbacktrace",
       "url": "https://github.com/dsrw/nim-libbacktrace",
       "commit": "d8bd4ce5c46bb6d2f984f6b3f3d7380897d95ecb",
       "version": ""
@@ -135,7 +141,7 @@
     "faststreams": {
       "dir": "$deps/faststreams",
       "url": "https://github.com/status-im/nim-faststreams",
-      "commit": "ce27581a3e881f782f482cb66dc5b07a02bd615e",
+      "commit": "50889cd16ec8771106cdd0eeea460039e8571e06",
       "version": ""
     },
     "serialization": {
@@ -153,7 +159,7 @@
     "testutils": {
       "dir": "$deps/testutils",
       "url": "https://github.com/status-im/nim-testutils",
-      "commit": "e4d37dc1652d5c63afb89907efb5a5e812261797",
+      "commit": "6ce5e5e2301ccbc04b09d27ff78741ff4d352b4d",
       "version": ""
     },
     "nimib": {
@@ -171,13 +177,19 @@
     "chronos": {
       "dir": "$deps/chronos",
       "url": "https://github.com/status-im/nim-chronos",
-      "commit": "0d00279e67ad9fadeb944944449adc89f052b8bd",
+      "commit": "45f43a9ad8bd8bcf5903b42f365c1c879bd54240",
       "version": ""
     },
-    "hldiff": {
-      "dir": "$deps/hldiff",
-      "url": "https://github.com/c-blake/hldiff",
-      "commit": "cc1fc22a18c57e16d89c580cf78478c38c394c66",
+    "results": {
+      "dir": "$deps/results",
+      "url": "https://github.com/arnetheduck/nim-results",
+      "commit": "df8113dda4c2d74d460a8fa98252b0b771bf1f27",
+      "version": ""
+    },
+    "stew": {
+      "dir": "$deps/stew",
+      "url": "https://github.com/status-im/nim-stew",
+      "commit": "4382b18f04b3c43c8409bfcd6b62063773b2bbaa",
       "version": ""
     },
     "glob": {
@@ -198,28 +210,22 @@
       "commit": "66f2458710dc641dd4640368f9483c8a0ec70561",
       "version": ""
     },
-    "mummyx.gokr.github.com": {
-      "dir": "$deps/mummyx.gokr.github.com",
-      "url": "https://github.com/gokr/mummyx",
-      "commit": "32f0ef9769cf65e73bb214983ea9c71b7f834b43",
-      "version": ""
-    },
     "taskpools": {
       "dir": "$deps/taskpools",
       "url": "https://github.com/status-im/nim-taskpools",
       "commit": "9e8ccc754631ac55ac2fd495e167e74e86293edb",
       "version": ""
     },
-    "stew": {
-      "dir": "$deps/stew",
-      "url": "https://github.com/status-im/nim-stew",
-      "commit": "b66168735d6f3841c5239c3169d3fe5fe98b1257",
+    "webby": {
+      "dir": "$deps/webby",
+      "url": "https://github.com/treeform/webby",
+      "commit": "325d6ade0970562bee7d7d53961a2c3287f0c4bc",
       "version": ""
     },
-    "results": {
-      "dir": "$deps/results",
-      "url": "https://github.com/arnetheduck/nim-results",
-      "commit": "df8113dda4c2d74d460a8fa98252b0b771bf1f27",
+    "crunchy": {
+      "dir": "$deps/crunchy",
+      "url": "https://github.com/guzba/crunchy",
+      "commit": "98eb6526982bb8aae8eec6e8781f4539fa19e049",
       "version": ""
     },
     "fusion": {
@@ -243,31 +249,13 @@
     "bearssl": {
       "dir": "$deps/bearssl",
       "url": "https://github.com/status-im/nim-bearssl",
-      "commit": "11e798b62b8e6beabe958e048e9e24c7e0f9ee63",
+      "commit": "22c6a76ce015bc07e011562bdcfc51d9446c1e82",
       "version": ""
     },
     "httputils": {
       "dir": "$deps/httputils",
       "url": "https://github.com/status-im/nim-http-utils",
-      "commit": "c53852d9e24205b6363bba517fa8ee7bde823691",
-      "version": ""
-    },
-    "adix": {
-      "dir": "$deps/adix",
-      "url": "https://github.com/c-blake/adix",
-      "commit": "22811ec9d74d5c1ada3d126fa8b964e185209686",
-      "version": ""
-    },
-    "webby": {
-      "dir": "$deps/webby",
-      "url": "https://github.com/treeform/webby",
-      "commit": "325d6ade0970562bee7d7d53961a2c3287f0c4bc",
-      "version": ""
-    },
-    "crunchy": {
-      "dir": "$deps/crunchy",
-      "url": "https://github.com/guzba/crunchy",
-      "commit": "98eb6526982bb8aae8eec6e8781f4539fa19e049",
+      "commit": "f142cb2e8bd812dd002a6493b6082827bb248592",
       "version": ""
     },
     "nimsimd": {
@@ -280,10 +268,10 @@
   "nimcfg": [
     "############# begin Atlas config section ##########",
     "--noNimblePath",
-    "--path:\"deps/Nim.getenu.github.com\"",
-    "--path:\"deps/godot-nim.getenu.github.com/godot\"",
-    "--path:\"deps/ed.getenu.github.com/src\"",
-    "--path:\"deps/nanoid.nim.getenu.github.com/src\"",
+    "--path:\"deps/nim\"",
+    "--path:\"deps/godot-nim/godot\"",
+    "--path:\"deps/ed/src\"",
+    "--path:\"deps/nanoid.nim/src\"",
     "--path:\"deps/pretty/src\"",
     "--path:\"deps/cligen\"",
     "--path:\"deps/chroma/src\"",
@@ -296,8 +284,8 @@
     "--path:\"deps/unittest2\"",
     "--path:\"deps/nph/src\"",
     "--path:\"deps/regex/src\"",
-    "--path:\"deps/nim-libbacktrace.dsrw.github.com\"",
     "--path:\"deps/nimcp/src\"",
+    "--path:\"deps/nim-libbacktrace\"",
     "--path:\"deps/threading\"",
     "--path:\"deps/flatty/src\"",
     "--path:\"deps/netty/src\"",
@@ -311,18 +299,16 @@
     "--path:\"deps/chronos\"",
     "--path:\"deps/results\"",
     "--path:\"deps/stew\"",
-    "--path:\"deps/hldiff\"",
     "--path:\"deps/glob/src\"",
     "--path:\"deps/toml_serialization\"",
     "--path:\"deps/unicodedb/src\"",
     "--path:\"deps/taskpools\"",
-    "--path:\"deps/mummyx.gokr.github.com/src\"",
+    "--path:\"deps/mummyx/src\"",
     "--path:\"deps/fusion/src\"",
     "--path:\"deps/mustache/src\"",
     "--path:\"deps/parsetoml/src\"",
     "--path:\"deps/bearssl\"",
     "--path:\"deps/httputils\"",
-    "--path:\"deps/adix\"",
     "--path:\"deps/webby/src\"",
     "--path:\"deps/crunchy/src\"",
     "--path:\"deps/nimsimd/src\"",
@@ -340,19 +326,21 @@
       "bin_dir = \"app\"",
       "src_dir = \"src\"",
       "",
-      "requires \"https://github.com/getenu/Nim#77d820e1\",",
+      "requires \"https://github.com/getenu/Nim#bea4c144\",",
       "  \"https://github.com/getenu/godot-nim 0.8.6\",",
-      "  \"https://github.com/getenu/ed 0.20.0\",",
+      "  \"https://github.com/getenu/ed >= 0.20.7\",",
       "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
       "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
-      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#51f1227\", \"zippy\", \"unittest2\",",
-      "  \"nph\", \"regex\", \"nimcp\", \"https://github.com/dsrw/nim-libbacktrace\"",
+      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#a1296ca\", \"zippy\", \"unittest2\",",
+      "  \"nph\", \"regex\", \"nimcp\",",
+      "  \"https://github.com/gokr/mummyx#32f0ef97\",",
+      "  \"https://github.com/dsrw/nim-libbacktrace\"",
       ""
     ]
   },
   "hostOS": "macosx",
   "hostCPU": "arm64",
-  "nimVersion": "2.2.6",
+  "nimVersion": "2.2.10",
   "gccVersion": "",
   "clangVersion": ""
 }

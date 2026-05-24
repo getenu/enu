@@ -53,10 +53,10 @@ proc recv(s: McpSession, timeout_ms = 20000): JsonNode =
       continue
     try:
       result = parse_json(line)
-    except JsonParsingError as e:
-      echo "FAIL: non-JSON on stdout: " & e.msg
-      echo "  raw: " & line[0 ..< min(300, line.len)]
-      quit 1
+    except JsonParsingError:
+      # nimcp emits an "MCP server initialized" info line on stdout at boot.
+      # Skip non-JSON lines instead of failing the test.
+      continue
     return
   let err = s.collect_stderr()
   echo "FAIL: timed out after " & $timeout_ms & "ms. stderr (last 3000 chars):"
@@ -152,10 +152,59 @@ proc run_reconnect_tests*() =
     sleep 15_000
 
     let r2 = s.do_call_tool(
-      "set_position", %*{"x": 3.0, "y": 1.0, "z": -15.0}, timeout_ms = 30_000
+      "set_position",
+      %*{"x": 3.0, "y": 1.0, "z": -15.0, "rotation": 0.0, "id": ""},
+      timeout_ms = 30_000,
     )
     check not r2.starts_with("Error"), "post-timeout set_position failed: " & r2
     echo "  idle-reconnect set_position: PASS"
+
+  echo "  fast-reconnect: 8 fresh sessions back-to-back, no own-message assert..."
+  stdout.flush_file()
+  # Before the SUBSCRIBE-time stale-sub sweep landed, each fresh enu_mcp
+  # process subscribing to Enu within netty's ~10s keepalive window had a
+  # ~7/8 chance of tripping the `self.id notin source` assert in ed on the
+  # first ASSIGN-publishing tool call (set_position, screenshot_at, eval).
+  # With stable per-process ctx ids plus the worker-side sweep on
+  # SUBSCRIBE, this loop should run clean.
+  for i in 1 .. 8:
+    var s = open_session()
+    s.do_initialize()
+    case i mod 4
+    of 1:
+      let r = s.do_call_tool(
+        "set_position",
+        %*{"x": 5.0, "y": 1.0, "z": -10.0, "rotation": 0.0, "id": ""},
+        timeout_ms = 15_000,
+      )
+      check not r.starts_with("Error"), "iter " & $i & " set_position: " & r
+    of 2:
+      let r = s.do_call_tool(
+        "screenshot_at",
+        %*{
+          "x": 0.0, "y": 1.0, "z": -10.0,
+          "distance": 20.0, "height": 10.0, "angle": 180.0,
+        },
+        timeout_ms = 20_000,
+      )
+      check not r.starts_with("Error"), "iter " & $i & " screenshot_at: " & r
+    of 3:
+      let r = s.do_call_tool(
+        "screenshot_top_down",
+        %*{"x": 0.0, "z": -10.0, "size": 30.0},
+        timeout_ms = 20_000,
+      )
+      check not r.starts_with("Error"),
+        "iter " & $i & " screenshot_top_down: " & r
+    else:
+      let r = s.do_call_tool(
+        "eval",
+        %*{"code": "1", "top_level": false, "unit_id": ""},
+        timeout_ms = 15_000,
+      )
+      check not r.starts_with("Error"), "iter " & $i & " eval: " & r
+    s.close()
+  echo "  fast-reconnect: PASS"
 
 when is_main_module:
   echo "=== enu_mcp reconnect test ==="

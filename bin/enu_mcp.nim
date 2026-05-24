@@ -15,6 +15,11 @@ var
   # things predictable for the agent even when Netty kills our context.
   last_bot_transform: Option[Transform]
 
+# Stable across reconnects. Lets the worker recognize a reconnecting client
+# (same id → drop the stale subscription on SUBSCRIBE) instead of holding
+# two routes to the same process until the netty keepalive timeout fires.
+let ctx_id = "enu_mcp-" & generate_id()
+
 proc bot_id(): string =
   "mcp_bot-" & $Ed.thread_ctx.id
 
@@ -77,12 +82,11 @@ proc connect() =
   ensure_bot()
 
 proc reconnect() =
-  info "reconnect: creating fresh context"
+  info "reconnect: creating fresh context", ctx_id
   bot = nil
   last_enu_response = MonoTime()
-  Ed.thread_ctx = EdContext.init(
-    chan_size = 100, buffer = false, id = "enu_mcp-" & generate_id()
-  )
+  Ed.thread_ctx =
+    EdContext.init(chan_size = 100, buffer = false, id = ctx_id)
   connect()
 
 const PING_TIMEOUT = 0.5.seconds
@@ -422,9 +426,8 @@ info "enu_mcp starting", pid = get_current_process_id(), connect_addr
 
 Ed.bootstrap
 
-Ed.thread_ctx = EdContext.init(
-  chan_size = 100, buffer = false, id = "enu_mcp-" & generate_id()
-)
+Ed.thread_ctx =
+  EdContext.init(chan_size = 100, buffer = false, id = ctx_id)
 
 info "Ed context initialized. starting stdio server"
 new_stdio_transport().serve(enu_server)
