@@ -46,8 +46,39 @@ proc set_unit_transform_full(
   ## Like set_unit_transform but also tilts around the local X axis (pitch),
   ## which set_unit_transform can't do because Player.rotation only tracks yaw.
   ## Used by screenshot_at to aim the camera vertically.
+  ##
+  ## Build the look-at basis directly from yaw + pitch. The Euler approach
+  ## (init_basis(vec3(pitch, yaw, 0))) and basis multiplication both lean on
+  ## conventions that aren't obvious from the call sites and give visibly
+  ## rolled horizons at off-axis angles. A camera basis is just:
+  ##   forward = world unit vector derived from yaw + pitch
+  ##   right   = horizontal perpendicular to forward
+  ##   up      = right × forward
+  ## with no degrees of freedom for roll.
+  let
+    cy = cos(yaw_rad)
+    sy = sin(yaw_rad)
+    cp = cos(pitch_rad)
+    sp = sin(pitch_rad)
+  # yaw_rad = 0 means facing -Z (north) per screenshot_at's atan2(dir.x, -dir.z).
+  # Positive pitch tips forward into the ground (pitch_rad sign matches the
+  # geometric "look-down" expected by screenshot_at).
+  let
+    forward = vec3(float32(sy * cp), float32(-sp), float32(-cy * cp))
+    right = vec3(float32(cy), 0'f32, float32(sy))
+    up = right.cross(forward)
+  # init_basis(row0, row1, row2) — rows are the world components of the
+  # camera's local axes. Column j = (row0[j], row1[j], row2[j]) is where
+  # local axis j ends up in world space:
+  #   local +X -> right
+  #   local +Y -> up
+  #   local +Z -> -forward  (camera back; forward is local -Z)
   var t = Transform()
-  t.basis = init_basis(vec3(float32(pitch_rad), float32(yaw_rad), 0.0))
+  t.basis = init_basis(
+    vec3(right.x, up.x, -forward.x),
+    vec3(right.y, up.y, -forward.y),
+    vec3(right.z, up.z, -forward.z),
+  )
   t.origin = pos
   unit.transform = t
   if unit of Player:

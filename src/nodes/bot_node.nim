@@ -20,9 +20,14 @@ gdobj BotNode of KinematicBody:
     mesh: MeshInstance
     animation_player: AnimationPlayer
     transform_zid: EID
-    # MCP screenshot is two-phase: positioning the camera doesn't take effect
-    # until the next render. Frame 1 positions, frame 2 captures.
-    screenshot_pending: bool
+    # MCP screenshot is multi-phase: positioning the camera doesn't take
+    # effect until the next render, and a projection-mode change (ortho ↔
+    # perspective) needs an extra frame on top of that. -1 = idle, N > 0 =
+    # warming up (decrement each frame), 0 = capture this frame.
+    screenshot_warmup_frames: int = -1
+    # Bot hides its own skin during capture so it doesn't fill its own POV
+    # when the camera sits near the bot's body (screenshot, screenshot_at).
+    skin_hidden_during_screenshot: bool
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -191,8 +196,11 @@ gdobj BotNode of KinematicBody:
       let bot = Bot(self.model)
       if EPHEMERAL in bot.global_flags:
         let q = bot.mcp_query
-        if self.screenshot_pending and q.kind == MCP_SCREENSHOT and
-            q.state == MCP_READY:
+        if q.kind == MCP_SCREENSHOT and q.state == MCP_READY and
+            self.screenshot_warmup_frames > 0:
+          dec self.screenshot_warmup_frames
+        elif q.kind == MCP_SCREENSHOT and q.state == MCP_READY and
+            self.screenshot_warmup_frames == 0:
           let vp =
             if q.screenshot_with_ui:
               self.get_tree().root
@@ -206,10 +214,14 @@ gdobj BotNode of KinematicBody:
             ("enu_screenshot_" & $state.screenshot_counter & ".png")
           discard img.save_png(path)
           info "mcp screenshot captured", path
-          self.screenshot_pending = false
+          self.screenshot_warmup_frames = -1
+          if self.skin_hidden_during_screenshot:
+            self.skin.visible = true
+            self.skin_hidden_during_screenshot = false
           bot.mcp_query =
             McpQuery(kind: MCP_SCREENSHOT, result: path, state: MCP_DONE)
-        elif q.state == MCP_READY and q.kind == MCP_SCREENSHOT:
+        elif q.state == MCP_READY and q.kind == MCP_SCREENSHOT and
+            self.screenshot_warmup_frames < 0:
           # with_ui captures the root viewport (game + GUI overlay) so the
           # camera positioning below has no effect — root is already the
           # composited screen. For without-UI we still drive mcp_camera.
@@ -228,10 +240,31 @@ gdobj BotNode of KinematicBody:
               # down. Half-extent (screenshot_size) controls coverage.
               let half = if q.screenshot_size > 0: q.screenshot_size else: 30.0
               cam.set_orthogonal(half * 2, 0.1, 500.0)
+              let target = self.global_transform.origin
               var t: Transform
-              t.basis = init_basis(vec3(-PI / 2, 0, 0))
-              t.origin = vec3(self.global_transform.origin.x, 200,
-                self.global_transform.origin.z)
+              # Camera forward is local -Z. To look at -Y (straight down)
+              # with world -Z as "image up" (so north stays at the top of
+              # the frame), the local axes in world space are:
+              #   local +X = world +X     (east stays right)
+              #   local +Y = world -Z     (north points up in the image)
+              #   local +Z = world +Y     (so local -Z = world -Y = down)
+              # Row-major Basis (rows are the world-space components of
+              # the local axes). Equivalent column form:
+              #   local +X -> (1, 0, 0)   east stays right in the image
+              #   local +Y -> (0, 0, -1)  north stays up in the image
+              #   local +Z -> (0, 1, 0)   so local -Z (camera forward) = down
+              # Constructing this from euler angles via init_basis(vec3(...))
+              # is fragile: when pitched ±π/2 the camera ends up looking at
+              # the sky.
+              t.basis = init_basis(
+                vec3(1, 0, 0),
+                vec3(0, 0, 1),
+                vec3(0, -1, 0),
+              )
+              # y=60 is enough headroom for anything voxel-sized while
+              # staying within Enu's voxel renderer's draw distance. At
+              # y=200+ the world clips and the frame goes black.
+              t.origin = vec3(target.x, 60, target.z)
               cam.transform = t
             else:
               # set_perspective restores FOV/near/far if a prior top-down
@@ -246,11 +279,23 @@ gdobj BotNode of KinematicBody:
                   bt
               cam.transform = t
             cam.make_current()
+            # Hide the bot's own skin so it doesn't fill the frame when
+            # the camera sits at the bot's position. Skipped for the
+            # from-player path since that uses the human player's camera,
+            # not the bot's. Restored once the screenshot is captured.
+            if not q.screenshot_from_player and not self.skin.is_nil:
+              self.skin.visible = false
+              self.skin_hidden_during_screenshot = true
             info "mcp screenshot positioning camera",
               from_player = q.screenshot_from_player,
               top_down = q.screenshot_top_down,
               origin = cam.global_transform.origin
-          self.screenshot_pending = true
+          # Two warm-up frames: one for the transform write to land, one for
+          # a projection-mode change (ortho ↔ perspective) to take effect.
+          # A single frame was enough most of the time but a perspective
+          # capture immediately after an orthographic one occasionally read
+          # back the prior frame's ortho render.
+          self.screenshot_warmup_frames = 2
 
     if ?self.model:
       if self.model.code.owner == state.worker_ctx_name:
