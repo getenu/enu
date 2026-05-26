@@ -124,41 +124,27 @@ the position, *not* the centre.
 
 ### Rotating an instance
 
-Instances expose a mutable `rotation` field (degrees around the world Y
-axis). Assigning to it after construction rotates the displayed object:
+Pass `rotation` (degrees around the world Y axis) to `.new(...)`, or
+set the mutable `.rotation` field after construction:
 
 ```nim
-let chair = DiningChair.new(position = vec3(5, 1, -10))
-chair.rotation = 90.0   # turn 90° clockwise (viewed from above)
+# Create rotated:
+let c = DiningChair.new(position = vec3(5, 1, -10), rotation = 90.0)
+
+# Or mutate after:
+let d = DiningChair.new(position = vec3(7, 1, -10))
+d.rotation = -90.0
 ```
 
-The rotation pivots around the instance's `position` (the proto's local
+Rotation pivots around the instance's `position` (the proto's local
 `(0, 0, 0)`), so the displayed object swings around that corner. If you
-want a rotated object to occupy a specific space, compute its post-rotation
-footprint and adjust `position` accordingly.
+want a rotated object to occupy a specific space, compute its
+post-rotation footprint and adjust `position` accordingly.
 
-> **TODO (Enu API gap):** `.new(rotation = …)` is **not** accepted —
-> the only built-in named args are `global`, `speed`, `color`, and
-> `position` (plus whatever the proto declares in `name X(...)`). For
-> the common case of "create rotated at position", you need two lines:
->
-> ```nim
-> let c = DiningChair.new(position = vec3(5, 1, -10))
-> c.rotation = 90.0
-> ```
->
-> Plumbing `rotation` through `.new()` would let this be a one-liner.
-
-> **TODO (Enu bug):** setting `rotation = 180.0` is silently coerced
-> back to 0 (other values like 45, 60, 90 work as expected). Likely a
-> range-normalisation issue in the setter. Until fixed, avoid 180 — if
-> you need a 180° rotation, use 179 or 181, or build the proto with the
-> opposite default orientation.
-
-> **TODO (Enu API gap):** instance footprints (post-scale, post-rotation
-> world AABB) aren't queryable, so there's no built-in collision check
-> between an instance and walls / other instances. Track each one
-> explicitly in the `/build-plan` Inventory table.
+> **TODO (Enu API gap):** instance footprints (post-scale,
+> post-rotation world AABB) aren't queryable, so there's no built-in
+> collision check between an instance and walls / other instances.
+> Track each one explicitly in the `/build-plan` Inventory table.
 
 ## Patterns
 

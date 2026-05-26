@@ -202,23 +202,9 @@ To place a queen bed against the north wall of a 5 m × 5 m bedroom (world
 > query, list each instance's footprint explicitly in the plan's Inventory
 > table and verify by walk-through after building.
 
-> **TODO (Enu API gap):** rotating instances requires two lines instead
-> of one — `.new(rotation = …)` isn't a built-in named arg. Use:
->
-> ```nim
-> let c = DiningChair.new(position = vec3(...))
-> c.rotation = 90.0
-> ```
->
-> The mutable `.rotation` setter works visually (rotates around the
-> instance's `position`), but `.new(rotation = …)` is rejected with
-> "unknown named parameter". Plumbing it through `.new()` would let
-> rotated-at-creation be a one-liner. See `/build-script` for the
-> chair-as-proto pattern.
->
-> One known bug: `rotation = 180.0` silently resets to 0. Use 179 or
-> 181 (or build the proto with the opposite default orientation) until
-> fixed.
+Rotation is a built-in `.new(...)` parameter and a mutable instance
+field — pass `rotation = 90` to spawn rotated, or assign
+`inst.rotation = 90` after. See `/build-script` for the pattern.
 
 ## Sizing rooms for human feel
 

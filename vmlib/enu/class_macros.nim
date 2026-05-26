@@ -134,8 +134,18 @@ proc build_ctors(
   ctor_body.add quote do:
     apply_position(result, `position`)
 
+  var rotation = "rotation".ident
+  if "rotation" notin var_names:
+    params &= new_ident_defs(rotation, new_empty_node(), new_float_lit_node(0.0))
+
   ctor_body.add quote do:
     exec_instance(result)
+
+  # Apply rotation after the proto body has drawn its voxels, so the body
+  # can't accidentally clobber the caller's requested orientation.
+  ctor_body.add quote do:
+    if `rotation` != 0.0:
+      result.rotation = `rotation`
 
   # add baked in constructor params for speed, color, etc.
   # probably shouldn't be here.
