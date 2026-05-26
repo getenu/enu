@@ -66,6 +66,100 @@ above ground:
 Tower.new(height = 10, position = vec3(5, 1, -20))
 ```
 
+## Scaled-down prototypes (furniture etc.)
+
+For objects that don't read as themselves at 1 m³ resolution (chairs,
+beds, fixtures), draw the prototype at higher internal voxel resolution
+and set `scale = 0.25` (or similar) so the displayed object is the
+right size. The internal detail makes it recognisable; the scale keeps
+it human-sized.
+
+Pattern (example — design protos for whatever your build needs, this is
+just a representative one):
+
+```nim
+## Queen-size bed. 8x5x12 internal voxels at scale 0.25 = 2 × 1.25 × 3 m.
+name BedQueen
+speed = 0
+if not is_instance:
+  show = false
+  quit()
+
+scale = 0.25
+
+fill_box(0, 0, 0, 7, 1, 11, brown)   # frame
+fill_box(0, 2, 1, 7, 3, 11, white)   # mattress
+fill_box(0, 0, 0, 7, 5, 0, brown)    # headboard
+fill_box(1, 4, 1, 3, 4, 2, white)    # pillows
+fill_box(4, 4, 1, 6, 4, 2, white)
+fill_box(0, 4, 8, 7, 4, 11, blue)    # blanket
+```
+
+Instantiate:
+
+```nim
+BedQueen.new(position = vec3(4, 1, -116))
+```
+
+### Footprint of a scaled instance
+
+The `position` argument places the prototype's local `(0, 0, 0)` at that
+world coord. The instance then extends `+X`, `+Y`, `+Z` by
+`(voxel_count × scale)`:
+
+- `fill_box(0, _, _, 7, …)` covers 8 voxels (`0..7` inclusive) → 8 × 0.25 = 2 m wide
+- `fill_box(_, _, 0, _, _, 11)` covers 12 voxels → 12 × 0.25 = 3 m deep
+
+So `BedQueen.new(position = vec3(4, 1, -116))` occupies world
+`(4..6, 1..1.5, -116..-113)`. The displayed object's NW-bottom corner is
+the position, *not* the centre.
+
+### Limitations to know about
+
+> **TODO (Enu API gap):** there's no built-in collision check between
+> scaled instance footprints and walls, doors, or other instances. To
+> avoid overlap, list each instance's footprint explicitly in the
+> `/build-plan` Inventory table and verify by walking through after
+> placing.
+
+### Rotating an instance
+
+Instances expose a mutable `rotation` field (degrees around the world Y
+axis). Assigning to it after construction rotates the displayed object:
+
+```nim
+let chair = DiningChair.new(position = vec3(5, 1, -10))
+chair.rotation = 90.0   # turn 90° clockwise (viewed from above)
+```
+
+The rotation pivots around the instance's `position` (the proto's local
+`(0, 0, 0)`), so the displayed object swings around that corner. If you
+want a rotated object to occupy a specific space, compute its post-rotation
+footprint and adjust `position` accordingly.
+
+> **TODO (Enu API gap):** `.new(rotation = …)` is **not** accepted —
+> the only built-in named args are `global`, `speed`, `color`, and
+> `position` (plus whatever the proto declares in `name X(...)`). For
+> the common case of "create rotated at position", you need two lines:
+>
+> ```nim
+> let c = DiningChair.new(position = vec3(5, 1, -10))
+> c.rotation = 90.0
+> ```
+>
+> Plumbing `rotation` through `.new()` would let this be a one-liner.
+
+> **TODO (Enu bug):** setting `rotation = 180.0` is silently coerced
+> back to 0 (other values like 45, 60, 90 work as expected). Likely a
+> range-normalisation issue in the setter. Until fixed, avoid 180 — if
+> you need a 180° rotation, use 179 or 181, or build the proto with the
+> opposite default orientation.
+
+> **TODO (Enu API gap):** instance footprints (post-scale, post-rotation
+> world AABB) aren't queryable, so there's no built-in collision check
+> between an instance and walls / other instances. Track each one
+> explicitly in the `/build-plan` Inventory table.
+
 ## Patterns
 
 ### Polygon tower (N sides)

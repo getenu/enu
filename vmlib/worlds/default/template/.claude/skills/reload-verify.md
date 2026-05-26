@@ -21,17 +21,40 @@ After writing JSON or script files:
 
 2. **Wait 4–5 seconds** (Enu polls every ~2 seconds)
 
-3. **Take a screenshot** to verify
+3. **Take a screenshot** *and walk through* to verify
 
-If the change isn't visible, try a force-reload:
+### Hot-reload only adds, it doesn't subtract
 
-```bash
-# Force full reload by switching levels and back
-```
-Then use eval:
+Re-running a build script paints whatever `fill_box` / `place` calls it
+contains — but voxels placed by *prior* runs stay. Removing a wall or
+shrinking a structure by editing the script will leave the old voxels
+behind. The same applies to deleting a `.new(...)` line: the previously
+spawned instance persists.
+
+For any change that removes geometry (not just adds), force a full reload:
+
 ```nim
-load_level("level-name")
+press_action("save_and_reload")
 ```
+
+(Or via slash command: `/reload-verify`.) After `save_and_reload` the level
+re-loads from disk and prior runtime-only voxels are gone.
+
+### Verification is by walk-through, not just screenshot
+
+Screenshots from far back miss most placement bugs (chair clipping a
+doorway, counter blocking entry, bed footboard against a wall). The
+reliable check:
+
+1. Spawn / move the player into the room
+2. Walk through every door from both sides
+3. Check that furniture is reachable on all sides it should be (≥ 1 m
+   clearance per `/build-plan`)
+4. *Then* screenshot for the record
+
+Bot teleports (`set_position`) sometimes snap back when the target
+position is inside another object's collision capsule. If the bot ends up
+somewhere unexpected, `units_near` will show where it actually landed.
 
 ## Positioning the MCP Bot
 

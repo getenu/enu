@@ -191,3 +191,84 @@ fill_box(-5, top_y, -5, 5, top_y, 5, brown)
 3. Write `scripts/<name>.nim` using `fill_box`, `place`, etc.
 4. Add name to `level.json` load_order
 5. Touch the files, wait 4–5 seconds, screenshot to verify
+
+## Furniture Inside a Structure
+
+For anything bigger than a single placement (bedroom, kitchen, dining area),
+**don't try to render furniture with 1:1-voxel `place` calls.** A 1 m³ cube
+doesn't read as a chair; three cubes in a row don't read as a couch. Build
+furniture as scaled prototypes (see `/build-script` for the `name X(...)`
+prototype mechanism), then instantiate them from the room's script.
+
+1:1 voxels *are* fine for things that really are box-shaped at human scale:
+counters, fridges, dressers, signs, wall-mounted TVs. Everything else gets
+a proto.
+
+Example proto sizes that have worked (illustrative — design your own per
+build; these are starting points, not a fixed catalog):
+
+| Proto (example) | Internal voxels | Scale | World footprint (m) |
+|-----------------|-----------------|-------|----------------------|
+| `BedQueen` | 8 × 5 × 12 | 0.25 | 2 × 1.25 × 3 |
+| `BedTwin` | 6 × 5 × 10 | 0.25 | 1.5 × 1.25 × 2.5 |
+| `Sofa` | 12 × 5 × 5 | 0.25 | 3 × 1.25 × 1.25 |
+| `DiningTable` | 8 × 3 × 5 | 0.25 | 2 × 0.75 × 1.25 |
+| `DiningChair` | 3 × 5 × 3 | 0.25 | 0.75 × 1.25 × 0.75 |
+| `Toilet` | 4 × 6 × 4 | 0.25 | 1 × 1.5 × 1 |
+| `Bathtub` | 8 × 3 × 5 | 0.25 | 2 × 0.75 × 1.25 |
+
+For a `CoffeeTable`, `Lamp`, `Bookshelf`, `Workbench`, etc. — write a new
+proto in the same pattern. See `/build-plan` for the 1 m clearance rule and
+the scaled-instance placement formula, and `/build-script` for the
+rotation pattern.
+
+## Multi-Room Buildings (rooms, halls, doors)
+
+A few patterns that keep multi-room interiors clean:
+
+### Door openings
+
+Place doors by erasing voxels in a wall, 2 wide × 3 tall:
+
+```nim
+# Front door in south wall at z=16, centered at x=8..9
+fill_box(8, 1, 16, 9, 3, 16, eraser)
+```
+
+### Hallway depth
+
+A 1-voxel-deep hallway feels claustrophobic (you scrape both walls when you
+walk through). Go 2 voxels deep:
+
+```nim
+# Hallway between back rooms (z=6 divider) and front rooms (z=9 divider)
+# leaves z=7..8 as a 2-deep walkway.
+fill_box(0, 1, 6, 17, 4, 6, white)
+fill_box(0, 1, 9, 17, 4, 9, white)
+```
+
+### Windows as holes, not blue blocks
+
+`fill_box(..., blue)` for windows reads as a "blue panel," not a window.
+Use `eraser` to punch real holes instead:
+
+```nim
+fill_box(2, 2, 0, 4, 3, 0, eraser)  # 3-wide × 2-tall window in north wall
+```
+
+### Optional roof toggle for verification
+
+A `const ROOF_OFF` at the top of the script lets you re-load the level with
+the roof omitted so top-down screenshots show the interior layout:
+
+```nim
+const ROOF_OFF = false  # flip to true for layout-verification screenshots
+
+# ... later ...
+when not ROOF_OFF:
+  fill_box(-1, 5, -1, 18, 5, 16, brown)  # eave
+  fill_box(2,  6, 2,  15, 6, 13, brown)  # ridge step
+```
+
+Remember: switching `ROOF_OFF` true → false leaves the prior roof voxels
+behind. Use `press_action("save_and_reload")` to reload clean.

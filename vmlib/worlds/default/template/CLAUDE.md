@@ -3,6 +3,20 @@
 This directory is an Enu level. You can create and modify it using file edits and
 the MCP tools provided by the `enu` server.
 
+## Multi-room / multi-unit builds: use `/build-plan` first
+
+For anything larger than a single placement — multi-room buildings, a whole
+scene, more than ~3 units — run `/build-plan <description>` before
+constructing. The skill writes a plan to `<level_dir>/plan.md` with an
+inventory of units, their world footprints, dependencies, clearance rules,
+and a walk-through verification checklist. Confirm the plan with the human
+before laying any voxels.
+
+When making furniture or fixtures, default to scaled prototypes
+(`scale = 0.25`) — 1 m³ voxels read as cubes, not chairs or beds. See
+`/build-script` for the prototype mechanism and `/build-plan` for clearance
++ scale-math guidance.
+
 ## Quick Start
 
 1. `get_level_dir` → confirm the level directory path
