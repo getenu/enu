@@ -122,24 +122,32 @@ the position, *not* the centre.
 > `/build-plan` Inventory table and verify by walking through after
 > placing.
 
-### Rotating an instance
+### Per-instance transform: rotation and scale
 
-Pass `rotation` (degrees around the world Y axis) to `.new(...)`, or
-set the mutable `.rotation` field after construction:
+`position`, `rotation` (degrees around world Y), and `scale` are all
+`.new(...)` parameters as well as mutable fields on the instance:
 
 ```nim
-# Create rotated:
-let c = DiningChair.new(position = vec3(5, 1, -10), rotation = 90.0)
+# Create rotated + sized in one line:
+let c = DiningChair.new(
+  position = vec3(5, 1, -10), rotation = 90.0, scale = 0.3
+)
 
-# Or mutate after:
+# Or mutate after construction:
 let d = DiningChair.new(position = vec3(7, 1, -10))
 d.rotation = -90.0
+d.scale = 0.5
 ```
 
 Rotation pivots around the instance's `position` (the proto's local
-`(0, 0, 0)`), so the displayed object swings around that corner. If you
-want a rotated object to occupy a specific space, compute its
-post-rotation footprint and adjust `position` accordingly.
+`(0, 0, 0)`), so the displayed object swings around that corner. Scale
+is also relative to the instance's `position`. If you want a rotated or
+scaled object to occupy a specific space, compute its post-transform
+footprint and adjust `position` accordingly.
+
+(`scale = 0` is treated as "not specified" so the proto's own
+`scale = ...` line in its body keeps applying. Same for
+`rotation = 0`.)
 
 > **TODO (Enu API gap):** instance footprints (post-scale,
 > post-rotation world AABB) aren't queryable, so there's no built-in

@@ -138,14 +138,23 @@ proc build_ctors(
   if "rotation" notin var_names:
     params &= new_ident_defs(rotation, new_empty_node(), new_float_lit_node(0.0))
 
+  var scale = "scale".ident
+  if "scale" notin var_names:
+    params &= new_ident_defs(scale, new_empty_node(), new_float_lit_node(0.0))
+
   ctor_body.add quote do:
     exec_instance(result)
 
-  # Apply rotation after the proto body has drawn its voxels, so the body
-  # can't accidentally clobber the caller's requested orientation.
+  # Apply rotation and scale after the proto body has drawn its voxels so
+  # the body can't accidentally clobber the caller's requested values. 0
+  # is the "not specified" sentinel for both (a 0 rotation is a no-op, a
+  # 0 scale would be invisible — neither is a useful value to actually
+  # pass through).
   ctor_body.add quote do:
     if `rotation` != 0.0:
       result.rotation = `rotation`
+    if `scale` != 0.0:
+      result.scale = `scale`
 
   # add baked in constructor params for speed, color, etc.
   # probably shouldn't be here.
