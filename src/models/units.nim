@@ -35,16 +35,45 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     shared_value = EdValue[Shared].init()
     sight_query_value = EdValue[SightQuery].init(flags = {SYNC_LOCAL})
     eval_value = EdValue[string].init("", flags = {SYNC_LOCAL})
+    anchor_value = ed(Transform.init)
 
   self.init_shared
   self.global_flags += VISIBLE
   self.global_flags += DIRTY
 
+proc pivot_local*(self: Unit): Vector3 =
+  ## The unit's anchor pivot in parent-local coords (or world coords if
+  ## the unit is GLOBAL). Defaults to `transform.origin` when no anchor
+  ## has been set, since the anchor's identity Transform has origin = 0.
+  self.transform.origin + self.transform.basis.xform(self.anchor.origin)
+
+proc pivot_basis*(self: Unit): Basis =
+  ## The basis the unit is "rotated to" from the user's perspective —
+  ## i.e. the basis at the anchor pivot. Composes the stored transform
+  ## basis with the anchor's basis offset.
+  self.transform.basis * self.anchor.basis
+
+proc set_pivot_local*(self: Unit, pivot_in_parent_local: Vector3) =
+  ## Reposition the unit so its anchor pivot lands at the given
+  ## parent-local coord. Leaves rotation/scale alone.
+  self.transform_value.origin =
+    pivot_in_parent_local - self.transform.basis.xform(self.anchor.origin)
+
+proc set_pivot_basis*(self: Unit, new_pivot_basis: Basis) =
+  ## Re-orient the unit so the anchor pivot adopts the given basis,
+  ## keeping the pivot's parent-local position fixed.
+  let pivot = self.pivot_local
+  let new_basis = new_pivot_basis * self.anchor.basis.inverse
+  var t = Transform.init
+  t.basis = new_basis
+  t.origin = pivot - new_basis.xform(self.anchor.origin)
+  self.transform = t
+
 proc position*(self: Unit): Vector3 =
   if GLOBAL in self.global_flags:
-    self.transform.origin
+    self.pivot_local
   else:
-    self.transform.origin.global_from(self.parent)
+    self.pivot_local.global_from(self.parent)
 
 proc find_root*(self: Unit, all_clones = false): Unit =
   result = self

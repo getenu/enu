@@ -1,6 +1,11 @@
 # `anchor:` block — design notes
 
-Captured from chat exploration; needs a real plan + implementation pass.
+> **Status:** implemented (first pass). The block, the SET_ANCHOR mode
+> in begin_move/begin_turn, the math-in-bridge composition for
+> position/rotation, and the live `instance.anchor:` re-anchoring form
+> are all live. JSON persistence and a UI "drag the anchor" tool are
+> still future work; the rest of this doc is the original design
+> exploration and remains the reference for those.
 
 ## Problem
 

@@ -253,9 +253,16 @@ proc fire(self: Build) =
 proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
 
+proc is_setting_anchor(move_mode: int): bool =
+  move_mode == 3
+
 method on_begin_move*(
     self: Build, direction: Vector3, steps: float, move_mode: int
 ): Callback =
+  if is_setting_anchor(move_mode):
+    let offset = self.anchor_value.basis.xform(direction) * steps
+    self.anchor_value.origin = self.anchor_value.origin + offset
+    return
   let move = self.is_moving(move_mode)
   if move:
     self.end_asap() # Exit ASAP mode when switching to movement
@@ -306,6 +313,12 @@ method on_begin_turn*(
     else:
       {LEFT: UP, RIGHT: DOWN, UP: RIGHT, DOWN: LEFT}.to_table
   let axis = map[axis]
+  if is_setting_anchor(move_mode):
+    let world_axis = self.anchor_value.basis.xform(axis)
+    self.anchor_value.basis =
+      self.anchor_value.basis.rotated(world_axis, deg_to_rad(degrees))
+        .orthonormalized
+    return
   let move = self.is_moving(move_mode)
   if move:
     self.end_asap()

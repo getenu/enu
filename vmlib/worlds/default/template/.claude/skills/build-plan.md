@@ -183,8 +183,11 @@ Each prototype draws voxels in its own local coords. With `scale = 0.25`:
 - The instance footprint in world units is `voxel_count × scale`:
   8 × 0.25 = **2 m wide**, 12 × 0.25 = **3 m deep**.
 - An instance placed at `position = vec3(X, Y, Z)` occupies
-  `(X..X+2, Y..Y+0.5, Z..Z+3)`. The proto's local `(0, 0, 0)` is the
-  NW-bottom corner — *not* the centre — of the displayed object.
+  `(X..X+2, Y..Y+0.5, Z..Z+3)`. By default the proto's local
+  `(0, 0, 0)` is the NW-bottom corner — *not* the centre — of the
+  displayed object. A proto with an `anchor:` block reports its
+  declared pivot point at `position` instead; use the anchor pose to
+  reason about footprints in that case.
 
 To place a queen bed against the north wall of a 5 m × 5 m bedroom (world
 `x = 3..8`, `z = −116..−111`):
@@ -204,7 +207,11 @@ To place a queen bed against the north wall of a 5 m × 5 m bedroom (world
 
 Rotation is a built-in `.new(...)` parameter and a mutable instance
 field — pass `rotation = 90` to spawn rotated, or assign
-`inst.rotation = 90` after. See `/build-script` for the pattern.
+`inst.rotation = 90` after. For a proto that needs to rotate cleanly
+in place (chairs around a table, etc.) declare an `anchor:` block in
+the proto so `position` places the pivot and `rotation` spins around
+it without half-extent offset arithmetic in the call site. See
+`/build-script`.
 
 ## Sizing rooms for human feel
 

@@ -386,9 +386,9 @@ proc position_set(self: Unit, position: Vector3) =
     position.y = 0.1
 
   if GLOBAL in self.global_flags:
-    self.transform_value.origin = position
+    self.set_pivot_local(position)
   else:
-    self.transform_value.origin = position.local_to(self.parent)
+    self.set_pivot_local(position.local_to(self.parent))
 
 proc start_position_set(self: Unit, position: Vector3) =
   if GLOBAL in self.global_flags:
@@ -396,6 +396,12 @@ proc start_position_set(self: Unit, position: Vector3) =
   else:
     self.start_transform.origin = position.local_to(self.parent)
   self.global_flags += DIRTY
+
+proc reset_anchor(self: Unit) =
+  ## Reset the unit's anchor to identity. Used at the start of an
+  ## `anchor:` block so the body's turtle commands accumulate from a
+  ## clean pivot.
+  self.anchor = Transform.init
 
 proc delete(self: Unit) =
   ## Remove the unit from the level and delete its on-disk script + data.
@@ -457,7 +463,7 @@ proc rotation(self: Unit): float =
   if self of Player:
     result = Player(self).rotation
   else:
-    let b = self.transform.basis.orthonormalized
+    let b = self.pivot_basis.orthonormalized
     # Yaw around Y. Compute from basis columns directly:
     #   basis * (1, 0, 0) = (cos y, 0, -sin y)
     # so y = atan2(-basis[2][0], basis[0][0]). `basis.get_euler()` uses
@@ -473,16 +479,17 @@ proc rotation(self: Unit): float =
     result = degrees
 
 proc `rotation=`(self: Unit, degrees: float) =
-  var t = Transform.init
   if self of Player:
     Player(self).rotation_value.touch degrees
+    var t = Transform.init
     t.origin = self.transform.origin
+    self.transform = t
   else:
-    t = Transform.init
     var s = self.scale
-    t = t.rotated(UP, deg_to_rad(degrees)).scaled(vec3(s, s, s))
-    t.origin = self.transform.origin
-  self.transform = t
+    var pivot_basis = Transform.init.basis
+      .rotated(UP, deg_to_rad(degrees))
+      .scaled(vec3(s, s, s))
+    self.set_pivot_basis(pivot_basis)
 
 proc sees(
     worker: Worker, self: Unit, target: Unit, distance: float
@@ -905,8 +912,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
-    sleep_impl, position_set, start_position_set, delete, keep_alive,
-    new_markdown_sign, update_markdown_sign
+    sleep_impl, position_set, start_position_set, reset_anchor, delete,
+    keep_alive, new_markdown_sign, update_markdown_sign
 
   result.bridged_from_vm "bots", play
 

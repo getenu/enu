@@ -268,6 +268,7 @@ type
     current_line_value*: EdValue[int]
     sight_query_value*: EdValue[SightQuery]
     eval_value*: EdValue[string]
+    anchor_value*: EdValue[Transform]
 
   BlockLogEntry* = tuple
     unit_id: string

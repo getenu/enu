@@ -207,27 +207,26 @@ a proto.
 Example proto sizes that have worked (illustrative — design your own per
 build; these are starting points, not a fixed catalog):
 
-| Proto (example) | Internal voxels | Scale | World footprint (m) | Origin |
-|-----------------|-----------------|-------|----------------------|--------|
-| `BedQueen` | 8 × 5 × 12 | 0.25 | 2 × 1.25 × 3 | NW corner |
-| `BedTwin` | 6 × 5 × 10 | 0.25 | 1.5 × 1.25 × 2.5 | NW corner |
-| `Sofa` | 12 × 5 × 5 | 0.25 | 3 × 1.25 × 1.25 | NW corner |
-| `DiningTable` | 8 × 3 × 5 | 0.25 | 2 × 0.75 × 1.25 | NW corner |
-| `DiningChair` | 2 × 5 × 2 | 0.25 | 0.5 × 1.25 × 0.5 | **centred** |
-| `Toilet` | 4 × 6 × 4 | 0.25 | 1 × 1.5 × 1 | NW corner |
-| `Bathtub` | 8 × 3 × 5 | 0.25 | 2 × 0.75 × 1.25 | NW corner |
+| Proto (example) | Internal voxels | Scale | World footprint (m) |
+|-----------------|-----------------|-------|----------------------|
+| `BedQueen` | 8 × 5 × 12 | 0.25 | 2 × 1.25 × 3 |
+| `BedTwin` | 6 × 5 × 10 | 0.25 | 1.5 × 1.25 × 2.5 |
+| `Sofa` | 12 × 5 × 5 | 0.25 | 3 × 1.25 × 1.25 |
+| `DiningTable` | 8 × 3 × 5 | 0.25 | 2 × 0.75 × 1.25 |
+| `DiningChair` | 2 × 5 × 2 | 0.25 | 0.5 × 1.25 × 0.5 |
+| `Toilet` | 4 × 6 × 4 | 0.25 | 1 × 1.5 × 1 |
+| `Bathtub` | 8 × 3 × 5 | 0.25 | 2 × 0.75 × 1.25 |
 
-The "Origin" column distinguishes protos whose `position` is the
-NW-bottom corner of the displayed object (the natural pattern with
-`fill_box(0, 0, 0, ...)`) from protos drawn around their origin with
-negative voxel coords (rotation-friendly). Anything that gets rotated
-around a table or otherwise placed at arbitrary angles wants the
-centred-origin pattern — see `/build-script` for the recipe.
+By default `position` places the proto's local `(0, 0, 0)` (the first
+voxel of a `fill_box(0, 0, 0, …)`-drawn body) — the NW-bottom corner.
+For protos that need to be rotated around a table or otherwise placed
+at arbitrary angles, add an `anchor:` block to declare a different
+pivot (typically the centre). See `/build-script` for the recipe.
 
 For a `CoffeeTable`, `Lamp`, `Bookshelf`, `Workbench`, etc. — write a new
 proto in the same pattern. See `/build-plan` for the 1 m clearance rule and
 the scaled-instance placement formula, and `/build-script` for the
-rotation pattern.
+`anchor:` block.
 
 ## Multi-Room Buildings (rooms, halls, doors)
 

@@ -377,6 +377,36 @@ template build*(new_enu_target: Unit) =
   enu_target = new_enu_target
   move_mode = 1
 
+template anchor*(body: untyped) =
+  ## Declare the unit's pivot. Inside the block, turtle commands
+  ## (`forward`, `right`, `up`, `turn`, `lean`, …) accumulate into the
+  ## unit's anchor pose instead of drawing voxels or moving the unit.
+  ## The turtle starts at the proto's local `(0, 0, 0)` facing -Z.
+  ##
+  ## After the block, `position` places the anchor pivot at the given
+  ## world coord, `rotation` pivots around it, and `move me; forward`
+  ## moves along the anchor's intrinsic forward.
+  mixin reset_anchor
+  enu_target.reset_anchor()
+  let saved_move_mode = move_mode
+  move_mode = 3
+  body
+  move_mode = saved_move_mode
+
+template anchor*(target: Unit, body: untyped) =
+  ## Re-anchor an existing instance. Visibly moves/reorients the
+  ## instance because it's already rendered; the unit's `position` and
+  ## `rotation` stay constant from the user's perspective.
+  mixin reset_anchor
+  let saved_enu_target = enu_target
+  let saved_move_mode = move_mode
+  enu_target = target
+  enu_target.reset_anchor()
+  move_mode = 3
+  body
+  enu_target = saved_enu_target
+  move_mode = saved_move_mode
+
 proc turn*(self: Unit, position: Vector3, move_mode: int) =
   self.turn(self.angle_to(position), move_mode)
 

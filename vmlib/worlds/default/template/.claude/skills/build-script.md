@@ -143,23 +143,23 @@ d.scale = 0.5
 `scale = ...` line in its body keeps applying. Same for
 `rotation = 0`.)
 
-### Designing protos for rotation
+### Designing protos for rotation: the `anchor:` block
 
-Rotation pivots around the instance's `position` — which is the proto's
-local `(0, 0, 0)`. If you draw your proto starting at `(0, 0, 0)` and
-filling in `+X`/`+Y`/`+Z` (the natural pattern for `fill_box`), the
-proto's origin is its **NW-bottom corner**, and rotating the instance
-swings the body around that corner. The displayed object ends up in a
-different world location than the un-rotated version.
+Without an anchor, `position`/`rotation` pivot around the proto's local
+`(0, 0, 0)` — which for a `fill_box(0, 0, 0, …)`-drawn proto is its
+NW-bottom corner. Rotating swings the body around that corner; setting
+`position = vec3(x, y, z)` places the corner there, not the centre.
 
-If a proto is going to be rotated — chairs around a table, lamps in
-different orientations, anything multi-facing — draw it around the
-origin instead, using negative voxel coordinates:
+The `anchor:` block declares where the proto's *pivot* lives in its
+local voxel frame. Inside the block, turtle commands (`forward`,
+`right`, `up`, `turn`, `lean`) accumulate into the anchor pose — no
+voxels are placed, the unit is not moved, the turtle's pre-block state
+isn't touched. Run it at the top of the proto, before any drawing.
 
 ```nim
-## Dining chair: 2 wide x 5 tall x 2 deep, centred so rotation pivots
-## around the chair's middle. Backrest fixed at the -Z (proto-north)
-## face; use `rotation` on the instance to face it the right way.
+## Dining chair: 2 wide × 5 tall × 2 deep voxels. Anchor at the centre
+## of the seat so `position` places the seat centre and `rotation`
+## pivots around it. Backrest is on the proto's +Z face.
 name DiningChair
 speed = 0
 if not is_instance:
@@ -168,43 +168,50 @@ if not is_instance:
 
 scale = 0.25
 
-# Four legs around the origin
-fill_box(-1, 0, -1, -1, 0, -1, brown)
-fill_box( 0, 0, -1,  0, 0, -1, brown)
-fill_box(-1, 0,  0, -1, 0,  0, brown)
-fill_box( 0, 0,  0,  0, 0,  0, brown)
+anchor:
+  forward 1   # move pivot into the middle of the depth (z = 1 of 0..1)
+  right 1     # ...and the middle of the width (x = 1 of 0..1)
 
-# Seat slab
-fill_box(-1, 1, -1, 0, 1, 0, brown)
-
-# Backrest at -Z face (chair's "north" side)
-fill_box(-1, 2, -1, 0, 4, -1, brown)
+fill_box(0, 0, 0, 1, 0, 1, brown)   # legs row
+fill_box(0, 1, 0, 1, 1, 1, brown)   # seat
+fill_box(0, 2, 0, 1, 4, 0, brown)   # backrest at proto +Z face
 ```
 
-Place four chairs around a table by varying `rotation`:
+Place four chairs around a table on clean grid coords:
 
 ```nim
-DiningChair.new(position = vec3(4.5, 1, -104.75), rotation = 0)   # N
-DiningChair.new(position = vec3(4.5, 1, -103),    rotation = 180) # S
-DiningChair.new(position = vec3(5.75, 1, -103.875), rotation = 270) # E
-DiningChair.new(position = vec3(3.25, 1, -103.875), rotation = 90)  # W
+DiningChair.new(position = vec3(4.5, 1, -104), rotation = 0)    # N
+DiningChair.new(position = vec3(4.5, 1, -103), rotation = 180)  # S
+DiningChair.new(position = vec3(5.0, 1, -103.5), rotation = 270) # E
+DiningChair.new(position = vec3(4.0, 1, -103.5), rotation = 90)  # W
 ```
 
-When *not* to centre the origin: structural pieces that grow in a
-single direction (walls, floors, long beams) are simpler to author with
-the NW-corner origin pattern, and they're rarely rotated dynamically
-anyway. Use the centred pattern specifically for instances that need
-arbitrary-angle placement.
+No half-extent offset arithmetic in the call sites — the chair's centre
+goes exactly where you ask, and rotation spins it in place.
 
-> **TODO (Enu API gap):** instance footprints (post-scale,
-> post-rotation world AABB) aren't queryable, so there's no built-in
-> collision check between an instance and walls / other instances.
-> Track each one explicitly in the `/build-plan` Inventory table.
+The anchor is also a *direction*, not just a point. `turn` inside the
+block changes the unit's intrinsic forward, so `move me; forward 10`
+moves the unit along the visually-drawn forward instead of the proto's
+hard-coded `-Z`.
 
-> **TODO (Enu API gap):** instance footprints (post-scale,
-> post-rotation world AABB) aren't queryable, so there's no built-in
-> collision check between an instance and walls / other instances.
-> Track each one explicitly in the `/build-plan` Inventory table.
+Live re-anchoring works on instances too — visibly moves/reorients,
+since the unit is already on screen:
+
+```nim
+let c = DiningChair.new(position = vec3(5, 1, -10))
+c.anchor:
+  forward 2   # nudge the pivot deeper into the seat
+```
+
+When *not* to bother with an anchor: structural pieces drawn from a
+corner (walls, floors, long beams) that you never rotate. The default
+identity anchor and the `fill_box(0, 0, 0, …)` origin pattern are fine.
+
+> **TODO (Enu API gap):** instance footprints (post-scale, post-rotation
+> world AABB) still aren't queryable, so there's no built-in collision
+> check between an instance and walls / other instances. The anchor
+> pins down the reference point that query would key off; track each
+> one explicitly in the `/build-plan` Inventory table for now.
 
 ## Patterns
 

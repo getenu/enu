@@ -11,6 +11,10 @@ method code_template*(self: Bot, imports: string): string =
 method on_begin_move*(
     self: Bot, direction: Vector3, steps: float, moving_mode: int
 ): Callback =
+  if moving_mode == 3:
+    let offset = self.anchor_value.basis.xform(direction) * steps
+    self.anchor_value.origin = self.anchor_value.origin + offset
+    return
   # Move mode param is ignored
   var duration = 0.0
   let
@@ -31,6 +35,12 @@ method on_begin_move*(
 method on_begin_turn*(
     self: Bot, axis: Vector3, degrees: float, lean: bool, move_mode: int
 ): Callback =
+  if move_mode == 3:
+    let world_axis = self.anchor_value.basis.xform(axis)
+    self.anchor_value.basis =
+      self.anchor_value.basis.rotated(world_axis, deg_to_rad(degrees))
+        .orthonormalized
+    return
   # move mode param is ignored
   let degrees = degrees * -axis.x
   var duration = 0.0
