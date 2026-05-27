@@ -139,15 +139,67 @@ d.rotation = -90.0
 d.scale = 0.5
 ```
 
-Rotation pivots around the instance's `position` (the proto's local
-`(0, 0, 0)`), so the displayed object swings around that corner. Scale
-is also relative to the instance's `position`. If you want a rotated or
-scaled object to occupy a specific space, compute its post-transform
-footprint and adjust `position` accordingly.
-
 (`scale = 0` is treated as "not specified" so the proto's own
 `scale = ...` line in its body keeps applying. Same for
 `rotation = 0`.)
+
+### Designing protos for rotation
+
+Rotation pivots around the instance's `position` — which is the proto's
+local `(0, 0, 0)`. If you draw your proto starting at `(0, 0, 0)` and
+filling in `+X`/`+Y`/`+Z` (the natural pattern for `fill_box`), the
+proto's origin is its **NW-bottom corner**, and rotating the instance
+swings the body around that corner. The displayed object ends up in a
+different world location than the un-rotated version.
+
+If a proto is going to be rotated — chairs around a table, lamps in
+different orientations, anything multi-facing — draw it around the
+origin instead, using negative voxel coordinates:
+
+```nim
+## Dining chair: 2 wide x 5 tall x 2 deep, centred so rotation pivots
+## around the chair's middle. Backrest fixed at the -Z (proto-north)
+## face; use `rotation` on the instance to face it the right way.
+name DiningChair
+speed = 0
+if not is_instance:
+  show = false
+  quit()
+
+scale = 0.25
+
+# Four legs around the origin
+fill_box(-1, 0, -1, -1, 0, -1, brown)
+fill_box( 0, 0, -1,  0, 0, -1, brown)
+fill_box(-1, 0,  0, -1, 0,  0, brown)
+fill_box( 0, 0,  0,  0, 0,  0, brown)
+
+# Seat slab
+fill_box(-1, 1, -1, 0, 1, 0, brown)
+
+# Backrest at -Z face (chair's "north" side)
+fill_box(-1, 2, -1, 0, 4, -1, brown)
+```
+
+Place four chairs around a table by varying `rotation`:
+
+```nim
+DiningChair.new(position = vec3(4.5, 1, -104.75), rotation = 0)   # N
+DiningChair.new(position = vec3(4.5, 1, -103),    rotation = 180) # S
+DiningChair.new(position = vec3(5.75, 1, -103.875), rotation = 270) # E
+DiningChair.new(position = vec3(3.25, 1, -103.875), rotation = 90)  # W
+```
+
+When *not* to centre the origin: structural pieces that grow in a
+single direction (walls, floors, long beams) are simpler to author with
+the NW-corner origin pattern, and they're rarely rotated dynamically
+anyway. Use the centred pattern specifically for instances that need
+arbitrary-angle placement.
+
+> **TODO (Enu API gap):** instance footprints (post-scale,
+> post-rotation world AABB) aren't queryable, so there's no built-in
+> collision check between an instance and walls / other instances.
+> Track each one explicitly in the `/build-plan` Inventory table.
 
 > **TODO (Enu API gap):** instance footprints (post-scale,
 > post-rotation world AABB) aren't queryable, so there's no built-in
