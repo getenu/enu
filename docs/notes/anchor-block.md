@@ -3,9 +3,8 @@
 > **Status:** implemented (first pass). The block, the SET_ANCHOR mode
 > in begin_move/begin_turn, the math-in-bridge composition for
 > position/rotation, and the live `instance.anchor:` re-anchoring form
-> are all live. JSON persistence and a UI "drag the anchor" tool are
-> still future work; the rest of this doc is the original design
-> exploration and remains the reference for those.
+> are all live. The rest of this doc is the original design
+> exploration, kept as a reference.
 
 ## Problem
 
@@ -126,18 +125,6 @@ rotate twice. `anchor: turn right` does the same job declaratively:
 the unit appears and behaves as though it had been drawn rotated 90°,
 and re-running the script produces the same result every time.
 
-## Future: JSON persistence
-
-When the UI grows a "set anchor here" tool, the human's choice should
-persist as a property in the unit's JSON. Applied before the script
-runs.
-
-Open: if a script also has an `anchor:` block, does it **replace** the
-JSON anchor or **compose** on top of it? Probably compose — JSON
-encodes "the human placed the anchor here" and the script can adjust
-from there — with a flag on the JSON form for "hard human preference,
-scripts cannot override."
-
 ## Implementation hints (from chat)
 
 - `begin_move` and `begin_turn` are the primitives most turtle API
@@ -164,9 +151,6 @@ scripts cannot override."
   worth a sensible default that's "centre of bbox at script-yield
   time"? Or leave to the script author to declare. Probably the
   latter, with a clear convention documented in `/build-script`.
-- Interaction with `start_transform` in the JSON: anchor is in
-  proto-local coords, separate from the world transform. They compose
-  cleanly.
 - Animation: future `spin around the anchor's vertical axis` is a
   natural primitive once the pose is captured. Out of scope here but
   worth knowing the slot exists.
