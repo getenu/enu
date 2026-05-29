@@ -726,33 +726,85 @@ iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
     for pos, info in chunk:
       yield (pos, info)
 
+proc chunk_aabb(chunk_id: Vector3): AABB {.inline.} =
+  init_aabb(chunk_id * ChunkDim, vec3(ChunkDim, ChunkDim, ChunkDim))
+
 proc render_snapshot_direct*(
     voxel_tool: VoxelTool, chunk_id: Vector3, snapshot: SnapshotData
-) =
+): int {.discardable.} =
+  ## Render a chunk's snapshot into the terrain. Checks
+  ## `is_area_editable` first: if the chunk's data block is fully
+  ## loaded we use the cheap per-voxel `set_voxel`; otherwise we fall
+  ## back to a one-chunk `paste`, because `set_voxel` silently no-ops
+  ## for chunks the terrain hasn't fully loaded yet.
   if snapshot.data.len == 0:
-    return
+    return 0
   let voxels = decode_chunk(snapshot)
-  for linear in 0 ..< CHUNK_VOLUME:
-    let packed_voxel = voxels[linear]
-    if packed_voxel != EMPTY_VOXEL:
-      let local_pos = from_linear(linear)
-      let world_pos = chunk_id * ChunkDim + local_pos
-      let (color_idx, _) = unpack_voxel(packed_voxel)
-      voxel_tool.set_voxel(world_pos, color_idx.int64)
+  let chunk_min = chunk_id * ChunkDim
+  if voxel_tool.is_area_editable(chunk_aabb(chunk_id)):
+    for linear in 0 ..< CHUNK_VOLUME:
+      let packed_voxel = voxels[linear]
+      if packed_voxel != EMPTY_VOXEL:
+        let local_pos = from_linear(linear)
+        let (color_idx, _) = unpack_voxel(packed_voxel)
+        voxel_tool.set_voxel(chunk_min + local_pos, color_idx.int64)
+        inc result
+  else:
+    let buffer = gdnew[VoxelBuffer]()
+    buffer.create(ChunkDim, ChunkDim, ChunkDim)
+    buffer.fill(0)
+    for linear in 0 ..< CHUNK_VOLUME:
+      let packed_voxel = voxels[linear]
+      if packed_voxel != EMPTY_VOXEL:
+        let local_pos = from_linear(linear)
+        let (color_idx, _) = unpack_voxel(packed_voxel)
+        buffer.set_voxel(
+          color_idx.int64,
+          local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
+        )
+        inc result
+    voxel_tool.paste(chunk_min, buffer, 1, 0)
 
 proc render_delta_direct*(
     voxel_tool: VoxelTool, chunk_id: Vector3, delta: DeltaUpdate
-) =
+): int {.discardable.} =
+  ## Render a delta into the terrain. Same fast/slow split as
+  ## render_snapshot_direct — `set_voxel` for editable chunks, `paste`
+  ## fallback for chunks the terrain doesn't yet consider fully
+  ## loaded (where `set_voxel` would silently drop the write).
   if delta.data.len == 0:
-    return
+    return 0
   let changes = decode_delta(delta)
-  for (local_pos, packed_voxel) in changes:
-    let world_pos = chunk_id * ChunkDim + local_pos
-    if packed_voxel == EMPTY_VOXEL:
-      voxel_tool.set_voxel(world_pos, 0)
-    else:
-      let (color_idx, _) = unpack_voxel(packed_voxel)
-      voxel_tool.set_voxel(world_pos, color_idx.int64)
+  let chunk_min = chunk_id * ChunkDim
+  let editable = voxel_tool.is_area_editable(chunk_aabb(chunk_id))
+  if editable:
+    for (local_pos, packed_voxel) in changes:
+      let world_pos = chunk_min + local_pos
+      if packed_voxel == EMPTY_VOXEL:
+        voxel_tool.set_voxel(world_pos, 0)
+      else:
+        let (color_idx, _) = unpack_voxel(packed_voxel)
+        voxel_tool.set_voxel(world_pos, color_idx.int64)
+      inc result
+  else:
+    let buffer = gdnew[VoxelBuffer]()
+    buffer.create(ChunkDim, ChunkDim, ChunkDim)
+    buffer.fill(0)
+    for (local_pos, packed_voxel) in changes:
+      if packed_voxel == EMPTY_VOXEL:
+        # paste with use_mask=true treats 0 as skip, so eraser writes
+        # need to go through set_voxel separately. Best-effort; if the
+        # area isn't editable, the eraser won't take effect until a
+        # later render pass.
+        voxel_tool.set_voxel(chunk_min + local_pos, 0)
+      else:
+        let (color_idx, _) = unpack_voxel(packed_voxel)
+        buffer.set_voxel(
+          color_idx.int64,
+          local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
+        )
+        inc result
+    voxel_tool.paste(chunk_min, buffer, 1, 0)
 
 const ASAP_PASTE_INTERVAL = init_duration(seconds = 2)
 
@@ -770,7 +822,17 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
     self.buffer_size = vec3(ChunkDim, ChunkDim, ChunkDim)
     self.buffer = gdnew[VoxelBuffer]()
     self.buffer.create(ChunkDim, ChunkDim, ChunkDim)
+    # Zero first — VoxelBuffer.create doesn't initialize cells, so any
+    # cells voxel_tool.copy below doesn't touch would otherwise hold
+    # uninitialized memory and get pasted back as spurious voxels.
     self.buffer.fill(0)
+    # Pre-populate the buffer with the terrain's current state so the
+    # paste at end_asap doesn't wipe voxels that were written before
+    # ASAP began. (The godot_voxel paste binding doesn't expose
+    # use_mask, so paste always overwrites every cell including the
+    # untouched ones — pre-populating means "untouched" cells already
+    # hold the correct existing values.)
+    self.voxel_tool.copy(self.min_pos, self.buffer, 1)
   elif chunk_min.x < self.min_pos.x or chunk_min.y < self.min_pos.y or
       chunk_min.z < self.min_pos.z or chunk_max.x > self.max_pos.x or
       chunk_max.y > self.max_pos.y or chunk_max.z > self.max_pos.z:
@@ -788,7 +850,12 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
 
     let new_buffer = gdnew[VoxelBuffer]()
     new_buffer.create(new_size.x.int64, new_size.y.int64, new_size.z.int64)
+    # Zero first; see note above in the fresh-buffer path.
     new_buffer.fill(0)
+    # Pre-populate the new buffer's terrain region from the terrain,
+    # then overlay our existing buffer's contents (which carry the
+    # in-flight deltas) on top.
+    self.voxel_tool.copy(new_min, new_buffer, 1)
 
     let offset = self.min_pos - new_min
     new_buffer.copy_channel_from_area(
@@ -841,6 +908,11 @@ proc buffer_delta*(self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate) =
   self.dirty = true
 
 proc begin_asap*(self: VoxelRenderer) =
+  # If a previous cycle's buffer wasn't pasted yet, paste it now
+  # before clearing. Defensive: keeps the renderer robust against
+  # rapid ASAP toggling.
+  if ?self.buffer and self.dirty:
+    self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
   self.buffer = nil
   self.min_pos = vec3()
   self.max_pos = vec3()

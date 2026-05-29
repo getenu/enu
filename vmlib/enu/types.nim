@@ -4,7 +4,7 @@ var global_default* = false
 
 const yes* = true
 const no* = false
-const ASAP* = float.high  ## Magic value for speed to enable ASAP mode
+const ASAP* = 0.0  ## Magic value for speed to enable ASAP mode
 
 type
   Vector3* = tuple[x, y, z: float]

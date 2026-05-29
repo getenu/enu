@@ -566,6 +566,15 @@ proc initial_position(self: Build): Vector3 =
 proc draw_position(self: Build): Vector3 =
   self.position + self.draw_transform.origin
 
+proc advance(self: Build, steps: float) =
+  ## Translate the turtle's draw_position by `steps` along its current
+  ## forward direction. Bypasses begin_move (and the speed/ASAP toggle
+  ## that goes with it). Used by `wall` / `floor` so the turtle ends up
+  ## at the far end of the shape without paying for the forward
+  ## animation or risking the speed-toggle render race.
+  let offset = self.draw_transform.basis.xform(FORWARD) * steps
+  self.draw_transform_value.origin = self.draw_transform.origin + offset
+
 proc draw_position_set(self: Build, position: Vector3) =
   if GLOBAL in self.global_flags:
     self.draw_transform_value.origin = position - self.position
@@ -756,6 +765,14 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
 proc has_block_at(position: Vector3): bool =
   find_block_at(position).is_some
 
+proc rendered_voxel_count_get(self: Build): int =
+  ## Total voxels the build_node has actually painted into the
+  ## terrain via render_snapshot_direct / render_delta_direct's
+  ## paste-based path. Diagnostic for catching when writes are
+  ## dropped by VoxelTool::is_area_editable; lags the model count
+  ## if the paste hasn't caught up yet.
+  self.rendered_voxel_count
+
 proc units_in_box(
     x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
 ): string =
@@ -855,6 +872,216 @@ proc draw_voxel(self: Build, position: Vector3, color: Colors) =
   let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
   self.draw(position, info)
 
+const
+  BOX_PIVOT_CORNER = 0
+  BOX_PIVOT_CENTRE = 1
+  BOX_PIVOT_BOTTOM_CENTRE = 2
+
+proc box_local_bounds(
+    w, h, d: int, pivot: int
+): tuple[lo, hi: Vector3] =
+  ## Returns the box's continuous bounds in turtle-local coords, given
+  ## width / height / depth (voxel counts, all positive) and a pivot
+  ## constant. Width extends along +X, height along +Y, depth along -Z
+  ## (turtle's local forward).
+  ##
+  ## For even dimensions with non-corner pivots, the half-voxel snaps
+  ## to the -X / -Z / -Y side (one extra voxel toward the back-bottom-
+  ## left of the box) so the convention matches the corner pivot's
+  ## back-bottom-left intuition.
+  case pivot
+  of BOX_PIVOT_CORNER:
+    result.lo = vec3(0.0, 0.0, -(d - 1).float)
+    result.hi = vec3((w - 1).float, (h - 1).float, 0.0)
+  of BOX_PIVOT_CENTRE:
+    let x_lo = -(w div 2).float
+    let y_lo = -(h div 2).float
+    let z_hi = (d div 2).float - (if d mod 2 == 0: 1.0 else: 0.0)
+    result.lo = vec3(x_lo, y_lo, z_hi - (d - 1).float)
+    result.hi = vec3(x_lo + (w - 1).float, y_lo + (h - 1).float, z_hi)
+  of BOX_PIVOT_BOTTOM_CENTRE:
+    let x_lo = -(w div 2).float
+    let z_hi = (d div 2).float - (if d mod 2 == 0: 1.0 else: 0.0)
+    result.lo = vec3(x_lo, 0.0, z_hi - (d - 1).float)
+    result.hi = vec3(x_lo + (w - 1).float, (h - 1).float, z_hi)
+  else:
+    result.lo = vec3(0.0, 0.0, 0.0)
+    result.hi = vec3(0.0, 0.0, 0.0)
+
+proc box_impl(
+    self: Build,
+    w: int,
+    h: int,
+    d: int,
+    color: Colors,
+    fill: bool,
+    pivot: int,
+    at: Vector3,
+    rotation_deg: float,
+    use_turtle: bool,
+) =
+  ## OBB scan-converter. Walks the world-AABB of the box, inverse-
+  ## transforms each voxel into box-local coords, draws it if it lies
+  ## inside the box's per-pivot bounds.
+  if w <= 0 or h <= 0 or d <= 0:
+    return
+
+  var basis: Basis
+  var origin: Vector3
+  if use_turtle:
+    basis = self.draw_transform.basis
+    origin = self.draw_transform.origin
+  else:
+    basis = init_basis()
+    if rotation_deg != 0.0:
+      basis = basis.rotated(UP, deg_to_rad(rotation_deg).float32)
+    origin = at
+
+  let (lo, hi) = box_local_bounds(w, h, d, pivot)
+
+  # World-AABB from the 8 OBB corners.
+  var u_lo = vec3(float.high, float.high, float.high)
+  var u_hi = vec3(float.low, float.low, float.low)
+  for cx in [lo.x, hi.x]:
+    for cy in [lo.y, hi.y]:
+      for cz in [lo.z, hi.z]:
+        let p = basis.xform(vec3(cx, cy, cz)) + origin
+        u_lo.x = min(u_lo.x, p.x)
+        u_lo.y = min(u_lo.y, p.y)
+        u_lo.z = min(u_lo.z, p.z)
+        u_hi.x = max(u_hi.x, p.x)
+        u_hi.y = max(u_hi.y, p.y)
+        u_hi.z = max(u_hi.z, p.z)
+
+  let ix_lo = u_lo.x.floor.int
+  let iy_lo = u_lo.y.floor.int
+  let iz_lo = u_lo.z.floor.int
+  let ix_hi = u_hi.x.ceil.int
+  let iy_hi = u_hi.y.ceil.int
+  let iz_hi = u_hi.z.ceil.int
+
+  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  # 0.5 = half-voxel inclusion threshold. For axis-aligned cases this
+  # is a no-op (voxel centres land exactly on integer coords, the
+  # extra 0.5 margin doesn't add any cells). For off-axis cases it
+  # gives the "fat" Bresenham-style rasterisation that matches what
+  # `forward N` at non-cardinal headings already produces — a
+  # 1-thick wall at 45° draws a 1-voxel-wide stairstep instead of
+  # leaving holes between integer grid points.
+  let pad = 0.5
+  for ix in ix_lo .. ix_hi:
+    for iy in iy_lo .. iy_hi:
+      for iz in iz_lo .. iz_hi:
+        let world = vec3(ix.float, iy.float, iz.float)
+        let local = basis.xform_inv(world - origin)
+        if local.x < lo.x - pad or local.x > hi.x + pad:
+          continue
+        if local.y < lo.y - pad or local.y > hi.y + pad:
+          continue
+        if local.z < lo.z - pad or local.z > hi.z + pad:
+          continue
+        if not fill:
+          let near = min(
+            min(local.x - lo.x, hi.x - local.x),
+            min(min(local.y - lo.y, hi.y - local.y),
+                min(local.z - lo.z, hi.z - local.z)),
+          )
+          if near > 0.5:
+            continue
+        self.draw(world, info)
+
+proc sphere_impl(
+    self: Build,
+    size: int,
+    color: Colors,
+    fill: bool,
+    at: Vector3,
+    use_turtle: bool,
+) =
+  ## Radially-symmetric, so basis doesn't matter — only the centre.
+  ## `size` = diameter in voxels. Radius = size / 2.
+  if size <= 0:
+    return
+  let centre = if use_turtle: self.draw_transform.origin else: at
+  let radius = size.float / 2.0
+  let r_int = (radius + 0.5).floor.int
+  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  for dx in -r_int .. r_int:
+    for dy in -r_int .. r_int:
+      for dz in -r_int .. r_int:
+        let dist = sqrt((dx * dx + dy * dy + dz * dz).float)
+        if dist > radius:
+          continue
+        if not fill and dist < radius - 1.0:
+          continue
+        let p = centre + vec3(dx.float, dy.float, dz.float)
+        self.draw(vec3(p.x.round, p.y.round, p.z.round), info)
+
+proc cylinder_impl(
+    self: Build,
+    size: int,
+    height: int,
+    color: Colors,
+    fill: bool,
+    at: Vector3,
+    use_turtle: bool,
+) =
+  ## Axis = turtle's local up. Pivot = centre of the bottom face.
+  ## `size` = diameter (voxels), `height` = voxels along the axis.
+  if size <= 0 or height <= 0:
+    return
+
+  var basis: Basis
+  var origin: Vector3
+  if use_turtle:
+    basis = self.draw_transform.basis
+    origin = self.draw_transform.origin
+  else:
+    basis = init_basis()
+    origin = at
+
+  let radius = size.float / 2.0
+  let r_int = (radius + 0.5).floor.int
+
+  # Bounds in cylinder-local coords for the AABB seed.
+  let lo = vec3(-r_int.float, 0.0, -r_int.float)
+  let hi = vec3(r_int.float, (height - 1).float, r_int.float)
+
+  var u_lo = vec3(float.high, float.high, float.high)
+  var u_hi = vec3(float.low, float.low, float.low)
+  for cx in [lo.x, hi.x]:
+    for cy in [lo.y, hi.y]:
+      for cz in [lo.z, hi.z]:
+        let p = basis.xform(vec3(cx, cy, cz)) + origin
+        u_lo.x = min(u_lo.x, p.x)
+        u_lo.y = min(u_lo.y, p.y)
+        u_lo.z = min(u_lo.z, p.z)
+        u_hi.x = max(u_hi.x, p.x)
+        u_hi.y = max(u_hi.y, p.y)
+        u_hi.z = max(u_hi.z, p.z)
+
+  let ix_lo = u_lo.x.floor.int
+  let iy_lo = u_lo.y.floor.int
+  let iz_lo = u_lo.z.floor.int
+  let ix_hi = u_hi.x.ceil.int
+  let iy_hi = u_hi.y.ceil.int
+  let iz_hi = u_hi.z.ceil.int
+
+  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  for ix in ix_lo .. ix_hi:
+    for iy in iy_lo .. iy_hi:
+      for iz in iz_lo .. iz_hi:
+        let world = vec3(ix.float, iy.float, iz.float)
+        let local = basis.xform_inv(world - origin)
+        let r2 = local.x * local.x + local.z * local.z
+        if r2 > radius * radius:
+          continue
+        if local.y < -0.5 or local.y > (height - 1).float + 0.5:
+          continue
+        if not fill and r2 < (radius - 1.0) * (radius - 1.0):
+          continue
+        self.draw(world, info)
+
 proc place_block(self: Build, position: Vector3, color: Colors) =
   ## Place a persistent MANUAL voxel. The block is saved to local_edits and
   ## survives reload. For programmatic block-placement use draw_voxel.
@@ -920,7 +1147,8 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
-    draw_voxel, save_level_now, reload_unit
+    draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
+    cylinder_impl, advance, rendered_voxel_count_get
 
   result.bridged_from_vm "builds_private", place_block
 

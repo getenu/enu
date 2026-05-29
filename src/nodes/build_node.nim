@@ -73,16 +73,26 @@ gdobj BuildNode of VoxelTerrain:
         if ASAP_MODE in self.model.global_flags:
           self.renderer.buffer_snapshot(chunk_id, snapshot)
         elif ?self.renderer.voxel_tool:
-          render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
+          let painted = render_snapshot_direct(
+            self.renderer.voxel_tool, chunk_id, snapshot
+          )
+          self.model.rendered_voxel_count =
+            self.model.rendered_voxel_count + painted
 
       if chunk_id in self.model.voxels.chunk_deltas:
         let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
         if ?delta_seq:
+          var painted = 0
           for delta in delta_seq:
             if ASAP_MODE in self.model.global_flags:
               self.renderer.buffer_delta(chunk_id, delta)
             elif ?self.renderer.voxel_tool:
-              render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+              painted = painted + render_delta_direct(
+                self.renderer.voxel_tool, chunk_id, delta
+              )
+          if painted > 0:
+            self.model.rendered_voxel_count =
+              self.model.rendered_voxel_count + painted
 
           self.watch_delta_seq(chunk_id, delta_seq)
 
