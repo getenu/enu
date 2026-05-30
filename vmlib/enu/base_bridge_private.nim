@@ -19,6 +19,7 @@ bridged_to_host:
   proc reset_anchor*(self: Unit)
   proc delete*(self: Unit)
   proc keep_alive*()
+  proc claim_name*(requested: string)
 
   proc new_markdown_sign*(
     self: Unit,

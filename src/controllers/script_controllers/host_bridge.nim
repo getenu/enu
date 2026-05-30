@@ -159,6 +159,85 @@ proc exit(self: Worker, ctx: ScriptCtx, exit_code: int) =
   self.pause_script()
   ctx.running = false
 
+proc to_unit_id*(requested_name: string): string =
+  ## Convert a user-facing prototype name (CamelCase or any-case) into
+  ## the on-disk unit id `build_<snake_case>`. `Tree` -> `build_tree`,
+  ## `DiningChair` -> `build_dining_chair`, `bed_queen` ->
+  ## `build_bed_queen`. Already-prefixed names are kept as-is.
+  if requested_name == "":
+    return ""
+  var snake = ""
+  for i, c in requested_name:
+    if c in {'A' .. 'Z'}:
+      if i > 0 and requested_name[i - 1] notin {'_', 'A' .. 'Z'}:
+        snake.add '_'
+      snake.add char(ord(c) - ord('A') + ord('a'))
+    else:
+      snake.add c
+  if snake.starts_with("build_") or snake.starts_with("bot_"):
+    snake
+  else:
+    "build_" & snake
+
+proc claim_name(self: Worker, requested: string) =
+  ## Called from the `name` macro at the top of a prototype script.
+  ## If the unit's on-disk id already matches `requested`, no-ops.
+  ## If a conflicting unit already exists in the level, raises a
+  ## script error. Otherwise, schedules a rename of the script + data
+  ## files and exits the current script — the file watcher then
+  ## reloads the unit under the new id.
+  let unit = self.active_unit
+  if unit.is_nil or not ?unit.script_ctx:
+    return
+  let target_id = to_unit_id(requested)
+  if target_id == "" or unit.id == target_id:
+    return
+
+  let
+    new_script = state.config.script_dir / (target_id & ".nim")
+    new_data_dir = state.config.data_dir / target_id
+  if file_exists(new_script) or dir_exists(new_data_dir):
+    raise ValueError.init(
+      "The name '" & requested & "' conflicts with the existing unit '" &
+        target_id & "'. Choose a different name."
+    )
+
+  let
+    old_id = unit.id
+    old_script = unit.script_ctx.script
+    old_data_dir = state.config.data_dir / old_id
+    old_data_file = old_data_dir / (old_id & ".json")
+    new_data_file = new_data_dir / (target_id & ".json")
+
+  self.exit(unit.script_ctx, 0)
+  after_boop:
+    # Capture the file content with id rewrites before any moves.
+    var data_content = ""
+    if file_exists(old_data_file):
+      data_content =
+        read_file(old_data_file).replace(
+          "\"" & old_id & "\"", "\"" & target_id & "\""
+        )
+
+    if dir_exists(old_data_dir):
+      move_dir(old_data_dir, new_data_dir)
+      let inner_old = new_data_dir / (old_id & ".json")
+      if file_exists(inner_old):
+        move_file(inner_old, new_data_file)
+      if data_content != "" and file_exists(new_data_file):
+        write_file(new_data_file, data_content)
+
+    if file_exists(old_script):
+      move_file(old_script, new_script)
+
+    # Drop the in-memory unit; the file watcher picks up the new
+    # `data/<target_id>/<target_id>.json` on its next pass.
+    if unit.parent.is_nil:
+      state.units -= unit
+    else:
+      unit.parent.units -= unit
+    save_level(state.config.level_dir)
+
 proc load_level(self: Worker, level: string, world: string) =
   var world = world
   if not ?world:
@@ -1140,7 +1219,7 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
     sleep_impl, position_set, start_position_set, reset_anchor, delete,
-    keep_alive, new_markdown_sign, update_markdown_sign
+    keep_alive, new_markdown_sign, update_markdown_sign, claim_name
 
   result.bridged_from_vm "bots", play
 

@@ -214,6 +214,7 @@ proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
       include loops
 
       register_active(me)
+      claim_name(`name_str`)
       let home {.inject.} = PositionOffset(position: me.local_position)
       let `var_name`* {.inject.} = me
       `ctors`
