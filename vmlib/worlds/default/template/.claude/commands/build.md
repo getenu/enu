@@ -2,7 +2,7 @@ Build a structure in this Enu level: $ARGUMENTS
 
 Steps:
 1. `get_level_dir` to get LEVEL_DIR, then `screenshot` (with pitch=-30 or -90 for top-down) to see the current state
-2. Plan the structure. Use `fill_box`, `fill_sphere`, `fill_cylinder`, `place` for geometric shapes; use movement-based drawing (`forward/right/up/turn`) for paths and outlines
+2. Plan the structure. Use `box`, `sphere`, `cylinder`, `wall`, `floor`, `place` for geometric shapes; use movement-based drawing (`forward/right/up/turn`) for paths and outlines
 3. Pick a unique ID: `build_<descriptive_name>` (lowercase, no spaces)
 4. Create `LEVEL_DIR/data/<id>/<id>.json` with the build's world origin and `start_color`; use `"edits": {"<id>": []}` if all blocks come from the script
 5. Write `LEVEL_DIR/scripts/<id>.nim` with the build script

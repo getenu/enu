@@ -104,7 +104,7 @@ How will I know each phase worked?
 
 - After perimeter: `find_voxel_overlaps` clean for the walls
 - After floor: top-down screenshot shows enclosed shape
-- After buildings: `units_in_box(-25,0,-65, 25,30,-20)` shows expected list
+- After buildings: `for u in units_in_box(-25,0,-65, 25,30,-20): echo u.id` shows expected list
 - **Walk-through pass**: have the human (or `screenshot_from_player`) walk
   through every door — confirm passable, no clipping, furniture readable
   from inside
@@ -135,8 +135,8 @@ Anything I'm unsure of — confirm with the human before acting:
 
 1. Write the plan
 2. Read it back, look for layout mistakes (overlapping coordinates, missing
-   corners, etc.). Use `units_in_box` to verify nothing already occupies the
-   target space.
+   corners, etc.). Use `box_is_free` (or `units_overlapping` for the list)
+   to verify nothing already occupies the target space.
 3. **Confirm with the human** before laying any voxels. The plan is cheap to
    change; the world is expensive.
 4. Build phase 1, screenshot, **walk through**, update plan with "✓" or notes.

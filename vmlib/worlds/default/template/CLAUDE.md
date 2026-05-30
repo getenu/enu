@@ -39,10 +39,17 @@ When making furniture or fixtures, default to scaled prototypes
 - `get_console` — Recent Enu console output (use after `eval` to see `echo` results)
 
 **Spatial primitives** (call via `eval`):
-- `units_in_box(x1, y1, z1, x2, y2, z2)` — Units whose origins are inside the inclusive world-space box. "What's in this room?"
+- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the inclusive world-space box. Iterate or `.len` it; print with `for u in ...: echo u.id`. "What's in this room?"
 - `floor_at(x, z)` — Top y at (x, z) with a visible voxel, or -1 if column is empty. "Where's the ground here?"
-- `clear_box(x1, y1, z1, x2, y2, z2)` — true if no voxels in the box. "Can I put a structure here?"
+- `clear_box(x1, y1, z1, x2, y2, z2)` — true if no voxels in the box. "Is this volume empty of blocks?"
 - `find_voxel_overlaps(limit)` — World positions where two builds share a voxel (z-fighting detection)
+
+**Bounds queries** (work on any `Unit` / proto type, return values in world coords):
+- `unit.bounds` — `WorldBox` (`tuple[min, max: Vector3]`) tight world-space AABB after scale/rotation/anchor. On a proto type (`DiningChair.bounds`) returns the proto's own drawn-voxel AABB.
+- `a.overlaps(b)` — true if two units' bounds intersect
+- `units_overlapping(box: WorldBox)` — `seq[Unit]` whose bounds intersect `box` (contrast with `units_in_box`, which is origin-only)
+- `box_is_free(box: WorldBox)` — true if no voxels AND no unit's bounds intersect `box` (contrast with `clear_box`, which is voxels-only)
+- `WorldBox` helpers: `b.size`, `b.centre`, `p in b`, `a.intersects(b)`, `b.expanded(margin)`
 
 **Mutating:**
 - `eval(code, top_level = false, unit_id = "")` — Run Nim code in the Enu scripting context.
@@ -213,21 +220,28 @@ Use these inside build scripts for direct coordinate-based placement:
 # Place a single block at local integer coords
 place(x, y, z, color)
 
-# Fill a box region
-fill_box(x1, y1, z1, x2, y2, z2, color)
+# Shape primitives — default to the turtle's current transform.
+# Pass `at = vec3(x, y, z)` for explicit local coords.
+box(width = W, height = H, depth = D, color = c)
+sphere(size = D, color = c)              # D = diameter, not radius
+cylinder(size = D, height = H, color = c)
 
-# Fill a sphere (radius in blocks, float)
-fill_sphere(cx, cy, cz, radius, color)
-
-# Fill a vertical cylinder
-fill_cylinder(cx, y1, y2, cz, radius, color)
+# Turtle-forward wrappers that leave the turtle at the far end so
+# calls chain. Use these to build walls and floors without explicit
+# coords.
+wall(length = N, height = H, color = c)
+floor(length = N, width = W, color = c)
 
 # Examples:
-fill_box(0, 0, 0, 9, 0, 9, brown)         # 10×10 floor
-fill_box(0, 0, 0, 9, 5, 0, brown)         # 10×6 wall
-fill_sphere(5, 5, 5, 4.0, green)          # sphere canopy
-fill_cylinder(5, 0, 8, 5, 3.0, brown)    # round tower
-fill_box(2, 1, 2, 7, 1, 7, black)        # hollow out a floor area
+box(width = 10, height = 1, depth = 10, color = brown)   # 10×10 floor
+box(width = 10, height = 6, depth = 1, color = brown)    # 10×6 wall
+sphere(size = 6, color = green)                          # canopy at turtle
+cylinder(size = 4, height = 8, color = brown)            # round tower
+box(width = 6, height = 1, depth = 6,
+    at = vec3(2, 1, -7), color = eraser)                 # hollow inside a floor
+
+# `fill = false` makes any shape hollow (1-voxel shell). `eraser` color
+# removes voxels.
 ```
 
 After drawing, switch to move mode to animate or reposition:
@@ -261,7 +275,7 @@ if not is_instance:
 
 color = color
 height.times:
-  fill_box(0, 0, 0, 3, 0, 3, color)
+  box(width = 4, height = 1, depth = 4, color = color)
   up 1
 
 # Instantiate from any other script. Bump y by 1 so the default block

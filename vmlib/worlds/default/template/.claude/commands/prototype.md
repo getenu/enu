@@ -4,13 +4,14 @@ A prototype is a reusable build that can be instantiated multiple times with dif
 
 Steps:
 1. `get_level_dir` + `screenshot` to orient yourself
-2. Pick a name for the prototype type (CamelCase is conventional: `Tower`, `House`, `Tree`)
-3. Pick a unique file ID: `build_<name_lowercase>` (e.g., `build_tower`)
-4. Create `LEVEL_DIR/data/<id>/<id>.json` with a world origin and `start_color`
-5. Write `LEVEL_DIR/scripts/<id>.nim` defining the prototype
-6. Touch both files — Enu auto-detects the prototype
-7. Create the instantiating script and touch it too
-8. Wait 5 seconds, `screenshot` to verify
+2. Pick a name for the prototype type (CamelCase is conventional: `Tower`, `House`, `OakTree`)
+3. Create `LEVEL_DIR/scripts/build_anything.nim` and `LEVEL_DIR/data/build_anything/build_anything.json` with any temporary id — adding `name Tower` to the script makes Enu auto-rename the files to `build_tower.{nim,json}` on first load (CamelCase → snake_case, prefixed with `build_`). Conflict with an existing unit raises a script error.
+4. Create the instantiating script and touch it too
+5. Wait 5 seconds, `screenshot` to verify
+
+Prototype visibility is controlled per-level via `show_prototypes` in
+`level.json` (default `true`). When false, every `name`-declared unit
+starts with `show = false` (override with `show = true` in the script).
 
 ### Prototype script pattern
 
