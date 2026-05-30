@@ -16,6 +16,7 @@ var load_chunks {.threadvar.}: bool
 type LevelInfo = object
   enu_version*, format_version*: string
   load_order*: seq[string]
+  show_prototypes*: bool
 
 proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   self.enu_version = json{"enu_version"}.get_str
@@ -25,6 +26,11 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
     self.load_order = json["load_order"].json_to(seq[string])
   else:
     self.load_order = @[]
+
+  if "show_prototypes" in json:
+    self.show_prototypes = json["show_prototypes"].get_bool
+  else:
+    self.show_prototypes = true
 
 proc to_json_hook(self: Color): JsonNode =
   result =
@@ -397,6 +403,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       enu_version: enu_version,
       format_version: "v0.9.2",
       load_order: sorted_scripts,
+      show_prototypes: state.show_prototypes,
     )
     write_file level_dir / "level.json", jsonutils.to_json(level).pretty
     save_ide_support(level_dir, sorted_scripts)
@@ -510,6 +517,7 @@ proc load_level*(worker: Worker, level_dir: string) =
   debug "loading ", level_file
   var load_order = newSeq[string]()
 
+  state.show_prototypes = true
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
@@ -517,6 +525,7 @@ proc load_level*(worker: Worker, level_dir: string) =
       load_chunks = level.format_version == "v0.9"
       if level.load_order.len > 0:
         load_order = level.load_order
+      state.show_prototypes = level.show_prototypes
     except Exception as e:
       error "Failed to load level", error = e
 

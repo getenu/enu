@@ -189,6 +189,12 @@ proc claim_name(self: Worker, requested: string) =
   let unit = self.active_unit
   if unit.is_nil or not ?unit.script_ctx:
     return
+  # Every named unit is a prototype. Apply the level's prototype-visibility
+  # default before any user `show = ...` in the script body runs. If the
+  # script sets `show` explicitly later it wins (assignments run after
+  # claim_name in the macro-generated code).
+  if not state.show_prototypes:
+    unit.global_flags -= VISIBLE
   let target_id = to_unit_id(requested)
   if target_id == "" or unit.id == target_id:
     return

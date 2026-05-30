@@ -170,6 +170,7 @@ type
     draw_unit_id*: string
     console*: ConsoleModel
     paused*: bool
+    show_prototypes*: bool
     frame_count*: int
     skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format

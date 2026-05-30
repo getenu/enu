@@ -152,6 +152,7 @@ proc init*(_: type GameState): GameState =
     config_value: EdValue[Config].init(flags = flags, id = "config"),
     tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
     gravity: -80.0,
+    show_prototypes: true,
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
     open_sign_value: EdValue[Sign].init(flags = flags),
     wants: EdSeq[LocalStateFlags].init(flags = flags),
