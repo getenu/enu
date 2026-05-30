@@ -13,6 +13,7 @@ proc init*(_: type Player): Player =
   )
   self.init_unit(shared = false)
   self.global_flags += GLOBAL
+  self.global_flags += AGENT
 
   state.local_flags.changes:
     if RESETTING_VM.added:

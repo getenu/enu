@@ -597,8 +597,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         var i = 0
         while i < state.units.len:
           let unit = state.units[i]
-          if unit.id == \"player-{ctx_name}" or
-              (EPHEMERAL in unit.global_flags and ctx_name in unit.id):
+          # AGENT units encode their owning context name in their id
+          # (`player-{ctx_name}`, `mcp_bot-{ctx_name}`, ...). When the
+          # context unsubscribes, drop the corresponding agents.
+          if AGENT in unit.global_flags and ctx_name in unit.id:
             state.units.del i
           else:
             i += 1

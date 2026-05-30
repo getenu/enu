@@ -183,18 +183,18 @@ gdobj BotNode of KinematicBody:
 
     if self.model of Bot:
       let bot = Bot(self.model)
-      let is_ephemeral = EPHEMERAL in bot.global_flags
-      if is_ephemeral:
+      let is_agent = AGENT in bot.global_flags
+      if is_agent:
         info "mcp bot node setup",
           id = bot.id, has_mcp_query_value = ?bot.mcp_query_value
       self.set_process(
-        SCRIPT_RUNNING in self.model.global_flags or is_ephemeral
+        SCRIPT_RUNNING in self.model.global_flags or is_agent
       )
 
   method process(delta: float) =
     if self.model of Bot:
       let bot = Bot(self.model)
-      if EPHEMERAL in bot.global_flags:
+      if AGENT in bot.global_flags:
         let q = bot.mcp_query
         if q.kind == MCP_SCREENSHOT and q.state == MCP_READY and
             self.screenshot_warmup_frames > 0:

@@ -162,7 +162,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
         unit.local_flags -= HIGHLIGHT
       state.pop_flag RETICLE_VISIBLE
 
-  if EPHEMERAL in self.global_flags and SERVER in state.local_flags:
+  if AGENT in self.global_flags and SERVER in state.local_flags:
     self.mcp_query_value.changes(false):
       var q = change.item
       if added:

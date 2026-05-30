@@ -130,7 +130,16 @@ type
     RESETTING
     HIGHLIGHT_ERROR
     ASAP_MODE
-    EPHEMERAL
+    AGENT
+      ## Set on units owned by a remote client context — the human's
+      ## Player and any client-owned bot (MCP, scripted agents). Agent
+      ## units survive level reloads (peer to the human), are skipped
+      ## by level persistence (their lifecycle is the client's, not
+      ## the level's), and get cleaned up when their owning context
+      ## unsubscribes. Convention: agent unit ids contain the owning
+      ## context name as a substring (e.g. `player-{ctx_name}`,
+      ## `mcp_bot-{ctx_name}`) so worker.nim can match them on
+      ## unsubscribe.
 
   Tools* = enum
     CODE_MODE

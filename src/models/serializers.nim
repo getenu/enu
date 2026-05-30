@@ -361,9 +361,11 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
     var sort_nodes = newSeq[string]()
     var error_nodes = newSeq[string]()
     for unit in state.units:
+      if AGENT in unit.global_flags:
+        continue
       if unit.script_ctx != nil:
         let filename = unit.script_ctx.file_name.extract_filename
-        if filename != "players.nim" and filename != "":
+        if filename != "":
           let name =
             if filename.ends_with(".nim"):
               filename[0 .. ^5]
@@ -409,7 +411,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
     save_ide_support(level_dir, sorted_scripts)
 
     for unit in state.units:
-      if EPHEMERAL in unit.global_flags:
+      if AGENT in unit.global_flags:
         continue
       if save_all or DIRTY in unit.global_flags:
         unit.save

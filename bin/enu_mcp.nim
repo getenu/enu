@@ -95,7 +95,7 @@ proc ensure_bot() =
   info "ensure_bot: creating new bot", id = bot_id()
   bot = Bot.init(id = bot_id())
   bot.color = CLAUDE_ORANGE
-  bot.global_flags += EPHEMERAL
+  bot.global_flags += AGENT
   units.add(bot)
   # Restore the previous bot's position so reconnects are invisible to the
   # agent. Falls back to (0, 1, 0) on a fresh start so screenshot_at's
