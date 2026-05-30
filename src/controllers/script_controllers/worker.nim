@@ -146,7 +146,10 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
     self.interpreter.reset_module(unit.script_ctx.module_name)
     debug "reset module", module = unit.script_ctx.module_name
     unit.script_ctx.running = false
-    remove_file unit.script_ctx.script
+    try:
+      remove_file unit.script_ctx.script
+    except OSError:
+      discard
   elif code.nim.strip != "":
     debug "loading unit", unit_id = unit.id
     if LOADING_SCRIPT notin state.local_flags and not self.retry_failures:
@@ -165,6 +168,39 @@ const file_watch_interval = 2.seconds
 proc update_files*(self: Worker) =
   if SERVER notin state.local_flags:
     return
+
+  # Detect on-disk deletions before the mtime scans (which silently swallow
+  # OSError for missing files and so would leave a deleted unit in state).
+  var unit_deletions: seq[Unit]
+  var script_clears: seq[Unit]
+  for unit in state.units.value:
+    if not ?unit.script_ctx:
+      continue
+    # Skip units whose JSON has never been observed (still initializing) —
+    # we can't tell "deleted" from "never existed yet".
+    if unit.script_ctx.last_saved_json_mtime != Time.default and
+        not file_exists(unit.data_file):
+      unit_deletions.add(unit)
+      continue
+    if unit.script_ctx.script != "" and
+        unit.script_ctx.last_saved_mtime != Time.default and
+        not file_exists(unit.script_ctx.script):
+      script_clears.add(unit)
+
+  for unit in unit_deletions:
+    debug "unit data file deleted on disk; removing", unit_id = unit.id
+    if unit.parent.is_nil:
+      state.units -= unit
+    else:
+      unit.parent.units -= unit
+  if unit_deletions.len > 0:
+    save_level(state.config.level_dir)
+
+  for unit in script_clears:
+    debug "script file deleted on disk; clearing code", unit_id = unit.id
+    # Mark the script as unobserved so a future re-add re-loads it.
+    unit.script_ctx.last_saved_mtime = Time.default
+    unit.code = Code.init("")
 
   # Script mtime scan (root-level units only; nested units handled via deps)
   for unit in state.units.value:
