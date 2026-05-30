@@ -888,14 +888,22 @@ proc tight_voxel_aabb(self: Build): tuple[present: bool, lo, hi: Vector3] =
     if pos.z + 1.0 > hi.z: hi.z = pos.z + 1.0
   (any_voxel, lo, hi)
 
-proc world_aabb(transform: Transform, lo, hi: Vector3): WorldBox =
-  # Transform all 8 corners and re-fit to an axis-aligned box.
+proc world_aabb(unit: Unit, lo, hi: Vector3): WorldBox =
+  # Transform all 8 corners of the local-space AABB through the
+  # unit's own transform, then walk the parent chain accumulating
+  # parent origins (mirroring `global_from` / the position getter).
+  # Re-fit to an axis-aligned box at the end.
   var w_lo = vec3(float.high, float.high, float.high)
   var w_hi = vec3(-float.high, -float.high, -float.high)
+  let t = unit.transform
   for cx in [lo.x, hi.x]:
     for cy in [lo.y, hi.y]:
       for cz in [lo.z, hi.z]:
-        let p = transform.basis.xform(vec3(cx, cy, cz)) + transform.origin
+        var p = t.basis.xform(vec3(cx, cy, cz)) + t.origin
+        var parent = unit.parent
+        while parent != nil:
+          p += parent.transform.origin
+          parent = parent.parent
         if p.x < w_lo.x: w_lo.x = p.x
         if p.y < w_lo.y: w_lo.y = p.y
         if p.z < w_lo.z: w_lo.z = p.z
@@ -915,7 +923,7 @@ proc bounds(self: Unit): WorldBox =
     if not present:
       let p = b.position
       return (p, p)
-    return world_aabb(b.transform, lo, hi)
+    return world_aabb(b, lo, hi)
   else:
     let p = self.position
     (p - vec3(0.5, 0.0, 0.5), p + vec3(0.5, 1.5, 0.5))
