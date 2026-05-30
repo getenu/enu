@@ -132,16 +132,21 @@ Bot IDs start with `bot_`, build IDs with `build_`.
 
 ## Hot-Reload
 
-Enu watches JSON files for changes every ~2 seconds. After editing:
+Enu watches script + JSON files every ~2 seconds. After editing:
 
 1. Write all files
-2. `touch` them to ensure a newer mtime
+2. `touch` them to bump mtime
 3. Wait 4–5 seconds, then take a screenshot to verify
 
-For a guaranteed full reload (also picks up vmlib/API changes):
-```nim
-press_action("save_and_reload")
-```
+Hot-reload re-runs the script from a clean voxel state (same path
+the in-game editor uses), so edits that remove geometry produce a
+clean rebuild — no need to manually reset the build first.
+
+`press_action("save_and_reload")` reloads the entire level from disk
+and is disruptive to anyone else working in the same world. Only
+reach for it when a vmlib/engine change needs a fresh interpreter,
+or when `level.json` itself is broken — never as part of the normal
+edit loop.
 
 ## Working With the Human (Block Annotations)
 

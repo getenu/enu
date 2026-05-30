@@ -313,5 +313,6 @@ when not ROOF_OFF:
       at = vec3(2, 6, -2), color = brown)   # ridge step
 ```
 
-Remember: switching `ROOF_OFF` true → false leaves the prior roof voxels
-behind. Use `press_action("save_and_reload")` to reload clean.
+Touch the script file after flipping `ROOF_OFF` — the hot-reload
+re-runs the build script from a clean voxel state, so the toggle
+takes effect without `save_and_reload`.

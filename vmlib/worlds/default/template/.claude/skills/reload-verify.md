@@ -23,22 +23,28 @@ After writing JSON or script files:
 
 3. **Take a screenshot** *and walk through* to verify
 
-### Hot-reload only adds, it doesn't subtract
+Hot-reload is a full re-run, not an additive paint. The watcher does
+the same thing as the in-game editor: it resets the unit's voxel
+state and re-executes the script body. So edits that *remove* or
+*move* geometry produce a clean rebuild — touch the file, the unit
+matches the new script. Hand-placed JSON `edits` are preserved
+through the reset.
 
-Re-running a build script paints whatever `box` / `place` calls it
-contains — but voxels placed by *prior* runs stay. Removing a wall or
-shrinking a structure by editing the script will leave the old voxels
-behind. The same applies to deleting a `.new(...)` line: the previously
-spawned instance persists.
+### When `save_and_reload` is appropriate
 
-For any change that removes geometry (not just adds), force a full reload:
+`save_and_reload` reloads the whole level from disk. It's disruptive
+to anyone else working in the same level (other agents, the human),
+so prefer the per-script touch flow above. Real reasons to reach for
+the nuclear option:
+
+- A vmlib change (your edit is to `vmlib/enu/*.nim`, not a level
+  script — the running interpreter has stale bindings).
+- The level structure itself changed (`level.json` corruption, etc.).
+- The agent is debugging Enu engine code and needs a fresh VM.
 
 ```nim
 press_action("save_and_reload")
 ```
-
-(Or via slash command: `/reload-verify`.) After `save_and_reload` the level
-re-loads from disk and prior runtime-only voxels are gone.
 
 ### Verification is by walk-through, not just screenshot
 
