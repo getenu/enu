@@ -178,8 +178,8 @@ as 1:1 voxel cubes.
 
 Each prototype draws voxels in its own local coords. With `scale = 0.25`:
 
-- A `fill_box(0, 0, 0, 7, 0, 11, …)` fills voxels `(0..7, 0, 0..11)` —
-  that's **8** voxels wide and **12** deep (count inclusive).
+- A `box(width = 8, height = 1, depth = 12, …)` covers 8 voxels wide
+  along the proto's +X and 12 voxels deep along its -Z.
 - The instance footprint in world units is `voxel_count × scale`:
   8 × 0.25 = **2 m wide**, 12 × 0.25 = **3 m deep**.
 - An instance placed at `position = vec3(X, Y, Z)` occupies

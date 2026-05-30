@@ -41,7 +41,7 @@ speed = 0
 color = yellow  # use white or green as proxy
 
 # Draw the coin shape
-fill_sphere(2, 2, 2, 1.5, green)
+sphere(size = 3, color = green)
 
 move me
 speed = 20
@@ -93,7 +93,7 @@ name WinSpot
 
 speed = 0
 show = false   # invisible trigger zone
-fill_box(0, 0, 0, 4, 4, 4, eraser)   # make it hollow so player can enter
+box(width = 5, height = 5, depth = 5, color = eraser)   # hollow so player can enter
 
 loop:
   nil -> waiting
@@ -170,7 +170,7 @@ var door1* = Door.new(width = 12, height = 8, color = brown)
 name Button(door: Door = nil, pause = 0)
 speed = 0
 color = red
-fill_box(0, 0, 0, 1, 0, 1, red)  # flat button on floor
+box(width = 2, height = 1, depth = 2, color = red)  # flat button on floor
 
 move me
 speed = 10
@@ -230,7 +230,7 @@ name Checkpoint
 
 speed = 0
 color = blue
-fill_box(0, 0, 0, 3, 5, 0, blue)  # visible marker
+box(width = 4, height = 6, depth = 1, color = blue)  # visible marker
 
 var activated* = false
 

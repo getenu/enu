@@ -25,7 +25,7 @@ After writing JSON or script files:
 
 ### Hot-reload only adds, it doesn't subtract
 
-Re-running a build script paints whatever `fill_box` / `place` calls it
+Re-running a build script paints whatever `box` / `place` calls it
 contains — but voxels placed by *prior* runs stay. Removing a wall or
 shrinking a structure by editing the script will leave the old voxels
 behind. The same applies to deleting a `.new(...)` line: the previously

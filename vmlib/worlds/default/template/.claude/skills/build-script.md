@@ -87,12 +87,12 @@ if not is_instance:
 
 scale = 0.25
 
-fill_box(0, 0, 0, 7, 1, 11, brown)   # frame
-fill_box(0, 2, 1, 7, 3, 11, white)   # mattress
-fill_box(0, 0, 0, 7, 5, 0, brown)    # headboard
-fill_box(1, 4, 1, 3, 4, 2, white)    # pillows
-fill_box(4, 4, 1, 6, 4, 2, white)
-fill_box(0, 4, 8, 7, 4, 11, blue)    # blanket
+box(width = 8, height = 2, depth = 12, color = brown)             # frame
+box(width = 8, height = 2, at = position + vec3(0, 2, -10), depth = 11, color = white)  # mattress
+box(width = 8, height = 6, depth = 1, color = brown)              # headboard at the back face
+box(width = 3, height = 1, at = position + vec3(1, 4, -1), depth = 2, color = white)    # left pillow
+box(width = 3, height = 1, at = position + vec3(4, 4, -1), depth = 2, color = white)    # right pillow
+box(width = 8, height = 1, at = position + vec3(0, 4, -3), depth = 4, color = blue)     # blanket
 ```
 
 Instantiate:
@@ -104,11 +104,11 @@ BedQueen.new(position = vec3(4, 1, -116))
 ### Footprint of a scaled instance
 
 The `position` argument places the prototype's local `(0, 0, 0)` at that
-world coord. The instance then extends `+X`, `+Y`, `+Z` by
-`(voxel_count × scale)`:
+world coord. The instance then extends along the proto's width / height /
+depth (scaled):
 
-- `fill_box(0, _, _, 7, …)` covers 8 voxels (`0..7` inclusive) → 8 × 0.25 = 2 m wide
-- `fill_box(_, _, 0, _, _, 11)` covers 12 voxels → 12 × 0.25 = 3 m deep
+- `box(width = 8, …)` covers 8 voxels along the proto's +X → 8 × 0.25 = 2 m wide
+- `box(_, _, depth = 12, …)` covers 12 voxels along the proto's -Z → 12 × 0.25 = 3 m deep
 
 So `BedQueen.new(position = vec3(4, 1, -116))` occupies world
 `(4..6, 1..1.5, -116..-113)`. The displayed object's NW-bottom corner is
@@ -146,9 +146,9 @@ d.scale = 0.5
 ### Designing protos for rotation: the `anchor:` block
 
 Without an anchor, `position`/`rotation` pivot around the proto's local
-`(0, 0, 0)` — which for a `fill_box(0, 0, 0, …)`-drawn proto is its
-NW-bottom corner. Rotating swings the body around that corner; setting
-`position = vec3(x, y, z)` places the corner there, not the centre.
+`(0, 0, 0)` — which is the turtle's starting cell. Rotating swings the
+body around that corner; setting `position = vec3(x, y, z)` places the
+corner there, not the centre.
 
 The `anchor:` block declares where the proto's *pivot* lives in its
 local voxel frame. Inside the block, turtle commands (`forward`,
@@ -169,12 +169,14 @@ if not is_instance:
 scale = 0.25
 
 anchor:
-  forward 1   # move pivot into the middle of the depth (z = 1 of 0..1)
-  right 1     # ...and the middle of the width (x = 1 of 0..1)
+  forward 1   # move pivot into the middle of the depth
+  right 1     # ...and the middle of the width
 
-fill_box(0, 0, 0, 1, 0, 1, brown)   # legs row
-fill_box(0, 1, 0, 1, 1, 1, brown)   # seat
-fill_box(0, 2, 0, 1, 4, 0, brown)   # backrest at proto +Z face
+box(width = 2, height = 1, depth = 2, color = brown)             # legs row
+box(width = 2, height = 1, at = position + vec3(0, 1, -1),
+    depth = 2, color = brown)                                    # seat
+box(width = 2, height = 3, at = position + vec3(0, 2, 0),
+    depth = 1, color = brown)                                    # backrest at proto +Z face
 ```
 
 Place four chairs around a table on clean grid coords:
@@ -205,7 +207,7 @@ c.anchor:
 
 When *not* to bother with an anchor: structural pieces drawn from a
 corner (walls, floors, long beams) that you never rotate. The default
-identity anchor and the `fill_box(0, 0, 0, …)` origin pattern are fine.
+identity anchor + `box(width, height, depth)` at the turtle is fine.
 
 > **TODO (Enu API gap):** instance footprints (post-scale, post-rotation
 > world AABB) still aren't queryable, so there's no built-in collision
@@ -358,10 +360,8 @@ Open from another script: `var my_door = Door.new(...); my_door.open = true`
 ```nim
 import math
 speed = 0
-color = brown
 
-# Build a 10x1x10 platform
-fill_box(0, 0, 0, 9, 0, 9, brown)
+box(width = 10, height = 1, depth = 10, color = brown)   # 10×10 platform
 
 move me
 speed = 50
@@ -376,9 +376,8 @@ forever:
 ```nim
 import math
 speed = 0
-color = brown
 
-fill_box(0, 0, 0, 3, 0, 20, brown)
+box(width = 3, height = 1, depth = 20, color = brown)
 
 move me
 speed = 100
@@ -398,8 +397,7 @@ forever:
 name Button(door: Door = nil, pause = 5)
 
 speed = 0
-color = red
-fill_box(0, 0, 0, 1, 1, 1, red)
+box(width = 2, height = 2, depth = 2, color = red)
 
 move me
 speed = 10
