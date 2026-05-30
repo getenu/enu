@@ -202,7 +202,11 @@ proc update_files*(self: Worker) =
     unit.script_ctx.last_saved_mtime = Time.default
     unit.code = Code.init("")
 
-  # Script mtime scan (root-level units only; nested units handled via deps)
+  # Script mtime scan (root-level units only; nested units handled via deps).
+  # Use `touch` rather than `=` so the watcher re-runs the script even when
+  # the file's mtime changed but its content didn't (e.g. an explicit save
+  # to force a re-run). watch_code -> change_code already does reset + reload,
+  # mirroring the in-game editor's save path.
   for unit in state.units.value:
     if ?unit.script_ctx and unit.script_ctx.script != "":
       try:
@@ -210,7 +214,7 @@ proc update_files*(self: Worker) =
         if mtime != unit.script_ctx.last_saved_mtime:
           let code = read_file(unit.script_ctx.script)
           unit.script_ctx.last_saved_mtime = mtime
-          unit.code = Code.init(code)
+          unit.code_value.touch Code.init(code)
       except OSError:
         discard
 
