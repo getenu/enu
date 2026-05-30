@@ -268,12 +268,9 @@ default block lands above the ground floor.
 name Tower(height = 10, color = brown)
 speed = 0
 
-# Skip the prototype definition itself (only draw for instances):
-if not is_instance:
-  show = false
-  quit()
-
-color = color
+# Protos run their full script (so `Tower.bounds` etc. work). Hide
+# the proto's own copy via the level's `show_prototypes` setting in
+# `level.json`, or with an explicit `show = false` here.
 height.times:
   box(width = 4, height = 1, depth = 4, color = color)
   up 1

@@ -81,10 +81,6 @@ just a representative one):
 ## Queen-size bed. 8x5x12 internal voxels at scale 0.25 = 2 × 1.25 × 3 m.
 name BedQueen
 speed = 0
-if not is_instance:
-  show = false
-  quit()
-
 scale = 0.25
 
 box(width = 8, height = 2, depth = 12, color = brown)             # frame
@@ -162,10 +158,6 @@ isn't touched. Run it at the top of the proto, before any drawing.
 ## pivots around it. Backrest is on the proto's +Z face.
 name DiningChair
 speed = 0
-if not is_instance:
-  show = false
-  quit()
-
 scale = 0.25
 
 anchor:

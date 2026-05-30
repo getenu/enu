@@ -19,13 +19,9 @@ starts with `show = false` (override with `show = true` in the script).
 name Tower(height = 10, color = brown, sides = 4)
 speed = 0
 
-# Don't draw anything for the prototype definition itself:
-if not is_instance:
-  show = false
-  quit()
-
-# Draw the instance:
-color = color
+# The proto runs the same body as its instances. Use the level's
+# `show_prototypes = false` (see `level.json`) to hide all protos in
+# one place, or `show = false` here to hide just this one.
 height.times:
   sides.times:
     forward 8
@@ -51,7 +47,6 @@ Or from `eval` (for testing):
 ```nim
 name Door(open = false, width = 10, height = 8)
 speed = 0
-if not is_instance: show = false; quit()
 
 # Draw:
 height.times:
