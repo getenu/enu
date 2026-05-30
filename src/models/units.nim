@@ -206,7 +206,11 @@ proc destroy_impl*(self: Bot | Build | Sign) =
 proc clear_all*(units: EdSeq[Unit]) =
   var roots = units.value
   for unit in roots:
-    if not (unit of Player):
-      unit.walk_tree proc(unit: Unit) =
-        unit.units.clear
-      units -= unit
+    # Players and EPHEMERAL agents (MCP bots, other live client-owned
+    # units) survive level reloads. They're tied to a remote context
+    # lifetime, not to the loaded level.
+    if unit of Player or EPHEMERAL in unit.global_flags:
+      continue
+    unit.walk_tree proc(unit: Unit) =
+      unit.units.clear
+    units -= unit
