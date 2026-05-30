@@ -858,24 +858,125 @@ proc rendered_voxel_count_get(self: Build): int =
   ## if the paste hasn't caught up yet.
   self.rendered_voxel_count
 
+type WorldBox* = tuple[min, max: Vector3]
+
+proc get_WorldBox(a: VmArgs, pos: int): WorldBox =
+  # The VM passes WorldBox as nkPar( nkPar(min.x,y,z), nkPar(max.x,y,z) ).
+  let node = a.get_node(pos)
+  let lo = node.sons[0].sons
+  let hi = node.sons[1].sons
+  result = (
+    vec3(lo[0].float_val, lo[1].float_val, lo[2].float_val),
+    vec3(hi[0].float_val, hi[1].float_val, hi[2].float_val),
+  )
+
+proc tight_voxel_aabb(self: Build): tuple[present: bool, lo, hi: Vector3] =
+  ## Voxel-tight local-space AABB of the build's visible voxels.
+  ## `present` is false if the build has no visible voxels.
+  var lo = vec3(float.high, float.high, float.high)
+  var hi = vec3(-float.high, -float.high, -float.high)
+  var any_voxel = false
+  for (pos, info) in self.voxels.all_voxels:
+    if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
+      continue
+    any_voxel = true
+    if pos.x < lo.x: lo.x = pos.x
+    if pos.y < lo.y: lo.y = pos.y
+    if pos.z < lo.z: lo.z = pos.z
+    if pos.x + 1.0 > hi.x: hi.x = pos.x + 1.0
+    if pos.y + 1.0 > hi.y: hi.y = pos.y + 1.0
+    if pos.z + 1.0 > hi.z: hi.z = pos.z + 1.0
+  (any_voxel, lo, hi)
+
+proc world_aabb(transform: Transform, lo, hi: Vector3): WorldBox =
+  # Transform all 8 corners and re-fit to an axis-aligned box.
+  var w_lo = vec3(float.high, float.high, float.high)
+  var w_hi = vec3(-float.high, -float.high, -float.high)
+  for cx in [lo.x, hi.x]:
+    for cy in [lo.y, hi.y]:
+      for cz in [lo.z, hi.z]:
+        let p = transform.basis.xform(vec3(cx, cy, cz)) + transform.origin
+        if p.x < w_lo.x: w_lo.x = p.x
+        if p.y < w_lo.y: w_lo.y = p.y
+        if p.z < w_lo.z: w_lo.z = p.z
+        if p.x > w_hi.x: w_hi.x = p.x
+        if p.y > w_hi.y: w_hi.y = p.y
+        if p.z > w_hi.z: w_hi.z = p.z
+  (w_lo, w_hi)
+
+proc bounds(self: Unit): WorldBox =
+  ## Tight world-space AABB after scale/rotation/anchor are applied.
+  ## Builds report the bounding box of placed voxels. Bots/players
+  ## fall back to a small box around `position` (collider-aware
+  ## bounds is a follow-up).
+  if self of Build:
+    let b = Build(self)
+    let (present, lo, hi) = b.tight_voxel_aabb
+    if not present:
+      let p = b.position
+      return (p, p)
+    return world_aabb(b.transform, lo, hi)
+  else:
+    let p = self.position
+    (p - vec3(0.5, 0.0, 0.5), p + vec3(0.5, 1.5, 0.5))
+
+proc box_intersects(a, b: WorldBox): bool {.inline.} =
+  not (
+    a.max.x < b.min.x or a.min.x > b.max.x or a.max.y < b.min.y or
+    a.min.y > b.max.y or a.max.z < b.min.z or a.min.z > b.max.z
+  )
+
+proc overlaps(a: Unit, b: Unit): bool =
+  ## True if the two units' world-space bounding boxes intersect.
+  box_intersects(a.bounds, b.bounds)
+
+proc units_overlapping(box: WorldBox): seq[Unit] =
+  ## Units (root + nested) whose world-space bounds intersect `box`.
+  proc walk(unit: Unit, out_units: var seq[Unit]) =
+    if box_intersects(unit.bounds, box):
+      out_units.add(unit)
+    for c in unit.units.value:
+      walk(c, out_units)
+  for u in state.units.value:
+    walk(u, result)
+
+proc box_is_free(box: WorldBox): bool =
+  ## True if `box` is free of voxels (any Build's voxel data) AND
+  ## doesn't intersect any unit's bounds. Use to validate a proposed
+  ## placement. Contrast with `clear_box`, which only checks voxels.
+  let
+    xlo = box.min.x.floor.int
+    xhi = box.max.x.ceil.int - 1
+    ylo = box.min.y.floor.int
+    yhi = box.max.y.ceil.int - 1
+    zlo = box.min.z.floor.int
+    zhi = box.max.z.ceil.int - 1
+  for x in xlo .. xhi:
+    for y in ylo .. yhi:
+      for z in zlo .. zhi:
+        if find_block_at(vec3(x.float, y.float, z.float)).is_some:
+          return false
+  for u in state.units.value:
+    if box_intersects(u.bounds, box):
+      return false
+  true
+
 proc units_in_box(
     x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
-): string =
-  ## List units whose positions are inside the inclusive world-space box.
-  ## One per line: "id (x, y, z)". Useful for "what's in this room".
+): seq[Unit] =
+  ## Units whose origins are inside the inclusive world-space box.
+  ## For "is this unit's body in the box," use `units_overlapping`.
   let lo = vec3(min(x1, x2).float, min(y1, y2).float, min(z1, z2).float)
   let hi = vec3(max(x1, x2).float, max(y1, y2).float, max(z1, z2).float)
-  var out_lines = ""
-  proc walk(unit: Unit) =
+  proc walk(unit: Unit, out_units: var seq[Unit]) =
     let p = unit.position
     if p.x >= lo.x and p.x <= hi.x and p.y >= lo.y and p.y <= hi.y and
         p.z >= lo.z and p.z <= hi.z:
-      out_lines &= unit.id & " (" & $p.x & "," & $p.y & "," & $p.z & ")\n"
+      out_units.add(unit)
     for c in unit.units.value:
-      walk(c)
+      walk(c, out_units)
   for u in state.units.value:
-    walk(u)
-  out_lines
+    walk(u, result)
 
 proc floor_at(x: int, z: int): int =
   ## Return the highest y at (x, z) that has a visible voxel, or -1 if the
@@ -1220,7 +1321,8 @@ proc bridge_to_vm*(worker: Worker) =
     `lock=`, reset, press_action, load_level, level_name, world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units, signal_test_complete, now_seconds,
-    dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box
+    dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box, bounds,
+    overlaps, units_overlapping, box_is_free
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,

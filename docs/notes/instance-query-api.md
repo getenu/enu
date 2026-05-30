@@ -29,35 +29,49 @@ These are the questions that come up over and over while building:
 
 ```nim
 type
-  WorldBox* = object
-    min*, max*: Vector3      # world-space AABB
+  WorldBox* = tuple[min, max: Vector3]   # world-space AABB
 
 proc bounds*(self: Unit): WorldBox
-  ## Tight world-space AABB after scale, rotation, and anchor are
-  ## applied. For Builds this is the voxel bounding box transformed
-  ## into world coords. For Bots/Players, the unit's collider AABB.
+  ## Tight world-space voxel AABB after scale, rotation, and anchor
+  ## are applied. For Builds this is the tight bounding box of the
+  ## actual placed voxels, transformed into world coords. For
+  ## Bots/Players, the unit's collider AABB. Equally valid on a proto
+  ## (`DiningChair.bounds`) and on an instance — a proto's bounds is
+  ## the bounding box of whatever its draw script lays down.
 
 proc overlaps*(a, b: Unit): bool
   ## True if `a.bounds` and `b.bounds` intersect.
 
-proc clearance*(self: Unit, others: seq[Unit] = @[]): float
+proc clearance*(self: Unit): float
+proc clearance*(self: Unit, others: seq[Unit]): float
   ## Shortest distance from the unit's surface to the nearest other
   ## unit's surface (or world voxel). 0 means touching; negative means
-  ## interpenetrating. `others` defaults to all units in the current
-  ## level except `self`.
+  ## interpenetrating. With no `others` argument, scans every other
+  ## unit in the level.
 
-proc fits*(box: WorldBox): bool
-  ## True if `box` is free of voxels (any Build's voxel data) and
-  ## doesn't intersect any instance's bounds. Use to validate a
-  ## proposed placement.
+proc box_is_free*(box: WorldBox): bool
+  ## True if `box` is free of voxels (any Build's voxel data) AND
+  ## doesn't intersect any instance's bounds. Contrast with the
+  ## existing `clear_box` which checks voxels only.
+
+proc what_blocks*(_: type WorldBox, box: WorldBox): seq[Unit]
+  ## `WorldBox.what_blocks(box)` — units whose bounds intersect `box`.
+  ## Same data as `units_overlapping(box)`, framed for the "why did
+  ## `box_is_free` say no?" debug call site.
+
+proc units_overlapping*(box: WorldBox): seq[Unit]
+  ## Units whose bounds intersect `box`. New shape; the existing
+  ## `units_in_box(x1..z2)` keeps its origin-in-box semantics for
+  ## back-compat (and as the MCP-eval-friendly entry that formats
+  ## a string).
 ```
 
-And two helpers on `WorldBox` because every caller will want them:
+And helpers on `WorldBox` because every caller will want them:
 
 ```nim
 proc size*(b: WorldBox): Vector3
 proc centre*(b: WorldBox): Vector3
-proc contains*(b: WorldBox, p: Vector3): bool
+proc contains*(b: WorldBox, p: Vector3): bool  # auto-enables `p in b`
 proc intersects*(a, b: WorldBox): bool
 proc expanded*(b: WorldBox, margin: float): WorldBox
   ## `box.expanded(1.0)` for a "1m clearance" version of the box.
@@ -68,37 +82,50 @@ precision (a chair rotated 45° has a much smaller AABB than the bbox
 of its rotated corners), that's a follow-up primitive — the AABB
 covers ~95% of real placement-validation work.
 
+### Naming note: `bounds` vs the existing field
+
+Today, `Build` has an internal `bounds_value: EdValue[AABB]` field
+holding a chunk-aligned local-space AABB (used by VoxelTerrain for
+culling). That's not what user code wants. Plan:
+
+- Rename the existing field → `chunk_bounds_value` (and `self.bounds`
+  internal accessor → `self.chunk_bounds`).
+- Add a new tight voxel-AABB field maintained per-build, exposed as
+  the bridged `bounds` getter on `Unit`.
+
 ## Usage examples
 
 ### A. Validate a chair placement before committing
 
 ```nim
-let proposed = DiningChair.proto_bounds(
-  position = vec3(4.5, 1, -103.25), rotation = 0
-)
-if proposed.fits():
+# `DiningChair.bounds` is the proto's voxel AABB at its declared
+# position (defaults to origin). Shift it into the candidate spot:
+let proto = DiningChair.bounds
+let offset = vec3(4.5, 1, -103.25) - proto.min
+let proposed: WorldBox = (proto.min + offset, proto.max + offset)
+if box_is_free(proposed):
   DiningChair.new(position = vec3(4.5, 1, -103.25), rotation = 0)
 else:
-  echo "won't fit — collides with: ", proposed.what_blocks()
+  echo "won't fit — collides with: ", WorldBox.what_blocks(proposed)
 ```
 
-(`proto_bounds` is a class-method on protos: compute the would-be
-bounds without actually instantiating. `what_blocks` is an optional
-debug helper that returns the colliding units.)
+Rotation is harder to model without a real instance — for that case,
+spawn → measure → destroy (`show = false; reset(clear = true)`)
+is the documented workaround until OBB or a dedicated
+`bounds_at(position, rotation)` primitive lands.
 
 ### B. Walk a corridor and ask if anything's in the way
 
 ```nim
-let doorway = WorldBox(min: vec3(8, 1, 16), max: vec3(9, 3, 16.5))
+let doorway: WorldBox = (vec3(8, 1, 16), vec3(9, 3, 16.5))
 let clear_path = doorway.expanded(0.5)   # half-metre approach margin
-for unit in units_in_box(clear_path):
+for unit in units_overlapping(clear_path):
   echo "blocking doorway: ", unit.id
 ```
 
-(`units_in_box` today filters by origin. New semantics: a unit is in
-the box if its bounds intersect it. Keeps the obvious name, breaks
-existing scripts that relied on origin-only — fine, we'll refresh the
-skills along with this work.)
+`units_overlapping` is the new primitive; the existing
+`units_in_box(x1..z2)` keeps its origin-in-box semantics for
+back-compat and for MCP-eval-friendly string output.
 
 ### C. Auto-arrange chairs around a table (using bounds)
 
@@ -129,11 +156,11 @@ and `bounds.min/max` are stable.
 ```nim
 # After building a room, check every doorway has clearance
 for door in doorways:
-  let box = WorldBox(
-    min: door.position - vec3(0.5, 0, 0.5),
-    max: door.position + vec3(0.5, 3, 0.5)
+  let box: WorldBox = (
+    door.position - vec3(0.5, 0, 0.5),
+    door.position + vec3(0.5, 3, 0.5)
   )
-  if not fits(box):
+  if not box_is_free(box):
     echo "doorway ", door.position, " is blocked"
 ```
 
@@ -150,8 +177,8 @@ for inst in [chair1, chair2, table, sofa]:
 
 ```nim
 # eval'd from MCP:
-let bedroom = WorldBox(min: vec3(3, 0, -116), max: vec3(8, 5, -111))
-for u in units_in_box(bedroom):
+let bedroom: WorldBox = (vec3(3, 0, -116), vec3(8, 5, -111))
+for u in units_overlapping(bedroom):
   echo u.id, " bounds=", u.bounds
 ```
 
@@ -160,20 +187,22 @@ for u in units_in_box(bedroom):
 - **AABB or OBB**: AABB is dead simple and good enough for grid-aligned
   cardinal-rotation placement (the common case). OBB matters more for
   arbitrary angles. Start AABB, add OBB later if needed?
-- **Voxel-aware vs. proto-AABB**: a `Build` is a sparse voxel cloud;
-  its AABB is conservative (lots of empty space inside an L-shaped
-  wall). Should `bounds` return the voxel-tight AABB (recomputed when
-  the build changes) or just the proto's declared bounds? The existing
-  `bounds_value: EdValue[AABB]` field on `Build` (`src/types.nim:306`)
-  suggests we already track something — verify what's in there.
+- **Voxel-aware bounds — decided**: `bounds` is voxel-tight. The
+  existing chunk-aligned `bounds_value` gets renamed to
+  `chunk_bounds_value` (it stays around for VoxelTerrain culling);
+  a parallel tight-AABB field is added to `Build` and maintained as
+  voxels are drawn / erased.
+- **`bounds` on a proto vs an instance — decided**: same proc, same
+  return type. A proto draws its voxels into itself (just with
+  `show = false`) so `DiningChair.bounds` returns the tight world
+  AABB of the proto's drawn voxels. No `proto_bounds` needed.
+  *Implementation note*: today protos `quit()` before drawing in the
+  documented pattern (`if not is_instance: show = false; quit()`).
+  Either change the pattern (proto draws but hides) or add a
+  draw-into-buffer measurement path. Resolve at implementation time.
 - **Cost of `clearance`**: requires scanning all units. Fine for
   per-placement validation, expensive for per-frame use. Document the
   cost, don't try to make it free.
-- **`proto_bounds` without instantiating**: needs a way to ask the
-  proto "if I called .new with these args, what would the bounds be?"
-  Either (a) the proto declares its bbox statically (author tells us),
-  or (b) we instantiate-then-destroy to measure. (a) is cheaper but
-  needs an authoring convention; (b) is automatic but wasteful.
 - **Should the anchor offset show up in `bounds`?** The anchor only
   changes the *pivot*, not the voxel extents — but it does change
   where `position` places the voxel cloud. As long as we compute
