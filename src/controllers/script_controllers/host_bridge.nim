@@ -934,9 +934,55 @@ proc box_intersects(a, b: WorldBox): bool {.inline.} =
     a.min.y > b.max.y or a.max.z < b.min.z or a.min.z > b.max.z
   )
 
+proc world_offset(unit: Unit): Vector3 =
+  # Sum parent origins so per-voxel coords resolve to world space,
+  # mirroring `global_from` / `world_aabb`. Used by the query API to
+  # walk voxels in world coordinates without re-traversing the unit
+  # tree for each lookup.
+  var p = unit.parent
+  while p != nil:
+    result += p.transform.origin
+    p = p.parent
+
+proc voxel_overlaps(a: Build, b: Build): bool =
+  # True if any visible voxel of `a` falls inside a visible voxel of
+  # `b` (and vice versa). Iterates `a`'s voxels, projects each into
+  # `b`'s local coords, and looks up. Cost scales with `a`'s voxel
+  # count; pick the smaller build as `a` when both extents are big.
+  let
+    ta = a.transform
+    offset_a = a.world_offset
+    tb = b.transform
+    offset_b = b.world_offset
+    tb_basis_inv = tb.basis.inverse
+    b_origin_world = tb.origin + offset_b
+  for (pos, info) in a.voxels.all_voxels:
+    if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
+      continue
+    # World position of `a`'s voxel centre.
+    let world = ta.basis.xform(pos + vec3(0.5, 0.5, 0.5)) + ta.origin + offset_a
+    # Translate into `b`'s local frame, then floor to voxel coords.
+    let in_b_local = tb_basis_inv.xform(world - b_origin_world)
+    let cell = vec3(in_b_local.x.floor, in_b_local.y.floor, in_b_local.z.floor)
+    if cell in b:
+      let info_b = b.voxel_info(cell)
+      if info_b.kind != HOLE and info_b.color != ACTION_COLORS[ERASER]:
+        return true
+  false
+
 proc overlaps(a: Unit, b: Unit): bool =
-  ## True if the two units' world-space bounding boxes intersect.
-  box_intersects(a.bounds, b.bounds)
+  ## True if the two units' geometry actually overlaps. AABBs are
+  ## checked first as a cheap reject; for two Builds we then test
+  ## whether any of `a`'s voxels falls inside one of `b`'s, which
+  ## handles the "furniture inside a hollow room" case correctly
+  ## (the room's AABB fills the interior but its voxels are only
+  ## the walls). For Bot/Player pairs the AABB result stands —
+  ## their bounds are already a tight capsule approximation.
+  if not box_intersects(a.bounds, b.bounds):
+    return false
+  if a of Build and b of Build:
+    return voxel_overlaps(Build(a), Build(b))
+  true
 
 proc units_overlapping(box: WorldBox): seq[Unit] =
   ## Units (root + nested) whose world-space bounds intersect `box`.
@@ -953,14 +999,6 @@ proc voxels_in_box*(box: WorldBox): bool =
   ## Walks only builds whose own bounds overlap the query, then tests
   ## each of those builds' voxels — cost scales with the voxel count
   ## of nearby builds, not with the query volume.
-  proc world_offset(unit: Unit): Vector3 =
-    # Sum parent origins so per-voxel coords resolve to world space,
-    # mirroring `global_from` / `world_aabb`.
-    var p = unit.parent
-    while p != nil:
-      result += p.transform.origin
-      p = p.parent
-
   proc walk(unit: Unit): bool =
     if unit of Build:
       let build = Build(unit)
