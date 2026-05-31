@@ -46,10 +46,10 @@ suite "ASAP toggle render race":
     var model_count = 0
     let origin = me.position
     # Walk a generous AABB covering all 5 cube positions. Boxes extend
-    # +X/+Y/-Z from `at`, so z range is -4..0.
+    # +X/+Y/+Z from `at`, so z range is 0..3.
     for x in -1 .. 36:
       for y in -1 .. 4:
-        for z in -4 .. 1:
+        for z in -1 .. 4:
           let pos = origin + vec3(x.float, y.float, z.float)
           if has_block_at(pos): model_count.inc
     let rendered = me.rendered_voxel_count_get

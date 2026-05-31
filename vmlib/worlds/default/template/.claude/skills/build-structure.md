@@ -72,6 +72,13 @@ place(x, y, z, color)
 for the other useful pivots (sphere/cylinder default to centre /
 bottom-centre respectively).
 
+When `at = vec3(x, y, z)` is used, depth extends in **+Z** from the
+anchor (the anchor is the box's min-coord corner), so the call reads
+like an axis-aligned `(x..x+W, y..y+H, z..z+D)` placement. At the
+turtle, depth extends along the turtle's *forward* (default -Z)
+instead — handy for spirals, towers, etc., but use `at = ...` (or
+`to = ...`) when you want axis-aligned placement.
+
 `fill = false` makes shapes hollow (1-voxel shell). `eraser` color
 removes voxels.
 

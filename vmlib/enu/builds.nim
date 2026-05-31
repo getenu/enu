@@ -201,10 +201,10 @@ proc box*(self: Build, at, to: Vector3, color: Colors, fill = true) =
   let w = int(hi.x - lo.x) + 1
   let h = int(hi.y - lo.y) + 1
   let d = int(hi.z - lo.z) + 1
-  # Corner pivot extends depth along -Z, so anchor at the high-Z
-  # corner to cover the requested z range.
+  # at-mode CORNER pivot extends +X / +Y / +Z from the anchor, so
+  # anchor at the min corner to cover the requested range.
   self.box_impl(
-    w, h, d, color, fill, ord(corner), vec3(lo.x, lo.y, hi.z), 0.0, false
+    w, h, d, color, fill, ord(corner), lo, 0.0, false
   )
 
 template box*(

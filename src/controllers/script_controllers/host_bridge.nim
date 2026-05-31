@@ -1099,31 +1099,53 @@ const
   BOX_PIVOT_BOTTOM_CENTRE = 2
 
 proc box_local_bounds(
-    w, h, d: int, pivot: int
+    w, h, d: int, pivot: int, use_turtle: bool
 ): tuple[lo, hi: Vector3] =
-  ## Returns the box's continuous bounds in turtle-local coords, given
+  ## Returns the box's continuous bounds in basis-local coords, given
   ## width / height / depth (voxel counts, all positive) and a pivot
-  ## constant. Width extends along +X, height along +Y, depth along -Z
-  ## (turtle's local forward).
+  ## constant.
+  ##
+  ## Width extends along +X and height along +Y in both modes. Depth
+  ## direction differs:
+  ##   - turtle mode: depth extends along -Z (the turtle's forward),
+  ##     so `forward N; back N` and `box(_, _, N)` cover the same
+  ##     voxels.
+  ##   - `at = vec3(...)` mode: depth extends along +Z so `at` reads
+  ##     as the minimum-coord corner of the box. Without this, an
+  ##     axis-aligned `box(at = vec3(x, y, z), depth = N)` would
+  ##     silently extend into negative Z from `at`, which is
+  ##     counterintuitive for script-coords work.
   ##
   ## For even dimensions with non-corner pivots, the half-voxel snaps
-  ## to the -X / -Z / -Y side (one extra voxel toward the back-bottom-
-  ## left of the box) so the convention matches the corner pivot's
+  ## to the negative side (one extra voxel toward the back-bottom-
+  ## left) so the convention matches the corner pivot's
   ## back-bottom-left intuition.
+  let z_sign = if use_turtle: -1.0 else: 1.0
   case pivot
   of BOX_PIVOT_CORNER:
-    result.lo = vec3(0.0, 0.0, -(d - 1).float)
-    result.hi = vec3((w - 1).float, (h - 1).float, 0.0)
+    let z_far = z_sign * (d - 1).float
+    result.lo = vec3(0.0, 0.0, min(0.0, z_far))
+    result.hi = vec3((w - 1).float, (h - 1).float, max(0.0, z_far))
   of BOX_PIVOT_CENTRE:
     let x_lo = -(w div 2).float
     let y_lo = -(h div 2).float
-    let z_hi = (d div 2).float - (if d mod 2 == 0: 1.0 else: 0.0)
-    result.lo = vec3(x_lo, y_lo, z_hi - (d - 1).float)
+    let z_centre_high = (d div 2).float - (if d mod 2 == 0: 1.0 else: 0.0)
+    let z_hi_t = z_centre_high
+    let z_lo_t = z_centre_high - (d - 1).float
+    let (z_lo, z_hi) =
+      if use_turtle: (z_lo_t, z_hi_t)
+      else: (-z_hi_t, -z_lo_t)
+    result.lo = vec3(x_lo, y_lo, z_lo)
     result.hi = vec3(x_lo + (w - 1).float, y_lo + (h - 1).float, z_hi)
   of BOX_PIVOT_BOTTOM_CENTRE:
     let x_lo = -(w div 2).float
-    let z_hi = (d div 2).float - (if d mod 2 == 0: 1.0 else: 0.0)
-    result.lo = vec3(x_lo, 0.0, z_hi - (d - 1).float)
+    let z_centre_high = (d div 2).float - (if d mod 2 == 0: 1.0 else: 0.0)
+    let z_hi_t = z_centre_high
+    let z_lo_t = z_centre_high - (d - 1).float
+    let (z_lo, z_hi) =
+      if use_turtle: (z_lo_t, z_hi_t)
+      else: (-z_hi_t, -z_lo_t)
+    result.lo = vec3(x_lo, 0.0, z_lo)
     result.hi = vec3(x_lo + (w - 1).float, (h - 1).float, z_hi)
   else:
     result.lo = vec3(0.0, 0.0, 0.0)
@@ -1158,7 +1180,7 @@ proc box_impl(
       basis = basis.rotated(UP, deg_to_rad(rotation_deg).float32)
     origin = at
 
-  let (lo, hi) = box_local_bounds(w, h, d, pivot)
+  let (lo, hi) = box_local_bounds(w, h, d, pivot, use_turtle)
 
   # World-AABB from the 8 OBB corners.
   var u_lo = vec3(float.high, float.high, float.high)
