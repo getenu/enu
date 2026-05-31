@@ -928,6 +928,58 @@ proc bounds(self: Unit): WorldBox =
     let p = self.position
     (p - vec3(0.5, 0.0, 0.5), p + vec3(0.5, 1.5, 0.5))
 
+proc bounds_at(
+    self: Build, position: Vector3, rotation: float = 0.0, scale: float = 0.0
+): WorldBox =
+  ## Predict the world AABB of a hypothetical instance of this proto
+  ## at the given pose. Lets scripts validate `.new(position = ...)`
+  ## before committing — e.g. `if box_is_free(DiningChair.bounds_at(
+  ## vec3(4, 1, -103), rotation = 90)): DiningChair.new(...)`.
+  ##
+  ## Matches `.new()`'s "0 means proto default" sentinel for scale
+  ## and rotation: pass non-zero to override.
+  ##
+  ## Composes the anchor offset the same way Bot/Build init does:
+  ## visible pose = T_anchor; voxel transform = T_anchor * inverse(A),
+  ## so a voxel at local coord v lands at
+  ##   T_anchor.basis * (v - A.origin) + position.
+  ##
+  ## Limitation: reads the proto's *actual* voxel data. Legacy protos
+  ## that use the `if not is_instance: quit()` early-out never draw,
+  ## so their bounds_at reports only the default 1x1x1 starter block.
+  ## Drop the early-quit so the proto's draw runs against itself too.
+  let (present, lo, hi) = self.tight_voxel_aabb
+  if not present:
+    return (position, position)
+  let
+    effective_scale = if scale > 0.0: scale else: self.scale
+    effective_scale_safe =
+      if effective_scale > 0.0: effective_scale else: 1.0
+  var basis = init_basis()
+  if effective_scale_safe != 1.0:
+    basis = basis.scaled(
+      vec3(effective_scale_safe, effective_scale_safe, effective_scale_safe)
+    )
+  if rotation != 0.0:
+    basis = basis.rotated(UP, deg_to_rad(rotation).float32)
+  let
+    a = self.anchor
+    voxel_basis = basis * a.basis.inverse
+    voxel_origin = position - basis.xform(a.origin)
+  var w_lo = vec3(float.high, float.high, float.high)
+  var w_hi = vec3(-float.high, -float.high, -float.high)
+  for cx in [lo.x, hi.x]:
+    for cy in [lo.y, hi.y]:
+      for cz in [lo.z, hi.z]:
+        let p = voxel_basis.xform(vec3(cx, cy, cz)) + voxel_origin
+        if p.x < w_lo.x: w_lo.x = p.x
+        if p.y < w_lo.y: w_lo.y = p.y
+        if p.z < w_lo.z: w_lo.z = p.z
+        if p.x > w_hi.x: w_hi.x = p.x
+        if p.y > w_hi.y: w_hi.y = p.y
+        if p.z > w_hi.z: w_hi.z = p.z
+  (w_lo, w_hi)
+
 proc box_intersects(a, b: WorldBox): bool {.inline.} =
   not (
     a.max.x < b.min.x or a.min.x > b.max.x or a.max.y < b.min.y or
@@ -1417,7 +1469,7 @@ proc bridge_to_vm*(worker: Worker) =
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units, signal_test_complete, now_seconds,
     dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box, bounds,
-    overlaps, units_overlapping, box_is_free
+    overlaps, units_overlapping, box_is_free, bounds_at
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,

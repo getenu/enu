@@ -71,6 +71,9 @@ bridged_to_host:
   proc overlaps*(a: Unit, b: Unit): bool
   proc units_overlapping*(box: WorldBox): seq[Unit]
   proc box_is_free*(box: WorldBox): bool
+  proc bounds_at*(
+    self: Build, position: Vector3, rotation: float = 0.0, scale: float = 0.0
+  ): WorldBox
 
   proc added_units*(): seq[Unit]
   proc register_template_node*(self: Unit, name: string)
