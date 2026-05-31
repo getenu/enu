@@ -948,22 +948,52 @@ proc units_overlapping(box: WorldBox): seq[Unit] =
   for u in state.units.value:
     walk(u, result)
 
+proc voxels_in_box*(box: WorldBox): bool =
+  ## True if any visible voxel (any Build's data) intersects `box`.
+  ## Walks only builds whose own bounds overlap the query, then tests
+  ## each of those builds' voxels — cost scales with the voxel count
+  ## of nearby builds, not with the query volume.
+  proc world_offset(unit: Unit): Vector3 =
+    # Sum parent origins so per-voxel coords resolve to world space,
+    # mirroring `global_from` / `world_aabb`.
+    var p = unit.parent
+    while p != nil:
+      result += p.transform.origin
+      p = p.parent
+
+  proc walk(unit: Unit): bool =
+    if unit of Build:
+      let build = Build(unit)
+      # Explicit Unit() so we dispatch through the WorldBox-returning
+      # `bounds` above, not Build's local-AABB field accessor.
+      if box_intersects(Unit(build).bounds, box):
+        let
+          t = build.transform
+          offset = build.world_offset
+        for (pos, info) in build.voxels.all_voxels:
+          if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
+            continue
+          let
+            a = t.basis.xform(pos) + t.origin + offset
+            b = t.basis.xform(pos + vec3(1, 1, 1)) + t.origin + offset
+            vlo = vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z))
+            vhi = vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z))
+          if box_intersects((vlo, vhi), box):
+            return true
+    for c in unit.units.value:
+      if walk(c): return true
+    false
+
+  for u in state.units.value:
+    if walk(u): return true
+  false
+
 proc box_is_free(box: WorldBox): bool =
   ## True if `box` is free of voxels (any Build's voxel data) AND
   ## doesn't intersect any unit's bounds. Use to validate a proposed
   ## placement. Contrast with `clear_box`, which only checks voxels.
-  let
-    xlo = box.min.x.floor.int
-    xhi = box.max.x.ceil.int - 1
-    ylo = box.min.y.floor.int
-    yhi = box.max.y.ceil.int - 1
-    zlo = box.min.z.floor.int
-    zhi = box.max.z.ceil.int - 1
-  for x in xlo .. xhi:
-    for y in ylo .. yhi:
-      for z in zlo .. zhi:
-        if find_block_at(vec3(x.float, y.float, z.float)).is_some:
-          return false
+  if voxels_in_box(box):
+    return false
   for u in state.units.value:
     if box_intersects(u.bounds, box):
       return false
@@ -1001,18 +1031,15 @@ proc clear_box(
   ## True if no visible voxel exists anywhere inside the inclusive box.
   ## Use before placing a new structure to confirm the volume is empty.
   let
-    xlo = min(x1, x2)
-    xhi = max(x1, x2)
-    ylo = min(y1, y2)
-    yhi = max(y1, y2)
-    zlo = min(z1, z2)
-    zhi = max(z1, z2)
-  for x in xlo..xhi:
-    for y in ylo..yhi:
-      for z in zlo..zhi:
-        if find_block_at(vec3(x.float, y.float, z.float)).is_some:
-          return false
-  true
+    lo = vec3(min(x1, x2).float, min(y1, y2).float, min(z1, z2).float)
+    # +1 to make the inclusive int box a half-open float box matching
+    # what `voxels_in_box` expects.
+    hi = vec3(
+      (max(x1, x2) + 1).float,
+      (max(y1, y2) + 1).float,
+      (max(z1, z2) + 1).float,
+    )
+  not voxels_in_box((lo, hi))
 
 proc find_voxel_overlaps(limit: int = 50): string =
   ## Find world positions where two or more Builds both have a visible
