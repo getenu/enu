@@ -160,6 +160,10 @@ proc query*(
     let v = bot.mcp_query
     if v.state == MCP_DONE:
       return v
+    if not ctx.connected:
+      # Peer went away mid-query (e.g. Enu restarted). tick reaps the dead
+      # connection within netty's timeout; bail so the caller can reconnect.
+      return McpQuery(state: MCP_DONE, error: "Error: connection lost")
     if get_mono_time() - start > timeout:
       bot.mcp_query = McpQuery(state: MCP_DONE)
       return McpQuery(

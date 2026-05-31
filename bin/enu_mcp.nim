@@ -47,20 +47,24 @@ proc run_tool(
     screenshot_top_down = false,
     screenshot_size: float = 0.0,
 ): string =
-  client.ensure_connected
-  let r = bot.query(
-    client.ctx,
-    McpQuery(
-      kind: kind,
-      code: code,
-      top_level: top_level,
-      unit_id: unit_id,
-      screenshot_from_player: screenshot_from_player,
-      screenshot_with_ui: screenshot_with_ui,
-      screenshot_top_down: screenshot_top_down,
-      screenshot_size: screenshot_size,
-    ),
+  let q = McpQuery(
+    kind: kind,
+    code: code,
+    top_level: top_level,
+    unit_id: unit_id,
+    screenshot_from_player: screenshot_from_player,
+    screenshot_with_ui: screenshot_with_ui,
+    screenshot_top_down: screenshot_top_down,
+    screenshot_size: screenshot_size,
   )
+  client.ensure_connected
+  var r = bot.query(client.ctx, q)
+  if r.error.len > 0 and not client.connected:
+    # The connection dropped (e.g. Enu restarted) and the query never
+    # reached Enu, so re-subscribing and retrying once is safe.
+    client.connect
+    if client.connected:
+      r = bot.query(client.ctx, q)
   if r.error != "": r.error else: r.result
 
 let enu_server = mcp_server("enu", "1.0.0"):

@@ -148,3 +148,36 @@ which is the ideal outcome.
   The wire protocol (McpQuery flatty) is unchanged, so an old Enu dylib
   still interoperates; I rebuild+relaunch anyway before integration tests.
 - **#63 (`.new(rotation=)` bug)** stays separate — untouched.
+
+## Results (overnight run)
+
+Done and verified via the test harnesses (no interactive MCP):
+
+- **ed** `EdClient` + `connected` + `every` (commit in deps/ed). Threaded
+  round-trip test passes; full `nimble test` green.
+- **nimcp** stdio `serve` idle callback (commit) + two stdout-hygiene fixes
+  (commit): the non-chronicles logging fallback defaulted to a stdout
+  handler, and `handleToolsList` had a debug `echo` — both corrupted the
+  stdio JSON-RPC stream. `nimble test` green (14 files).
+- **enu** `src/agent.nim` (agent bot + query + animate/glide/look_at) and a
+  thin `bin/enu_mcp.nim` rewrite (commit). Plus restart-robustness:
+  `query` exits early when the connection drops, and `run_tool`
+  reconnects+retries once on a dropped query.
+- **Integration**: `enu_mcp_test` 8/8 pass (it caught the two stdout bugs);
+  `enu_mcp_reconnect_test` 3/3; restart-survival probe passes — a kept-open
+  session evaluated `40+2→42`, Enu was killed and relaunched, then the same
+  session evaluated `1+2→3` after auto-recovery.
+
+### Findings for the morning (not fixed — out of scope)
+
+- **nimcp ignores Nim param defaults**: a tool call must include *every*
+  declared parameter in its JSON args, or it errors `key not found: <param>`.
+  Claude's client sends all args per the schema, so eval/etc. work in
+  practice, but "optional" params aren't truly optional for other clients.
+- **`enu_mcp_reconnect_test` eval assertions were weak** (`"1" in r1`): they
+  matched the `requestId:"1"` inside an *error* response, so they verified a
+  round-trip but not eval execution. The set_position case (sends all args)
+  did verify the move path. Strengthened to send full args.
+- The idle-tick fix means the 15s-idle reconnect case now stays connected
+  the whole time (keepalives prevent the timeout) rather than dropping and
+  reconnecting — the intended outcome.
