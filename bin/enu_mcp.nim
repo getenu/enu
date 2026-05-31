@@ -120,11 +120,23 @@ proc reconnect() =
     EdContext.init(chan_size = 100, buffer = false, id = ctx_id)
   connect()
 
-const PING_TIMEOUT = 0.5.seconds
+# Generous enough to cover a save_and_reload roundtrip — Enu's
+# worker thread can be busy for a few seconds rebuilding a level,
+# during which the bot's mcp_query handler can't fire. A tighter
+# timeout was triggering false-positive disconnects mid-reload,
+# which then created a fresh local context + duplicate bot that
+# Enu couldn't reconcile against its surviving AGENT bot.
+const PING_TIMEOUT = 5.seconds
+
+# Skip the heartbeat ping if Enu responded successfully within this
+# window. The ping is only here as a fallback because netty doesn't
+# reliably signal disconnects; if we've gotten a real response very
+# recently, we know the link is alive.
+const PING_SKIP_IF_RECENT_RESPONSE = 2.seconds
 
 proc ping_succeeded(): bool =
-  ## Active heartbeat. Cheap when alive (~10-20ms), bounded when dead.
-  ## Definitive: a response means both directions of the conn are live.
+  ## Active heartbeat. A response means both directions of the conn
+  ## are live and the worker thread is responsive.
   if bot.is_nil or not ?bot.transform_value:
     return false
   bot.mcp_query = McpQuery(kind: MCP_PING, state: MCP_PENDING)
@@ -147,6 +159,12 @@ proc ensure_connected() =
     last_bot_transform = some(bot.transform)
   if Ed.thread_ctx.subscribers.len == 0 or bot.is_nil:
     reconnect()
+    return
+  # Recent successful tool response is proof the connection is up —
+  # no need to ping again. Saves a round-trip for back-to-back calls
+  # and avoids spurious timeouts when the worker is briefly busy.
+  if last_enu_response != MonoTime() and
+      get_mono_time() - last_enu_response < PING_SKIP_IF_RECENT_RESPONSE:
     return
   if not ping_succeeded():
     info "ping failed, reconnecting"
