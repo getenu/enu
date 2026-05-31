@@ -3,7 +3,7 @@
 ## run queries against an agent bot and animate it for framing shots. All
 ## the connection-keeping and animation lives in `ed` and `src/agent.nim`.
 
-import std/[os]
+import std/[os, strutils]
 import pkg/ed
 import pkg/nimcp except info
 import core, models/[bots, colors], agent
@@ -28,7 +28,8 @@ var
 let client = EdClient(id: ctx_id, address: connect_addr, chan_size: 100)
 
 client.on_connect = proc() =
-  bot = ensure_agent_bot(client.ctx, bot_id(), CLAUDE_ORANGE, last_bot_transform)
+  bot =
+    ensure_agent_bot(client.ctx, bot_id(), CLAUDE_ORANGE, last_bot_transform)
 
 proc keep_alive() =
   ## Idle work between requests: tick the connection (reconnecting if Enu
@@ -128,7 +129,10 @@ let enu_server = mcp_server("enu", "1.0.0"):
     proc clear_block_log(): string =
       ## Empty the block log so subsequent placements start a fresh
       ## annotation session.
-      run_tool(MCP_EVAL, "clear_block_log(active_unit())\n\"cleared\"")
+      run_tool(MCP_EVAL, (\"""
+        clear_block_log(active_unit())
+        "cleared"
+      """).dedent.strip)
 
   mcp_tool:
     proc units_near(x, y, z: float, radius: float = 30.0): string =
@@ -136,10 +140,7 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## of (x, y, z). One unit per line, formatted "d=DD.D  id  (X, Y, Z)".
       ## Includes spawner-created clones. Useful for chasing "# CLAUDE:"
       ## marker blocks or quickly enumerating what's near a position.
-      run_tool(
-        MCP_EVAL,
-        "units_near(" & $x & ", " & $y & ", " & $z & ", " & $radius & ")",
-      )
+      run_tool(MCP_EVAL, \"units_near({x}, {y}, {z}, {radius})")
 
   mcp_tool:
     proc screenshot_top_down(x: float, z: float, size: float = 30.0): string =
@@ -183,14 +184,15 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## the level saves), so the change survives a restart.
       ## - id: target unit's id.
       ## - x, y, z: new world position.
-      run_tool(
-        MCP_EVAL,
-        "let u = find_by_id(\"" & id & "\")\n" &
-          "if u.is_nil:\n  \"Error: unit not found: " & id & "\"\nelse:\n" &
-          "  u.start_position = vec3(" & $x & ", " & $y & ", " & $z & ")\n" &
-          "  u.position = vec3(" & $x & ", " & $y & ", " & $z & ")\n" &
-          "  \"moved \" & u.id",
-      )
+      run_tool(MCP_EVAL, (\"""
+        let u = find_by_id("{id}")
+        if u.is_nil:
+          "Error: unit not found: {id}"
+        else:
+          u.start_position = vec3({x}, {y}, {z})
+          u.position = vec3({x}, {y}, {z})
+          "moved " & u.id
+      """).dedent.strip)
 
   mcp_tool:
     proc delete_unit(id: string): string =
@@ -198,12 +200,14 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## directory. Cannot be undone. Use sparingly; prefer `move_unit` first
       ## when the unit might just be in the wrong place.
       ## - id: target unit's id.
-      run_tool(
-        MCP_EVAL,
-        "let u = find_by_id(\"" & id & "\")\n" &
-          "if u.is_nil:\n  \"Error: unit not found: " & id & "\"\nelse:\n" &
-          "  u.delete()\n  \"deleted " & id & "\"",
-      )
+      run_tool(MCP_EVAL, (\"""
+        let u = find_by_id("{id}")
+        if u.is_nil:
+          "Error: unit not found: {id}"
+        else:
+          u.delete()
+          "deleted {id}"
+      """).dedent.strip)
 
   mcp_tool:
     proc set_position(
@@ -216,7 +220,11 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## id: unit id to move (default: MCP bot). Use the player's id to move
       ## the player.
       client.ensure_connected
-      let unit = if id == "": bot else: client.ctx.find_unit(id)
+      let unit =
+        if id == "":
+          bot
+        else:
+          client.ctx.find_unit(id)
       if unit.is_nil:
         return "Error: Unit not found: " & id
       unit.glide(client.ctx, vec3(x, y, z), rotation)
