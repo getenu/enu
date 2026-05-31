@@ -126,15 +126,24 @@ proc run_reconnect_tests*() =
     defer:
       s.close()
     s.do_initialize()
-    let r1 = s.do_call_tool("eval", %*{"code": "1"})
-    check "1" in r1, "initial eval failed: " & r1
+    # Send all args: nimcp requires every declared tool param in the JSON,
+    # else the call errors `key not found: <param>` (its error JSON happens
+    # to contain the requestId, so a bare `"1" in r1` would pass on an
+    # error). Full args make this verify eval execution, not just a reply.
+    let r1 = s.do_call_tool(
+      "eval", %*{"code": "1", "top_level": false, "unit_id": ""}
+    )
+    check r1 == "1", "initial eval failed: " & r1
 
     echo "    (waiting 15s for netty 10s timeout + margin...)"
     stdout.flush_file()
     sleep 15_000
 
-    let r2 = s.do_call_tool("eval", %*{"code": "2"}, timeout_ms = 30_000)
-    check "2" in r2, "post-timeout eval failed: " & r2
+    let r2 = s.do_call_tool(
+      "eval", %*{"code": "2", "top_level": false, "unit_id": ""},
+      timeout_ms = 30_000,
+    )
+    check r2 == "2", "post-timeout eval failed: " & r2
     echo "  idle-reconnect: PASS"
 
   echo "  idle-reconnect set_position: connect, wait 15s, move bot..."
