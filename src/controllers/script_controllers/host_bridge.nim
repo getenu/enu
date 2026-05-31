@@ -526,8 +526,6 @@ proc `speed=`(self: Unit, speed: float) =
 proc scale(self: Unit): float =
   types.scale(self)
 
-proc `scale=`(self: Unit, scale: float) =
-  types.`scale=`(self, scale)
 
 proc color(self: Unit): Colors =
   action_index self.color_value.value
@@ -575,6 +573,22 @@ proc `rotation=`(self: Unit, degrees: float) =
       .rotated(UP, deg_to_rad(degrees))
       .scaled(vec3(s, s, s))
     self.set_pivot_basis(pivot_basis)
+
+proc `scale=`(self: Unit, scale: float) =
+  types.`scale=`(self, scale)
+  if self of Player:
+    return
+  # Compose scale into transform.basis synchronously, the same way
+  # `rotation=` does — the model is the single source of truth. Godot has
+  # no separate scale storage (the node derives its scale from the basis),
+  # so previously scale only reached the basis asynchronously, via a
+  # node→model writeback in build_node/bot_node that raced with — and
+  # clobbered — a concurrent `rotation=`. Doing it here removes the race.
+  let degrees = self.rotation
+  let pivot_basis = Transform.init.basis
+    .rotated(UP, deg_to_rad(degrees))
+    .scaled(vec3(scale, scale, scale))
+  self.set_pivot_basis(pivot_basis)
 
 proc sees(
     worker: Worker, self: Unit, target: Unit, distance: float

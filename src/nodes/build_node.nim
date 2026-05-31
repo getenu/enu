@@ -236,11 +236,11 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.scale_value.watch:
       if added:
-        let scale = change.item
-        self.scale = vec3(scale, scale, scale)
-        self.model.transform_value.pause self.transform_zid:
-          self.model.transform = self.transform
-        self.max_view_distance = int(self.default_view_distance.float / scale)
+        # Scale lives in the model's transform.basis (set synchronously by
+        # `scale=`); the node picks it up via transform_value below. Here we
+        # only adjust the view distance for the new scale.
+        self.max_view_distance =
+          int(self.default_view_distance.float / change.item)
 
     self.transform_zid = self.model.transform_value.watch:
       if added:

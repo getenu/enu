@@ -155,12 +155,9 @@ gdobj BotNode of KinematicBody:
           editor.cursor_set_line(change.item.line, true)
           editor.cursor_set_column(change.item.col, true)
 
-    self.model.scale_value.watch:
-      if added:
-        let scale = change.item
-        self.scale = vec3(scale, scale, scale)
-        self.model.transform_value.pause(self.transform_zid):
-          self.model.transform = self.transform
+    # Scale is composed into transform.basis by `scale=` and applied via the
+    # transform_value watch below — no separate node-scale writeback (it used
+    # to race with rotation).
 
     self.model.color_value.watch:
       if added:
