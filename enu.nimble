@@ -12,6 +12,6 @@ requires "https://github.com/getenu/Nim#bea4c144",
   "https://github.com/getenu/nanoid.nim >= 0.2.1",
   "https://github.com/treeform/pretty >= 0.2.0", "cligen", "chroma", "markdown",
   "chronicles", "dotenv", "nimibook", "metrics#a1296ca", "zippy", "unittest2",
-  "nph", "regex", "nimcp",
+  "https://github.com/getenu/nph#948b933", "regex", "nimcp",
   "https://github.com/gokr/mummyx#32f0ef97",
   "https://github.com/dsrw/nim-libbacktrace"

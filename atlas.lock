@@ -15,7 +15,7 @@
     "ed.getenu.github.com": {
       "dir": "$deps/ed",
       "url": "https://github.com/getenu/ed",
-      "commit": "074ebaadd96fa742b4ab603aed2626c18149d347",
+      "commit": "39ee2258b7e073b290cad310f475d81751177390",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
@@ -84,10 +84,10 @@
       "commit": "253e23e2bfc1de7aae6492e69018f32d69f436df",
       "version": ""
     },
-    "nph": {
+    "nph.getenu.github.com": {
       "dir": "$deps/nph",
-      "url": "https://github.com/arnetheduck/nph",
-      "commit": "2cacf6cc28116e4046e0b67a13545af5c4e756bd",
+      "url": "https://github.com/getenu/nph",
+      "commit": "948b933e8358a52e5f87d8854e69382b228e2d01",
       "version": ""
     },
     "regex": {
@@ -99,7 +99,7 @@
     "nimcp": {
       "dir": "$deps/nimcp",
       "url": "https://github.com/gokr/nimcp",
-      "commit": "4eae6a857cc3152b7388c74421d9a7425327ee04",
+      "commit": "99c2498f775adc16dc04183f65adbccd3b847057",
       "version": ""
     },
     "mummyx.gokr.github.com": {
@@ -332,7 +332,7 @@
       "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
       "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
       "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#a1296ca\", \"zippy\", \"unittest2\",",
-      "  \"nph\", \"regex\", \"nimcp\",",
+      "  \"https://github.com/getenu/nph#948b933\", \"regex\", \"nimcp\",",
       "  \"https://github.com/gokr/mummyx#32f0ef97\",",
       "  \"https://github.com/dsrw/nim-libbacktrace\"",
       ""
