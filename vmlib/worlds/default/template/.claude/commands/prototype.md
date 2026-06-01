@@ -37,6 +37,16 @@ Tower.new(height = 20, color = red)
 Tower.new(height = 10, color = blue, position = vec3(20, 0, -10))
 ```
 
+**Load order:** a script can only `.new` a proto that has loaded. Enu
+resolves cross-script dependencies automatically by retrying, so creating
+a proto and its spawner together (in the same edit) works regardless of
+filenames. The one gotcha is hot-reload timing: if the spawner's files
+land and get picked up a polling cycle (~2 s) *before* the proto's exist,
+the spawner reports `undeclared identifier: <ProtoName>` and won't retry
+on its own. Either write the proto first, or — if you see that error —
+just `touch` the spawner script again once the proto has loaded; it
+re-runs and resolves.
+
 Or from `eval` (for testing):
 ```nim
 # This won't work from eval — prototypes must be instantiated from a unit script context
