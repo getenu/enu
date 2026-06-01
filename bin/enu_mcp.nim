@@ -129,10 +129,11 @@ let enu_server = mcp_server("enu", "1.0.0"):
     proc clear_block_log(): string =
       ## Empty the block log so subsequent placements start a fresh
       ## annotation session.
-      run_tool(MCP_EVAL, (\"""
+
+      run_tool MCP_EVAL, \"""
         clear_block_log(active_unit())
         "cleared"
-      """).dedent.strip)
+      """.dedent.strip
 
   mcp_tool:
     proc units_near(x, y, z: float, radius: float = 30.0): string =
@@ -184,7 +185,7 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## the level saves), so the change survives a restart.
       ## - id: target unit's id.
       ## - x, y, z: new world position.
-      run_tool(MCP_EVAL, (\"""
+      run_tool MCP_EVAL, \"""
         let u = find_by_id("{id}")
         if u.is_nil:
           "Error: unit not found: {id}"
@@ -192,7 +193,7 @@ let enu_server = mcp_server("enu", "1.0.0"):
           u.start_position = vec3({x}, {y}, {z})
           u.position = vec3({x}, {y}, {z})
           "moved " & u.id
-      """).dedent.strip)
+      """.dedent.strip
 
   mcp_tool:
     proc delete_unit(id: string): string =
@@ -200,14 +201,14 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## directory. Cannot be undone. Use sparingly; prefer `move_unit` first
       ## when the unit might just be in the wrong place.
       ## - id: target unit's id.
-      run_tool(MCP_EVAL, (\"""
+      run_tool MCP_EVAL, \"""
         let u = find_by_id("{id}")
         if u.is_nil:
           "Error: unit not found: {id}"
         else:
           u.delete()
           "deleted {id}"
-      """).dedent.strip)
+      """.dedent.strip
 
   mcp_tool:
     proc set_position(
