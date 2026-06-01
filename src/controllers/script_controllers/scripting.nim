@@ -157,7 +157,12 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
     let ctx = controller.active_unit.script_ctx
     let errors = controller.active_unit.errors
     if severity == Severity.Error and config.error_counter >= config.error_max:
-      echo msg
+      # While retrying (level load / new-unit batch), a failure here may just
+      # be an as-yet-unloaded cross-script dependency that resolves on a later
+      # pass. Don't echo it as an error; if it's genuinely broken, the unit
+      # stays in `failed` and script_error reports it once retries are done.
+      if not controller.retry_failures:
+        echo msg
       var file_name =
         if info.file_index.int >= 0:
           config.m.file_infos[info.file_index.int].full_path.string

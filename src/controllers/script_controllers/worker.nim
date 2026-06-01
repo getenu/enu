@@ -223,7 +223,9 @@ proc update_files*(self: Worker) =
   for unit in state.units.value:
     root_units[unit.id] = unit
 
-  # JSON watch: reload changed units and detect new ones in a single pass
+  # JSON watch: reload changed units inline; collect newly-appeared ones to
+  # load together as a batch afterward.
+  var new_units: seq[tuple[id, json_file: string]]
   for dir in walk_dirs(state.config.data_dir / "*"):
     let unit_id = dir.split_path.tail
     let json_file = dir / unit_id & ".json"
@@ -249,11 +251,25 @@ proc update_files*(self: Worker) =
       except OSError:
         discard
     else:
+      new_units.add (unit_id, json_file)
+
+  # Load newly-appeared units as one batch: queue each (deferring "symbol not
+  # found" failures) under retry_failures, then retry until they all resolve.
+  # Cross-script dependencies between simultaneously-added units (e.g. a proto
+  # and the spawner that references it) sort themselves out regardless of
+  # filesystem order, the same way a full level load does.
+  if new_units.len > 0:
+    state.push_flag LOADING_SCRIPT
+    self.retry_failures = true
+    for (unit_id, json_file) in new_units:
       try:
         load_unit_from_json(unit_id, json_file)
-        save_level(state.config.level_dir)
       except Exception as e:
         error "Failed to load new unit from JSON", unit_id, error = e
+    self.retry_failed_scripts()
+    self.retry_failures = false
+    state.pop_flag LOADING_SCRIPT
+    save_level(state.config.level_dir)
 
   # Detect orphan scripts (report once)
   for script_path in walk_files(state.config.script_dir / "*.nim"):
