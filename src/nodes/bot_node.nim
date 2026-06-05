@@ -5,7 +5,7 @@ import
   godotapi/[
     scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
     animation_player, resource_loader, packed_scene, spatial_material,
-    text_edit, camera, viewport, texture, image,
+    text_edit, camera, viewport, texture, image, visual_server,
   ]
 import gdutils, core, models/[colors, units], ui/markdown_label
 import ./queries
@@ -203,6 +203,14 @@ gdobj BotNode of KinematicBody:
               self.get_tree().root
             else:
               Viewport(state.mcp_viewport)
+          # A minimized window halts the VisualServer draw cycle, so the
+          # viewport's texture would otherwise be frozen on the last frame
+          # rendered before minimizing. Force a synchronous draw (no buffer
+          # swap — the window may have no drawable) so the capture reflects
+          # the current camera regardless of window state. `process` keeps
+          # running while minimized, so the warm-up frames above committed
+          # the camera transform/projection; this just renders them.
+          force_draw(swap_buffers = false)
           let img = vp.get_texture.get_data
           img.flip_y
           inc state.screenshot_counter
