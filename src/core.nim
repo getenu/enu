@@ -280,6 +280,18 @@ proc init*(_: type Transform, origin: Vector3, yaw_deg: float): Transform =
   result.basis = yaw_basis(yaw_deg)
   result.origin = origin
 
+proc write_file_if_changed*(path, content: string) =
+  ## Skip the write when the on-disk content already matches, so unchanged
+  ## saves don't bump the mtime. File watchers — including other Enu
+  ## instances on the same level — treat any mtime change as a change, and
+  ## rewriting identical content makes two instances reload-loop forever.
+  try:
+    if read_file(path) == content:
+      return
+  except OSError, IOError:
+    discard
+  write_file(path, content)
+
 proc init*(_: type Code, nim: string): Code =
   Code(owner: state.worker_ctx_name, runner: state.server_ctx_name, nim: nim)
 

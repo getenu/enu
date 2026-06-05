@@ -127,7 +127,10 @@ proc load_unit_from_json(unit_id, json_file: string) =
       new_unit.global_flags -= SCRIPT_INITIALIZING
 
 proc write_script_file(unit: Unit, code: string) =
-  write_file(unit.script_ctx.script, code)
+  # Code changes that originate from disk (level load, file-watcher reloads)
+  # round-trip through here; write_file_if_changed keeps them from bumping
+  # the mtime and reload-looping another instance on the same level dir.
+  write_file_if_changed(unit.script_ctx.script, code)
   try:
     unit.script_ctx.last_saved_mtime =
       get_last_modification_time(unit.script_ctx.script)
