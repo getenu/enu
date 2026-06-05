@@ -995,9 +995,13 @@ proc bounds_at(
   (w_lo, w_hi)
 
 proc box_intersects(a, b: WorldBox): bool {.inline.} =
+  # Half-open overlap test ([min, max)): boxes that merely share a boundary
+  # plane (a.max == b.min) do NOT overlap. Using strict `<`/`>` here counted
+  # touching as intersecting, so a single-voxel `clear_box` query reported
+  # "occupied" whenever an adjacent cell held a voxel.
   not (
-    a.max.x < b.min.x or a.min.x > b.max.x or a.max.y < b.min.y or
-    a.min.y > b.max.y or a.max.z < b.min.z or a.min.z > b.max.z
+    a.max.x <= b.min.x or a.min.x >= b.max.x or a.max.y <= b.min.y or
+    a.min.y >= b.max.y or a.max.z <= b.min.z or a.min.z >= b.max.z
   )
 
 proc world_offset(unit: Unit): Vector3 =
