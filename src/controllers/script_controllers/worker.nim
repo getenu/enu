@@ -534,6 +534,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           connect_address,
           partial = true,
           fetch = ["root_units"],
+          deep = true, # push unit closures: we render everything
         )
         connected = true
         # Get the remote server's context ID from subscribers
