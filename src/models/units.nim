@@ -158,39 +158,33 @@ method destroy*(self: Unit) {.base, gcsafe.} =
   fail "override me"
 
 proc destroy_impl*(self: Bot | Build | Sign) =
-  if self.is_destroyed:
+  if self.destroyed:
     return
-  self.is_destroyed = true
+  self.destroyed = true
   assert ?self
 
-  let units = self.units.value
-  for unit in units:
+  # Cascade stays explicit: child units are independently removable, so they
+  # can't live in our lifetime (Lifetime can't un-register).
+  for unit in self.units.value:
     unit.destroy
 
-  when self is Sign:
-    self.owner = nil
-
+  # `shared` is shared across the unit tree (only the root owns it), so its
+  # voxel-edit tables are torn down once, here. Our shared_value *container* is
+  # dropped by destroy_fields below.
   if self.parent == nil:
     let shared = self.shared
     if ?shared.edit_snapshots:
       shared.edit_snapshots.destroy
     if ?shared.edit_deltas:
       shared.edit_deltas.destroy
-    self.shared = nil
-    # No explicit free: `shared` is an EdRef now, so ORC reclaims it once this
-    # drops the last reference, and ed prunes its ref_pool entry. (step 4.3)
-  else:
-    self.shared = nil
 
+  # Callbacks / external subscriptions bound to this unit's lifetime.
   if ?self.lifetime:
     self.lifetime.finish()
 
-  let parent = self.parent
-  self.parent = nil
-  for field in self[].fields:
-    when field is Ed:
-      if ?field and not field.destroyed:
-        field.destroy
+  # Owner-cascade: destroy every owned Ed container. Reflection (ed) so it works
+  # for synced replicas too, whose units never run init_unit.
+  self.destroy_fields()
 
   if state.open_unit == self:
     state.open_unit = nil
@@ -199,13 +193,11 @@ proc destroy_impl*(self: Bot | Build | Sign) =
     if state.open_sign_value.valid and state.open_sign == self:
       state.open_sign = nil
 
-  if ?parent:
-    parent.units.pause:
-      parent.units -= self
-  # No explicit free: removing self from its parent (and the field teardown
-  # above) drops ed's references; once nothing else holds this Unit, ORC reclaims
-  # it and ed prunes its ref_pool entry. The Godot node teardown stays in
-  # remove_from_scene. (step 4.3)
+  # Unlink from the parent (syncs REMOVED). parent is a {.cursor.} — no cycle to
+  # break by nil-ing it, and ORC owns the memory now.
+  if ?self.parent:
+    self.parent.units.pause:
+      self.parent.units -= self
 
 proc clear_all*(units: EdSeq[Unit]) =
   var roots = units.value

@@ -272,8 +272,6 @@ type
     color_value*: EdValue[Color]
     sight_ray*: RayCast
     frame_created*: int
-    lifetime* {.ed_ignore.}: Lifetime
-    is_destroyed* {.ed_ignore.}: bool
     errors*: ScriptErrors
     current_line_value*: EdValue[int]
     sight_query_value*: EdValue[SightQuery]
