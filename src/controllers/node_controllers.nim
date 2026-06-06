@@ -17,9 +17,11 @@ proc remove_from_scene(unit: Unit) =
   if unit == current_build:
     current_build = nil
 
-  for zid in unit.eids:
-    Ed.thread_ctx.untrack zid
-  unit.eids = @[]
+  # Untrack the unit's watchers up front — before the teardown below mutates
+  # flags / clears children — so no watcher fires against the node we're about
+  # to free. `destroy` finishes the lifetime again at the end (idempotent).
+  if ?unit.lifetime:
+    unit.lifetime.finish()
 
   unit.global_flags -= READY
 

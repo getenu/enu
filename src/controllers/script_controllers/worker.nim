@@ -307,17 +307,17 @@ proc watch_code(self: Worker, unit: Unit) =
       except VMQuit as e:
         self.script_error(unit, e)
 
-  unit.eids.add:
-    unit.errors.changes:
-      if unit.code.owner == Ed.thread_ctx.id:
-        if added and change.item.log:
-          state.err(
-            \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
-          )
-          state.push_flags CONSOLE_VISIBLE
+  let errors_zid = unit.errors.changes:
+    if unit.code.owner == Ed.thread_ctx.id:
+      if added and change.item.log:
+        state.err(
+          \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
+        )
+        state.push_flags CONSOLE_VISIBLE
 
-        if removed:
-          state.pop_flags CONSOLE_VISIBLE
+      if removed:
+        state.pop_flags CONSOLE_VISIBLE
+  unit.errors.bind_lifetime(unit.require_lifetime, errors_zid)
 
   if unit.script_ctx.is_nil:
     unit.script_ctx =
@@ -378,12 +378,14 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       main_thread_state.config.connect_address
     worker_ctx: EdContext
 
+  let is_server = ?listen_address or not ?connect_address
   worker_ctx = EdContext.init(
     id = "work-" & generate_id(),
     chan_size = 500,
     buffer = false,
     listen_address = listen_address,
     label = "worker",
+    is_authority = is_server
   )
 
   Ed.thread_ctx = worker_ctx
@@ -392,7 +394,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   state = GameState.init_from(main_thread_state)
   state.init_logger
 
-  if ?listen_address or not ?connect_address:
+  if is_server:
     state.push_flag SERVER
     state.server_ctx_name = worker_ctx.id
 
@@ -425,10 +427,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           remove_file unit.script_ctx.script
           remove_dir unit.data_dir
 
-      for zid in unit.eids:
-        debug "untracking zid", zid, unit = unit.id
-        Ed.thread_ctx.untrack zid
-      unit.eids = @[]
       unit.destroy
 
   let player = state.player
@@ -461,6 +459,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             let found = find_in(u.units)
             if not found.is_nil:
               return found
+
         unit = find_in(state.units)
         if unit.is_nil:
           return ("", "Error: unit not found: " & unit_id)

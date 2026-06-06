@@ -272,7 +272,7 @@ type
     color_value*: EdValue[Color]
     sight_ray*: RayCast
     frame_created*: int
-    eids* {.ed_ignore.}: seq[EID]
+    lifetime* {.ed_ignore.}: Lifetime
     is_destroyed* {.ed_ignore.}: bool
     errors*: ScriptErrors
     current_line_value*: EdValue[int]

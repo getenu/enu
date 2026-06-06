@@ -19,6 +19,7 @@ proc init_shared*(self: Unit) =
     self.shared = shared
 
 proc init_unit*[T: Unit](self: T, shared = true) =
+  self.lifetime = new_lifetime()
   with self:
     units = EdSeq[Unit].init()
     transform_value = ed(self.start_transform)
@@ -180,9 +181,8 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   else:
     self.shared = nil
 
-  for zid in self.eids:
-    Ed.thread_ctx.untrack zid
-  self.eids = @[]
+  if ?self.lifetime:
+    self.lifetime.finish()
 
   let parent = self.parent
   self.parent = nil
