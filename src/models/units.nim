@@ -169,8 +169,7 @@ proc destroy_impl*(self: Bot | Build | Sign) =
     unit.destroy
 
   # `shared` is shared across the unit tree (only the root owns it), so its
-  # voxel-edit tables are torn down once, here. Our shared_value *container* is
-  # dropped by destroy_fields below.
+  # voxel-edit tables are torn down once, here.
   if self.parent == nil:
     let shared = self.shared
     if ?shared.edit_snapshots:
@@ -182,9 +181,21 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   if ?self.lifetime:
     self.lifetime.finish()
 
-  # Owner-cascade: destroy every owned Ed container. Reflection (ed) so it works
-  # for synced replicas too, whose units never run init_unit.
-  self.destroy_fields()
+  # Dev safety net: every direct Ed container should have been attributed to us
+  # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
+  # it'd leak silently, so surface it loudly. Not in release.
+  when not defined(release):
+    for field in self[].fields:
+      when field is Ed:
+        if ?field:
+          let fid = field.id
+          if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
+            error "unowned Ed field at destroy (missing id.own:/own:?)",
+              unit = self.id, field_id = fid
+
+  # Owner-cascade: destroy every container we own (via the synced ownership
+  # index), broadcasting DESTROY so replicas follow. Works in any context.
+  Ed.thread_ctx.destroy_owned(self.id)
 
   if state.open_unit == self:
     state.open_unit = nil

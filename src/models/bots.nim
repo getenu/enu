@@ -86,22 +86,23 @@ proc init*(
     global = true,
     parent: Unit = nil,
 ): Bot =
-  var self = Bot(
-    id: id,
-    start_transform: transform,
-    animation_value: ed("auto"),
-    mcp_query_value: EdValue[McpQuery].init(McpQuery()),
-    speed: 1.0,
-    clone_of: clone_of,
-    start_color: ACTION_COLORS[BLACK],
-    parent: parent,
-  )
+  id.own:
+    var self = Bot(
+      id: id,
+      start_transform: transform,
+      animation_value: ed("auto"),
+      mcp_query_value: EdValue[McpQuery].init(McpQuery()),
+      speed: 1.0,
+      clone_of: clone_of,
+      start_color: ACTION_COLORS[BLACK],
+      parent: parent,
+    )
 
-  self.init_unit
+    self.init_unit
 
-  if global:
-    self.global_flags += GLOBAL
-  result = self
+    if global:
+      self.global_flags += GLOBAL
+    result = self
 
 method clone*(self: Bot, clone_to: Unit, id: string): Unit =
   var transform = clone_to.transform

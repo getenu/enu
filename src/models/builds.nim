@@ -394,37 +394,42 @@ proc init*(
     parent: Unit = nil,
 ): Build =
   let voxel_id = id & ".voxels"
-  let voxels = VoxelStore.init(id = voxel_id, unit_id = id)
-  var self = Build(
-    id: id,
-    voxels: voxels,
-    start_transform: transform,
-    draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
-    start_color: color,
-    drawing: true,
-    bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
-    speed: 1.0,
-    clone_of: clone_of,
-    bot_collisions: bot_collisions,
-    parent: parent,
-  )
+  # Everything built here is owned by this build's id (containers stamp owner_id
+  # = id, riding their CREATE), so destroy_owned(id) tears it all down. VoxelStore
+  # is inside the scope too, so its chunk tables are owned. init_unit, called
+  # within, inherits the scope through the threadvar.
+  id.own:
+    let voxels = VoxelStore.init(id = voxel_id, unit_id = id)
+    var self = Build(
+      id: id,
+      voxels: voxels,
+      start_transform: transform,
+      draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
+      start_color: color,
+      drawing: true,
+      bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
+      speed: 1.0,
+      clone_of: clone_of,
+      bot_collisions: bot_collisions,
+      parent: parent,
+    )
 
-  self.init_unit
+    self.init_unit
 
-  # Set up edit references after init_unit creates Shared
-  self.voxels.edit_snapshots = self.shared.edit_snapshots
-  self.voxels.edit_deltas = self.shared.edit_deltas
-  self.voxels.rebuild_local_edits()
+    # Set up edit references after init_unit creates Shared
+    self.voxels.edit_snapshots = self.shared.edit_snapshots
+    self.voxels.edit_deltas = self.shared.edit_deltas
+    self.voxels.rebuild_local_edits()
 
-  # Expand bounds as chunks are created (for early chunk loading)
-  let build = self
-  self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
-    build.expand_bounds_to_chunk(chunk_id)
+    # Expand bounds as chunks are created (for early chunk loading)
+    let build = self
+    self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
+      build.expand_bounds_to_chunk(chunk_id)
 
-  if global:
-    self.global_flags += GLOBAL
-  self.reset()
-  result = self
+    if global:
+      self.global_flags += GLOBAL
+    self.reset()
+    result = self
 
 proc init_voxels_if_needed*(self: Build) =
   ## Initialize voxels if nil (happens when Build is synced between threads)
