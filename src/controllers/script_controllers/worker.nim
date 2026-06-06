@@ -527,7 +527,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     var connected = false
     while not connected and get_mono_time() < timeout_at:
       try:
-        Ed.thread_ctx.subscribe(connect_address)
+        Ed.thread_ctx.subscribe(connect_address, partial = false)
         connected = true
         # Get the remote server's context ID from subscribers
         for sub in Ed.thread_ctx.subscribers:
