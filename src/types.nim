@@ -219,7 +219,7 @@ type
 
   VoxelStore* = ref object
     id*: string
-    ctx*: EdContext
+    ctx* {.cursor.}: EdContext # back-ref; the Build owns this VoxelStore, ctx outlives it
     unit_id*: string # For edit key construction
     packed_chunks*: EdTable[Vector3, SnapshotData]
     chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
@@ -254,7 +254,7 @@ type
     answer*: Option[bool]
 
   Unit* = ref object of Model
-    parent*: Unit
+    parent* {.cursor.}: Unit # back-ref; the parent owns this child via `units`
     units*: EdSeq[Unit]
     start_transform*: Transform
     scale_value*: EdValue[float]
