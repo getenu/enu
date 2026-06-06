@@ -147,7 +147,13 @@ proc init*(_: type GameState): GameState =
     player_value: EdValue[Player].init(flags = flags),
     local_flags: EdSet[LocalStateFlags].init(flags = flags),
     global_flags: EdSet[GlobalStateFlags].init(id = "state_global_flags"),
-    units: EdSeq[Unit].init(id = "root_units"),
+    units: EdSeq[Unit].init(
+      # OWNS_MEMBERS (ownerless): nothing cascades into root units, but ed
+      # indexes the members so partial subscribers get each unit's ownership
+      # closure pushed ahead of the collection (husk-free parse).
+      id = "root_units",
+      flags = DEFAULT_FLAGS + {OWNS_MEMBERS},
+    ),
     open_unit_value: EdValue[Unit].init(flags = flags),
     config_value: EdValue[Config].init(flags = flags, id = "config"),
     tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),

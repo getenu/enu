@@ -527,7 +527,14 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     var connected = false
     while not connected and get_mono_time() < timeout_at:
       try:
-        Ed.thread_ctx.subscribe(connect_address, partial = false)
+        Ed.thread_ctx.subscribe(
+          # Partial replica: the unit directory plus (server-pushed) each
+          # unit's ownership closure — see OWNS_MEMBERS on root_units. Our own
+          # writes still flow up (the reverse direction stays full).
+          connect_address,
+          partial = true,
+          fetch = ["root_units"],
+        )
         connected = true
         # Get the remote server's context ID from subscribers
         for sub in Ed.thread_ctx.subscribers:

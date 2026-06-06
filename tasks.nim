@@ -230,6 +230,64 @@ task world_tests,
           " --enu-test scenes/game.tscn --temp-workdir"
     exec cmd
 
+task client_smoke,
+  "Two-instance smoke: server + partial-replica client; verify sync via logs":
+  p "Building enu..."
+  exec "nim build"
+
+  p "Killing existing enu processes..."
+  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+  discard gorge_ex("pkill -x enu_mcp || true")
+  exec "sleep 1"
+
+  let godot = godot_bin()
+  p "Starting server..."
+  exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose " &
+    "scenes/game.tscn > /tmp/enu_server.log 2>&1 &"
+  exec "sleep 6"
+
+  p "Starting client (partial replica)..."
+  exec &"cd app && ENU_CONNECT_ADDRESS=127.0.0.1 {godot} --verbose " &
+    "scenes/game.tscn --temp-workdir > /tmp/enu_client.log 2>&1 &"
+  exec "sleep 20" # boot + connect + initial sync + scripts
+
+  p "Checking logs..."
+  let client_log = gorge_ex("cat /tmp/enu_client.log").output
+  let server_log = gorge_ex("cat /tmp/enu_server.log").output
+
+  var failures: seq[string]
+  template expect_check(cond: bool, msg: string) =
+    if cond:
+      echo "  ok: " & msg
+    else:
+      failures.add msg
+      echo "  FAIL: " & msg
+
+  expect_check "connected to server" in client_log, "client connected"
+  expect_check "Unable to connect to server" notin client_log,
+    "no connect timeout"
+  expect_check "adding child" in client_log,
+    "client renders units (add_to_scene)"
+  expect_check client_log.count("player-") >= 2,
+    "client sees both players (own + server's)"
+  expect_check server_log.count("adding child") >= 1 and
+    server_log.count("player-") >= 2,
+    "server sees the client's player"
+  expect_check "unowned Ed field" notin client_log, "client: no unowned fields"
+  expect_check "unowned Ed field" notin server_log, "server: no unowned fields"
+  expect_check "SIGSEGV" notin client_log and "Traceback" notin client_log,
+    "client: no crashes"
+  expect_check "SIGSEGV" notin server_log and "Traceback" notin server_log,
+    "server: no crashes"
+
+  p "Killing enu instances..."
+  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+
+  if failures.len > 0:
+    echo &"\nResult: FAIL ({failures.len} checks failed)"
+    quit 1
+  echo "\nResult: PASS"
+
 task mcp_repro,
   "Build enu, restart it, and run MCP integration tests (repeat N times, default 5)":
   let

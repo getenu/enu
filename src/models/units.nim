@@ -165,8 +165,6 @@ method destroy*(self: Unit) {.gcsafe.} =
 proc destroy_impl*(self: Bot | Build | Sign) =
   if self.destroyed:
     return
-  self.destroyed = true
-  assert ?self
 
   # Dev safety net: every direct Ed container should have been attributed to us
   # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
