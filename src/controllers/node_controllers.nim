@@ -154,8 +154,9 @@ proc watch*(self: NodeController, state: GameState) =
       self.watch_units(change.item)
     elif removed:
       change.item.remove_from_scene()
-      let unit = change.item
-      Ed.thread_ctx.queue_free(unit)
+      # No explicit queue_free: the Unit is an EdRef, reclaimed by ORC once
+      # unreferenced (ed then prunes its ref_pool entry). remove_from_scene
+      # already handles the Godot node teardown. (step 4.3)
 
 proc init*(_: type NodeController): NodeController =
   result = NodeController()

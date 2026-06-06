@@ -177,7 +177,8 @@ proc destroy_impl*(self: Bot | Build | Sign) =
     if ?shared.edit_deltas:
       shared.edit_deltas.destroy
     self.shared = nil
-    Ed.thread_ctx.free(shared)
+    # No explicit free: `shared` is an EdRef now, so ORC reclaims it once this
+    # drops the last reference, and ed prunes its ref_pool entry. (step 4.3)
   else:
     self.shared = nil
 
@@ -201,7 +202,10 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   if ?parent:
     parent.units.pause:
       parent.units -= self
-  Ed.thread_ctx.free(self)
+  # No explicit free: removing self from its parent (and the field teardown
+  # above) drops ed's references; once nothing else holds this Unit, ORC reclaims
+  # it and ed prunes its ref_pool entry. The Godot node teardown stays in
+  # remove_from_scene. (step 4.3)
 
 proc clear_all*(units: EdSeq[Unit]) =
   var roots = units.value

@@ -200,7 +200,7 @@ type
     net_bytes_received_value*: EdValue[int64]
     net_connections_value*: EdValue[int]
 
-  Model* = ref object of RootObj
+  Model* = ref object of EdRef
     id*: string
     target_point*: Vector3
     target_normal*: Vector3
@@ -210,7 +210,7 @@ type
 
   Ground* = ref object of Model
 
-  Shared* = ref object of RootObj
+  Shared* = ref object of EdRef
     id*: string
     materials*: seq[ShaderMaterial]
     emission_colors*: seq[godot.Color]
