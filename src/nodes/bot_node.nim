@@ -180,18 +180,23 @@ gdobj BotNode of KinematicBody:
 
     if self.model of Bot:
       let bot = Bot(self.model)
-      let is_agent = AGENT in bot.global_flags
-      if is_agent:
+      # MCP queries are answered only by the server. A connected client also
+      # holds the synced bot (and its mcp_query_value); answering here too
+      # makes two writers race on the same synced response container — seen
+      # live as an eval answered with a screenshot path.
+      let serves_mcp =
+        AGENT in bot.global_flags and SERVER in state.local_flags
+      if serves_mcp:
         info "mcp bot node setup",
           id = bot.id, has_mcp_query_value = ?bot.mcp_query_value
       self.set_process(
-        SCRIPT_RUNNING in self.model.global_flags or is_agent
+        SCRIPT_RUNNING in self.model.global_flags or serves_mcp
       )
 
   method process(delta: float) =
     if self.model of Bot:
       let bot = Bot(self.model)
-      if AGENT in bot.global_flags:
+      if AGENT in bot.global_flags and SERVER in state.local_flags:
         let q = bot.mcp_query
         if q.kind == MCP_SCREENSHOT and q.state == MCP_READY and
             self.screenshot_warmup_frames > 0:

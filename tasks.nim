@@ -235,20 +235,27 @@ task client_smoke,
   p "Building enu..."
   exec "nim build"
 
-  p "Killing existing enu processes..."
-  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+  p "Stopping previous harness-launched enu (if any)..."
+  discard gorge_ex(
+    "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
+  )
   discard gorge_ex("pkill -x enu_mcp || true")
   exec "sleep 1"
+  let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
+  if port_check.output.strip.len > 0:
+    echo "Port 9632 is in use by an enu this harness didn't start — not killing it:"
+    echo port_check.output
+    quit 1
 
   let godot = godot_bin()
   p "Starting server..."
   exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose " &
-    "scenes/game.tscn > /tmp/enu_server.log 2>&1 &"
+    "scenes/game.tscn > /tmp/enu_server.log 2>&1 & echo $! > /tmp/enu_server.pid"
   exec "sleep 6"
 
   p "Starting client (partial replica)..."
   exec &"cd app && ENU_CONNECT_ADDRESS=127.0.0.1 {godot} --verbose " &
-    "scenes/game.tscn --temp-workdir > /tmp/enu_client.log 2>&1 &"
+    "scenes/game.tscn --temp-workdir > /tmp/enu_client.log 2>&1 & echo $! > /tmp/enu_client.pid"
   exec "sleep 20" # boot + connect + initial sync + scripts
 
   p "Checking logs..."
@@ -280,8 +287,10 @@ task client_smoke,
   expect_check "SIGSEGV" notin server_log and "Traceback" notin server_log,
     "server: no crashes"
 
-  p "Killing enu instances..."
-  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+  p "Stopping harness enu instances..."
+  discard gorge_ex(
+    "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
+  )
 
   if failures.len > 0:
     echo &"\nResult: FAIL ({failures.len} checks failed)"
@@ -299,14 +308,23 @@ task mcp_repro,
   p "Building enu..."
   exec "nim build"
 
-  p "Killing existing enu processes..."
-  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
-  discard gorge_ex("pkill -f enu_mcp || true")
+  p "Stopping previous harness-launched enu (if any)..."
+  # Only kill instances *this harness* started (pidfile) — never a manually
+  # launched enu. If the port is still busy, fail loudly instead.
+  discard gorge_ex(
+    "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
+  )
+  discard gorge_ex("pkill -x enu_mcp || true")
   exec "sleep 1"
+  let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
+  if port_check.output.strip.len > 0:
+    echo "Port 9632 is in use by an enu this harness didn't start — not killing it:"
+    echo port_check.output
+    quit 1
 
   p &"Starting enu in background..."
   let godot = godot_bin()
-  exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose scenes/game.tscn > /tmp/enu_repro.log 2>&1 &"
+  exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose scenes/game.tscn > /tmp/enu_repro.log 2>&1 & echo $! > /tmp/enu_repro.pid"
   exec "sleep 4"
 
   p &"Running MCP integration tests ({iterations} iterations)..."
@@ -328,8 +346,10 @@ task mcp_repro,
       echo "Bug reproduced — stopping."
       break
 
-  p "Killing enu..."
-  discard gorge_ex("pkill -f 'godot.*game.tscn' || true")
+  p "Stopping harness enu..."
+  discard gorge_ex(
+    "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
+  )
 
   echo &"\nResult: {pass_count}/{iterations} passed"
   if fail_count > 0:
