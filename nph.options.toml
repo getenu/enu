@@ -1,0 +1,4 @@
+# Enu fork formatting rules (https://github.com/getenu/nph). Not understood by
+# upstream nph - kept separate from .nph.toml so that file stays upstream-safe.
+line-width = 80
+inline-trailing-string = true
