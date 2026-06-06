@@ -420,6 +420,9 @@ type
     worker_thread*: system.Thread[tuple[ctx: EdContext, state: GameState]]
 
   Worker* = ref object
+    # Units that arrived before their data (narrow partial replica): the worker
+    # join is deferred until their core containers fill. Drained per loop tick.
+    pending_units*: seq[Unit]
     retry_failures*: bool
     interpreter*: Interpreter
     active_unit*: Unit
@@ -439,6 +442,9 @@ type
     mcp_update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object
+    # Units that arrived before their data (narrow partial replica): the scene
+    # add is deferred until their core containers fill. Drained per frame.
+    pending*: seq[Unit]
 
   SavedState* = object
     transform*: Transform

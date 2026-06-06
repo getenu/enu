@@ -74,6 +74,7 @@ gdobj Game of Node:
   method process*(delta: float) =
     Ed.thread_ctx.tick
     inc state.frame_count
+    self.node_controller.drain_pending()
 
     let time = get_mono_time()
     when defined(metrics):

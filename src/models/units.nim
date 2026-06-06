@@ -12,7 +12,13 @@ proc init_shared*(self: Unit) =
   assert ?self.shared_value
   if ?self.parent:
     self.shared = self.parent.shared
-  elif not ?self.shared:
+  elif not ?self.shared and self.shared_value.loaded:
+    # Construction-time only: a fresh unit mints its tree's Shared. On a narrow
+    # replica `shared_value` is an unloaded placeholder — the synced value is on
+    # its way — and minting here would shadow it with an unowned local orphan
+    # (caught by the destroy-time assertion). Reads heal once the fill lands;
+    # init_shared is re-run by init_voxels_if_needed and the join paths.
+    debug "init_shared minting fresh shared", unit = self.id
     self.shared_value.init
     var shared = Shared(id: self.id & "-shared")
     shared.init_ed_fields
@@ -44,6 +50,15 @@ proc init_unit*[T: Unit](self: T, shared = true) =
   self.init_shared
   self.global_flags += VISIBLE
   self.global_flags += DIRTY
+
+proc sync_ready*(self: Unit): bool =
+  ## Ready to join the scene: the core containers hold real data. Locally
+  ## created units always are; on a narrow (non-deep) partial replica they
+  ## arrive as placeholders and fill once the deep fetch lands. SYNC_LOCAL
+  ## fields never fill on replicas, so only scene-critical synced fields are
+  ## checked.
+  self.global_flags.loaded and self.transform_value.loaded and
+    self.shared_value.loaded
 
 proc pivot_local*(self: Unit): Vector3 =
   ## The unit's anchor pivot in parent-local coords (or world coords if
@@ -172,11 +187,14 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   when not defined(release):
     for field in self[].fields:
       when field is Ed:
-        if ?field:
+        # Skip unloaded placeholders: on a narrow replica the closure may not
+        # have arrived, and ownership stamps ride with it.
+        if ?field and field.loaded:
           let fid = field.id
           if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
+            const field_type = $typeof(field)
             error "unowned Ed field at destroy (missing id.own:/own:?)",
-              unit = self.id, field_id = fid
+              unit = self.id, field_id = fid, field_type
 
   if state.open_unit == self:
     state.open_unit = nil

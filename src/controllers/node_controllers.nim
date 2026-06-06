@@ -130,12 +130,13 @@ proc find_nested_changes(parent: Change[Unit]) =
         elif Removed in change.changes:
           parent.item.set_global(false)
 
+proc add_or_defer(self: NodeController, unit: Unit) {.gcsafe.}
+
 proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
   unit.units.watch(unit):
     if added:
       change.item.fix_parents(unit)
-      change.item.add_to_scene()
-      self.watch_units(change.item)
+      self.add_or_defer(change.item)
     elif removed:
       reset_nodes()
       change.item.remove_from_scene()
@@ -146,12 +147,37 @@ proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
     elif GLOBAL.removed:
       unit.set_global(false)
 
+proc add_or_defer(self: NodeController, unit: Unit) {.gcsafe.} =
+  ## Narrow partial replicas: a unit can arrive before its data (placeholder
+  ## containers). Defer the scene add until the core containers fill — the
+  ## worker's deep fetch brings them, and `drain_pending` (per frame) finishes
+  ## the join. Field watchers self-heal the rest via Fill changes.
+  if unit.sync_ready:
+    unit.add_to_scene()
+    self.watch_units(unit)
+  else:
+    debug "deferring scene add until materialized", unit_id = unit.id
+    self.pending.add unit
+
+proc drain_pending*(self: NodeController) =
+  if self.pending.len == 0:
+    return
+  var still: seq[Unit]
+  for unit in self.pending:
+    if unit.destroyed:
+      continue
+    if unit.sync_ready:
+      unit.add_to_scene()
+      self.watch_units(unit)
+    else:
+      still.add unit
+  self.pending = still
+
 proc watch*(self: NodeController, state: GameState) =
   state.units.changes:
     info "node_ctrl state.units change", added, removed, id = change.item.id
     if added:
-      change.item.add_to_scene()
-      self.watch_units(change.item)
+      self.add_or_defer(change.item)
     elif removed:
       change.item.remove_from_scene()
       # No explicit queue_free: the Unit is an EdRef, reclaimed by ORC once

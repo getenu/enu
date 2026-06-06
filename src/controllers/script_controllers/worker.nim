@@ -353,6 +353,11 @@ proc watch_units(
         # FIXME: this is being set for the main thread in node_controller
         unit.fix_parents(parent)
         unit.frame_created = state.frame_count
+        if SERVER notin state.local_flags and not unit.sync_ready:
+          # Narrow partial replica: the unit arrived without its data. One deep
+          # fetch pulls its whole ownership closure (containers + subtree); the
+          # fills relay to the node ctx, whose deferred scene add completes.
+          discard Ed.thread_ctx.fetch(unit.id, deep = true)
         unit.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
           unit.script_ctx.timer = get_mono_time()
         self.watch_units(unit.units, unit, body)
@@ -413,8 +418,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   worker.for_all_units:
     if added:
-      unit.worker_thread_joined(worker)
-      worker.watch_code unit
+      if unit.sync_ready:
+        unit.worker_thread_joined(worker)
+        worker.watch_code unit
+      else:
+        # Narrow replica: the unit's data is still arriving (the deep fetch in
+        # watch_units pulls it). Join once it lands — drained per loop tick.
+        worker.pending_units.add unit
 
     if removed:
       worker.unmap_unit(unit)
@@ -533,8 +543,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           # writes still flow up (the reverse direction stays full).
           connect_address,
           partial = true,
+          # deep stays default-false for now: a stress test of the narrow path
+          # (placeholders + materialize-on-access). Flip to deep = true if it
+          # doesn't hold up — that pushes unit closures so units arrive
+          # render-ready.
           fetch = ["root_units"],
-          deep = true, # push unit closures: we render everything
         )
         connected = true
         # Get the remote server's context ID from subscribers
@@ -622,6 +635,18 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       let timeout = frame_start + max_time
       let wait_until = frame_start + min_time
       inc tick_count
+
+      if worker.pending_units.len > 0:
+        var still_pending: seq[Unit]
+        for unit in worker.pending_units:
+          if unit.destroyed:
+            continue
+          if unit.sync_ready:
+            unit.worker_thread_joined(worker)
+            worker.watch_code unit
+          else:
+            still_pending.add unit
+        worker.pending_units = still_pending
 
       for ctx_name in Ed.thread_ctx.unsubscribed:
         var i = 0
