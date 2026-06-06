@@ -25,7 +25,17 @@ var
   # restart, keeping things predictable for the agent.
   last_bot_transform = Transform.init(vec3(0, 1, 0))
 
-let client = EdClient(id: ctx_id, address: connect_addr, chan_size: 100)
+# Partial replica: only `fetch` (and anything fetched later) syncs from Enu.
+# root_units is the unit directory — needed to find/supersede the agent bot;
+# the bot's own containers are auto-interest (we create them), and a reconnect
+# deep-fetches the prior session's bot (see ensure_agent_bot).
+let client = EdClient(
+  id: ctx_id,
+  address: connect_addr,
+  chan_size: 100,
+  partial: true,
+  fetch: @["root_units"],
+)
 
 client.on_connect = proc() =
   bot =

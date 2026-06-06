@@ -33,7 +33,31 @@ proc ensure_agent_bot*(
   ## level reloads and isn't persisted). `at` seeds the position on create.
   for u in ctx.root_units:
     if u.id == id and u of Bot:
-      return Bot(u)
+      result = Bot(u)
+      # Reconnect on a partial replica: the bot arrived inline via root_units,
+      # but its container fields can be unregistered stubs — their CREATEs were
+      # filtered before this session expressed interest. Deep-fetch the bot's
+      # owned closure, wait (bounded) for it to land, then re-link the fields to
+      # the real containers. A full replica passes through instantly: everything
+      # is already registered, so there's nothing pending and the re-link is a
+      # no-op.
+      ctx.fetch(id, deep = true)
+      let deadline = get_mono_time() + init_duration(seconds = 2)
+      var pending = true
+      while pending and get_mono_time() < deadline:
+        ctx.tick
+        pending = false
+        for field in result[].fields:
+          when field is Ed:
+            if ?field and field.id notin ctx:
+              pending = true
+        if pending:
+          sleep FRAME_MS
+      for field in result[].fields:
+        when field is Ed:
+          if ?field and field.id in ctx:
+            field = type(field)(ctx[field.id])
+      return result
   result = Bot.init(id = id)
   result.color = color
   result.global_flags += AGENT
