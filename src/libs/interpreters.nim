@@ -44,6 +44,19 @@ proc run*(self: ScriptCtx): bool =
   self.exit_code = none(int)
 
   var raw_dependencies = newSeq[string]()
+  # Breadcrumb for a rare, traceless worker-thread SIGSEGV (read-from-nil) seen
+  # during the player's first script load, inside load_module. It's ~1-in-50 and
+  # disappears under a debugger or --stacktrace:on (a timing-sensitive Heisenbug),
+  # so a live backtrace has been unobtainable. This log flushes before the crash
+  # (proven: the prior "loading script" line always survives), so on recurrence the
+  # last line records which input was nil. Cheap — run() fires once per (re)load,
+  # not per frame. If this shows a nil here, that's the culprit; if all non-nil,
+  # the nil is deeper in the compiler (graph/idgen/module state).
+  info "script run: entering load_module",
+    file = self.file_name,
+    interpreter_nil = self.interpreter.is_nil,
+    pass_context_nil = self.pass_context.is_nil,
+    code_len = self.code.len
   try:
     self.interpreter.load_module(
       self.file_name, self.code, self.pass_context, raw_dependencies
