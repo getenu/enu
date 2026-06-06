@@ -201,7 +201,6 @@ type
     net_connections_value*: EdValue[int]
 
   Model* = ref object of EdRef
-    id*: string
     target_point*: Vector3
     target_normal*: Vector3
     local_flags*: EdSet[LocalModelFlags]
@@ -211,7 +210,6 @@ type
   Ground* = ref object of Model
 
   Shared* = ref object of EdRef
-    id*: string
     materials*: seq[ShaderMaterial]
     emission_colors*: seq[godot.Color]
     edit_snapshots*: EdTable[EditKey, SnapshotData]

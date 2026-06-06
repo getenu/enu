@@ -21,7 +21,9 @@ proc init_shared*(self: Unit) =
 proc init_unit*[T: Unit](self: T, shared = true) =
   self.lifetime = new_lifetime()
   with self:
-    units = EdSeq[Unit].init()
+    # OWNS_MEMBERS: children belong to us — membership drives ed's owned index,
+    # so our destroy cascades into them (and removal un-registers them).
+    units = EdSeq[Unit].init(flags = DEFAULT_FLAGS + {OWNS_MEMBERS})
     transform_value = ed(self.start_transform)
     global_flags = EdSet[GlobalModelFlags].init()
     local_flags = EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL})
@@ -154,7 +156,10 @@ method on_collision*(
 method off_collision*(self: Model, partner: Model) {.base, gcsafe.} =
   discard
 
-method destroy*(self: Unit) {.base, gcsafe.} =
+method destroy*(self: Unit) {.gcsafe.} =
+  # Override of ed's EdRef base: a Unit must be destroyed through a concrete
+  # subtype's destroy (Bot/Build/Sign/Player), which does enu cleanup and then
+  # calls the generic EdRef teardown.
   fail "override me"
 
 proc destroy_impl*(self: Bot | Build | Sign) =
@@ -162,24 +167,6 @@ proc destroy_impl*(self: Bot | Build | Sign) =
     return
   self.destroyed = true
   assert ?self
-
-  # Cascade stays explicit: child units are independently removable, so they
-  # can't live in our lifetime (Lifetime can't un-register).
-  for unit in self.units.value:
-    unit.destroy
-
-  # `shared` is shared across the unit tree (only the root owns it), so its
-  # voxel-edit tables are torn down once, here.
-  if self.parent == nil:
-    let shared = self.shared
-    if ?shared.edit_snapshots:
-      shared.edit_snapshots.destroy
-    if ?shared.edit_deltas:
-      shared.edit_deltas.destroy
-
-  # Callbacks / external subscriptions bound to this unit's lifetime.
-  if ?self.lifetime:
-    self.lifetime.finish()
 
   # Dev safety net: every direct Ed container should have been attributed to us
   # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
@@ -193,10 +180,6 @@ proc destroy_impl*(self: Bot | Build | Sign) =
             error "unowned Ed field at destroy (missing id.own:/own:?)",
               unit = self.id, field_id = fid
 
-  # Owner-cascade: destroy every container we own (via the synced ownership
-  # index), broadcasting DESTROY so replicas follow. Works in any context.
-  Ed.thread_ctx.destroy_owned(self.id)
-
   if state.open_unit == self:
     state.open_unit = nil
 
@@ -209,6 +192,12 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   if ?self.parent:
     self.parent.units.pause:
       self.parent.units -= self
+
+  # Everything else is ownership: the EdRef teardown finishes our lifetime
+  # (callbacks) and destroys all we own — our containers, the child units (the
+  # OWNS_MEMBERS `units` collection cascades through their destroy), and, on
+  # the root, the shared voxel-edit tables (created in our `id.own:` scope).
+  proc_call EdRef(self).destroy()
 
 proc clear_all*(units: EdSeq[Unit]) =
   var roots = units.value
