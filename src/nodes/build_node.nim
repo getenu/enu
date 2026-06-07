@@ -28,6 +28,8 @@ gdobj BuildNode of VoxelTerrain:
     loaded_chunks: HashSet[Vector3]
     tracked_delta_seqs: Table[Vector3, EID]
     renderer: VoxelRenderer
+    paging_logged: bool
+    data_logged: bool
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded"
@@ -68,6 +70,20 @@ gdobj BuildNode of VoxelTerrain:
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
 
+      if SERVER notin state.local_flags:
+        # Voxel paging: the engine's view streaming is the demand signal. A
+        # block entering view pulls its chunk data from the server (no-op if
+        # already loaded; a miss leaves a per-key subscription behind, so
+        # someone building here pops in). The tables are LAZY — they arrive
+        # as empty handles with the unit.
+        self.model.voxels.packed_chunks.request(chunk_id)
+        self.model.voxels.chunk_deltas.request(chunk_id)
+        if not self.paging_logged:
+          self.paging_logged = true
+          # One line per build: paired with "voxel data arriving" below, a
+          # build that requests but never receives is visible in the logs.
+          info "voxel paging", unit = self.model.id
+
       if chunk_id in self.model.voxels.packed_chunks:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
         if ASAP_MODE in self.model.global_flags:
@@ -99,6 +115,12 @@ gdobj BuildNode of VoxelTerrain:
   method on_block_unloaded(chunk_id: Vector3) =
     if ?self.model:
       self.loaded_chunks.excl(chunk_id)
+      if SERVER notin state.local_flags:
+        # Out of view: page out. Evicts locally (the excl above keeps the
+        # REMOVED watch from erasing an already-dropped block) and retracts
+        # our per-key interest upstream — never touches the authority's data.
+        self.model.voxels.packed_chunks.release(chunk_id)
+        self.model.voxels.chunk_deltas.release(chunk_id)
 
   proc set_glow(glow: float) =
     let library = self.mesher.as(VoxelMesherBlocky).library
@@ -156,6 +178,9 @@ gdobj BuildNode of VoxelTerrain:
     # Watch packed_chunks for new snapshots
     self.model.voxels.packed_chunks.watch:
       if added:
+        if not self.data_logged:
+          self.data_logged = true
+          info "voxel data arriving", unit = self.model.id
         if change.item.key in self.loaded_chunks:
           if ASAP_MODE in self.model.global_flags:
             self.renderer.buffer_snapshot(change.item.key, change.item.value)

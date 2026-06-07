@@ -1,8 +1,7 @@
 import std/[locks, os, random, net, json, jsonutils, strutils]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
-import core, models, models/serializers, models/chunk_pager,
-  libs/[interpreters, eval]
+import core, models, models/serializers, libs/[interpreters, eval]
 import ./[vars, host_bridge, scripting]
 
 var
@@ -629,9 +628,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   var tick_count = 0
   var last_tick_count = 0
   var max_tick_time = Duration.default
-  # Voxel paging (partial clients): request chunks near the player, release
-  # far ones. No-op on the server / single player.
-  var pager = ChunkPager.init
 
   try:
     while running:
@@ -722,8 +718,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       # Only reset timer if we actually flushed during ASAP mode
       if did_flush_asap:
         last_asap_flush = frame_start
-
-      pager.tick # page voxel chunks in/out around the player (clients)
 
       Ed.thread_ctx.tick
       run_deferred()

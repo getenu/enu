@@ -91,8 +91,15 @@ gdobj Game of Node:
 
       let vram = get_monitor(RENDER_VIDEO_MEM_USED)
       var unit_count = 0
+      # Loaded chunk entries across all builds — the number voxel paging
+      # actually moves (chunk values live inside their tables, so the object
+      # count doesn't reflect page-in/out).
+      var chunk_count = 0
       state.units.value.walk_tree proc(unit: Unit) =
         inc unit_count
+        if unit of Build and ?Build(unit).voxels:
+          chunk_count += Build(unit).voxels.packed_chunks.len
+          chunk_count += Build(unit).voxels.chunk_deltas.len
 
       self.stats.text =
         \"""
@@ -100,7 +107,8 @@ gdobj Game of Node:
         scale_factor: {state.scale_factor}
         vram: {vram}
         units: {unit_count}
-        zen objects: {Ed.thread_ctx.len}
+        ed objects: {Ed.thread_ctx.len}
+        chunks: {chunk_count}
         level: {state.level_name}
         {get_network_stats()}
         {get_stats()}
