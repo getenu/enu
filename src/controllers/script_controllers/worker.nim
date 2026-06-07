@@ -393,8 +393,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     is_authority = is_server,
     # Partial clients page voxel data on demand; cap resident body memory so
     # the evictor reclaims dormant chunks/residue (LRU). A low see-it-work
-    # value for now — the server (full authority) never evicts (0).
-    mem_limit = (if is_server: 0 else: 16 * 1024 * 1024),
+    # value for now — the server (full authority) never evicts (< 0).
+    mem_limit = (if is_server: -1 else: 16 * 1024 * 1024),
   )
 
   Ed.thread_ctx = worker_ctx
