@@ -282,6 +282,8 @@ task client_smoke,
     "server sees the client's player"
   expect_check "unowned Ed field" notin client_log, "client: no unowned fields"
   expect_check "unowned Ed field" notin server_log, "server: no unowned fields"
+  expect_check "chunk pager" in client_log,
+    "client pages voxel chunks (LAZY tables + request/release)"
   expect_check "SIGSEGV" notin client_log and "Traceback" notin client_log,
     "client: no crashes"
   expect_check "SIGSEGV" notin server_log and "Traceback" notin server_log,

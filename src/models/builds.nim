@@ -492,6 +492,11 @@ proc setup_packed_chunk_watches(self: Build) =
   self.voxels.packed_chunks.watch:
     if added:
       self.voxels.apply_snapshot(change.item.key, change.item.value)
+    elif removed and not modified:
+      # Paged out (a rewrite is REMOVED+MODIFIED and skipped): drop the
+      # chunk's local voxel state. The authority keeps the data; moving back
+      # re-requests it.
+      self.voxels.unload_chunk(change.item.key)
 
   self.voxels.chunk_deltas.watch:
     if added:
@@ -501,6 +506,10 @@ proc setup_packed_chunk_watches(self: Build) =
         for delta in delta_seq:
           self.voxels.apply_delta(chunk_id, delta)
         watch_delta_seq(chunk_id, delta_seq)
+    elif removed and not modified:
+      if change.item.key notin self.voxels.packed_chunks:
+        # Delta-only chunk paged out; no packed_chunks REMOVED will fire.
+        self.voxels.unload_chunk(change.item.key)
 
 method worker_thread_joined*(self: Build, worker: Worker) =
   proc_call worker_thread_joined(Unit(self), worker)

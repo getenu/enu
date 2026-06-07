@@ -295,15 +295,19 @@ proc init*(
     id: id,
     ctx: use_ctx,
     unit_id: unit_id,
+    # LAZY: pull-only on partial replicas. The big voxel tables don't ride a
+    # unit's closure push — clients receive an empty handle and page chunks
+    # in/out with request/release as the player moves (see chunk paging).
+    # Full replicas (server threads, single player) are unaffected.
     packed_chunks: EdTable[Vector3, SnapshotData].init(
       id = id & ".packed_chunks",
       ctx = use_ctx,
-      flags = {SYNC_LOCAL, SYNC_REMOTE},
+      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY},
     ),
     chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]].init(
       id = id & ".chunk_deltas",
       ctx = use_ctx,
-      flags = {SYNC_LOCAL, SYNC_REMOTE},
+      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY},
     ),
     edit_snapshots: edit_snapshots,
     edit_deltas: edit_deltas,
@@ -676,6 +680,17 @@ proc apply_snapshot*(
         if kind != HOLE:
           inc self.block_count
 
+proc unload_chunk*(self: VoxelStore, chunk_id: Vector3) =
+  ## Drop a paged-out chunk's local state (the voxel paging counterpart of
+  ## apply_snapshot). The data still exists on the authority; a later
+  ## `request` re-applies it.
+  if chunk_id in self.local_voxels:
+    for pos, info in self.local_voxels[chunk_id]:
+      if info.kind != HOLE:
+        dec self.block_count
+    self.local_voxels.del(chunk_id)
+  self.pending_chunks.del(chunk_id)
+
 proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
   let changes = decode_delta(delta)
   for (local_pos, packed_voxel) in changes:
@@ -805,6 +820,18 @@ proc render_delta_direct*(
         )
         inc result
     voxel_tool.paste(chunk_min, buffer, 1, 0)
+
+proc erase_chunk_direct*(voxel_tool: VoxelTool, chunk_id: Vector3) =
+  ## Clear a paged-out chunk from the terrain — the un-render counterpart of
+  ## render_snapshot_direct. One zero-filled paste: the godot_voxel paste
+  ## binding overwrites every cell (no use_mask — see ensure_buffer), which is
+  ## exactly what an eraser wants, and it works whether or not the terrain
+  ## considers the chunk editable.
+  let chunk_min = chunk_id * ChunkDim
+  let buffer = gdnew[VoxelBuffer]()
+  buffer.create(ChunkDim, ChunkDim, ChunkDim)
+  buffer.fill(0)
+  voxel_tool.paste(chunk_min, buffer, 1, 0)
 
 const ASAP_PASTE_INTERVAL = init_duration(seconds = 2)
 
