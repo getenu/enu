@@ -199,6 +199,7 @@ type
     net_bytes_sent_value*: EdValue[int64]
     net_bytes_received_value*: EdValue[int64]
     net_connections_value*: EdValue[int]
+    ed_mem_value*: EdValue[int] # worker ctx resident body bytes (evictor)
 
   Model* = ref object of EdRef
     target_point*: Vector3

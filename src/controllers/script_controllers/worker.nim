@@ -390,7 +390,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     buffer = false,
     listen_address = listen_address,
     label = "worker",
-    is_authority = is_server
+    is_authority = is_server,
+    # Partial clients page voxel data on demand; cap resident body memory so
+    # the evictor reclaims dormant chunks/residue (LRU). A low see-it-work
+    # value for now — the server (full authority) never evicts (0).
+    mem_limit = (if is_server: 0 else: 16 * 1024 * 1024),
   )
 
   Ed.thread_ctx = worker_ctx
@@ -727,6 +731,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         state.net_connections = Ed.thread_ctx.reactor.connections.len
       else:
         state.net_connections = 0
+      # Surface the worker ctx's resident body bytes (the evictor's pool) to
+      # the main-thread stats screen.
+      state.ed_mem = Ed.thread_ctx.used_bytes
 
       # Log stats periodically
       if frame_start > last_stats_log + stats_log_interval:

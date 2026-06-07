@@ -1,7 +1,7 @@
 import
   godotapi/[
     viewport, camera, mesh_instance, material, camera, viewport_texture, image,
-    resource_loader
+    resource_loader, engine
   ]
 import godot
 import ".."/[core, gdutils]
@@ -12,7 +12,7 @@ gdobj PreviewMaker of Viewport:
     cube: MeshInstance
     bot: Spatial
     callback: proc(img: Image) {.gcsafe.}
-    skip_next = false
+    frames_drawn_at_request = int64.high
 
   method ready*() =
     self.camera = self.find_node("Camera") as Camera
@@ -23,11 +23,14 @@ gdobj PreviewMaker of Viewport:
     assert not self.bot.is_nil
 
   method process*(delta: float) =
-    if not self.skip_next and not self.callback.is_nil:
+    # The UPDATE_ONCE render happens on the next actual draw, which can be
+    # several frames away at startup (window not presenting yet, fullscreen
+    # transition, etc). Counting completed draws instead of process ticks
+    # keeps us from grabbing the texture before it has been rendered.
+    if not self.callback.is_nil and get_frames_drawn() > self.frames_drawn_at_request:
       let image = self.get_texture().get_data()
       self.callback(image)
       self.callback = nil
-    self.skip_next = false
 
   proc generate_block_preview*(
       material_name: string, callback: proc(preview: Image) {.gcsafe.}
@@ -40,7 +43,7 @@ gdobj PreviewMaker of Viewport:
     self.camera.fov = 1
     self.camera.look_at vec3(), UP
     self.callback = callback
-    self.skip_next = true
+    self.frames_drawn_at_request = get_frames_drawn()
 
   proc generate_object_preview*(
       object_name: string, callback: proc(preview: Image) {.gcsafe.}
@@ -51,4 +54,4 @@ gdobj PreviewMaker of Viewport:
     self.camera.fov = 1.2
     self.camera.look_at vec3(), UP
     self.callback = callback
-    self.skip_next = true
+    self.frames_drawn_at_request = get_frames_drawn()

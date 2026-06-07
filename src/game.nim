@@ -109,6 +109,7 @@ gdobj Game of Node:
         units: {unit_count}
         ed objects: {Ed.thread_ctx.len}
         chunks: {chunk_count}
+        ed mem: {state.ed_mem div 1024} KiB
         level: {state.level_name}
         {get_network_stats()}
         {get_stats()}

@@ -171,6 +171,7 @@ proc init*(_: type GameState): GameState =
     net_bytes_sent_value: EdValue[int64].init(0'i64, flags = flags),
     net_bytes_received_value: EdValue[int64].init(0'i64, flags = flags),
     net_connections_value: EdValue[int].init(0, flags = flags),
+    ed_mem_value: EdValue[int].init(0, flags = flags),
   )
 
   self.init_logger
