@@ -393,15 +393,27 @@ proc init*(
     bot_collisions = true,
     parent: Unit = nil,
 ): Build =
-  let voxel_id = id & ".voxels"
   # Everything built here is owned by this build's id (containers stamp owner_id
-  # = id, riding their CREATE), so destroy_owned(id) tears it all down. VoxelStore
-  # is inside the scope too, so its chunk tables are owned. init_unit, called
-  # within, inherits the scope through the threadvar.
+  # = id, riding their CREATE), so destroy_owned(id) tears it all down. init_unit,
+  # called within, inherits the scope through the threadvar.
   id.own:
-    let voxels = VoxelStore.init(id = voxel_id, unit_id = id)
+    # The synced voxel tables: real Build Ed fields, generated ids (no derived
+    # id, so a reload mints fresh ones — no destroy+recreate-same-id race).
+    # LAZY: pull-only on partial replicas (page chunks in/out); full replicas
+    # get the data.
+    let packed_chunks = EdTable[Vector3, SnapshotData].init(
+      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
+    )
+    let chunk_deltas = EdTable[Vector3, EdSeq[DeltaUpdate]].init(
+      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
+    )
+    let voxels = VoxelStore.init(
+      unit_id = id, packed_chunks = packed_chunks, chunk_deltas = chunk_deltas
+    )
     var self = Build(
       id: id,
+      packed_chunks: packed_chunks,
+      chunk_deltas: chunk_deltas,
       voxels: voxels,
       start_transform: transform,
       draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
@@ -432,39 +444,20 @@ proc init*(
     result = self
 
 proc init_voxels_if_needed*(self: Build) =
-  ## Initialize voxels if nil (happens when Build is synced between threads)
+  ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
+  ## ride the closure, so it's nil after a cross-thread sync). The synced tables
+  ## are the Build's own Ed fields — reconnected by reference after sync, so we
+  ## just wrap them (no id lookup, no aliasing).
   self.init_shared()
   if not ?self.voxels:
-    let voxel_id = self.id & ".voxels"
-    let ctx = Ed.thread_ctx
-    let packed_id = voxel_id & ".packed_chunks"
-    let deltas_id = voxel_id & ".chunk_deltas"
-    notice "init_voxels_if_needed",
-      build_id = self.id,
-      packed_id,
-      deltas_id,
-      packed_exists = (packed_id in ctx),
-      deltas_exists = (deltas_id in ctx)
-    if packed_id notin ctx or deltas_id notin ctx:
-      notice "voxel EdTables not in context, creating new ones",
-        build_id = self.id
-      self.voxels = VoxelStore.init(
-        id = voxel_id,
-        unit_id = self.id,
-        ctx = ctx,
-        edit_snapshots = self.shared.edit_snapshots,
-        edit_deltas = self.shared.edit_deltas,
-      )
-    else:
-      self.voxels = VoxelStore(
-        id: voxel_id,
-        ctx: ctx,
-        unit_id: self.id,
-        packed_chunks: EdTable[Vector3, SnapshotData](ctx[packed_id]),
-        chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]](ctx[deltas_id]),
-        edit_snapshots: self.shared.edit_snapshots,
-        edit_deltas: self.shared.edit_deltas,
-      )
+    self.voxels = VoxelStore.init(
+      ctx = Ed.thread_ctx,
+      unit_id = self.id,
+      packed_chunks = self.packed_chunks,
+      chunk_deltas = self.chunk_deltas,
+      edit_snapshots = self.shared.edit_snapshots,
+      edit_deltas = self.shared.edit_deltas,
+    )
     self.voxels.rebuild_local_edits()
     # Expand bounds as chunks are created
     let build = self

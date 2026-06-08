@@ -12,17 +12,31 @@ proc init_shared*(self: Unit) =
   assert ?self.shared_value
   if ?self.parent:
     self.shared = self.parent.shared
-  elif not ?self.shared and self.shared_value.loaded:
-    # Construction-time only: a fresh unit mints its tree's Shared. On a narrow
-    # replica `shared_value` is an unloaded placeholder — the synced value is on
-    # its way — and minting here would shadow it with an unowned local orphan
-    # (caught by the destroy-time assertion). Reads heal once the fill lands;
-    # init_shared is re-run by init_voxels_if_needed and the join paths.
-    debug "init_shared minting fresh shared", unit = self.id
-    self.shared_value.init
-    var shared = Shared(id: self.id & "-shared")
-    shared.init_ed_fields
-    self.shared = shared
+  elif not ?self.shared:
+    if ?self.shared_value.value:
+      # Adopt the synced `Shared`. The root that constructed it published it into
+      # `shared_value` (below), so it rides the wire as a real ref — every other
+      # context (replicas, and re-entry after a reload) takes that same instance
+      # rather than minting a shadow.
+      self.shared = self.shared_value.value
+    elif self.shared_value.loaded:
+      # Construction: the root mints its tree's `Shared`, owns the edit tables
+      # under it, and *publishes* it so the singleton syncs everywhere.
+      debug "init_shared minting fresh shared", unit = self.id
+      var shared = Shared(id: generate_id())
+      shared.id.own:
+        shared.init_ed_fields
+      self.shared_value.value = shared
+      self.shared = shared
+    # else: narrow replica — `shared_value` is an unloaded placeholder; the
+    # synced value is on its way. Leave `self.shared` nil; reads heal once the
+    # fill lands and init_shared re-runs (via init_voxels_if_needed / join).
+    if ?self.shared:
+      # `Shared` is a standalone EdRef in no owned collection, so attribute it to
+      # us explicitly. Re-derived locally on each context (mint *and* adopt), so
+      # `destroy_owned(self.id)` on a reload tears `Shared` — and the edit tables
+      # it owns — down everywhere, no synced ownership state required.
+      Ed.thread_ctx.set_owner(self.shared, self.id)
 
 proc init_unit*[T: Unit](self: T, shared = true) =
   self.lifetime = new_lifetime()

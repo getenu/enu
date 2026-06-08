@@ -217,11 +217,14 @@ type
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
 
   VoxelStore* = ref object
-    id*: string
+    # Local per-side render wrapper. The synced tables (`packed_chunks`,
+    # `chunk_deltas`) are owned by the Build (Build Ed fields) and merely
+    # referenced here; the rest (`local_voxels`, `pending_*`, …) is local state
+    # rebuilt on each side.
     ctx* {.cursor.}: EdContext # back-ref; the Build owns this VoxelStore, ctx outlives it
     unit_id*: string # For edit key construction
-    packed_chunks*: EdTable[Vector3, SnapshotData]
-    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
+    packed_chunks*: EdTable[Vector3, SnapshotData]      # ref to the Build's
+    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]  # ref to the Build's
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
     local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
@@ -305,6 +308,13 @@ type
     text_only*: bool
 
   Build* = ref object of Unit
+    # The synced voxel tables ride the build's closure as real Ed fields (like
+    # `units`) — reconnected by reference after sync, with generated ids. So they
+    # need no id lookup, and a reload gets fresh ids (no destroy+recreate-same-id
+    # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
+    # at these.
+    packed_chunks*: EdTable[Vector3, SnapshotData]
+    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
     voxels*: VoxelStore
     draw_transform_value*: EdValue[Transform]
     voxels_per_frame*: float

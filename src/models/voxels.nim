@@ -284,31 +284,23 @@ proc decode_delta*(
 
 proc init*(
     _: type VoxelStore,
-    id: string,
     ctx: EdContext = nil,
     unit_id: string = "",
+    packed_chunks: EdTable[Vector3, SnapshotData] = nil,
+    chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]] = nil,
     edit_snapshots: EdTable[EditKey, SnapshotData] = nil,
     edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]] = nil,
 ): VoxelStore =
+  # The synced tables are created and owned by the Build (its Ed fields) and
+  # passed in here by reference — so this wrapper holds no ed identity, just the
+  # local render state. (The tables are LAZY: pull-only on partial replicas,
+  # which page chunks in/out; full replicas get the data.)
   let use_ctx = if not ?ctx: Ed.thread_ctx else: ctx
   VoxelStore(
-    id: id,
     ctx: use_ctx,
     unit_id: unit_id,
-    # LAZY: pull-only on partial replicas. The big voxel tables don't ride a
-    # unit's closure push — clients receive an empty handle and page chunks
-    # in/out with request/release as the player moves (see chunk paging).
-    # Full replicas (server threads, single player) are unaffected.
-    packed_chunks: EdTable[Vector3, SnapshotData].init(
-      id = id & ".packed_chunks",
-      ctx = use_ctx,
-      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY},
-    ),
-    chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]].init(
-      id = id & ".chunk_deltas",
-      ctx = use_ctx,
-      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY},
-    ),
+    packed_chunks: packed_chunks,
+    chunk_deltas: chunk_deltas,
     edit_snapshots: edit_snapshots,
     edit_deltas: edit_deltas,
   )
