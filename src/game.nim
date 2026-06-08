@@ -194,6 +194,11 @@ gdobj Game of Node:
       buffer = true,
       label = "main",
       max_recv_duration = (1.0 / 30.0).seconds,
+      # The render thread never evicts (mem_limit < 0): it holds whatever it's
+      # rendering, and the renderer relies on that (a render-race world test
+      # fails if voxel containers can be evicted mid-frame here). Memory is
+      # managed at the worker — the partial replica — which caches voxel chunks
+      # per-key and sheds under its own budget.
     )
 
     state = GameState.init
