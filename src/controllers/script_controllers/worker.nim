@@ -840,6 +840,12 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       state.pop_flag NEEDS_RESTART
 
     Ed.thread_ctx.tick
+
+    # The worker thread is exiting (quit or NEEDS_RESTART → relaunch). Release
+    # the context's bodies + buffers; without this every restart leaks the whole
+    # worker context and its voxel bodies (the body closures pin it — ORC can't
+    # collect the cycle, so it needs the explicit ed EdContext.destroy).
+    worker_ctx.destroy()
   except Exception:
     discard
 
