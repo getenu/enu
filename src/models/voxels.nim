@@ -286,21 +286,20 @@ proc init*(
     _: type VoxelStore,
     ctx: EdContext = nil,
     unit_id: string = "",
-    packed_chunks: EdTable[Vector3, SnapshotData] = nil,
-    chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]] = nil,
+    build: Build = nil,
     edit_snapshots: EdTable[EditKey, SnapshotData] = nil,
     edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]] = nil,
 ): VoxelStore =
-  # The synced tables are created and owned by the Build (its Ed fields) and
-  # passed in here by reference — so this wrapper holds no ed identity, just the
-  # local render state. (The tables are LAZY: pull-only on partial replicas,
-  # which page chunks in/out; full replicas get the data.)
+  # The synced tables (`packed_chunks`/`chunk_deltas`) are the Build's own Ed
+  # fields, read live through `build` (not cached) so a reload that reincarnates
+  # them is always seen. The wrapper holds no ed identity, just local render
+  # state. (Those tables are LAZY: pull-only on partial replicas, which page
+  # chunks in/out; full replicas get the data.)
   let use_ctx = if not ?ctx: Ed.thread_ctx else: ctx
   VoxelStore(
     ctx: use_ctx,
     unit_id: unit_id,
-    packed_chunks: packed_chunks,
-    chunk_deltas: chunk_deltas,
+    build: build,
     edit_snapshots: edit_snapshots,
     edit_deltas: edit_deltas,
   )

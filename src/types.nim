@@ -223,8 +223,12 @@ type
     # rebuilt on each side.
     ctx* {.cursor.}: EdContext # back-ref; the Build owns this VoxelStore, ctx outlives it
     unit_id*: string # For edit key construction
-    packed_chunks*: EdTable[Vector3, SnapshotData]      # ref to the Build's
-    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]  # ref to the Build's
+    # Back-ref to the owning Build (cursor — the Build outlives its wrapper). The
+    # synced tables `packed_chunks`/`chunk_deltas` are read LIVE from it via procs
+    # (see voxels.nim), not cached — a reload reincarnates those Ed fields, and a
+    # cached copy would dangle on the destroyed table (ed revives the Build's
+    # field in place, so reading through it always sees the current table).
+    build* {.cursor.}: Build
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
     local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
@@ -482,6 +486,15 @@ proc from_flatty*(s: string, i: var int, n: var EdContext) =
 
 proc to_flatty*(s: var string, n: EdContext) =
   discard
+
+proc packed_chunks*(self: VoxelStore): EdTable[Vector3, SnapshotData] =
+  ## Read the Build's table live — never cache it: a reload reincarnates the Ed
+  ## field (ed revives it in place), so reading through the Build always sees the
+  ## current table; a cached copy would dangle on the destroyed one.
+  self.build.packed_chunks
+
+proc chunk_deltas*(self: VoxelStore): EdTable[Vector3, EdSeq[DeltaUpdate]] =
+  self.build.chunk_deltas
 
 Ed.register(Player)
 Ed.register(Build)

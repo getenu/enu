@@ -407,9 +407,7 @@ proc init*(
     let chunk_deltas = EdTable[Vector3, EdSeq[DeltaUpdate]].init(
       flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
     )
-    let voxels = VoxelStore.init(
-      unit_id = id, packed_chunks = packed_chunks, chunk_deltas = chunk_deltas
-    )
+    let voxels = VoxelStore.init(unit_id = id)
     var self = Build(
       id: id,
       packed_chunks: packed_chunks,
@@ -426,6 +424,7 @@ proc init*(
       parent: parent,
     )
 
+    voxels.build = self # back-ref for live table reads (set once self exists)
     self.init_unit
 
     # Set up edit references after init_unit creates Shared
@@ -453,8 +452,7 @@ proc init_voxels_if_needed*(self: Build) =
     self.voxels = VoxelStore.init(
       ctx = Ed.thread_ctx,
       unit_id = self.id,
-      packed_chunks = self.packed_chunks,
-      chunk_deltas = self.chunk_deltas,
+      build = self,
       edit_snapshots = self.shared.edit_snapshots,
       edit_deltas = self.shared.edit_deltas,
     )
