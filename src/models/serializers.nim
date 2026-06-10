@@ -538,9 +538,21 @@ proc load_level*(worker: Worker, level_dir: string) =
   let init_proc =
     worker.interpreter.select_routine("initialize_state", "base_api")
 
-  assert not init_proc.is_nil,
-    "initialize_state routine not found in base_api module. " &
-      "Ensure base_api defines and exports initialize_state()."
+  if init_proc.is_nil:
+    # The interpreter is wedged: a VM defect during the reset broke the base
+    # module load, so initialize_state isn't callable — and everything else
+    # (script loads, MCP evals) is broken with it. Asserting here killed the
+    # worker thread, which took the whole server down (the unwind through
+    # godot's C++ frames aborts) along with every connected client. Instead,
+    # restart the worker: a clean-slate relaunch rebuilds the interpreter and
+    # reloads the level; player state is preserved (saved_state) and clients
+    # reconnect/resync on their own.
+    error "initialize_state not found in base_api — interpreter wedged, " &
+      "restarting worker"
+    state.pop_flag LOADING_SCRIPT
+    state.global_flags -= LOADING_LEVEL
+    state.push_flag NEEDS_RESTART
+    return
 
   # Set player as active unit so VM hooks work correctly during initialization
   assert worker.active_unit.is_nil, "active_unit should be nil at this point"
