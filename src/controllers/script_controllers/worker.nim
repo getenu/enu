@@ -66,7 +66,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         ctx.timer = MonoTime.high
         ctx.action_running = false
         self.active_unit = unit
-        ctx.timeout_at = now + script_timeout
+        ctx.fuel = script_fuel
         ctx.running = ctx.resume()
         if not ctx.running:
           if unit of Build:
@@ -82,7 +82,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         ctx.saved_callback = ctx.callback
         ctx.callback = nil
         self.active_unit = unit
-        ctx.timeout_at = now + script_timeout
+        ctx.fuel = script_fuel
         discard ctx.resume()
     except VMQuit as e:
       self.interpreter.reset_module(unit.script_ctx.module_name)
@@ -533,7 +533,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             worker.init_interpreter("")
             worker.bridge_to_vm
             player.script_ctx.interpreter = worker.interpreter
-            worker.initial_load_done = false
             worker.load_script_and_dependents(player)
           level_dir = change.item.level_dir
           if level_dir != "":

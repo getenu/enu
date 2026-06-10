@@ -224,6 +224,26 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       iface.module.ast = nil
       break
 
+template with_import_stack_recovery(graph: ModuleGraph, body: untyped) =
+  ## An aborted compile (a VMQuit timeout raised from the exec hook mid-import)
+  ## skips importer.nim's `importStack.setLen(L)` pop, leaving the in-flight
+  ## files on the stack — every later import of them then reports "recursive
+  ## module dependency", permanently. Worse, those modules sit half-compiled in
+  ## the graph and would be treated as loaded with missing symbols. The stack
+  ## itself records exactly which modules were mid-compile: on the way out,
+  ## pop anything above our depth and reset those modules so the next load
+  ## recompiles them from scratch.
+  let stack_depth = graph.importStack.len
+  try:
+    body
+  finally:
+    while graph.importStack.len > stack_depth:
+      let aborted = graph.importStack.pop
+      let m = graph.getModule(aborted)
+      if m != nil:
+        initStrTables(graph, m)
+        m.ast = nil
+
 import std/posix
 
 proc loadModule*(
@@ -258,7 +278,8 @@ proc loadModule*(
   ctx = preparePContext(i.graph, module, i.idgen)
 
   {.gcsafe.}:
-    discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
+    with_import_stack_recovery(i.graph):
+      discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
 
 proc node_to_str(n: PNode): string =
   case n.kind
@@ -384,7 +405,8 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[st
     pushProcCon(ctx, module)
     pushOwner(ctx, module)
   let s = llStreamOpen(code)
-  result = extendModule(i.graph, module, i.idgen, s, ctx)
+  with_import_stack_recovery(i.graph):
+    result = extendModule(i.graph, module, i.idgen, s, ctx)
 
 proc config*(i: Interpreter): ConfigRef =
   i.graph.config

@@ -126,7 +126,7 @@ proc exec_instance(self: Worker, unit: Unit) =
   self.active_unit = unit
   defer:
     self.active_unit = active
-  ctx.timeout_at = get_mono_time() + script_timeout
+  ctx.fuel = script_fuel
   inc rawExecute_depth
   defer:
     dec rawExecute_depth
@@ -143,10 +143,11 @@ proc pause_script(self: Worker) =
   self.active_unit.script_ctx.pause()
 
 proc keep_alive(ctx: ScriptCtx) =
-  ## Reset the script timeout. For long non-yielding loops (eg. spatial
-  ## queries from eval) that have legitimate work to do but no reason to
-  ## yield. Call periodically — the watchdog kicks in after script_timeout.
-  ctx.timeout_at = get_mono_time() + script_timeout
+  ## Refill the script's instruction budget. For long non-yielding loops
+  ## (eg. spatial queries from eval) that have legitimate work to do but no
+  ## reason to yield. Call periodically — the watchdog kicks in when the
+  ## budget runs out.
+  ctx.fuel = script_fuel
 
 proc yield_script(self: Worker, unit: Unit) =
   let ctx = unit.script_ctx
@@ -1193,11 +1194,26 @@ proc block_color_at(position: Vector3): Colors =
   else:
     ERASER
 
+proc count_draw(self: Build) =
+  ## Cooperative pacing for the immediate drawing APIs. The logo APIs yield
+  ## naturally (they animate in-engine); the immediate ones do all their work
+  ## inside the bridged call, so a build script could otherwise run its whole
+  ## control flow in one unyielding resume. Pause every draw_yield_interval
+  ## calls: the VMPause fires on the next VM instruction (after this call
+  ## returns), the script resumes next tick with a fresh fuel budget — so no
+  ## legitimate drawing script can exhaust the watchdog, regardless of size.
+  if ?self.script_ctx:
+    inc self.script_ctx.unyielded_draws
+    if self.script_ctx.unyielded_draws >= draw_yield_interval:
+      self.script_ctx.unyielded_draws = 0
+      self.script_ctx.pause()
+
 proc draw_voxel(self: Build, position: Vector3, color: Colors) =
   ## Paint a COMPUTED voxel. Goes through Build.draw, which only writes to
   ## local_voxels (not local_edits), so the block is regenerated when the
   ## script reloads and isn't bloating the save file. Backs fill_box,
   ## fill_sphere, fill_cylinder, and place.
+  self.count_draw
   let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
   self.draw(position, info)
 
@@ -1276,6 +1292,7 @@ proc box_impl(
   ## inside the box's per-pivot bounds.
   if w <= 0 or h <= 0 or d <= 0:
     return
+  self.count_draw
 
   var basis: Basis
   var origin: Vector3
@@ -1353,6 +1370,7 @@ proc sphere_impl(
   ## `size` = diameter in voxels. Radius = size / 2.
   if size <= 0:
     return
+  self.count_draw
   let centre = if use_turtle: self.draw_transform.origin else: at
   let radius = size.float / 2.0
   let r_int = (radius + 0.5).floor.int
@@ -1381,6 +1399,7 @@ proc cylinder_impl(
   ## `size` = diameter (voxels), `height` = voxels along the axis.
   if size <= 0 or height <= 0:
     return
+  self.count_draw
 
   var basis: Basis
   var origin: Vector3

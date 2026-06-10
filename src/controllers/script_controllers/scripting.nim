@@ -93,7 +93,7 @@ proc init*(
   result = ScriptCtx(
     module_name: if ?clone_of: clone_of.id else: "",
     interpreter: interpreter,
-    timeout_at: MonoTime.high,
+    fuel: int64.high,
     timer: MonoTime.high,
   )
 
@@ -201,7 +201,6 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       ctx.exit_code = error_code
       raise (ref VMQuit)(info: info, msg: msg, location: loc)
 
-  var count: byte = 0
   interpreter.enter_hook = proc(
       c: PCtx, pc: int, tos: PStackFrame, instr: TInstr
   ) =
@@ -216,20 +215,18 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
     ctx.tos = tos
 
     let info = c.debug[pc]
-    inc count
-    if count == 255:
-      # don't call get_mono_time for every instruction for a 5-10% speedup.
-      count = 0
-      let now = get_mono_time()
-      if ctx.timeout_at < now:
-        let duration = script_timeout
-        raise (ref VMQuit)(
-          info: info,
-          kind: TIMEOUT,
-          msg:
-            \"Timeout. Script {ctx.script} executed for too long without " &
-            \"yielding: {duration}",
-        )
+    # The old wall-clock watchdog batched its check behind a byte counter to
+    # avoid a get_mono_time() per instruction; a fuel decrement is just another
+    # field write next to the ctx.pc/tos writes above, so check it directly.
+    ctx.fuel -= 1
+    if ctx.fuel <= 0:
+      raise (ref VMQuit)(
+        info: info,
+        kind: TIMEOUT,
+        msg:
+          \"Timeout. Script {ctx.script} executed too many instructions " &
+          "without yielding (instruction budget exhausted)",
+      )
 
     # We don't care about the line info if we're not in our enu script.
     # Store the file index the first time we hit our file and only change
@@ -248,7 +245,7 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       ctx.pause_requested = false
       raise VMPause.new_exception("vm paused")
 
-proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
+proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
   if SCRIPT_LOADING in unit.global_flags:
     # Re-entry on the same unit is a bug — an Ed callback fired during a
     # script load that drove back through load_level → retry_failed_scripts.
@@ -331,14 +328,16 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
           " " & $strerror(err) & "); see log for details.")
         raise
 
-      ctx.timeout_at = get_mono_time() + timeout
+      ctx.fuel = fuel
       ctx.file_index = -1
       info "loading script", script = ctx.script
       ctx.load(ctx.script, code)
 
     if not state.paused:
-      ctx.timeout_at = get_mono_time() + timeout
+      ctx.fuel = fuel
       ctx.running = ctx.run()
+      debug "script fuel consumed", script = ctx.script,
+        consumed = fuel - ctx.fuel
 
       var temp_visited: HashSet[string]
       proc visit(node: string) =
@@ -433,11 +432,7 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
       self.interpreter.reset_module(other.script_ctx.module_name)
 
   debug "loading unit", unit_id = unit.id
-  # Use longer timeout for first script load (system.nim compilation can be slow)
-  let timeout =
-    if not self.initial_load_done: initial_script_timeout else: script_timeout
-  self.load_script(unit, timeout)
-  self.initial_load_done = true
+  self.load_script(unit)
 
   for other in units_to_reload:
     if other != unit:
@@ -461,6 +456,6 @@ proc eval*(self: Worker, unit: Unit, code: string): Option[string] =
   defer:
     self.active_unit = active
 
-  unit.script_ctx.timeout_at = get_mono_time() + script_timeout
+  unit.script_ctx.fuel = script_fuel
   {.gcsafe.}:
     result = unit.script_ctx.eval(code)

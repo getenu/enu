@@ -545,7 +545,7 @@ proc load_level*(worker: Worker, level_dir: string) =
   # Set player as active unit so VM hooks work correctly during initialization
   assert worker.active_unit.is_nil, "active_unit should be nil at this point"
   worker.active_unit = state.player
-  state.player.script_ctx.timeout_at = get_mono_time() + initial_script_timeout
+  state.player.script_ctx.fuel = script_fuel
 
   try:
     {.gcsafe.}:

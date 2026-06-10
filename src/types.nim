@@ -394,7 +394,21 @@ type
   ScriptCtx* = ref object
     script*: string
     timer*: MonoTime
-    timeout_at*: MonoTime
+    # Instruction budget for the non-yielding-script watchdog: decremented by
+    # the VM exec hook, TIMEOUT when exhausted. Deterministic (the same script
+    # costs the same count on any machine or build type), unlike the wall-clock
+    # deadline it replaces — a cold or busy machine could stall a legitimate
+    # compile past any wall-clock limit, and a timeout aborting a module load
+    # poisons the interpreter's import graph.
+    fuel*: int64
+    # Immediate draw calls (box/sphere/cylinder/draw_voxel) since the last
+    # yield. The logo APIs yield naturally (they animate in-engine); the
+    # immediate APIs do all their work in the bridged call, so a build script
+    # could otherwise run its whole control flow in one unyielding resume.
+    # Every draw_yield_interval calls the bridge requests a pause — bounding
+    # the worker stall per resume and re-arming `fuel` on resume, so no
+    # legitimate drawing script can exhaust the budget.
+    unyielded_draws*: int
     ctx: PCtx
     pc: int
     tos: PStackFrame
@@ -447,7 +461,6 @@ type
     failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
-    initial_load_done*: bool
     module_names*: HashSet[string]
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
