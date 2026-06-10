@@ -833,9 +833,14 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     error "Unhandled worker thread exception",
       kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace
 
-    # Re-raise to crash properly instead of restarting
-    raise e
-    # state.push_flag(NEEDS_RESTART)
+    # Crash on purpose (a wedged worker must not zombie on), but exit directly
+    # rather than re-raising: the unwind crosses godot-nim's C++ frames and
+    # dies in libc++ ("recursive_mutex lock failed" + SIGABRT) with a
+    # misleading traceback from whatever the main thread happened to be doing.
+    # The error log above carries the real story; exit with it intact.
+    stderr.write_line "worker thread died: " & e.msg
+    stderr.write_line e.get_stack_trace
+    quit(1)
 
   try:
     if NEEDS_RESTART in state.local_flags:
