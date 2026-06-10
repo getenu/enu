@@ -366,8 +366,13 @@ proc flush_chunk_delta(
   let delta = encode_delta(changes)
 
   if chunk_id notin self.chunk_deltas:
-    self.chunk_deltas[chunk_id] =
-      EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
+    # Own the nested seq under its table's owner (the build): it's created here
+    # during drawing — outside any own scope — and an unowned container escapes
+    # the destroy cascade, leaking on every reload.
+    let table_owner = self.chunk_deltas.owner_id
+    table_owner.own:
+      self.chunk_deltas[chunk_id] =
+        EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
 
   self.chunk_deltas[chunk_id].add delta
   inc self.deltas_flushed
@@ -416,8 +421,13 @@ proc flush_edit_delta(
   let delta = encode_delta(changes)
 
   if key notin self.edit_deltas:
-    self.edit_deltas[key] =
-      EdSeq[DeltaUpdate].init(ctx = self.ctx, flags = {SYNC_LOCAL, SYNC_REMOTE})
+    # Own the nested seq under its table's owner (the Shared) — same leak as
+    # flush_chunk_delta above.
+    let table_owner = self.edit_deltas.owner_id
+    table_owner.own:
+      self.edit_deltas[key] = EdSeq[DeltaUpdate].init(
+        ctx = self.ctx, flags = {SYNC_LOCAL, SYNC_REMOTE}
+      )
 
   self.edit_deltas[key].add delta
   inc self.deltas_flushed
