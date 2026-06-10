@@ -100,6 +100,18 @@ if not found:
 - Static builds (JSON-only, no script) load automatically — don't need level.json
 - Verify the JSON file is valid: `python3 -c "import json; json.load(open('path/to/file.json'))"`
 
+**Build looks empty / a part is missing in a screenshot — query the data, don't
+trust the screenshot alone:**
+- `eval("echo Build(find_by_id(\"build_x\")).bounds")` — `bounds` is the voxels'
+  world-space AABB, so it tells you *where and how big* the voxels actually are.
+- If `bounds` is far from where you framed, the build is **mispositioned** and
+  rendering off-screen — reframe there.
+- If `bounds` is much larger than you expect, the geometry is genuinely too big
+  — re-check your voxel dimensions × `scale`.
+- If `bounds` looks right but nothing draws, it's a **stale render state** — the
+  voxels exist in the data but aren't being drawn, usually after many rapid
+  reloads of the *same* build. A `save_and_reload` redraws it.
+
 **Script errors:**
 - Check `get_console` for error messages after triggering a reload
 - Common issue: syntax errors in `.nim` files show up in the console
