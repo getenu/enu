@@ -481,6 +481,30 @@ proc change_loaded_level*(level, world: string) =
   config.level_dir = join_path(config.world_dir, config.level)
   state.config = config
 
+proc run_state_initializers*(worker: Worker) =
+  # Re-establish VM-side globals (players.nim's `player`, etc.) registered via
+  # register_state_init. Must run after every interpreter rebuild before any
+  # unit script executes — unit scripts reference `player` at top level.
+  let init_proc =
+    worker.interpreter.select_routine("initialize_state", "base_api")
+
+  assert not init_proc.is_nil,
+    "initialize_state routine not found in base_api module. " &
+      "Ensure base_api defines and exports initialize_state()."
+
+  # Set player as active unit so VM hooks work correctly during initialization
+  assert worker.active_unit.is_nil, "active_unit should be nil at this point"
+  worker.active_unit = state.player
+  state.player.script_ctx.fuel = script_fuel
+
+  try:
+    {.gcsafe.}:
+      discard worker.interpreter.call_routine(init_proc, [])
+  except VMQuit as e:
+    state.err(e.msg)
+
+  worker.active_unit = nil
+
 proc unload_level*(worker: Worker) =
   state.global_flags += LOADING_LEVEL
   state.push_flag LOADING_SCRIPT
@@ -535,25 +559,7 @@ proc load_level*(worker: Worker, level_dir: string) =
     except Exception as e:
       error "Failed to load level", error = e
 
-  let init_proc =
-    worker.interpreter.select_routine("initialize_state", "base_api")
-
-  assert not init_proc.is_nil,
-    "initialize_state routine not found in base_api module. " &
-      "Ensure base_api defines and exports initialize_state()."
-
-  # Set player as active unit so VM hooks work correctly during initialization
-  assert worker.active_unit.is_nil, "active_unit should be nil at this point"
-  worker.active_unit = state.player
-  state.player.script_ctx.fuel = script_fuel
-
-  try:
-    {.gcsafe.}:
-      discard worker.interpreter.call_routine(init_proc, [])
-  except VMQuit as e:
-    state.err(e.msg)
-
-  worker.active_unit = nil
+  worker.run_state_initializers()
 
   dont_join = true
   worker.retry_failures = true

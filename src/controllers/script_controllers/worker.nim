@@ -175,6 +175,14 @@ proc update_files*(self: Worker) =
   if SERVER notin state.local_flags:
     return
 
+  # Mid-reload there is no level: switch_world(0) writes level_dir = "" then
+  # back, and unload_level has already emptied state.units. Scanning now would
+  # make every on-disk unit look newly added and batch-load the whole level
+  # into a VM that hasn't run initialize_state yet.
+  if state.config.level_dir == "" or RESETTING_VM in state.local_flags or
+      LOADING_LEVEL in state.global_flags:
+    return
+
   # Detect on-disk deletions before the mtime scans (which silently swallow
   # OSError for missing files and so would leave a deleted unit in state).
   var unit_deletions: seq[Unit]
@@ -537,6 +545,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             worker.bridge_to_vm
             player.script_ctx.interpreter = worker.interpreter
             worker.load_script_and_dependents(player)
+            # The fresh VM has no `player` global until initialize_state runs,
+            # and load_level (which normally runs it) may not happen until a
+            # later change event. Anything that loads a unit script in that
+            # window hits a nil player at script top level.
+            worker.run_state_initializers()
           level_dir = change.item.level_dir
           if level_dir != "":
             worker.load_level(level_dir)
@@ -667,6 +680,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           # (`player-{ctx_name}`, `mcp_bot-{ctx_name}`, ...). When the
           # context unsubscribes, drop the corresponding agents.
           if AGENT in unit.global_flags and ctx_name in unit.id:
+            debug "reaping agent unit on ctx unsubscribe",
+              unit_id = unit.id, ctx_name
             state.units.del i
           else:
             i += 1
