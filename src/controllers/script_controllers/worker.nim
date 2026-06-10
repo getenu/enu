@@ -656,7 +656,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             still_pending.add unit
         worker.pending_units = still_pending
 
-      for ctx_name in Ed.thread_ctx.unsubscribed:
+      for ctx_name in Ed.thread_ctx.drain_unsubscribed:
         var i = 0
         while i < state.units.len:
           let unit = state.units[i]
