@@ -145,6 +145,13 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
 
   let controller = self
 
+  # module_names tracks modules successfully loaded into the CURRENT
+  # interpreter (script wrappers only import those). A fresh interpreter has
+  # none — carrying the old set over makes every wrapper import modules that
+  # aren't compiled yet, which falls back to compiling the raw script files
+  # off disk and fails on unwrapped user code (issue #51).
+  self.module_names.clear()
+
   self.interpreter = interpreter
   interpreter.config.spell_suggest_max = 0
 
@@ -274,8 +281,15 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
     if not state.paused:
       let module_name = ctx.script.split_file.name
       let script_dir = ctx.script.split_file.dir
+      # Only import modules that have already successfully loaded (they're
+      # added to module_names at the end of a successful load, below). An
+      # import of a not-yet-loaded unit resolves to its RAW script file (the
+      # scripts dir is on the VM search path) — unwrapped user code with no
+      # API in scope — and fails with confusing built-in-symbol errors
+      # ('undeclared identifier: speed'). A real cross-script reference to a
+      # not-yet-loaded unit now fails on the user's own symbol instead, and
+      # converges through the normal retry pass. (github issue #51)
       var others = self.module_names
-      self.module_names.incl module_name
       others.excl module_name
       # Only inject imports for modules whose script files exist in the current
       # script dir. Stale entries (e.g. from a previous level) are silently
@@ -359,6 +373,9 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
 
       visit(ctx.file_name.extract_filename)
 
+      # Loaded successfully: other units' wrappers may now import this module.
+      self.module_names.incl ctx.module_name
+
       if not ctx.running and not ?unit.clone_of:
         unit.collect_garbage
         unit.ensure_visible
@@ -371,6 +388,7 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
     if e.parent != nil:
       dump_vm_state_on_defect(unit, e.parent)
     self.interpreter.reset_module(unit.script_ctx.module_name)
+    self.module_names.excl unit.script_ctx.module_name
     if self.retry_failures and e.kind != TIMEOUT:
       info "retrying failed script later",
         script = unit.script_ctx.script, error = e.msg
@@ -430,6 +448,7 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
     if other != unit:
       debug "resetting", module = other.script_ctx.module_name
       self.interpreter.reset_module(other.script_ctx.module_name)
+      self.module_names.excl other.script_ctx.module_name
 
   debug "loading unit", unit_id = unit.id
   self.load_script(unit)

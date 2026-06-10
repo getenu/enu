@@ -36,6 +36,7 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref Exception) =
     (ref VMQuit)(info: info, kind: UNKNOWN, msg: e.msg, location: loc)
   if ?ctx:
     self.interpreter.reset_module(ctx.module_name)
+    self.module_names.excl ctx.module_name
   self.script_error(unit, vm_error)
 
 proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
@@ -86,6 +87,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         discard ctx.resume()
     except VMQuit as e:
       self.interpreter.reset_module(unit.script_ctx.module_name)
+      self.module_names.excl unit.script_ctx.module_name
       self.script_error(unit, e)
     except CatchableError as e:
       self.handle_catchable_error(unit, e)
@@ -147,6 +149,7 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
   unit.reset()
   if LOADING_SCRIPT notin state.local_flags and code.nim.strip == "":
     self.interpreter.reset_module(unit.script_ctx.module_name)
+    self.module_names.excl unit.script_ctx.module_name
     debug "reset module", module = unit.script_ctx.module_name
     unit.script_ctx.running = false
     try:
