@@ -543,24 +543,8 @@ proc `show=`(self: Unit, value: bool) =
   else:
     self.global_flags -= VISIBLE
 
-proc rotation(self: Unit): float =
-  if self of Player:
-    result = Player(self).rotation
-  else:
-    let b = self.pivot_basis.orthonormalized
-    # Yaw around Y. Compute from basis columns directly:
-    #   basis * (1, 0, 0) = (cos y, 0, -sin y)
-    # so y = atan2(-basis[2][0], basis[0][0]). `basis.get_euler()` uses
-    # arcsin and aliases ±180° yaw back to 0° (gimbal coincidence at
-    # zero pitch); atan2 covers the full range.
-    var degrees = rad_to_deg(arctan2(-b.elements[2].x, b.elements[0].x))
-    # Normalize to (-180, 180]. atan2 of (-0.0, -1) returns -π so a
-    # 180° rotation comes back as -180 without this clamp.
-    while degrees > 180.0:
-      degrees -= 360.0
-    while degrees <= -180.0:
-      degrees += 360.0
-    result = degrees
+# `rotation` (the anchor-aware yaw getter) lives in models/units — shared
+# with external agents that pose units.
 
 proc `rotation=`(self: Unit, degrees: float) =
   if self of Player:

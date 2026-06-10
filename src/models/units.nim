@@ -1,4 +1,4 @@
-import std/[os, with, tables]
+import std/[os, with, tables, math]
 import godotapi/spatial
 from pkg/core/godotcoretypes import Basis
 import core, models/[states, colors], libs/interpreters
@@ -108,6 +108,79 @@ proc position*(self: Unit): Vector3 =
     self.pivot_local
   else:
     self.pivot_local.global_from(self.parent)
+
+proc rotation*(self: Unit): float =
+  ## Yaw in degrees. Players track yaw directly; everyone else derives it
+  ## from the anchor-pivot basis.
+  if self of Player:
+    result = Player(self).rotation
+  else:
+    let b = self.pivot_basis.orthonormalized
+    # Yaw around Y. Compute from basis columns directly:
+    #   basis * (1, 0, 0) = (cos y, 0, -sin y)
+    # so y = atan2(-basis[2][0], basis[0][0]). `basis.get_euler()` uses
+    # arcsin and aliases ±180° yaw back to 0° (gimbal coincidence at
+    # zero pitch); atan2 covers the full range.
+    var degrees = rad_to_deg(arctan2(-b.elements[2].x, b.elements[0].x))
+    # Normalize to (-180, 180]. atan2 of (-0.0, -1) returns -π so a
+    # 180° rotation comes back as -180 without this clamp.
+    while degrees > 180.0:
+      degrees -= 360.0
+    while degrees <= -180.0:
+      degrees += 360.0
+    result = degrees
+
+proc move_to*(self: Unit, pos: Vector3, yaw_deg: float) =
+  ## Set the unit's position and yaw (no pitch).
+  self.transform = Transform.init(pos, yaw_deg)
+  if self of Player:
+    Player(self).rotation = yaw_deg
+
+proc look_at*(self: Unit, target: Vector3) =
+  ## Aim the unit at `target` from its current position — yaw plus
+  ## up/down pitch, like godot's `Spatial.look_at`. Builds the look basis
+  ## directly (forward / right / up) so off-axis angles don't roll the
+  ## horizon.
+  let
+    pos = self.transform.origin
+    dir = target - pos
+    horiz = sqrt(dir.x * dir.x + dir.z * dir.z)
+    yaw = arctan2(float(dir.x), -float(dir.z))
+    pitch = -arctan2(float(dir.y), float(horiz))
+    cy = cos(yaw)
+    sy = sin(yaw)
+    cp = cos(pitch)
+    sp = sin(pitch)
+    forward = vec3(float32(sy * cp), float32(-sp), float32(-cy * cp))
+    right = vec3(float32(cy), 0'f32, float32(sy))
+    up = right.cross(forward)
+  var t = Transform()
+  t.basis = init_basis(
+    vec3(right.x, up.x, -forward.x),
+    vec3(right.y, up.y, -forward.y),
+    vec3(right.z, up.z, -forward.z),
+  )
+  t.origin = pos
+  self.transform = t
+  if self of Player:
+    Player(self).rotation = rad_to_deg(yaw)
+
+proc frame*(
+    target: Vector3, distance, height, angle: float
+): tuple[pos: Vector3, yaw_deg: float] =
+  ## A camera pose that frames `target` from `distance` away, `height`
+  ## above, swung `angle` degrees around it (0 = south). Returns where to
+  ## stand and the yaw to face; `look_at(target)` from there supplies the
+  ## downward pitch.
+  let
+    angle_rad = deg_to_rad(angle)
+    pos = vec3(
+      target.x + distance * sin(angle_rad),
+      target.y + height,
+      target.z + distance * cos(angle_rad),
+    )
+    dir = target - pos
+  (pos, rad_to_deg(arctan2(float(dir.x), -float(dir.z))))
 
 proc find_root*(self: Unit, all_clones = false): Unit =
   result = self

@@ -1,7 +1,6 @@
 ## MCP server and CLI exposing Enu to agents. It is an `EdClient` (see ed)
 ## that subscribes to a running Enu, plus a thin layer of tools that run
-## queries against agent bots and animate them for framing shots. All the
-## connection-keeping and animation lives in `ed` and `src/agent.nim`.
+## queries against agent bots and animate them for framing shots.
 ##
 ## `enu mcp` runs the MCP stdio server. `enu <tool> [--param value ...]`
 ## makes a one-shot CLI call — the fallback when the MCP connection is
@@ -13,16 +12,21 @@
 ## bot, with its own color and position. A swarm of subagents each passing
 ## their own id drives a swarm of distinctly-colored bots.
 
-import std/[os, strutils, tables, monotimes, times]
+import std/[os, strutils, tables, math, monotimes, times]
 import pkg/ed
 import pkg/nimcp except info
-import core, models/[bots, colors], agent
+import core, models/[bots, units, colors]
 
 # First bot gets Claude orange; later agents cycle the rest.
 const PALETTE = [
   col"E8692A", col"3B82F6", col"22C55E", col"A855F7",
   col"EC4899", col"EAB308", col"14B8A6", col"EF4444",
 ]
+
+const
+  MOVE_SPEED = 50.0     ## units / second
+  ANGULAR_SPEED = 180.0 ## degrees / second
+  TELEPORT_DIST = 500.0 ## skip the glide past this distance
 
 let
   cli_args = command_line_params()
@@ -57,37 +61,62 @@ var
   transforms: Table[string, Transform]
 
 # Partial replica: only `fetch` (and anything fetched later) syncs from Enu.
-# root_units is the unit directory — needed to find/supersede agent bots;
-# each bot's own containers are auto-interest (we create them), and a
-# reconnect deep-fetches a prior session's bot (see ensure_agent_bot).
+# root_units is the unit directory — needed to find/supersede agent bots.
+# `blocking` gives synchronous semantics: touching anything that hasn't
+# synced yet — including a found bot's containers after a reconnect — pumps
+# I/O until it fills, so there's no hydration ceremony anywhere below.
 let client = EdClient(
   id: ctx_id,
   address: connect_addr,
   chan_size: 100,
   partial: true,
   fetch: @["root_units"],
+  blocking: true,
 )
 
 client.on_connect = proc() =
-  # Handles into the previous connection are stale; re-ensure lazily.
+  # Handles into the previous connection are stale; re-find lazily.
   agent_bots.clear
 
+proc root_units(): EdSeq[Unit] =
+  EdSeq[Unit](client.ctx["root_units"])
+
+proc find_unit(id: string): Unit =
+  for unit in root_units():
+    if unit.id == id:
+      return unit
+
+proc spawn_bot(id: string, color: Color, at: Transform): Bot =
+  ## A bot owned by this context: AGENT so it survives level reloads and is
+  ## reaped when this session ends; VIEWER so it can photograph parts of the
+  ## world no player is keeping loaded. CLI bots are invisible — one-off
+  ## commands don't need an avatar flashing in and out for other players
+  ## (screenshots render from a dedicated camera, not the bot node).
+  result = Bot.init(id = id)
+  result.color = color
+  result.global_flags += AGENT
+  result.global_flags += VIEWER
+  if not server_mode:
+    result.global_flags -= VISIBLE
+  root_units().add result
+  result.transform = at
+
 proc bot_for(agent_id = ""): Bot =
-  ## Each agent's bot, created on first use with the next palette color.
-  ## Bots get a voxel viewer so they can photograph areas of the world no
-  ## player is keeping loaded. CLI bots are invisible: one-off commands
-  ## don't need an in-world avatar flashing in and out for other players.
+  ## Each agent's bot: found by id (a reconnect after an Enu restart) or
+  ## spawned on first use with the next palette color.
   if agent_id notin bot_colors:
     bot_colors[agent_id] = PALETTE[bot_colors.len mod PALETTE.len]
   if agent_id notin agent_bots:
-    agent_bots[agent_id] = ensure_agent_bot(
-      client.ctx,
-      bot_id(agent_id),
-      bot_colors[agent_id],
-      transforms.get_or_default(agent_id, Transform.init(vec3(0, 1, 0))),
-      visible = server_mode,
-      viewer = true,
-    )
+    let existing = find_unit(bot_id(agent_id))
+    agent_bots[agent_id] =
+      if not existing.is_nil and existing of Bot:
+        Bot(existing)
+      else:
+        spawn_bot(
+          bot_id(agent_id),
+          bot_colors[agent_id],
+          transforms.get_or_default(agent_id, Transform.init(vec3(0, 1, 0))),
+        )
   agent_bots[agent_id]
 
 proc keep_alive() =
@@ -98,16 +127,58 @@ proc keep_alive() =
     if not bot.is_nil and ?bot.transform_value:
       transforms[agent_id] = bot.transform
 
+proc glide(unit: Unit, target: Vector3, rotation = 0.0, instant = false) =
+  ## Move smoothly to `target`, rotating to `rotation` degrees, syncing each
+  ## frame. Teleports past TELEPORT_DIST, or always with `instant` (one-shot
+  ## CLI calls just want the end state).
+  let
+    start = unit.transform.origin
+    start_rot = unit.rotation
+  var turn = rotation - start_rot
+  turn -= round(turn / 360.0) * 360.0
+  let
+    dist = start.distance_to(target)
+    seconds = max(dist / MOVE_SPEED, abs(turn) / ANGULAR_SPEED)
+  if instant or dist >= TELEPORT_DIST:
+    unit.move_to(target, rotation)
+    client.tick
+    return
+  client.animate(seconds):
+    if not ?unit.transform_value:
+      break
+    unit.move_to(start + (target - start) * t, start_rot + turn * t)
+
+proc ask(
+    unit: Unit, q: UnitQuery, timeout = init_duration(seconds = 30)
+): UnitQuery =
+  ## Set the unit's query slot and wait for whichever context owns the
+  ## unit's behavior to answer.
+  var pending = q
+  pending.state = QUERY_PENDING
+  unit.query = pending
+  let session = client.ctx
+  if client.tick_until(
+    timeout, client.ctx != session or unit.query.state == QUERY_DONE
+  ):
+    if client.ctx != session:
+      # tick reconnected mid-wait; `unit` belongs to the closed session.
+      return UnitQuery(state: QUERY_DONE, error: "Error: connection lost")
+    return unit.query
+  unit.query = UnitQuery(state: QUERY_DONE)
+  UnitQuery(
+    state: QUERY_DONE,
+    error: "Error: Enu did not respond within " & $timeout,
+  )
+
 proc run(q: UnitQuery, agent_id = ""): string =
   ## Run a query against this agent's bot and wait for Enu's answer.
   client.ensure_connected
-  var r = bot_for(agent_id).ask(client.ctx, q)
-  if r.error.len > 0 and not client.connected:
-    # The connection dropped (e.g. Enu restarted) and the query never
-    # reached Enu, so re-subscribing and retrying once is safe.
-    client.connect
+  var r = bot_for(agent_id).ask(q)
+  if r.error == "Error: connection lost":
+    # The query never reached Enu, so retrying once on the fresh session
+    # (established by the reconnect that surfaced the error) is safe.
     if client.connected:
-      r = bot_for(agent_id).ask(client.ctx, q)
+      r = bot_for(agent_id).ask(q)
   if r.error != "": r.error else: r.result
 
 proc eval_query(code: string, top_level = false, unit_id = ""): UnitQuery =
@@ -202,7 +273,7 @@ let enu_server = mcp_server("enu", "1.0.0"):
           return "Error: not a hex color: " & color
       bot_colors[agent_id] = c
       bot_for(agent_id).color = c
-      client.ctx.tick
+      client.tick
       "ok"
 
   mcp_tool:
@@ -217,9 +288,7 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## - size: half-width and half-height in voxel units.
       ## - agent_id: optional id giving each (sub)agent its own bot.
       client.ensure_connected
-      bot_for(agent_id).glide(
-        client.ctx, vec3(x, 1.0, z), 0.0, instant = not server_mode
-      )
+      bot_for(agent_id).glide(vec3(x, 1.0, z), instant = not server_mode)
       run UnitQuery(
         kind: QUERY_SCREENSHOT, screenshot_top_down: true,
         screenshot_size: size,
@@ -245,14 +314,13 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## - angle: viewing direction around the target in degrees (default 0).
       ## - agent_id: optional id giving each (sub)agent its own bot.
       client.ensure_connected
-      bot_for(agent_id).look_at(
-        client.ctx,
-        vec3(x, y, z),
-        distance,
-        height,
-        angle,
-        instant = not server_mode,
-      )
+      let
+        target = vec3(x, y, z)
+        bot = bot_for(agent_id)
+        pose = frame(target, distance, height, angle)
+      bot.glide(pose.pos, pose.yaw_deg, instant = not server_mode)
+      bot.look_at(target)
+      client.flush # the final pose reaches the renderer before the shot
       run UnitQuery(kind: QUERY_SCREENSHOT), agent_id
 
   mcp_tool:
@@ -306,10 +374,10 @@ let enu_server = mcp_server("enu", "1.0.0"):
         if id == "":
           Unit(bot_for(agent_id))
         else:
-          client.ctx.find_unit(id)
+          find_unit(id)
       if unit.is_nil:
         return "Error: Unit not found: " & id
-      unit.glide(client.ctx, vec3(x, y, z), rotation, instant = not server_mode)
+      unit.glide(vec3(x, y, z), rotation, instant = not server_mode)
       ""
 
 proc remove_bots() =
@@ -320,20 +388,8 @@ proc remove_bots() =
   if client.connected:
     for bot in agent_bots.values:
       if not bot.is_nil:
-        client.ctx.root_units -= bot
-    for _ in 0 .. 2:
-      client.ctx.tick
-      sleep 20
-
-proc wait_for_connection(): bool =
-  ## Tick until the subscription handshake lands, or give up.
-  let deadline = get_mono_time() + init_duration(seconds = 3)
-  while get_mono_time() < deadline:
-    if client.connected:
-      return true
-    client.tick
-    sleep 50
-  client.connected
+        root_units() -= bot
+    client.flush
 
 if server_mode:
   info "enu mcp starting", pid = get_current_process_id(), connect_addr
@@ -349,7 +405,7 @@ else:
   proc connect_to_enu(): bool {.gcsafe.} =
     Ed.bootstrap
     client.connect
-    result = wait_for_connection()
+    result = client.tick_until(init_duration(seconds = 3), client.connected)
     if not result:
       stderr.write_line "Error: can't reach Enu at " & connect_addr &
         " (is Enu running?)"

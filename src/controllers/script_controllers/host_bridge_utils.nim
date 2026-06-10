@@ -83,10 +83,21 @@ macro bridged_from_vm(
       let script_engine {.inject.} = `self`
 
   for proc_ref in proc_refs:
+    let symbol = bind_sym($proc_ref)
+    var chosen = symbol
+    if symbol.kind != nnkSym:
+      # Overloaded (e.g. `rotation` exists for Unit, for Player via its
+      # accessor, and for godot types). Prefer the Unit-first overload —
+      # the shape every bridged proc has — falling back to the first
+      # candidate (locals come first, preserving prior behavior).
+      chosen = symbol[0]
+      for candidate in symbol:
+        let params = candidate.get_impl[3]
+        if params.len > 1 and params[1][1].repr == "Unit":
+          chosen = candidate
+          break
     let
-      symbol = bind_sym($proc_ref)
-      proc_impl = (if symbol.kind == nnkSym: symbol
-      else: symbol[0]).get_impl
+      proc_impl = chosen.get_impl
       proc_name = proc_impl[0].str_val
       proc_impl_name = proc_name.replace("=", "_set") & "_impl"
       return_node = proc_impl[3][0]
