@@ -56,6 +56,21 @@ restore()       # restore saved position + orientation
 Prototype names use `CamelCase` — `name Tower(...)`, `name WallSegment(...)`,
 `name Door(...)`. The name becomes a type, so it reads as one.
 
+> **⚠️ Never instantiate a prototype from inside its own script.** A build
+> script that does `name Foo` *is* the `Foo` prototype — so calling `Foo.new(...)`
+> in that same script makes the prototype instantiate **itself**, recursively,
+> with no depth limit. It spawns an unbounded chain
+> (`build_foo_build_foo_..._instance_1_...`), floods the engine with `det == 0`
+> errors, and **crashes Enu**. Worse, `name Foo` persists a *second* build
+> (`build_foo`) carrying the same `.new` call, so the level **re-crashes on every
+> reload** until both are deleted by hand.
+>
+> **Rule: define a prototype in one script; instantiate it from a *different*
+> script** (another build, the player, or `eval`). Never write
+> `YourProto.new(...)` in the file that declares `name YourProto`. To draw a
+> one-off object (rocket-on-a-pad, etc.) without a reusable proto, just draw it
+> directly with `box`/turtle calls — don't use `name`/`.new` at all.
+
 Origin tip: every Build starts with a default block at local `(0, 0, 0)` —
 how the in-game block tool creates a build. If the prototype's voxels don't
 naturally cover that voxel, the default block shows through. Either draw
@@ -320,6 +335,75 @@ seed = 42
 
 After drawing, use `move me` to switch from build mode to move mode,
 then use the `loop:` state machine for animation.
+
+### Rotating a build: which axis, and where it pivots
+
+In move mode, `turn` and `lean` rotate the **whole unit**, and rotation
+**always pivots on the unit's origin `(0, 0, 0)`** — the build's local origin
+(its `data/<id>/<id>.json` position). Which rotation you get:
+
+| command | rotates around | use it for |
+|---------|----------------|------------|
+| `turn left/right N` | vertical **Y** (yaw) | carousels, merry-go-rounds, a sweeping lighthouse beam — anything on a vertical axle |
+| `turn up/down N` | the left-right axis (pitch / tumble) | a drawbridge lifting at its hinge, a seesaw |
+| `lean left/right N` | the **forward** axis (roll) | **windmills, Ferris wheels** — anything spinning in a vertical plane that faces the viewer |
+| `lean back/forward N` | the left-right axis (pitch) | tilting / leaning |
+
+(`turn forward/back` and `lean up/down` raise an error — those don't exist.)
+
+The classic mistake: drawing windmill/Ferris-wheel blades in the X-Y plane and
+spinning them with `turn` (yaw), which sweeps them flat like a revolving door.
+Use `lean` (roll) so they spin in their own plane:
+
+```nim
+# Blades centred on the hub at the origin so they spin in place. ROLL, not yaw.
+move me
+speed = 30
+forever:
+  lean right, 4.0
+  sleep()
+```
+
+**Pivot = the origin.** To **spin in place**, centre the geometry on `(0,0,0)`
+(negative coords, or `at = vec3(-w/2, ...)`); off-centre geometry **orbits** the
+origin instead. To **hinge**, put the origin at the hinge and draw the part
+extending away from it — e.g. a drawbridge deck drawn from the origin, lifted by
+pitching up around that near end:
+
+```nim
+speed = 0
+box(width = 8, height = 1, depth = 10, color = brown)   # deck, hinge at origin
+move me
+speed = 20
+forever:
+  turn up, 70     # raise the far end (pitch around the hinge)
+  sleep 2
+  turn down, 70
+  sleep 2
+```
+
+**Speed:** rotation rate ≈ degrees-per-command. To spin faster, raise the
+per-step degrees (`turn right, 5` not `1.5`) — not just `speed`.
+
+**Use the turtle commands, not position math.** Drive motion with
+`turn`/`lean`/`up`/`forward`, not by computing `position.y` deltas with `sin()`.
+The turtle commands read better and pivot correctly.
+
+### `move me` animates the WHOLE unit — split a moving part into its own build
+
+A build animates only as a whole. To move **just one part** — a windmill's
+blades on a static tower, a clock's pendulum, a drawbridge deck on a static
+gatehouse — that part must be a **separate build**. (Animating the pendulum from
+inside the clock-tower script slides the *entire tower*.) Positioning that
+separate part (a "clone"):
+
+- Its **`data/<id>/<id>.json` origin is both where it sits AND its rotation
+  pivot** — place the origin at the hinge/hub, not the centre of mass.
+- **Offset it to clear the static geometry.** Windmill blades belong *in front
+  of* the tower (offset toward the viewer in +Z), not inside it, or they clip
+  through — especially if the tower tapers outward toward the base.
+- Give it a **contrasting colour** so it reads against whatever's behind it (red
+  blades on a white tower, not white-on-white).
 
 ### Sliding door
 ```nim

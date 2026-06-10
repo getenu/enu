@@ -17,7 +17,7 @@ type McpSession = object
 
 proc open_session(): McpSession =
   result.process = start_process(
-    "nim", args = ["r", "./bin/enu_mcp.nim"], options = {poUsePath}
+    "nim", args = ["r", "./bin/enu.nim", "mcp"], options = {poUsePath}
   )
   result.next_id = 1
 

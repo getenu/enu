@@ -15,7 +15,7 @@ patch_file "nph", "phrenderer", "patches/phrenderer"
 --define:
   "chronicles_line_numbers"
 --define:
-  "chronicles_sinks=textlines[nocolors,file(/tmp/enu_mcp.log,truncate)]"
+  "chronicles_sinks=textlines[nocolors,file(/tmp/enu_cli.log,truncate)]"
 --define:
   "ed_partial_subscriber"
 --define:

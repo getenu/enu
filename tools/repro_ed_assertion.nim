@@ -1,13 +1,13 @@
 ## Reproduce the `self.id notin source` assert in
 ## deps/ed/src/ed/components/subscriptions.nim:511 by running multiple
-## fresh enu_mcp sessions and checking whether the first ASSIGN message
+## fresh enu mcp sessions and checking whether the first ASSIGN message
 ## after a new EdContext loops back to the originator.
 ##
 ## Run with Enu already up on ENU_LISTEN_ADDRESS=127.0.0.1:
 ##   ENU_CONNECT_ADDRESS=127.0.0.1 nim r tools/repro_ed_assertion.nim
 ##
 ## Each iteration:
-##   1. Open a fresh enu_mcp session (start_process "nim r bin/enu_mcp.nim")
+##   1. Open a fresh enu mcp session (start_process "nim r bin/enu.nim mcp")
 ##   2. initialize
 ##   3. eval "1"  — confirms basic eval round-trip
 ##   4. set_position — first bot.transform = on a new EdContext
@@ -24,7 +24,7 @@ type McpSession = object
 
 proc open_session(): McpSession =
   result.process = start_process(
-    "nim", args = ["r", "./bin/enu_mcp.nim"], options = {poUsePath}
+    "nim", args = ["r", "./bin/enu.nim", "mcp"], options = {poUsePath}
   )
   result.next_id = 1
 

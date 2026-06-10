@@ -2,7 +2,8 @@
   "mcpServers": {
     "enu": {
       "type": "stdio",
-      "command": "/Users/scott/src/enu/bin/enu_mcp"
+      "command": "/Users/scott/src/enu/bin/enu",
+      "args": ["mcp"]
     }
   }
 }

@@ -239,7 +239,7 @@ task client_smoke,
   discard gorge_ex(
     "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
   )
-  discard gorge_ex("pkill -x enu_mcp || true")
+  discard gorge_ex("pkill -x enu || true")
   exec "sleep 1"
   let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
   if port_check.output.strip.len > 0:
@@ -316,7 +316,7 @@ task mcp_repro,
   discard gorge_ex(
     "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
   )
-  discard gorge_ex("pkill -x enu_mcp || true")
+  discard gorge_ex("pkill -x enu || true")
   exec "sleep 1"
   let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
   if port_check.output.strip.len > 0:

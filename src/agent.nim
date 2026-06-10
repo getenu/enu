@@ -27,10 +27,14 @@ proc find_unit*(ctx: EdContext, id: string): Unit =
       return u
 
 proc ensure_agent_bot*(
-    ctx: EdContext, id: string, color: Color, at = Transform.init(vec3(0, 1, 0))
+    ctx: EdContext, id: string, color: Color,
+    at = Transform.init(vec3(0, 1, 0)), visible = true,
 ): Bot =
   ## Find this agent's bot by id, or create it (flagged AGENT so it survives
-  ## level reloads and isn't persisted). `at` seeds the position on create.
+  ## level reloads and isn't persisted). `at` seeds the position on create;
+  ## `visible = false` creates the bot hidden (one-shot CLI calls don't need
+  ## an in-world avatar flashing in and out). Screenshots are unaffected —
+  ## they render from a dedicated camera, not the bot node.
   for u in ctx.root_units:
     if u.id == id and u of Bot:
       result = Bot(u)
@@ -61,6 +65,8 @@ proc ensure_agent_bot*(
   result = Bot.init(id = id)
   result.color = color
   result.global_flags += AGENT
+  if not visible:
+    result.global_flags -= VISIBLE
   ctx.root_units.add result
   result.transform = at
 
@@ -118,10 +124,11 @@ template animate*(ctx: EdContext, seconds: float, body: untyped) =
 
 proc glide*(
     unit: Unit, ctx: EdContext, target: Vector3, rotation = 0.0,
-    speed = MOVE_SPEED,
+    speed = MOVE_SPEED, instant = false,
 ) =
   ## Smoothly move `unit` to `target` (and rotate to `rotation` degrees),
-  ## ticking `ctx` each frame. Teleports instantly past `TELEPORT_DIST`.
+  ## ticking `ctx` each frame. Teleports instantly past `TELEPORT_DIST`, or
+  ## always with `instant` (one-shot CLI calls just want the end state).
   let
     start = unit.transform.origin
     start_rot = unit.rotation
@@ -130,7 +137,7 @@ proc glide*(
   let
     dist = start.distance_to(target)
     seconds = max(dist / speed, abs(angle_diff) / ANGULAR_SPEED)
-  if dist >= TELEPORT_DIST or seconds < FRAME_SEC:
+  if instant or dist >= TELEPORT_DIST or seconds < FRAME_SEC:
     unit.move_to(target, rotation)
     ctx.tick
     return
@@ -157,13 +164,13 @@ proc frame*(
 
 proc look_at*(
     unit: Unit, ctx: EdContext, target: Vector3,
-    distance = 30.0, height = 8.0, angle = 0.0,
+    distance = 30.0, height = 8.0, angle = 0.0, instant = false,
 ) =
   ## Glide `unit` to a framing pose for `target`, landing aimed at it
   ## (including downward pitch). Ticks `ctx` a few extra times so the final
   ## transform reaches the renderer before a screenshot.
   let (pos, yaw_rad, pitch_rad) = frame(target, distance, height, angle)
-  unit.glide(ctx, pos, rad_to_deg(yaw_rad))
+  unit.glide(ctx, pos, rad_to_deg(yaw_rad), instant = instant)
   unit.aim(pos, yaw_rad, pitch_rad)
   for _ in 0 .. 2:
     ctx.tick

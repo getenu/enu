@@ -1,17 +1,28 @@
-## MCP server exposing Enu to an agent. It is an `EdClient` (see ed) that
-## stays subscribed to a running Enu, plus a thin layer of MCP tools that
-## run queries against an agent bot and animate it for framing shots. All
-## the connection-keeping and animation lives in `ed` and `src/agent.nim`.
+## MCP server and CLI exposing Enu to an agent. It is an `EdClient` (see ed)
+## that subscribes to a running Enu, plus a thin layer of tools that run
+## queries against an agent bot and animate it for framing shots. All the
+## connection-keeping and animation lives in `ed` and `src/agent.nim`.
+##
+## `enu mcp` runs the MCP stdio server. `enu <tool> [--param value ...]`
+## makes a one-shot CLI call — the fallback when the MCP connection is
+## down, or for scripts and humans. No args prints help.
 
-import std/[os, strutils]
+import std/[os, strutils, monotimes, times]
 import pkg/ed
 import pkg/nimcp except info
 import core, models/[bots, colors], agent
 
 const CLAUDE_ORANGE = col"E8692A"
 
+let
+  cli_args = command_line_params()
+  server_mode = cli_args.len > 0 and cli_args[0] == "mcp"
+
 # Stable per-process id, reused across reconnects so Enu recognizes and
-# supersedes a prior session. The bot id derives from it.
+# supersedes a prior session. The bot id derives from it. CLI invocations
+# get fresh ids too: concurrent commands then never supersede each other
+# (or a running server) — each gets its own bot, which Enu drops shortly
+# after the command's session ends.
 let
   ctx_id = "enu_mcp-" & generate_id()
   connect_addr = get_env("ENU_CONNECT_ADDRESS", "127.0.0.1")
@@ -38,8 +49,15 @@ let client = EdClient(
 )
 
 client.on_connect = proc() =
-  bot =
-    ensure_agent_bot(client.ctx, bot_id(), CLAUDE_ORANGE, last_bot_transform)
+  # CLI bots are invisible: one-off commands don't need an in-world avatar
+  # flashing in and out for other players.
+  bot = ensure_agent_bot(
+    client.ctx,
+    bot_id(),
+    CLAUDE_ORANGE,
+    last_bot_transform,
+    visible = server_mode,
+  )
 
 proc keep_alive() =
   ## Idle work between requests: tick the connection (reconnecting if Enu
@@ -88,10 +106,10 @@ let enu_server = mcp_server("enu", "1.0.0"):
   mcp_tool:
     proc screenshot_from_player(with_ui: bool = false): string =
       ## Take a screenshot from the player's first-person camera.
+      ## Returns the file path to the saved PNG image.
       ## - with_ui: include UI overlay (toolbar, console, etc.) in the
       ##   shot. Default false captures just the rendered world, matching
       ##   what the player sees with the UI hidden.
-      ## Returns the file path to the saved PNG image.
       run_tool(
         MCP_SCREENSHOT,
         screenshot_from_player = not with_ui,
@@ -162,7 +180,7 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## - x, z: center of the view in world coordinates.
       ## - size: half-width and half-height in voxel units.
       client.ensure_connected
-      bot.glide(client.ctx, vec3(x, 1.0, z), 0.0)
+      bot.glide(client.ctx, vec3(x, 1.0, z), 0.0, instant = not server_mode)
       run_tool(
         MCP_SCREENSHOT, screenshot_top_down = true, screenshot_size = size
       )
@@ -185,7 +203,14 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## - height: how high above target.y to raise the bot (default 8).
       ## - angle: viewing direction around the target in degrees (default 0).
       client.ensure_connected
-      bot.look_at(client.ctx, vec3(x, y, z), distance, height, angle)
+      bot.look_at(
+        client.ctx,
+        vec3(x, y, z),
+        distance,
+        height,
+        angle,
+        instant = not server_mode,
+      )
       run_tool(MCP_SCREENSHOT)
 
   mcp_tool:
@@ -226,10 +251,10 @@ let enu_server = mcp_server("enu", "1.0.0"):
     ): string =
       ## Move a unit to a position at 50 units/sec. Teleports instantly if
       ## distance >= 500.
-      ## x, y, z: target position in world space.
-      ## rotation: Y-axis rotation in degrees.
-      ## id: unit id to move (default: MCP bot). Use the player's id to move
-      ## the player.
+      ## - x, y, z: target position in world space.
+      ## - rotation: Y-axis rotation in degrees.
+      ## - id: unit id to move (default: MCP bot). Use the player's id to
+      ##   move the player.
       client.ensure_connected
       let unit =
         if id == "":
@@ -238,12 +263,55 @@ let enu_server = mcp_server("enu", "1.0.0"):
           client.ctx.find_unit(id)
       if unit.is_nil:
         return "Error: Unit not found: " & id
-      unit.glide(client.ctx, vec3(x, y, z), rotation)
+      unit.glide(client.ctx, vec3(x, y, z), rotation, instant = not server_mode)
       ""
 
-info "enu_mcp starting", pid = get_current_process_id(), connect_addr
+proc remove_bot() =
+  ## Proactively remove this invocation's bot so back-to-back CLI calls
+  ## don't see their predecessor's ghost (Enu reaps the bot when the dead
+  ## session is noticed, but that takes ~10s — long enough to occlude the
+  ## next call's screenshot from the same cached transform).
+  if not bot.is_nil and client.connected:
+    client.ctx.root_units -= bot
+    for _ in 0 .. 2:
+      client.ctx.tick
+      sleep 20
 
-Ed.bootstrap
-client.connect
-info "Ed context initialized. starting stdio server"
-new_stdio_transport().serve(enu_server, idle = keep_alive)
+proc wait_for_connection(): bool =
+  ## Tick until the subscription handshake lands, or give up.
+  let deadline = get_mono_time() + init_duration(seconds = 3)
+  while get_mono_time() < deadline:
+    if client.connected:
+      return true
+    client.tick
+    sleep 50
+  client.connected
+
+if server_mode:
+  info "enu mcp starting", pid = get_current_process_id(), connect_addr
+  Ed.bootstrap
+  client.connect
+  info "Ed context initialized. starting stdio server"
+  new_stdio_transport().serve(enu_server, idle = keep_alive)
+elif cli_args.len == 0 or cli_args[0] in ["help", "--help", "-h"]:
+  echo "enu — drive a running Enu from the command line.\n"
+  echo enu_server.help_text("enu")
+  echo "\nRun as an MCP server with: enu mcp"
+else:
+  proc connect_to_enu(): bool {.gcsafe.} =
+    Ed.bootstrap
+    client.connect
+    result = wait_for_connection()
+    if not result:
+      stderr.write_line "Error: can't reach Enu at " & connect_addr &
+        " (is Enu running?)"
+
+  let exit_code = enu_server.dispatch_cli(
+    cli_args,
+    "enu",
+    failure = proc(text: string): bool {.gcsafe.} =
+      text.starts_with("Error"),
+    setup = connect_to_enu,
+  )
+  remove_bot()
+  quit exit_code

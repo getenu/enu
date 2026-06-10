@@ -1,0 +1,400 @@
+ERR 2026-06-08 17:01:04.831-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.834-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.851-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.854-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.872-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.875-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.892-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.895-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.912-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.914-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.931-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.934-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.951-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.953-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.971-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.974-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.991-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:04.994-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:05.010-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=f4k1yi2po4vw2 type_name="Ed[seq[Unit], types.Unit]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/game.nim(98) process\n/Users/scott/src/enu/src/models/units.nim(126) walk_tree\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/game.nim(98) process
+/Users/scott/src/enu/src/models/units.nim(126) walk_tree
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+ERR 2026-06-08 17:01:05.013-03:00 Ed invalid                                 topics="ed" tid=15505218 file=validations.nim:9 id=7xrxx9dfxnl25 type_name="Ed[types.Code, types.Code]" trace="Traceback (most recent call last)\n/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc\n/Users/scott/src/enu/src/nodes/build_node.nim(296) process\n/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code\n/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value\n/Users/scott/src/enu/deps/chronicles/chronicles/formats.nim(26) valid\n" thread_ctx=main-p1jrvvmf2hayi
+
+ERROR: Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
+   at:  (godotmacros.nim:578) - Unhandled Nim exception (AssertionDefect): /Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94, 3) `self.valid` 
+/Users/scott/src/enu/deps/godot-nim/godot/nim/godotmacros.nim(607) methFunc
+/Users/scott/src/enu/src/nodes/build_node.nim(296) process
+/Users/scott/src/enu/deps/ed/src/ed/components/type_registry.nim(173) code
+/Users/scott/src/enu/deps/ed/src/ed/zens/operations.nim(94) value
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(45) failedAssertImpl
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/std/assertions.nim(40) raiseAssert
+/opt/homebrew/Cellar/nim/2.2.10/nim/lib/system/fatal.nim(62) sysFatal
+
