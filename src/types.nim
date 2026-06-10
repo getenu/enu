@@ -148,6 +148,12 @@ type
       ## context name as a substring (e.g. `player-{ctx_name}`,
       ## `mcp_bot-{ctx_name}`) so worker.nim can match them on
       ## unsubscribe.
+    VIEWER
+      ## The unit streams voxel terrain around itself: the server attaches
+      ## a VoxelViewer node so chunks near the unit get meshed even when no
+      ## player is nearby. Off by default — players bring their own viewer,
+      ## and most units don't need one. Set it on agent bots that take
+      ## screenshots away from the player.
 
   Tools* = enum
     CODE_MODE

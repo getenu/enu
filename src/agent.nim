@@ -53,16 +53,20 @@ proc hydrate*[T: EdRef](ctx: EdContext, obj: T) =
 
 proc spawn_bot*(
     ctx: EdContext, id: string, color: Color,
-    at = Transform.init(vec3(0, 1, 0)), visible = true,
+    at = Transform.init(vec3(0, 1, 0)), visible = true, viewer = false,
 ): Bot =
   ## Create a bot owned by this context, flagged AGENT so it survives level
   ## reloads, isn't persisted with the level, and is reaped when this context
   ## disconnects. `visible = false` creates it hidden (a one-shot CLI call
   ## doesn't need an in-world avatar flashing in and out) — screenshots are
   ## unaffected, they render from a dedicated camera, not the bot node.
+  ## `viewer = true` streams voxel terrain around the bot so it can be
+  ## photographed in areas no player is keeping loaded.
   result = Bot.init(id = id)
   result.color = color
   result.global_flags += AGENT
+  if viewer:
+    result.global_flags += VIEWER
   if not visible:
     result.global_flags -= VISIBLE
   ctx.root_units.add result
@@ -70,7 +74,7 @@ proc spawn_bot*(
 
 proc ensure_agent_bot*(
     ctx: EdContext, id: string, color: Color,
-    at = Transform.init(vec3(0, 1, 0)), visible = true,
+    at = Transform.init(vec3(0, 1, 0)), visible = true, viewer = false,
 ): Bot =
   ## Find this agent's bot by id (a reconnect after an Enu restart), or spawn
   ## a fresh one.
@@ -79,7 +83,7 @@ proc ensure_agent_bot*(
     result = Bot(existing)
     ctx.hydrate(result)
   else:
-    result = ctx.spawn_bot(id, color, at, visible)
+    result = ctx.spawn_bot(id, color, at, visible, viewer)
 
 proc rotation*(unit: Unit): float =
   ## Yaw in degrees. Players track yaw directly; everyone else derives it

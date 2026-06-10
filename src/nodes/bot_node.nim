@@ -5,7 +5,7 @@ import
   godotapi/[
     scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
     animation_player, resource_loader, packed_scene, spatial_material,
-    text_edit, camera, viewport, texture, image, visual_server,
+    text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
   ]
 import gdutils, core, models/[colors, units], ui/markdown_label
 import ./queries
@@ -192,6 +192,13 @@ gdobj BotNode of KinematicBody:
       self.set_process(
         SCRIPT_RUNNING in self.model.global_flags or serves_queries
       )
+      # A VIEWER unit streams voxel terrain around itself, so screenshots
+      # render even when no player is nearby. Server-side only: that's
+      # where queries (and their renders) are served.
+      if VIEWER in bot.global_flags and SERVER in state.local_flags:
+        let viewer = gdnew[VoxelViewer]()
+        viewer.view_distance = 256
+        self.add_child(viewer)
 
   method process(delta: float) =
     if self.model of Bot:
