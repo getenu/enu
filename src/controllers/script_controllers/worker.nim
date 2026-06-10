@@ -359,7 +359,12 @@ proc watch_units(
           # fills relay to the node ctx, whose deferred scene add completes.
           discard Ed.thread_ctx.fetch(unit.id, deep = true)
         unit.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
-          unit.script_ctx.timer = get_mono_time()
+          # script_ctx is nil for a unit that never finished joining (a narrow
+          # replica's deferred join, destroyed before its fetch completed — e.g.
+          # an agent bot churned during a reload). The CLOSED this watcher gets
+          # from that destroy must not deref it.
+          if ?unit.script_ctx:
+            unit.script_ctx.timer = get_mono_time()
         self.watch_units(unit.units, unit, body)
 
 template for_all_units(self: Worker, body: untyped) {.dirty.} =
@@ -757,7 +762,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             snapshots = total_snapshots,
             snapshots_delta = snapshots_this_period,
             deltas = total_deltas,
-            deltas_delta = deltas_this_period
+            deltas_delta = deltas_this_period,
+            ed_objects = Ed.thread_ctx.len
         last_stats_log = frame_start
         last_snapshots_flushed = total_snapshots
         last_deltas_flushed = total_deltas

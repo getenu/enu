@@ -114,6 +114,12 @@ gdobj Game of Node:
         {get_network_stats()}
         {get_stats()}
         """
+      # Periodic main-thread counterpart of "worker stats": ed object growth
+      # here is how reload/sync leaks surface (see docs/notes on the reload
+      # leaks) — keep it greppable.
+      if state.frame_count mod 300 == 0:
+        info "main stats", ed_objects = Ed.thread_ctx.len, units = unit_count,
+          chunks = chunk_count
     state.voxel_tasks =
       parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
 
