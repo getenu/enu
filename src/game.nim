@@ -72,6 +72,15 @@ gdobj Game of Node:
     mcp_viewport_node: Viewport
 
   method process*(delta: float) =
+    if state.is_nil or state.nodes.game != self:
+      # A scene reload (the NEEDS_RESTART worker-restart path) instantiates a
+      # fresh Game whose init replaces the global `state`; this superseded
+      # node can still get a frame or two before teardown. It must not touch
+      # the shared state — its node_controller's pending units would
+      # add_to_scene against the new instance's half-initialized nodes
+      # (state.nodes.data is nil until the new ready() runs): a nil-parent
+      # SIGSEGV observed when a client self-restarted mid-join.
+      return
     Ed.thread_ctx.tick
     inc state.frame_count
     self.node_controller.drain_pending()
