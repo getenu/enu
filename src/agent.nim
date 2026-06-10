@@ -1,9 +1,10 @@
 ## Helpers for an external agent that drives Enu over an `EdContext` — the
-## MCP server is the first such agent. Nothing here is MCP-specific: create
-## an agent bot, run a query against the worker, and animate a unit's
-## transform by ticking the shared context each frame.
+## MCP server is the first such agent. Nothing here is MCP-specific: spawn
+## an agent bot, hydrate a partially-replicated object, ask any unit a
+## cross-context query, and animate a unit's transform by ticking the shared
+## context each frame.
 ##
-## This module is compiled into the agent process (e.g. `bin/enu_mcp`), not
+## This module is compiled into the agent process (e.g. `bin/enu`), not
 ## the Enu dylib.
 
 import std/[os, math, monotimes, times]
@@ -26,42 +27,39 @@ proc find_unit*(ctx: EdContext, id: string): Unit =
     if u.id == id:
       return u
 
-proc ensure_agent_bot*(
+proc hydrate*[T: EdRef](ctx: EdContext, obj: T) =
+  ## Fill in an object that arrived over a partial replica. The object itself
+  ## synced inline, but its container fields can be unregistered stubs — their
+  ## CREATEs were filtered before this session expressed interest. Deep-fetch
+  ## the object's owned closure, wait (bounded) for it to land, then re-link
+  ## the fields to the real containers. On a full replica everything is
+  ## already registered, so this passes through instantly as a no-op.
+  ctx.fetch(obj.id, deep = true)
+  let deadline = get_mono_time() + init_duration(seconds = 2)
+  var pending = true
+  while pending and get_mono_time() < deadline:
+    ctx.tick
+    pending = false
+    for field in obj[].fields:
+      when field is Ed:
+        if ?field and field.id notin ctx:
+          pending = true
+    if pending:
+      sleep FRAME_MS
+  for field in obj[].fields:
+    when field is Ed:
+      if ?field and field.id in ctx:
+        field = type(field)(ctx[field.id])
+
+proc spawn_bot*(
     ctx: EdContext, id: string, color: Color,
     at = Transform.init(vec3(0, 1, 0)), visible = true,
 ): Bot =
-  ## Find this agent's bot by id, or create it (flagged AGENT so it survives
-  ## level reloads and isn't persisted). `at` seeds the position on create;
-  ## `visible = false` creates the bot hidden (one-shot CLI calls don't need
-  ## an in-world avatar flashing in and out). Screenshots are unaffected —
-  ## they render from a dedicated camera, not the bot node.
-  for u in ctx.root_units:
-    if u.id == id and u of Bot:
-      result = Bot(u)
-      # Reconnect on a partial replica: the bot arrived inline via root_units,
-      # but its container fields can be unregistered stubs — their CREATEs were
-      # filtered before this session expressed interest. Deep-fetch the bot's
-      # owned closure, wait (bounded) for it to land, then re-link the fields to
-      # the real containers. A full replica passes through instantly: everything
-      # is already registered, so there's nothing pending and the re-link is a
-      # no-op.
-      ctx.fetch(id, deep = true)
-      let deadline = get_mono_time() + init_duration(seconds = 2)
-      var pending = true
-      while pending and get_mono_time() < deadline:
-        ctx.tick
-        pending = false
-        for field in result[].fields:
-          when field is Ed:
-            if ?field and field.id notin ctx:
-              pending = true
-        if pending:
-          sleep FRAME_MS
-      for field in result[].fields:
-        when field is Ed:
-          if ?field and field.id in ctx:
-            field = type(field)(ctx[field.id])
-      return result
+  ## Create a bot owned by this context, flagged AGENT so it survives level
+  ## reloads, isn't persisted with the level, and is reaped when this context
+  ## disconnects. `visible = false` creates it hidden (a one-shot CLI call
+  ## doesn't need an in-world avatar flashing in and out) — screenshots are
+  ## unaffected, they render from a dedicated camera, not the bot node.
   result = Bot.init(id = id)
   result.color = color
   result.global_flags += AGENT
@@ -69,6 +67,19 @@ proc ensure_agent_bot*(
     result.global_flags -= VISIBLE
   ctx.root_units.add result
   result.transform = at
+
+proc ensure_agent_bot*(
+    ctx: EdContext, id: string, color: Color,
+    at = Transform.init(vec3(0, 1, 0)), visible = true,
+): Bot =
+  ## Find this agent's bot by id (a reconnect after an Enu restart), or spawn
+  ## a fresh one.
+  let existing = ctx.find_unit(id)
+  if not existing.is_nil and existing of Bot:
+    result = Bot(existing)
+    ctx.hydrate(result)
+  else:
+    result = ctx.spawn_bot(id, color, at, visible)
 
 proc rotation*(unit: Unit): float =
   ## Yaw in degrees. Players track yaw directly; everyone else derives it
@@ -176,29 +187,31 @@ proc look_at*(
     ctx.tick
     sleep 20
 
-proc query*(
-    bot: Bot, ctx: EdContext, q: McpQuery, timeout = init_duration(seconds = 30)
-): McpQuery =
-  ## Set `bot`'s query, tick `ctx` until the worker reports MCP_DONE, and
+proc ask*(
+    unit: Unit, ctx: EdContext, q: UnitQuery,
+    timeout = init_duration(seconds = 30),
+): UnitQuery =
+  ## Run a query against `unit` from this context: set the unit's query slot,
+  ## tick `ctx` until whichever context answers it reports QUERY_DONE, and
   ## return the completed query. On timeout, clears the slot and returns an
   ## error result.
   var pending = q
-  pending.state = MCP_PENDING
-  bot.mcp_query = pending
+  pending.state = QUERY_PENDING
+  unit.query = pending
   let start = get_mono_time()
   while true:
     ctx.tick
-    let v = bot.mcp_query
-    if v.state == MCP_DONE:
+    let v = unit.query
+    if v.state == QUERY_DONE:
       return v
     if not ctx.connected:
       # Peer went away mid-query (e.g. Enu restarted). tick reaps the dead
       # connection within netty's timeout; bail so the caller can reconnect.
-      return McpQuery(state: MCP_DONE, error: "Error: connection lost")
+      return UnitQuery(state: QUERY_DONE, error: "Error: connection lost")
     if get_mono_time() - start > timeout:
-      bot.mcp_query = McpQuery(state: MCP_DONE)
-      return McpQuery(
-        state: MCP_DONE,
+      unit.query = UnitQuery(state: QUERY_DONE)
+      return UnitQuery(
+        state: QUERY_DONE,
         error: "Error: Enu did not respond within " & $timeout,
       )
     sleep 10

@@ -68,8 +68,8 @@ gdobj Game of Node:
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
-    mcp_camera_node: Camera
-    mcp_viewport_node: Viewport
+    screenshot_camera_node: Camera
+    screenshot_viewport_node: Viewport
 
   method process*(delta: float) =
     if state.is_nil or state.nodes.game != self:
@@ -462,18 +462,18 @@ gdobj Game of Node:
       assert not state.nodes.data.is_nil
       self.scaled_viewport =
         self.get_node("ViewportContainer/Viewport") as Viewport
-      self.mcp_viewport_node = gdnew[Viewport]()
-      self.mcp_viewport_node.name = "McpViewport"
-      self.mcp_viewport_node.size = vec2(640, 360)
-      self.mcp_viewport_node.render_target_update_mode = UPDATE_ALWAYS
-      self.add_child(self.mcp_viewport_node)
-      self.mcp_viewport_node.world = self.scaled_viewport.find_world()
-      self.mcp_camera_node = gdnew[Camera]()
-      self.mcp_camera_node.name = "McpCamera"
-      self.mcp_viewport_node.add_child(self.mcp_camera_node)
-      self.mcp_camera_node.make_current()
-      state.mcp_camera = self.mcp_camera_node
-      state.mcp_viewport = self.mcp_viewport_node
+      self.screenshot_viewport_node = gdnew[Viewport]()
+      self.screenshot_viewport_node.name = "ScreenshotViewport"
+      self.screenshot_viewport_node.size = vec2(640, 360)
+      self.screenshot_viewport_node.render_target_update_mode = UPDATE_ALWAYS
+      self.add_child(self.screenshot_viewport_node)
+      self.screenshot_viewport_node.world = self.scaled_viewport.find_world()
+      self.screenshot_camera_node = gdnew[Camera]()
+      self.screenshot_camera_node.name = "ScreenshotCamera"
+      self.screenshot_viewport_node.add_child(self.screenshot_camera_node)
+      self.screenshot_camera_node.make_current()
+      state.screenshot_camera = self.screenshot_camera_node
+      state.screenshot_viewport = self.screenshot_viewport_node
 
       self.bind_signals(self.get_viewport(), "size_changed")
       self.bind_signals(self.get_tree(), "global_menu_action")

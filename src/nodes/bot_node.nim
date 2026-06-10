@@ -20,7 +20,7 @@ gdobj BotNode of KinematicBody:
     mesh: MeshInstance
     animation_player: AnimationPlayer
     transform_zid: EID
-    # MCP screenshot is multi-phase: positioning the camera doesn't take
+    # A screenshot query is multi-phase: positioning the camera doesn't take
     # effect until the next render, and a projection-mode change (ortho ↔
     # perspective) needs an extra frame on top of that. -1 = idle, N > 0 =
     # warming up (decrement each frame), 0 = capture this frame.
@@ -180,34 +180,34 @@ gdobj BotNode of KinematicBody:
 
     if self.model of Bot:
       let bot = Bot(self.model)
-      # MCP queries are answered only by the server. A connected client also
-      # holds the synced bot (and its mcp_query_value); answering here too
-      # makes two writers race on the same synced response container — seen
-      # live as an eval answered with a screenshot path.
-      let serves_mcp =
+      # Unit queries are answered only by the server. A connected client also
+      # holds the synced bot (and its query_value); answering here too makes
+      # two writers race on the same synced response container — seen live as
+      # an eval answered with a screenshot path.
+      let serves_queries =
         AGENT in bot.global_flags and SERVER in state.local_flags
-      if serves_mcp:
-        info "mcp bot node setup",
-          id = bot.id, has_mcp_query_value = ?bot.mcp_query_value
+      if serves_queries:
+        info "agent bot node setup",
+          id = bot.id, has_query_value = ?bot.query_value
       self.set_process(
-        SCRIPT_RUNNING in self.model.global_flags or serves_mcp
+        SCRIPT_RUNNING in self.model.global_flags or serves_queries
       )
 
   method process(delta: float) =
     if self.model of Bot:
       let bot = Bot(self.model)
       if AGENT in bot.global_flags and SERVER in state.local_flags:
-        let q = bot.mcp_query
-        if q.kind == MCP_SCREENSHOT and q.state == MCP_READY and
+        let q = bot.query
+        if q.kind == QUERY_SCREENSHOT and q.state == QUERY_READY and
             self.screenshot_warmup_frames > 0:
           dec self.screenshot_warmup_frames
-        elif q.kind == MCP_SCREENSHOT and q.state == MCP_READY and
+        elif q.kind == QUERY_SCREENSHOT and q.state == QUERY_READY and
             self.screenshot_warmup_frames == 0:
           let vp =
             if q.screenshot_with_ui:
               self.get_tree().root
             else:
-              Viewport(state.mcp_viewport)
+              Viewport(state.screenshot_viewport)
           # A minimized window halts the VisualServer draw cycle, so the
           # viewport's texture would otherwise be frozen on the last frame
           # rendered before minimizing. Force a synchronous draw (no buffer
@@ -223,28 +223,29 @@ gdobj BotNode of KinematicBody:
             get_temp_dir() /
             ("enu_screenshot_" & $state.screenshot_counter & ".png")
           discard img.save_png(path)
-          info "mcp screenshot captured", path
+          info "screenshot captured", path
           self.screenshot_warmup_frames = -1
           if self.skin_hidden_during_screenshot:
             self.skin.visible = true
             self.skin_hidden_during_screenshot = false
-          bot.mcp_query =
-            McpQuery(kind: MCP_SCREENSHOT, result: path, state: MCP_DONE)
-        elif q.state == MCP_READY and q.kind == MCP_SCREENSHOT and
+          bot.query =
+            UnitQuery(kind: QUERY_SCREENSHOT, result: path, state: QUERY_DONE)
+        elif q.state == QUERY_READY and q.kind == QUERY_SCREENSHOT and
             self.screenshot_warmup_frames < 0:
           # with_ui captures the root viewport (game + GUI overlay) so the
           # camera positioning below has no effect — root is already the
-          # composited screen. For without-UI we still drive mcp_camera.
+          # composited screen. For without-UI we still drive the
+          # screenshot camera.
           if not q.screenshot_with_ui:
-            # mcp_viewport's `world` reference is captured at game.ready
+            # screenshot_viewport's `world` reference is captured at game.ready
             # time, but the world changes on level switches. Refresh it
             # each shot so the ortho/perspective camera renders against
             # the current level.
-            let vp = Viewport(state.mcp_viewport)
+            let vp = Viewport(state.screenshot_viewport)
             let main_vp = self.get_tree().root
             if not main_vp.is_nil:
               vp.world = main_vp.find_world()
-            let cam = Camera(state.mcp_camera)
+            let cam = Camera(state.screenshot_camera)
             if q.screenshot_top_down:
               # Orthographic camera high above the target looking straight
               # down. Half-extent (screenshot_size) controls coverage.
@@ -296,7 +297,7 @@ gdobj BotNode of KinematicBody:
             if not q.screenshot_from_player and not self.skin.is_nil:
               self.skin.visible = false
               self.skin_hidden_during_screenshot = true
-            info "mcp screenshot positioning camera",
+            info "screenshot positioning camera",
               from_player = q.screenshot_from_player,
               top_down = q.screenshot_top_down,
               origin = cam.global_transform.origin

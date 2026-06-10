@@ -475,7 +475,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   worker.init_interpreter("")
   worker.bridge_to_vm
 
-  worker.mcp_eval_proc = proc(
+  worker.eval_proc = proc(
       code: string, top_level: bool, unit_id: string
   ): tuple[result: string, error: string] {.gcsafe.} =
     try:
@@ -523,7 +523,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     except CatchableError as e:
       ("", "Error: " & e.msg)
 
-  worker.mcp_update_files_proc = proc() {.gcsafe.} =
+  worker.update_files_proc = proc() {.gcsafe.} =
     worker.update_files()
 
   let load_level = proc() =

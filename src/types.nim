@@ -1,25 +1,33 @@
 import std/[tables, monotimes, times, sets, options, macros]
 
 type
-  McpQueryKind* = enum
-    MCP_BLANK
-    MCP_SCREENSHOT
-    MCP_EVAL
-    MCP_GET_CONSOLE
-    MCP_GET_LEVEL_DIR
-    MCP_PING
+  # A general way to run a query against a unit from another context (another
+  # thread, or a remote process over the network). The asker fills in a
+  # UnitQuery and sets the unit's `query` to it with state QUERY_PENDING; the
+  # context that owns the unit's behavior answers by writing the same value
+  # back with `result`/`error` filled in and state QUERY_DONE. Today only
+  # AGENT bots subscribe for answers (see bots.nim and bot_node.nim), but the
+  # slot exists on every unit.
+  UnitQueryKind* = enum
+    QUERY_BLANK
+    QUERY_SCREENSHOT
+    QUERY_EVAL
+    QUERY_CONSOLE
+    QUERY_LEVEL_DIR
+    QUERY_PING
 
-  McpQueryState* = enum
-    MCP_PENDING
-    MCP_READY
-    MCP_DONE
+  UnitQueryState* = enum
+    QUERY_IDLE
+    QUERY_PENDING
+    QUERY_READY
+    QUERY_DONE
 
-  McpQuery* = object
-    kind*: McpQueryKind
+  UnitQuery* = object
+    kind*: UnitQueryKind
     code*: string
     result*: string
     error*: string
-    state*: McpQueryState
+    state*: UnitQueryState
     top_level*: bool
     unit_id*: string
     screenshot_from_player*: bool
@@ -169,8 +177,8 @@ type
     tool_value*: EdValue[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
-    mcp_camera*: Node
-    mcp_viewport*: Node
+    screenshot_camera*: Node
+    screenshot_viewport*: Node
     player_camera*: Node
     screenshot_counter*: int
     player_value*: EdValue[Player]
@@ -284,6 +292,7 @@ type
     eval_value*: EdValue[string]
     anchor_value*: EdValue[Transform]
     rendered_voxel_count_value*: EdValue[int]
+    query_value*: EdValue[UnitQuery]
 
   BlockLogEntry* = tuple
     unit_id: string
@@ -301,7 +310,6 @@ type
 
   Bot* = ref object of Unit
     animation_value*: EdValue[string]
-    mcp_query_value*: EdValue[McpQuery]
 
   Sign* = ref object of Unit
     message_value*, more_value*: EdValue[string]
@@ -464,10 +472,10 @@ type
     module_names*: HashSet[string]
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
-    mcp_eval_proc*: proc(code: string, top_level: bool, unit_id: string): tuple[
+    eval_proc*: proc(code: string, top_level: bool, unit_id: string): tuple[
       result: string, error: string
     ] {.gcsafe.}
-    mcp_update_files_proc*: proc() {.gcsafe.}
+    update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object
     # Units that arrived before their data (narrow partial replica): the scene

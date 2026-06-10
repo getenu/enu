@@ -91,7 +91,6 @@ proc init*(
       id: id,
       start_transform: transform,
       animation_value: ed("auto"),
-      mcp_query_value: EdValue[McpQuery].init(McpQuery()),
       speed: 1.0,
       clone_of: clone_of,
       start_color: ACTION_COLORS[BLACK],
@@ -164,53 +163,55 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
       state.pop_flag RETICLE_VISIBLE
 
   if AGENT in self.global_flags and SERVER in state.local_flags:
-    self.mcp_query_value.changes(false):
+    self.query_value.changes(false):
       var q = change.item
       if added:
         case q.state
-        of MCP_PENDING:
-          info "mcp query received by worker, running file update",
+        of QUERY_PENDING:
+          info "unit query received by worker, running file update",
             kind = $q.kind, id = self.id
-          worker.mcp_update_files_proc()
-          q.state = MCP_READY
-          self.mcp_query = q
-        of MCP_READY:
+          worker.update_files_proc()
+          q.state = QUERY_READY
+          self.query = q
+        of QUERY_READY:
           case q.kind
-          of MCP_GET_CONSOLE:
+          of QUERY_CONSOLE:
             q.result = state.console.log.value.join("\n")
-            q.state = MCP_DONE
-            info "mcp console query responding", kind = q.kind, id = self.id
-            self.mcp_query = q
-          of MCP_EVAL:
+            q.state = QUERY_DONE
+            info "console query responding", kind = q.kind, id = self.id
+            self.query = q
+          of QUERY_EVAL:
             let (res, err) =
-              worker.mcp_eval_proc(q.code, q.top_level, q.unit_id)
+              worker.eval_proc(q.code, q.top_level, q.unit_id)
             q.result = res
             q.error = err
-            q.state = MCP_DONE
-            info "mcp eval query responding",
+            q.state = QUERY_DONE
+            info "eval query responding",
               code = q.code, error = q.error, id = self.id
-            self.mcp_query = q
-          of MCP_GET_LEVEL_DIR:
+            self.query = q
+          of QUERY_LEVEL_DIR:
             q.result = state.config.level_dir
-            q.state = MCP_DONE
-            info "mcp level query responding", kind = q.kind, id = self.id
-            self.mcp_query = q
-          of MCP_PING:
-            q.state = MCP_DONE
-            self.mcp_query = q
-          of MCP_SCREENSHOT:
+            q.state = QUERY_DONE
+            info "level query responding", kind = q.kind, id = self.id
+            self.query = q
+          of QUERY_PING:
+            q.state = QUERY_DONE
+            self.query = q
+          of QUERY_SCREENSHOT:
+            # Needs the renderer; answered by the unit's node on the main
+            # thread (see bot_node.nim).
             discard
-          of MCP_BLANK:
+          of QUERY_BLANK:
             discard
-        of MCP_DONE:
-          info "mcp query done in worker", kind = $q.kind
+        of QUERY_IDLE, QUERY_DONE:
+          discard
 
-    # Catch-up: if the agent wrote a query *before* the subscription above
+    # Catch-up: if the asker wrote a query *before* the subscription above
     # was registered (typical when the bot is brand new), `changes` never
     # fires for it. Nudge so the handler picks it up.
-    let pending = self.mcp_query
-    if pending.state == MCP_PENDING:
+    let pending = self.query
+    if pending.state == QUERY_PENDING:
       var q = pending
-      worker.mcp_update_files_proc()
-      q.state = MCP_READY
-      self.mcp_query = q
+      worker.update_files_proc()
+      q.state = QUERY_READY
+      self.query = q
