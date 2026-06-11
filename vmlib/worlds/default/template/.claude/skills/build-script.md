@@ -57,12 +57,20 @@ restore()       # restore the save
 Name locals and proc params carefully: bare words like `height`,
 `width`, `radius`, `size`, and `color` are unit accessors, and a local
 or proc param with one of those names resolves to the accessor instead.
-Use `h`, `w`, `rad`, `tall`, `col`, etc.
+`home` is also taken (a built-in position offset, usable as `go home` —
+but not a `Vector3`, so don't pass it to `me.go()`). Use `h`, `w`,
+`rad`, `tall`, `col`, etc.
 
 ## Prototypes (`name X`)
 
 Prototype names use `CamelCase` — `name Tower(...)`, `name Door(...)`.
 The name becomes a type, so it reads as one.
+
+The unit's id is `build_` + snake_case of the name: `name FlyerShip`
+makes the unit `build_flyer_ship`, and Enu renames the script and data
+files to match. Name the files that way from the start
+(`scripts/build_flyer_ship.nim`) so the id you pass to
+`wait_for_script` is the one the unit actually has.
 
 > **⚠️ Never instantiate a prototype from inside its own script.** A build
 > script that does `name Foo` *is* the `Foo` prototype — so calling `Foo.new(...)`
@@ -92,6 +100,11 @@ Rules that keep prototypes working:
   it, or erase it with `place(0, 0, 0, eraser)`.
 - **Spawn at `y = 0`** so the build's lowest voxel rests on the ground:
   `Tower.new(height = 10, position = vec3(5, 0, -20))`.
+- **`start_position` in an instance is the spawner's position**, not the
+  point passed to `.new()`. For behavior tethered to the spawn point
+  (patrol radius, return-home), pass the coordinates as explicit proto
+  params (`name FlyerShip(hx = 0.0, hy = 80.0, hz = 0.0)`) mirroring
+  each instance's `position`.
 - Spawner scripts set `drawing = false` so the spawner unit itself
   places no blocks.
 - **Proto self-copies are hidden by default** (`show_prototypes` is

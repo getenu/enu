@@ -31,8 +31,11 @@ Caveats:
   "still running" after the timeout — that means *alive, not stuck*.
   Pass a short timeout (e.g. 5) and verify with bounds or a
   screenshot instead.
-- Rarely, a call that lands mid-rebuild returns success with a 1×1×1
-  bounds — re-query once before concluding the script drew nothing.
+- A call can return success with ~1×1×1 bounds when the unit loaded as
+  just its bare default block — most common on freshly created units,
+  and on edits to a script whose `loop:` is mid-run. Touch the script
+  and `wait_for_script` again; re-query before concluding the script
+  drew nothing.
 - **Proto dependents go stale.** When a proto script (`name X`) changes,
   scripts that reference `X` keep their previously compiled types and
   fail with type-mismatch errors until they reload too. Touch dependents

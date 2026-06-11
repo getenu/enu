@@ -50,7 +50,7 @@ of distinctly-colored bots.
 - `eval(code, top_level = false, unit_id = "")` — run Nim in the Enu scripting context. Default returns the expression's value from the player's module; `top_level = true` allows `import`/`proc` (no return value); `unit_id` targets a unit's module (spawner clones can't be targeted — use their proto or another root unit).
 
 **Spatial queries** (via `eval`):
-- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box
+- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box. Coordinates are `int` (floats fail to compile); same for `floor_at` and `clear_box`. To enumerate units by kind/id, loop `Build.all` / `Bot.all` instead (see `/reload-verify`).
 - `floor_at(x, z)` — top y with a visible voxel, or -1
 - `clear_box(...)` — true if no voxels in the box
 - `find_voxel_overlaps(limit)` — positions where two builds share a voxel (z-fighting)
@@ -96,7 +96,10 @@ of distinctly-colored bots.
   scripts/<id>.nim    — the unit's script
 ```
 
-Build ids start with `build_`, bot ids with `bot_`.
+Build ids start with `build_`, bot ids with `bot_`. A script declaring
+`name FlyerShip` gets the id `build_flyer_ship` (`build_` + snake_case
+of the name) and Enu renames its files to match — name the files that
+way from the start so `wait_for_script` ids line up.
 
 **`data/<id>/<id>.json`:**
 
@@ -163,7 +166,8 @@ restore()
 `size` accepts ints or floats; rasterisation is voxel-centred, so
 effective widths are odd (`size = 4` and `5` both span 5 voxels) and
 fractional sizes make smooth tapers. Avoid naming locals/proc params
-`height`/`width`/`radius`/`size`/`color` — those are unit accessors.
+`height`/`width`/`radius`/`size`/`color` (unit accessors) or `home`
+(a built-in position offset).
 
 **Prototypes:** `name Tower(height = 10)` makes a reusable proto;
 instantiate from a *different* script with
