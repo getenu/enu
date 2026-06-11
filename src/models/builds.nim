@@ -357,7 +357,8 @@ method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
-  self.speed = 1
+  self.speed = 0 # draw ASAP unless the script sets a speed
+  self.begin_asap()
   self.scale = 1
 
   self.global_flags += RESETTING
@@ -418,7 +419,7 @@ proc init*(
       start_color: color,
       drawing: true,
       bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
-      speed: 1.0,
+      speed: 0.0, # draw ASAP unless the script sets a speed
       clone_of: clone_of,
       bot_collisions: bot_collisions,
       parent: parent,
