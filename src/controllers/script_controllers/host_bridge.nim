@@ -671,8 +671,11 @@ proc save(self: Build, name: string) =
     (self.draw_transform, self.color_value.value, self.drawing)
 
 proc restore(self: Build, name: string) =
-  (self.draw_transform, self.color_value.value, self.drawing) =
-    self.save_points[name]
+  # A missing name is a no-op, not a crash: scripts can restore() before
+  # their first save(), and a reload can clear the table mid-run.
+  if name in self.save_points:
+    (self.draw_transform, self.color_value.value, self.drawing) =
+      self.save_points[name]
 
 # Player binding
 
