@@ -92,8 +92,16 @@ proc to_node[T: Unit](self: Worker, units: seq[T]): PNode =
 
 # Common bindings
 
+# The queued action carries its edge in the first byte ('+' press,
+# '-' release); game.nim's watcher decodes it. press_action leaves the
+# action held — godot never auto-releases a synthetic action, so pair it
+# with release_action (a held action pins get_action_strength at 1.0,
+# and a repeated press reads as a double-tap).
 proc press_action(self: Worker, name: string) =
-  state.queued_action = name
+  state.queued_action = "+" & name
+
+proc release_action(self: Worker, name: string) =
+  state.queued_action = "-" & name
 
 proc register_template_node(self: Worker, pnode: PNode, name: string) =
   self.template_node_map[name] = pnode
@@ -1489,7 +1497,8 @@ proc bridge_to_vm*(worker: Worker) =
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
     velocity, `velocity=`, active_unit, color, `color=`, sees, start_position,
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
-    `lock=`, reset, press_action, load_level, level_name, world_name,
+    `lock=`, reset, press_action, release_action, load_level, level_name,
+    world_name,
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units, signal_test_complete, now_seconds,
     dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box, bounds,
