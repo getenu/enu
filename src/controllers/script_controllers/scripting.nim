@@ -385,12 +385,20 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
     # frame state is still intact at this point. Dump it before
     # reset_module wipes the module's iface — that's our only window to
     # learn what the bytecode was actually doing when the defect fired.
-    if e.parent != nil:
+    # Skipped while retrying: reload-storm failures are almost always
+    # transient ordering issues that resolve themselves, and the dump is
+    # large. (Terminal retry failures lose the dump too — acceptable:
+    # they're compile errors with no VM frames.)
+    if e.parent != nil and not self.retry_failures:
       dump_vm_state_on_defect(unit, e.parent)
     self.interpreter.reset_module(unit.script_ctx.module_name)
     self.module_names.excl unit.script_ctx.module_name
     if self.retry_failures and e.kind != TIMEOUT:
-      info "retrying failed script later",
+      # One calm line per transient failure; the detail is DEBUG. If the
+      # retries exhaust, script_error reports it loudly.
+      info "script failed, will retry",
+        script = unit.script_ctx.script.extract_filename
+      debug "script failure detail",
         script = unit.script_ctx.script, error = e.msg
       self.failed.add (unit, e)
     else:
