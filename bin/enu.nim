@@ -58,12 +58,9 @@ proc bot_color(agent_id: string): Color =
   else:
     hsl(float(agent_id.hash and 0xFFFF) / 65536.0 * 360.0, 70, 55).color
 
-var
-  # set_bot_color overrides, on top of the hashed default.
-  bot_colors: Table[string, Color]
-  # Survives reconnects so bots reappear where they were after an Enu
-  # restart, keeping things predictable for the agents. Keyed by bot id.
-  transforms: Table[string, Transform]
+# Survives reconnects so bots reappear where they were after an Enu
+# restart, keeping things predictable for the agents. Keyed by bot id.
+var transforms: Table[string, Transform]
 
 # Partial replica: only what we touch syncs from Enu. `blocking` gives
 # synchronous semantics: reading or writing anything that hasn't synced
@@ -95,7 +92,7 @@ proc bot_for(agent_id = ""): Bot =
         bot_id(agent_id), Transform.init(vec3(0, 1, 0))
       ),
     )
-    bot.color = bot_colors.get_or_default(agent_id, agent_id.bot_color)
+    bot.color = agent_id.bot_color
     bot.global_flags += EPHEMERAL
     bot.global_flags += VOXEL_VIEWER
     if not server_mode:
@@ -242,7 +239,6 @@ let enu_server = mcp_server("enu", "1.0.0"):
         except CatchableError:
           return "Error: not a hex color: " & color
       client.online:
-        bot_colors[agent_id] = c
         bot_for(agent_id).color = c
         "ok"
 
