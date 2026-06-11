@@ -683,8 +683,12 @@ proc restore(self: Build, name: string) =
   # A missing name is a no-op, not a crash: scripts can restore() before
   # their first save(), and a reload can clear the table mid-run.
   if name in self.save_points:
-    (self.draw_transform, self.color_value.value, self.drawing) =
-      self.save_points[name]
+    # Assign each part explicitly: tuple unpacking onto accessor calls
+    # compiles but silently writes into the getters' temporaries.
+    let (position, color, drawing) = self.save_points[name]
+    self.draw_transform = position
+    self.color_value.value = color
+    self.drawing = drawing
 
 # Player binding
 

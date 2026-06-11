@@ -86,16 +86,26 @@ macro bridged_from_vm(
     let symbol = bind_sym($proc_ref)
     var chosen = symbol
     if symbol.kind != nnkSym:
-      # Overloaded (e.g. `rotation` exists for Unit, for Player via its
-      # accessor, and for godot types). Prefer the Unit-first overload —
-      # the shape every bridged proc has — falling back to the first
-      # candidate (locals come first, preserving prior behavior).
+      # Overloaded. Prefer, in order: a proc defined in this module — the
+      # bridge wraps host_bridge's own procs first (`save` must bind the
+      # draw-position save here, not serializers' persist-the-unit save);
+      # then a Unit-first overload (procs that live in models, like
+      # `rotation`); then the first candidate.
       chosen = symbol[0]
+      var found_local = false
       for candidate in symbol:
-        let params = candidate.get_impl[3]
-        if params.len > 1 and params[1][1].repr == "Unit":
+        # The impl's line info is the declaration site (the sym's own is
+        # the bind_sym call site — this macro).
+        if "host_bridge" in candidate.get_impl.line_info:
           chosen = candidate
+          found_local = true
           break
+      if not found_local:
+        for candidate in symbol:
+          let params = candidate.get_impl[3]
+          if params.len > 1 and params[1][1].repr == "Unit":
+            chosen = candidate
+            break
     let
       proc_impl = chosen.get_impl
       proc_name = proc_impl[0].str_val
