@@ -319,6 +319,7 @@ gdobj Game of Node:
       gamepad_sensitivity = uc.gamepad_sensitivity ||= 2.5
       invert_gamepad_y_axis = uc.invert_gamepad_y_axis ||= false
       environment = uc.environment ||= "default"
+      auto_show_console = uc.auto_show_console ||= true
       megapixels_override = environments[value.environment]
 
     if ?listen_address_override:

@@ -28,9 +28,6 @@ export with, sets, tables, pretty, flatty, times.`<`
 template init*[K, V](_: type Table[K, V]): Table[K, V] =
   Table[K, V].default
 
-proc minutes*(m: float | int): Duration {.inline.} =
-  init_duration(seconds = int(m * 60))
-
 ### Debug
 
 export dump

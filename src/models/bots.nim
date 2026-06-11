@@ -193,6 +193,10 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             q.state = DONE
             info "console query responding", kind = q.kind, id = self.id
             self.query = q
+          of CLEAR_CONSOLE:
+            state.console.log.clear()
+            q.state = DONE
+            self.query = q
           of EVAL:
             let (res, err) =
               worker.eval_proc(q.code, q.top_level, q.unit_id)

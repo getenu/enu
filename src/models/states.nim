@@ -134,7 +134,7 @@ proc selected_color*(self: GameState): Color =
 
 proc init_logger*(self: GameState) =
   self.logger = proc(level, msg: string) {.closure.} =
-    if level == "err":
+    if level == "err" and state.config.auto_show_console:
       debug "console visible"
       state.push_flag CONSOLE_VISIBLE
     let msg = \"[b]{level.to_upper}[/b] {msg}"

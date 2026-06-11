@@ -13,6 +13,7 @@ type
     SCREENSHOT
     EVAL
     CONSOLE
+    CLEAR_CONSOLE
     LEVEL_DIR
     PING
 
@@ -376,6 +377,7 @@ type
     gamepad_sensitivity*: float
     invert_gamepad_y_axis*: bool
     screen_scale*: float
+    auto_show_console*: bool
 
   UserConfig* = object
     font_size*: Option[int]
@@ -399,6 +401,7 @@ type
     invert_gamepad_y_axis*: Option[bool]
     listen_address*: Option[string]
     connect_address*: Option[string]
+    auto_show_console*: Option[bool]
 
   Code* = object
     owner*: string

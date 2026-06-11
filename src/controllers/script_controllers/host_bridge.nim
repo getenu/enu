@@ -420,7 +420,8 @@ proc added_units(worker: Worker): seq[Unit] =
 proc echo_console(msg: string) =
   echo(msg)
   logger("info", msg & "\n")
-  state.push_flag CONSOLE_VISIBLE
+  if state.config.auto_show_console:
+    state.push_flag CONSOLE_VISIBLE
 
 proc dump_stats(label: string) =
   when defined(metrics):

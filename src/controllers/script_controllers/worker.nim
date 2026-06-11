@@ -324,7 +324,8 @@ proc watch_code(self: Worker, unit: Unit) =
         state.err(
           \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
         )
-        state.push_flags CONSOLE_VISIBLE
+        if state.config.auto_show_console:
+          state.push_flags CONSOLE_VISIBLE
 
       if removed:
         state.pop_flags CONSOLE_VISIBLE

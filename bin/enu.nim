@@ -12,7 +12,7 @@
 ## bot, with its own color and position. A swarm of subagents each passing
 ## their own id drives a swarm of distinctly-colored bots.
 
-import std/[os, strutils, math, monotimes, times]
+import std/[os, strutils, math]
 import pkg/ed
 import pkg/nimcp except info
 import core, models/[bots, units, colors]
@@ -98,16 +98,14 @@ proc glide(unit: Unit, target: Vector3, rotation = 0.0, instant = false) =
   if instant or unit.transform.origin.distance_to(target) >= TELEPORT_DIST:
     unit.move_to(target, rotation)
   else:
-    client.every(init_duration(milliseconds = 33)):
+    client.every(33.milliseconds):
       if unit.step_toward(
         target, rotation, MOVE_SPEED / 30, ANGULAR_SPEED / 30
       ):
         break
   client.tick # flush the final pose
 
-proc ask(
-    unit: Unit, q: UnitQuery, timeout = init_duration(seconds = 30)
-): UnitQuery =
+proc ask(unit: Unit, q: UnitQuery, timeout = 30.seconds): UnitQuery =
   ## File the query against `unit` and wait for the answer. Raises
   ## `SessionLost` if the connection goes away mid-wait.
   let query = unit.query(q)
@@ -161,6 +159,36 @@ let enu_server = mcp_server("enu", "1.0.0"):
     proc get_console(): string =
       ## Get the current Enu console output.
       run UnitQuery(kind: CONSOLE)
+
+  mcp_tool:
+    proc clear_console(): string =
+      ## Empty the Enu console.
+      run UnitQuery(kind: CLEAR_CONSOLE)
+
+  mcp_tool:
+    proc wait_for_script(unit_id: string, timeout: float = 30.0): string =
+      ## Reload the unit's script if it changed on disk, then wait for it
+      ## to finish running — up to `timeout` seconds. Returns immediately
+      ## if the script is idle and unchanged; returns the script's error
+      ## if it fails.
+      client.online:
+        # Any query makes the worker rescan files first, so a PING is a
+        # hot reload round-trip; by the time it answers, a changed script
+        # has been reloaded and is running.
+        let r = bot_for().ask(UnitQuery(kind: PING))
+        if r.error != "":
+          return r.error
+        let unit = find_unit(unit_id)
+        if unit.is_nil:
+          return "Error: unit not found: " & unit_id
+        if not client.tick_until(
+          timeout.seconds, SCRIPT_RUNNING notin unit.global_flags
+        ):
+          return "Error: " & unit_id & " still running after " & $timeout & "s"
+        for error in unit.errors:
+          return "Error: " & error.msg &
+            (if error.location != "": " at " & error.location else: "")
+        ""
 
   mcp_tool:
     proc eval(
@@ -340,7 +368,7 @@ else:
   proc connect_to_enu(): bool {.gcsafe.} =
     Ed.bootstrap
     client.connect
-    result = client.tick_until(init_duration(seconds = 3), client.connected)
+    result = client.tick_until(3.seconds, client.connected)
     if not result:
       stderr.write_line "Error: can't reach Enu at " & connect_addr &
         " (is Enu running?)"
