@@ -314,6 +314,12 @@ gdobj BuildNode of VoxelTerrain:
     # Create renderer for ASAP mode buffer operations
     self.renderer = VoxelRenderer.init(self.get_voxel_tool())
 
+    # Builds default to ASAP, so the flag is usually set before this node
+    # exists — the ASAP_MODE.added watch never fires for it. Adopt the
+    # current state here; the watch handles later transitions.
+    if ASAP_MODE in self.model.global_flags:
+      self.renderer.begin_asap()
+
     self.track_changes
 
     dont_join = was_skipping_join
