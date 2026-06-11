@@ -12,22 +12,12 @@
 ## bot, with its own color and position. A swarm of subagents each passing
 ## their own id drives a swarm of distinctly-colored bots.
 
-import std/[os, strutils, tables, math, monotimes, times]
-import pkg/ed
+import std/[os, strutils, tables, math, hashes, monotimes, times]
+import pkg/[ed, chroma]
 import pkg/nimcp except info
 import core, models/[bots, units, colors]
 
-# First bot gets Claude orange; later agents cycle the rest.
-const PALETTE = [
-  col"E8692A",
-  col"3B82F6",
-  col"22C55E",
-  col"A855F7",
-  col"EC4899",
-  col"EAB308",
-  col"14B8A6",
-  col"EF4444",
-]
+const CLAUDE_ORANGE = col"E8692A"
 
 const
   MOVE_SPEED = 50.0 ## units / second
@@ -59,7 +49,17 @@ proc bot_id(agent_id: string): string =
   if agent_id != "":
     result &= "-" & agent_id.slug
 
+proc bot_color(agent_id: string): Color =
+  ## A stable, vivid color from the agent id: hash to a hue, with fixed
+  ## saturation and lightness so every agent lands somewhere bright and
+  ## distinguishable. The main agent keeps Claude orange.
+  if agent_id == "":
+    CLAUDE_ORANGE
+  else:
+    hsl(float(agent_id.hash and 0xFFFF) / 65536.0 * 360.0, 70, 55).color
+
 var
+  # set_bot_color overrides, on top of the hashed default.
   bot_colors: Table[string, Color]
   # Survives reconnects so bots reappear where they were after an Enu
   # restart, keeping things predictable for the agents. Keyed by bot id.
@@ -83,13 +83,11 @@ proc find_unit(id: string): Unit =
 
 proc bot_for(agent_id = ""): Bot =
   ## Each agent's bot: found by id (a reconnect after an Enu restart) or
-  ## created on first use with the next palette color. EPHEMERAL: Enu reaps
-  ## it when this session ends. VOXEL_VIEWER: it can photograph parts of the
-  ## world no player is keeping loaded. CLI bots are invisible — one-off
-  ## commands don't need an avatar flashing in and out for other players
-  ## (screenshots render from a dedicated camera, not the bot node).
-  if agent_id notin bot_colors:
-    bot_colors[agent_id] = PALETTE[bot_colors.len mod PALETTE.len]
+  ## created on first use with a color hashed from the agent id. EPHEMERAL:
+  ## Enu reaps it when this session ends. VOXEL_VIEWER: it can photograph
+  ## parts of the world no player is keeping loaded. CLI bots are invisible
+  ## — one-off commands don't need an avatar flashing in and out for other
+  ## players (screenshots render from a dedicated camera, not the bot node).
   root_units().get_or_init(Bot, bot_id(agent_id)):
     let bot = Bot.init(
       id = bot_id(agent_id),
@@ -97,7 +95,7 @@ proc bot_for(agent_id = ""): Bot =
         bot_id(agent_id), Transform.init(vec3(0, 1, 0))
       ),
     )
-    bot.color = bot_colors[agent_id]
+    bot.color = bot_colors.get_or_default(agent_id, agent_id.bot_color)
     bot.global_flags += EPHEMERAL
     bot.global_flags += VOXEL_VIEWER
     if not server_mode:
