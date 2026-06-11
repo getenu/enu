@@ -65,19 +65,13 @@ var
   # restart, keeping things predictable for the agents. Keyed by bot id.
   transforms: Table[string, Transform]
 
-# Partial replica: only `fetch` (and anything fetched later) syncs from Enu.
-# root_units is the unit directory — needed to find/supersede agent bots.
-# `blocking` gives synchronous semantics: touching anything that hasn't
-# synced yet — including a found bot's containers after a reconnect — pumps
-# I/O until it fills, so there's no hydration ceremony anywhere below.
-let client = EdClient(
-  id: ctx_id,
-  address: connect_addr,
-  chan_size: 100,
-  partial: true,
-  fetch: @["root_units"],
-  blocking: true,
-)
+# Partial replica: only what we touch syncs from Enu. `blocking` gives
+# synchronous semantics: reading or writing anything that hasn't synced
+# yet — root_units on first use, a found bot's containers after a
+# reconnect — pumps I/O until it fills, so there's no fetch list and no
+# hydration ceremony anywhere below.
+let client = EdClient(id: ctx_id, address: connect_addr, partial: true,
+                      blocking: true)
 
 proc root_units(): EdSeq[Unit] =
   EdSeq[Unit](client.ctx["root_units"])
