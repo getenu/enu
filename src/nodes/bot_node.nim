@@ -185,30 +185,32 @@ gdobj BotNode of KinematicBody:
       # two writers race on the same synced response container — seen live as
       # an eval answered with a screenshot path.
       let serves_queries =
-        AGENT in bot.global_flags and SERVER in state.local_flags
+        EPHEMERAL in bot.global_flags and SERVER in state.local_flags
       if serves_queries:
         info "agent bot node setup",
           id = bot.id, has_query_value = ?bot.query_value
       self.set_process(
         SCRIPT_RUNNING in self.model.global_flags or serves_queries
       )
-      # A VIEWER unit streams voxel terrain around itself, so screenshots
+      # A VOXEL_VIEWER unit streams voxel terrain around itself, so screenshots
       # render even when no player is nearby. Server-side only: that's
-      # where queries (and their renders) are served.
-      if VIEWER in bot.global_flags and SERVER in state.local_flags:
-        let viewer = gdnew[VoxelViewer]()
+      # where queries (and their renders) are served. (Qualified: in Nim
+      # `VOXEL_VIEWER` and godot's `VoxelViewer` are the same identifier.)
+      if GlobalModelFlags.VOXEL_VIEWER in bot.global_flags and
+          SERVER in state.local_flags:
+        let viewer = gdnew[voxel_viewer.VoxelViewer]()
         viewer.view_distance = 256
         self.add_child(viewer)
 
   method process(delta: float) =
     if self.model of Bot:
       let bot = Bot(self.model)
-      if AGENT in bot.global_flags and SERVER in state.local_flags:
+      if EPHEMERAL in bot.global_flags and SERVER in state.local_flags:
         let q = bot.query
-        if q.kind == QUERY_SCREENSHOT and q.state == QUERY_READY and
+        if q.kind == SCREENSHOT and q.state == READY and
             self.screenshot_warmup_frames > 0:
           dec self.screenshot_warmup_frames
-        elif q.kind == QUERY_SCREENSHOT and q.state == QUERY_READY and
+        elif q.kind == SCREENSHOT and q.state == READY and
             self.screenshot_warmup_frames == 0:
           let vp =
             if q.screenshot_with_ui:
@@ -236,8 +238,8 @@ gdobj BotNode of KinematicBody:
             self.skin.visible = true
             self.skin_hidden_during_screenshot = false
           bot.query =
-            UnitQuery(kind: QUERY_SCREENSHOT, result: path, state: QUERY_DONE)
-        elif q.state == QUERY_READY and q.kind == QUERY_SCREENSHOT and
+            UnitQuery(kind: SCREENSHOT, result: path, state: DONE)
+        elif q.state == READY and q.kind == SCREENSHOT and
             self.screenshot_warmup_frames < 0:
           # with_ui captures the root viewport (game + GUI overlay) so the
           # camera positioning below has no effect — root is already the

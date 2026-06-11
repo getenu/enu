@@ -62,7 +62,7 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       ctx.last_ran = now
       if ctx.callback == nil or (;
         task_state = ctx.callback(delta, timeout)
-        task_state in {DONE, NEXT_TASK}
+        task_state in {TaskStates.DONE, NEXT_TASK}
       ):
         ctx.timer = MonoTime.high
         ctx.action_running = false
@@ -676,10 +676,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         var i = 0
         while i < state.units.len:
           let unit = state.units[i]
-          # AGENT units encode their owning context name in their id
+          # EPHEMERAL units encode their owning context name in their id
           # (`player-{ctx_name}`, `mcp_bot-{ctx_name}`, ...). When the
           # context unsubscribes, drop the corresponding agents.
-          if AGENT in unit.global_flags and ctx_name in unit.id:
+          if EPHEMERAL in unit.global_flags and ctx_name in unit.id:
             debug "reaping agent unit on ctx unsubscribe",
               unit_id = unit.id, ctx_name
             state.units.del i

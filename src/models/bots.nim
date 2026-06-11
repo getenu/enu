@@ -162,56 +162,56 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
         unit.local_flags -= HIGHLIGHT
       state.pop_flag RETICLE_VISIBLE
 
-  if AGENT in self.global_flags and SERVER in state.local_flags:
+  if EPHEMERAL in self.global_flags and SERVER in state.local_flags:
     self.query_value.changes(false):
       var q = change.item
       if added:
         case q.state
-        of QUERY_PENDING:
+        of PENDING:
           info "unit query received by worker, running file update",
             kind = $q.kind, id = self.id
           worker.update_files_proc()
-          q.state = QUERY_READY
+          q.state = READY
           self.query = q
-        of QUERY_READY:
+        of READY:
           case q.kind
-          of QUERY_CONSOLE:
+          of CONSOLE:
             q.result = state.console.log.value.join("\n")
-            q.state = QUERY_DONE
+            q.state = DONE
             info "console query responding", kind = q.kind, id = self.id
             self.query = q
-          of QUERY_EVAL:
+          of EVAL:
             let (res, err) =
               worker.eval_proc(q.code, q.top_level, q.unit_id)
             q.result = res
             q.error = err
-            q.state = QUERY_DONE
+            q.state = DONE
             info "eval query responding",
               code = q.code, error = q.error, id = self.id
             self.query = q
-          of QUERY_LEVEL_DIR:
+          of LEVEL_DIR:
             q.result = state.config.level_dir
-            q.state = QUERY_DONE
+            q.state = DONE
             info "level query responding", kind = q.kind, id = self.id
             self.query = q
-          of QUERY_PING:
-            q.state = QUERY_DONE
+          of PING:
+            q.state = DONE
             self.query = q
-          of QUERY_SCREENSHOT:
+          of SCREENSHOT:
             # Needs the renderer; answered by the unit's node on the main
             # thread (see bot_node.nim).
             discard
-          of QUERY_BLANK:
+          of BLANK:
             discard
-        of QUERY_IDLE, QUERY_DONE:
+        of IDLE, DONE:
           discard
 
     # Catch-up: if the asker wrote a query *before* the subscription above
     # was registered (typical when the bot is brand new), `changes` never
     # fires for it. Nudge so the handler picks it up.
     let pending = self.query
-    if pending.state == QUERY_PENDING:
+    if pending.state == PENDING:
       var q = pending
       worker.update_files_proc()
-      q.state = QUERY_READY
+      q.state = READY
       self.query = q

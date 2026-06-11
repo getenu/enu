@@ -15,7 +15,7 @@ proc init*(_: type Player): Player =
     )
     self.init_unit(shared = false)
     self.global_flags += GLOBAL
-    self.global_flags += AGENT
+    self.global_flags += EPHEMERAL
 
     self.own: # callback on external state, scoped to the player's lifetime
       state.local_flags.changes:

@@ -3,24 +3,24 @@ import std/[tables, monotimes, times, sets, options, macros]
 type
   # A general way to run a query against a unit from another context (another
   # thread, or a remote process over the network). The asker fills in a
-  # UnitQuery and sets the unit's `query` to it with state QUERY_PENDING; the
+  # UnitQuery and sets the unit's `query` to it with state PENDING; the
   # context that owns the unit's behavior answers by writing the same value
-  # back with `result`/`error` filled in and state QUERY_DONE. Today only
-  # AGENT bots subscribe for answers (see bots.nim and bot_node.nim), but the
+  # back with `result`/`error` filled in and state DONE. Today only
+  # EPHEMERAL bots subscribe for answers (see bots.nim and bot_node.nim), but the
   # slot exists on every unit.
   UnitQueryKind* = enum
-    QUERY_BLANK
-    QUERY_SCREENSHOT
-    QUERY_EVAL
-    QUERY_CONSOLE
-    QUERY_LEVEL_DIR
-    QUERY_PING
+    BLANK
+    SCREENSHOT
+    EVAL
+    CONSOLE
+    LEVEL_DIR
+    PING
 
   UnitQueryState* = enum
-    QUERY_IDLE
-    QUERY_PENDING
-    QUERY_READY
-    QUERY_DONE
+    IDLE
+    PENDING
+    READY
+    DONE
 
   UnitQuery* = object
     kind*: UnitQueryKind
@@ -138,7 +138,7 @@ type
     RESETTING
     HIGHLIGHT_ERROR
     ASAP_MODE
-    AGENT
+    EPHEMERAL
       ## Set on units owned by a remote client context — the human's
       ## Player and any client-owned bot (MCP, scripted agents). Agent
       ## units survive level reloads (peer to the human), are skipped
@@ -148,7 +148,7 @@ type
       ## context name as a substring (e.g. `player-{ctx_name}`,
       ## `mcp_bot-{ctx_name}`) so worker.nim can match them on
       ## unsubscribe.
-    VIEWER
+    VOXEL_VIEWER
       ## The unit streams voxel terrain around itself: the server attaches
       ## a VoxelViewer node so chunks near the unit get meshed even when no
       ## player is nearby. Off by default — players bring their own viewer,

@@ -182,6 +182,58 @@ proc frame*(
     dir = target - pos
   (pos, rad_to_deg(arctan2(float(dir.x), -float(dir.z))))
 
+proc step_toward*(
+    self: Unit, pos: Vector3, yaw: float, max_dist, max_degrees: float
+): bool =
+  ## Advance one bounded step toward a goal pose — at most `max_dist`
+  ## units and `max_degrees` of yaw, taking the short way around. True on
+  ## the step that arrives, so a caller can step once per frame until done.
+  let
+    origin = self.transform.origin
+    dist = origin.distance_to(pos)
+    arrived = dist <= max_dist
+    step = if arrived: pos else: origin + (pos - origin) * (max_dist / dist)
+  var turn = yaw - self.rotation
+  turn -= round(turn / 360.0) * 360.0
+  self.move_to(step, self.rotation + clamp(turn, -max_degrees, max_degrees))
+  arrived and abs(turn) <= max_degrees
+
+template get_or_init*[T](
+    units: EdSeq[Unit], _: typedesc[T], unit_id: string, init: untyped
+): T =
+  ## The unit with `unit_id` in `units`, or `init` evaluated and added —
+  ## Ruby's `||=` for a unit collection.
+  block:
+    var found: T
+    for u in units:
+      if u.id == unit_id and u of T:
+        found = T(u)
+        break
+    if found.is_nil:
+      found = init
+      units.add found
+    found
+
+proc query*(self: Unit, q: UnitQuery): EdValue[UnitQuery] =
+  ## File a cross-context query against this unit and return the slot its
+  ## answer arrives in — watch for `state == DONE`. Whichever context owns
+  ## the unit's behavior answers (today: the server, for ephemeral bots).
+  var pending = q
+  pending.state = PENDING
+  self.query = pending
+  self.query_value
+
+proc query*(
+    self: Unit,
+    kind: UnitQueryKind,
+    code = "",
+    top_level = false,
+    unit_id = "",
+): EdValue[UnitQuery] =
+  self.query UnitQuery(
+    kind: kind, code: code, top_level: top_level, unit_id: unit_id
+  )
+
 proc find_root*(self: Unit, all_clones = false): Unit =
   result = self
   var parent = self.parent
@@ -306,10 +358,10 @@ proc destroy_impl*(self: Bot | Build | Sign) =
 proc clear_all*(units: EdSeq[Unit]) =
   var roots = units.value
   for unit in roots:
-    # AGENT units (the human's Player + client-owned bots like MCP)
+    # EPHEMERAL units (the human's Player + client-owned bots like MCP)
     # survive level reloads. Their lifecycle belongs to the owning
     # remote context, not the loaded level.
-    if AGENT in unit.global_flags:
+    if EPHEMERAL in unit.global_flags:
       continue
     unit.walk_tree proc(unit: Unit) =
       unit.units.clear
