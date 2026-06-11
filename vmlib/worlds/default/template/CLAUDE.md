@@ -89,9 +89,9 @@ of distinctly-colored bots.
 ```
 <level-dir>/
   level.json          — managed by Enu (load order, settings); don't edit
-                        by hand while Enu is running. Settings like
-                        "show_prototypes": false (hide proto self-copies)
-                        are changed by editing it while Enu is down.
+                        by hand while Enu is running. Settings (e.g.
+                        "show_prototypes") are changed by editing it
+                        while Enu is down.
   data/<id>/<id>.json — unit position (+ hand-placed block edits)
   scripts/<id>.nim    — the unit's script
 ```

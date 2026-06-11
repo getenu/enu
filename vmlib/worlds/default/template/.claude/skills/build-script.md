@@ -94,6 +94,10 @@ Rules that keep prototypes working:
   `Tower.new(height = 10, position = vec3(5, 0, -20))`.
 - Spawner scripts set `drawing = false` so the spawner unit itself
   places no blocks.
+- **Proto self-copies are hidden by default** (`show_prototypes` is
+  false). Add `show = true` to the proto script while developing it so
+  you can see what you're drawing, and remove it when the proto is
+  done. Regular (non-proto) scripts show by default.
 
 Reference pair: `.claude/examples/tower.nim` + `.claude/examples/tower_cluster.nim`
 (randomised instances), `.claude/examples/spiral_tree.nim` +
