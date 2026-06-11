@@ -60,6 +60,7 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     eval_value = EdValue[string].init("", flags = {SYNC_LOCAL})
     anchor_value = ed(Transform.init)
     rendered_voxel_count_value = ed(0)
+    pending_block_updates_value = ed(0)
     query_value = EdValue[UnitQuery].init(UnitQuery())
 
   self.init_shared

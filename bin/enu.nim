@@ -162,16 +162,18 @@ let enu_server = mcp_server("enu", "1.0.0"):
   mcp_tool:
     proc wait_for_script(unit_id: string, timeout: float = 30.0): string =
       ## Reload the unit's script if it changed on disk, then wait for it
-      ## to finish running — up to `timeout` seconds. Returns immediately
-      ## if the script is idle and unchanged. On success returns the
-      ## unit's world-space bounds ("bounds: (min) .. (max)") so geometry
-      ## can be sanity-checked without a follow-up query; returns the
-      ## script's error if it fails. Animated builds (`loop:` state
-      ## machines, `move me` animations) never finish: expect "still
-      ## running" after the timeout — that means alive, not stuck. For
-      ## those, pass a short timeout and verify with bounds or a
-      ## screenshot instead.
+      ## to finish running AND for the voxel pipeline to apply everything
+      ## it drew — up to `timeout` seconds total. Returns immediately if
+      ## the script is idle, unchanged, and rendered. On success returns
+      ## the unit's world-space bounds ("bounds: (min) .. (max)") so
+      ## geometry can be sanity-checked without a follow-up query;
+      ## returns the script's error if it fails. Animated builds
+      ## (`loop:` state machines, `move me` animations) never finish:
+      ## expect "still running" after the timeout — that means alive,
+      ## not stuck. For those, pass a short timeout and verify with
+      ## bounds or a screenshot instead.
       client.online:
+        let deadline = get_mono_time() + timeout.seconds
         # Any query makes the worker rescan files first, so a PING is a
         # hot reload round-trip; by the time it answers, a changed script
         # has been reloaded and is running.
@@ -190,6 +192,42 @@ let enu_server = mcp_server("enu", "1.0.0"):
             "Error: " & error.msg &
             (if error.location != "": " at " & error.location
             else: "")
+
+        # The script finished, but the voxel pipeline is multithreaded:
+        # worker-side flushes, mesh generation, and applies may still be
+        # in flight — especially when other units are drawing. Wait for
+        # the unit's pending work (its own and its instances') to hold at
+        # zero; the streak absorbs the worker -> render-thread -> worker
+        # reporting latency, which would otherwise read as a false zero.
+        var settled_streak = 0
+        var last_pending = ""
+        while settled_streak < 3:
+          let p = bot_for().ask(
+            eval_query \"""
+              let u = find_by_id("{unit_id}")
+              if u.is_nil:
+                "0"
+              else:
+                $u.pending_block_updates
+            """.dedent.strip
+          )
+          if p.error != "":
+            # Don't fail the wait over a settle probe; the bounds query
+            # below surfaces real trouble.
+            break
+          last_pending = p.result.strip
+          if last_pending == "0":
+            inc settled_streak
+          else:
+            settled_streak = 0
+          if settled_streak < 3:
+            if get_mono_time() > deadline:
+              return
+                "Error: " & unit_id & " still rendering after " & $timeout &
+                "s (" & last_pending & " block updates pending)"
+            discard client.tick_until(
+              init_duration(milliseconds = 100), false
+            )
         let b = bot_for().ask(
             eval_query \"""
           let u = find_by_id("{unit_id}")

@@ -14,13 +14,18 @@ and verify them visually with screenshots.
 After writing JSON or script files:
 
 1. **`wait_for_script(unit_id)`** — reloads the unit if its files
-   changed and blocks until the script finishes its run. On success
-   returns the unit's world bounds (`bounds: (min) .. (max)`) — check
-   them against the footprint you intended (a 1×1×1 box at the origin
-   means the script drew nothing). On failure returns the script's
-   compile/runtime error with file:line. No sleeps, no mtime games,
-   and errors surface in the tool result instead of having to be
-   fished out of the console.
+   changed and blocks until the script finishes its run *and the voxel
+   pipeline has applied everything it drew* (the engine meshes on
+   background threads; the wait covers that too, including the unit's
+   instances). On success returns the unit's world bounds
+   (`bounds: (min) .. (max)`) — check them against the footprint you
+   intended (a 1×1×1 box at the origin means the script drew nothing).
+   On failure returns the script's compile/runtime error with
+   file:line, or "still rendering (N block updates pending)" if the
+   pipeline can't drain within the timeout — under heavy load, retry
+   with a longer timeout. No sleeps, no mtime games, and errors
+   surface in the tool result instead of having to be fished out of
+   the console.
 
 2. **Take a screenshot** *and walk through* to verify
 
@@ -31,11 +36,9 @@ Caveats:
   "still running" after the timeout — that means *alive, not stuck*.
   Pass a short timeout (e.g. 5) and verify with bounds or a
   screenshot instead.
-- A call can return success with ~1×1×1 bounds when the unit loaded as
-  just its bare default block — most common on freshly created units,
-  and on edits to a script whose `loop:` is mid-run. Touch the script
-  and `wait_for_script` again; re-query before concluding the script
-  drew nothing.
+- If a success reports ~1×1×1 bounds you didn't expect, the unit
+  loaded as just its bare default block — touch the script and
+  `wait_for_script` again before concluding the script drew nothing.
 - **Proto dependents go stale.** When a proto script (`name X`) changes,
   scripts that reference `X` keep their previously compiled types and
   fail with type-mismatch errors until they reload too. Touch dependents

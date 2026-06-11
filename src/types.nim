@@ -299,6 +299,10 @@ type
     eval_value*: EdValue[string]
     anchor_value*: EdValue[Transform]
     rendered_voxel_count_value*: EdValue[int]
+    # Voxel pipeline work the unit's terrain hasn't finished applying yet
+    # (queued, in-flight, or awaiting apply). Pushed from the node each frame;
+    # 0 = everything submitted is meshed and visible.
+    pending_block_updates_value*: EdValue[int]
     query_value*: EdValue[UnitQuery]
 
   BlockLogEntry* = tuple

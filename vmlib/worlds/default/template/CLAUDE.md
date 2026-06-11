@@ -39,7 +39,7 @@ of distinctly-colored bots.
 - `screenshot_from_player(with_ui = false)` — from the human's first-person camera; `with_ui = true` includes the toolbar/console overlay
 
 **The edit loop:**
-- `wait_for_script(unit_id, timeout = 30)` — reload the unit if its files changed, block until the script finishes. Success returns the unit's world bounds (`bounds: (min) .. (max)`) — check them against the intended footprint (a 1×1×1 box means the script drew nothing; if that looks wrong, re-query once before concluding). Failure returns the script's error with file:line. **Animated builds (`loop:` / `move me`) never finish** — "still running" after the timeout means alive, not stuck; use a short timeout and verify those with bounds or a screenshot.
+- `wait_for_script(unit_id, timeout = 30)` — reload the unit if its files changed, block until the script finishes *and its voxels are fully rendered*. Success returns the unit's world bounds (`bounds: (min) .. (max)`) — check them against the intended footprint (a 1×1×1 box means the script drew nothing). Failure returns the script's error with file:line, or "still rendering" if the voxel pipeline can't drain within the timeout. **Animated builds (`loop:` / `move me`) never finish** — "still running" after the timeout means alive, not stuck; use a short timeout and verify those with bounds or a screenshot.
 - `get_console` — console output (`echo` from eval lands here)
 - `clear_console` — empty the console; clear before a run you want clean error signal from
 

@@ -879,6 +879,19 @@ proc rendered_voxel_count_get(self: Build): int =
   ## if the paste hasn't caught up yet.
   self.rendered_voxel_count
 
+proc pending_block_updates_get(self: Unit): int =
+  ## Unfinished voxel pipeline work for the unit and all of its
+  ## descendants: worker-side chunks/edits not yet flushed to the render
+  ## thread, plus the terrain backlog (queued, in-flight, or awaiting
+  ## apply) as last pushed from the nodes. 0 = every submitted edit is
+  ## meshed and visible.
+  result = self.pending_block_updates
+  if self of Build and ?Build(self).voxels:
+    let voxels = Build(self).voxels
+    result += voxels.pending_chunks.len + voxels.pending_edits.len
+  for child in self.units.value:
+    result += child.pending_block_updates_get
+
 type WorldBox* = tuple[min, max: Vector3]
 
 proc get_WorldBox(a: VmArgs, pos: int): WorldBox =
@@ -1528,7 +1541,7 @@ proc bridge_to_vm*(worker: Worker) =
     drawing, `drawing=`, initial_position, save, restore, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
-    cylinder_impl, advance, rendered_voxel_count_get
+    cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get
 
   result.bridged_from_vm "builds_private", place_block
 

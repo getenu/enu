@@ -305,6 +305,15 @@ gdobj BuildNode of VoxelTerrain:
       let is_local = self.model.code.owner == state.worker_ctx_name
       self.renderer.tick(is_local)
 
+      if is_local:
+        # Terrain pipeline backlog, plus 1 while the ASAP renderer holds a
+        # buffered paste the terrain hasn't seen yet.
+        var pending = int(self.get_pending_block_updates())
+        if self.renderer.dirty:
+          pending.inc
+        if pending != self.model.pending_block_updates:
+          self.model.pending_block_updates = pending
+
   proc setup*() =
     let was_skipping_join = dont_join
     dont_join = true

@@ -67,11 +67,19 @@ bridged_to_host:
 
   proc rendered_voxel_count_get*(self: Build): int
 
+  proc pending_block_updates_get*(self: Unit): int
+    ## Unfinished voxel pipeline work (queued, in-flight, or awaiting
+    ## apply) for the unit and its descendants. 0 = every submitted edit
+    ## is meshed and visible.
+
   proc advance*(self: Build, steps: float)
     ## Translate the turtle by `steps` along its current forward
     ## direction without going through `begin_move`. No drawing, no
     ## animation, no speed/ASAP interaction. Used by `wall` / `floor`
     ## to leave the turtle at the far end of the shape.
+
+proc pending_block_updates*(self: Unit): int =
+  pending_block_updates_get(self)
 
 template asap*(body: untyped) =
   ## Execute build commands instantly without incremental updates.
