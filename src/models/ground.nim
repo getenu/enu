@@ -24,6 +24,10 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
         global = true,
         color = state.selected_color,
       )
+      # Builds default to ASAP for script drawing, but its paste batching
+      # (2s) would make hand-placed blocks appear late. A placed build has
+      # no script; render its voxels directly.
+      add_to.end_asap()
 
       state.units += add_to
   elif state.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
