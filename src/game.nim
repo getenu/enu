@@ -586,11 +586,20 @@ gdobj Game of Node:
 
     state.queued_action_value.changes:
       if added and change.item != "":
-        var ev = gdnew[InputEventAction]()
-        ev.action = state.queued_action
-        ev.pressed = true
+        let action = state.queued_action
         state.queued_action = ""
+        var ev = gdnew[InputEventAction]()
+        ev.action = action
+        ev.pressed = true
         parse_input_event(ev)
+        # Synthetic actions are taps. Godot never auto-releases an injected
+        # action, so without the matching release it stays "held" forever —
+        # get_action_strength pinned at 1.0, and a repeated press_action
+        # reads as a double-tap (jump toggled flying and climbed endlessly).
+        var release = gdnew[InputEventAction]()
+        release.action = action
+        release.pressed = false
+        parse_input_event(release)
 
   method on_size_changed() =
     self.rescale_at = get_mono_time()
