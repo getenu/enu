@@ -36,9 +36,6 @@ Caveats:
   "still running" after the timeout — that means *alive, not stuck*.
   Pass a short timeout (e.g. 5) and verify with bounds or a
   screenshot instead.
-- If a success reports ~1×1×1 bounds you didn't expect, the unit
-  loaded as just its bare default block — touch the script and
-  `wait_for_script` again before concluding the script drew nothing.
 - **Proto dependents go stale.** When a proto script (`name X`) changes,
   scripts that reference `X` keep their previously compiled types and
   fail with type-mismatch errors until they reload too. Touch dependents

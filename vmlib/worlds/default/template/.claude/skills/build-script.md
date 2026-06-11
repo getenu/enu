@@ -100,11 +100,6 @@ Rules that keep prototypes working:
   it, or erase it with `place(0, 0, 0, eraser)`.
 - **Spawn at `y = 0`** so the build's lowest voxel rests on the ground:
   `Tower.new(height = 10, position = vec3(5, 0, -20))`.
-- **`start_position` in an instance is the spawner's position**, not the
-  point passed to `.new()`. For behavior tethered to the spawn point
-  (patrol radius, return-home), pass the coordinates as explicit proto
-  params (`name FlyerShip(hx = 0.0, hy = 80.0, hz = 0.0)`) mirroring
-  each instance's `position`.
 - Spawner scripts set `drawing = false` so the spawner unit itself
   places no blocks.
 - **Proto self-copies are hidden by default** (`show_prototypes` is
