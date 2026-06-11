@@ -200,6 +200,9 @@ gdobj BotNode of KinematicBody:
           SERVER in state.local_flags:
         let viewer = gdnew[voxel_viewer.VoxelViewer]()
         viewer.view_distance = 256
+        # Meshing only — these viewers exist so screenshots render, and
+        # cooking colliders along every bot's path is a main-thread cost.
+        viewer.requires_collisions = false
         self.add_child(viewer)
 
   method process(delta: float) =
