@@ -12,12 +12,10 @@
 ## bot, with its own color and position. A swarm of subagents each passing
 ## their own id drives a swarm of distinctly-colored bots.
 
-import std/[os, strutils, tables, math, hashes, monotimes, times]
-import pkg/[ed, chroma]
+import std/[os, strutils, tables, math, monotimes, times]
+import pkg/ed
 import pkg/nimcp except info
 import core, models/[bots, units, colors]
-
-const CLAUDE_ORANGE = col"E8692A"
 
 const
   MOVE_SPEED = 50.0 ## units / second
@@ -49,15 +47,6 @@ proc bot_id(agent_id: string): string =
   if agent_id != "":
     result &= "-" & agent_id.slug
 
-proc bot_color(agent_id: string): Color =
-  ## A stable, vivid color from the agent id: hash to a hue, with fixed
-  ## saturation and lightness so every agent lands somewhere bright and
-  ## distinguishable. The main agent keeps Claude orange.
-  if agent_id == "":
-    CLAUDE_ORANGE
-  else:
-    hsl(float(agent_id.hash and 0xFFFF) / 65536.0 * 360.0, 70, 55).color
-
 # Survives reconnects so bots reappear where they were after an Enu
 # restart, keeping things predictable for the agents. Keyed by bot id.
 var transforms: Table[string, Transform]
@@ -80,11 +69,11 @@ proc find_unit(id: string): Unit =
 
 proc bot_for(agent_id = ""): Bot =
   ## Each agent's bot: found by id (a reconnect after an Enu restart) or
-  ## created on first use with a color hashed from the agent id. EPHEMERAL:
-  ## Enu reaps it when this session ends. VOXEL_VIEWER: it can photograph
-  ## parts of the world no player is keeping loaded. CLI bots are invisible
-  ## — one-off commands don't need an avatar flashing in and out for other
-  ## players (screenshots render from a dedicated camera, not the bot node).
+  ## created on first use. EPHEMERAL: Enu reaps it when this session ends.
+  ## VOXEL_VIEWER: it can photograph parts of the world no player is
+  ## keeping loaded. CLI bots are invisible — one-off commands don't need
+  ## an avatar flashing in and out for other players (screenshots render
+  ## from a dedicated camera, not the bot node).
   root_units().get_or_init(Bot, bot_id(agent_id)):
     let bot = Bot.init(
       id = bot_id(agent_id),
@@ -92,7 +81,6 @@ proc bot_for(agent_id = ""): Bot =
         bot_id(agent_id), Transform.init(vec3(0, 1, 0))
       ),
     )
-    bot.color = agent_id.bot_color
     bot.global_flags += EPHEMERAL
     bot.global_flags += VOXEL_VIEWER
     if not server_mode:
@@ -228,19 +216,6 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## Includes spawner-created clones. Useful for chasing "# CLAUDE:"
       ## marker blocks or quickly enumerating what's near a position.
       run eval_query(\"units_near({x}, {y}, {z}, {radius})")
-
-  mcp_tool:
-    proc set_bot_color(color: string, agent_id: string = ""): string =
-      ## Set your bot's color. Takes a hex color like "E8692A" or "#1E90FF".
-      ## - agent_id: optional id giving each (sub)agent its own bot.
-      let c =
-        try:
-          col(color.strip(chars = {'#'}))
-        except CatchableError:
-          return "Error: not a hex color: " & color
-      client.online:
-        bot_for(agent_id).color = c
-        "ok"
 
   mcp_tool:
     proc screenshot_top_down(

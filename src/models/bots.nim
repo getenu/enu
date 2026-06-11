@@ -93,7 +93,7 @@ proc init*(
       animation_value: ed("auto"),
       speed: 1.0,
       clone_of: clone_of,
-      start_color: ACTION_COLORS[BLACK],
+      start_color: id.color_of,
       parent: parent,
     )
 

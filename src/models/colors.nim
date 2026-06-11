@@ -1,6 +1,6 @@
 import pkg/core/godotcoretypes as godot except Color
 import pkg/chroma
-import std/[json, strutils]
+import std/[json, strutils, hashes]
 
 export chroma
 
@@ -12,6 +12,11 @@ converter to_godot_color*(self: chroma.Color): godot.Color =
 
 proc col*(hex: string): chroma.Color =
   hex.parse_hex
+
+proc color_of*(id: string): chroma.Color =
+  ## A stable, vivid color from an id: hash to a hue with fixed saturation
+  ## and lightness, so every id lands somewhere bright and distinguishable.
+  hsl(float(id.hash and 0xFFFF) / 65536.0 * 360.0, 70, 55).color
 
 type
   Colors* = enum
