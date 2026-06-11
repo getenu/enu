@@ -154,6 +154,15 @@ Anything I'm unsure of — confirm with the human before acting:
 6. When done, leave the plan as documentation (don't delete it). Future
    sessions can pick up where this one left off.
 
+### Dispatching subagents
+
+Plan sections should be executable verbatim — explicit coordinates and
+complete scripts — so they can be handed to parallel subagents, each
+passing its own `agent_id` for its own bot. Prefer **Sonnet** for
+well-specified build sections and **Opus** for sections needing design
+judgment or debugging; keep verification (bounds checks, screenshots,
+walk-throughs) with the orchestrator.
+
 ## Furniture and 1:1 voxel readability
 
 **1 m³ voxels read as Tetris blocks, not objects.** A "chair" made from a
