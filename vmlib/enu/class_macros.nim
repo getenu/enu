@@ -155,6 +155,10 @@ proc build_ctors(
       result.rotation = `rotation`
     if `scale` != 0.0:
       result.scale = `scale`
+    # The clone was seeded with the spawner's transform as its
+    # start_transform; re-stamp it now that the requested spawn pose is
+    # applied so start_position is the instance's own spawn point.
+    capture_start_transform(result)
 
   # add baked in constructor params for speed, color, etc.
   # probably shouldn't be here.

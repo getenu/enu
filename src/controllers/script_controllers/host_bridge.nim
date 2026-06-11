@@ -498,6 +498,12 @@ proc reset_anchor(self: Unit) =
   ## clean pivot.
   self.anchor = Transform.init
 
+proc capture_start_transform(self: Unit) =
+  ## Stamp the unit's current pose as its spawn pose. Called at the end of
+  ## `.new()` so a clone's `start_position` (and reset target) is the point
+  ## it was spawned at, not the spawner's transform it was seeded with.
+  self.start_transform = self.transform
+
 proc delete(self: Unit) =
   ## Remove the unit from the level and delete its on-disk script + data.
   ## Distinct from the `destroy` method, which only tears down the in-memory
@@ -1499,7 +1505,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge",
     register_active, register_template_node, echo_console, new_instance,
-    exec_instance, hit, exit, global, `global=`, position, local_position,
+    exec_instance, capture_start_transform, hit, exit, global, `global=`,
+    position, local_position,
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
     velocity, `velocity=`, active_unit, color, `color=`, sees, start_position,
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,

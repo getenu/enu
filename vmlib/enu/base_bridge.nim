@@ -84,6 +84,7 @@ bridged_to_host:
   proc exit*(exit_code = 0, msg = "")
   proc new_instance*(src, dest: Unit)
   proc exec_instance*(self: Unit)
+  proc capture_start_transform*(self: Unit)
   proc wake*(self: Unit)
   proc create_new*(self: Unit)
   proc frame_count*(): int
