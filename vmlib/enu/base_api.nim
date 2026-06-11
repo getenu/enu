@@ -7,6 +7,7 @@ import random as rnd except rand
 import types, state_machine, base_bridge, base_bridge_private
 
 export base_bridge
+export strutils
 export Timestamp, Duration
 
 proc now*(): Timestamp =
