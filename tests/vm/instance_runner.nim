@@ -217,10 +217,14 @@ proc setup_mocks(interp: Interpreter, vmlib_path: string) =
     proc(args: VmArgs) = args.set_result(BiggestInt(0))
   for sink in [
     "place_block_impl", "save_level_now_impl", "reload_unit_impl",
-    "begin_asap_impl", "end_asap_impl",
+    "begin_asap_impl", "end_asap_impl", "box_impl_impl",
+    "sphere_impl_impl", "cylinder_impl_impl", "draw_voxel_impl",
+    "advance_impl",
   ]:
     interp.implement_routine pkg, "builds", sink,
       proc(args: VmArgs) = discard
+  interp.implement_routine pkg, "builds", "rendered_voxel_count_get_impl",
+    proc(args: VmArgs) = args.set_result(BiggestInt(0))
   interp.implement_routine pkg, "builds", "drawing_impl",
     proc(args: VmArgs) = args.set_result(BiggestInt(1))
   interp.implement_routine pkg, "builds", "initial_position_impl",
@@ -262,6 +266,7 @@ proc setup_mocks(interp: Interpreter, vmlib_path: string) =
 
   for sink in [
     "wake_impl",
+    "capture_start_transform_impl",
     "speed_set_impl",
     "global_set_impl",
     "color_set_impl",
@@ -278,8 +283,12 @@ proc setup_mocks(interp: Interpreter, vmlib_path: string) =
   ]:
     interp.implement_routine pkg, "base_bridge", sink,
       proc(args: VmArgs) = discard
-  interp.implement_routine pkg, "base_bridge_private", "position_set_impl",
-    proc(args: VmArgs) = discard
+  for sink in [
+    "position_set_impl", "start_position_set_impl", "reset_anchor_impl",
+    "claim_name_impl",
+  ]:
+    interp.implement_routine pkg, "base_bridge_private", sink,
+      proc(args: VmArgs) = discard
 
   # Getters — return harmless defaults so VM code that reads them
   # doesn't trip raiseAssert.
@@ -365,7 +374,7 @@ proc setup_mocks(interp: Interpreter, vmlib_path: string) =
           interpreter: runner.interp,
           module_name: clone_module,
           file_name: clone_module,
-          timeout_at: MonoTime.high,
+          fuel: int64.high,
         )
         let clone_id = clone_module &
           "_" & current_unit_id() &
@@ -426,7 +435,7 @@ proc load_unit(unit_id: string, all_units: seq[string]): bool =
     interpreter: runner.interp,
     module_name: unit_id,
     file_name: wrapper_path,
-    timeout_at: MonoTime.high,
+    fuel: int64.high,
   )
   let mc = ManagedCtx(
     kind: SCRIPT,
