@@ -294,7 +294,9 @@ proc update_files*(self: Worker) =
       let json_file = state.config.data_dir / stem / stem & ".json"
       if not file_exists(json_file) and
           script_path notin self.orphan_scripts_reported:
-        state.err("Orphan script: " & script_path & " (no data file)")
+        # Log only — an orphan is a developer-side curiosity, not something
+        # the player should see in the console.
+        warn "orphan script (no data file)", script_path
         self.orphan_scripts_reported.incl(script_path)
 
   self.watch_files_at = get_mono_time() + file_watch_interval
