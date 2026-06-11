@@ -85,7 +85,12 @@ proc init*(
     clone_of: Bot = nil,
     global = true,
     parent: Unit = nil,
+    ephemeral = true,
 ): Bot =
+  ## Bots are EPHEMERAL by default: they belong to the session that created
+  ## them (surviving level reloads, skipped by persistence, reaped when the
+  ## session ends) — the right lifecycle for external agents. Bots that
+  ## belong to the level (placed, loaded, cloned) pass `ephemeral = false`.
   id.own:
     var self = Bot(
       id: id,
@@ -93,7 +98,7 @@ proc init*(
       animation_value: ed("auto"),
       speed: 1.0,
       clone_of: clone_of,
-      start_color: id.color_of,
+      start_color: ACTION_COLORS[BLACK],
       parent: parent,
     )
 
@@ -101,12 +106,20 @@ proc init*(
 
     if global:
       self.global_flags += GLOBAL
+    if ephemeral:
+      self.global_flags += EPHEMERAL
     result = self
 
 method clone*(self: Bot, clone_to: Unit, id: string): Unit =
   var transform = clone_to.transform
   result =
-    Bot.init(id = id, transform = transform, clone_of = self, parent = clone_to)
+    Bot.init(
+      id = id,
+      transform = transform,
+      clone_of = self,
+      parent = clone_to,
+      ephemeral = false,
+    )
 
 method on_collision*(self: Unit, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)

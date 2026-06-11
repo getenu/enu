@@ -245,7 +245,7 @@ proc fire(self: Build) =
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
-    state.units += Bot.init(transform = transform)
+    state.units += Bot.init(transform = transform, ephemeral = false)
   elif state.tool == CODE_MODE:
     let root = self.find_root
     state.open_unit = root

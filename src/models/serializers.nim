@@ -129,6 +129,7 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
   self = Bot.init(
     id = json["id"].json_to(string),
     transform = json["start_transform"].json_to(Transform),
+    ephemeral = false,
   )
 
   if not load_chunks and "edits" in json:

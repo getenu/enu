@@ -12,7 +12,7 @@
 ## bot, with its own color and position. A swarm of subagents each passing
 ## their own id drives a swarm of distinctly-colored bots.
 
-import std/[os, strutils, tables, math, monotimes, times]
+import std/[os, strutils, math, monotimes, times]
 import pkg/ed
 import pkg/nimcp except info
 import core, models/[bots, units, colors]
@@ -47,10 +47,6 @@ proc bot_id(agent_id: string): string =
   if agent_id != "":
     result &= "-" & agent_id.slug
 
-# Survives reconnects so bots reappear where they were after an Enu
-# restart, keeping things predictable for the agents. Keyed by bot id.
-var transforms: Table[string, Transform]
-
 # Partial replica: only what we touch syncs from Enu. `blocking` gives
 # synchronous semantics: reading or writing anything that hasn't synced
 # yet — root_units on first use, a found bot's containers after a
@@ -67,34 +63,33 @@ proc find_unit(id: string): Unit =
     if unit.id == id:
       return unit
 
+proc last_transform(id: string): Transform =
+  ## Where this bot was before a reconnect. The server lost it in a
+  ## restart, but the previous session's replica still knows; fall back
+  ## to the origin.
+  result = Transform.init(vec3(0, 0, 0))
+  if not client.prev.is_nil and "root_units" in client.prev:
+    for unit in EdSeq[Unit](client.prev["root_units"]):
+      if unit.id == id and ?unit.transform_value:
+        return unit.transform
+
 proc bot_for(agent_id = ""): Bot =
   ## Each agent's bot: found by id (a reconnect after an Enu restart) or
-  ## created on first use. EPHEMERAL: Enu reaps it when this session ends.
-  ## VOXEL_VIEWER: it can photograph parts of the world no player is
-  ## keeping loaded. CLI bots are invisible — one-off commands don't need
-  ## an avatar flashing in and out for other players (screenshots render
-  ## from a dedicated camera, not the bot node).
+  ## created on first use with a color hashed from its id. Ephemeral (the
+  ## default): Enu reaps it when this session ends. VOXEL_VIEWER: it can
+  ## photograph parts of the world no player is keeping loaded. CLI bots
+  ## are invisible — one-off commands don't need an avatar flashing in and
+  ## out for other players (screenshots render from a dedicated camera,
+  ## not the bot node).
   root_units().get_or_init(Bot, bot_id(agent_id)):
     let bot = Bot.init(
-      id = bot_id(agent_id),
-      transform = transforms.get_or_default(
-        bot_id(agent_id), Transform.init(vec3(0, 1, 0))
-      ),
+      id = bot_id(agent_id), transform = last_transform(bot_id(agent_id))
     )
-    bot.global_flags += EPHEMERAL
+    bot.color = bot.id.color_of
     bot.global_flags += VOXEL_VIEWER
     if not server_mode:
       bot.global_flags -= VISIBLE
     bot
-
-proc keep_alive() =
-  ## Idle work between requests: tick the connection (reconnecting if Enu
-  ## restarted) and remember where our bots are.
-  client.tick
-  if client.connected:
-    for unit in root_units():
-      if unit.id.starts_with("mcp_bot-" & ctx_id) and ?unit.transform_value:
-        transforms[unit.id] = unit.transform
 
 proc glide(unit: Unit, target: Vector3, rotation = 0.0, instant = false) =
   ## Walk smoothly to `target`, turning to `rotation` degrees, syncing each
@@ -335,7 +330,8 @@ if server_mode:
   Ed.bootstrap
   client.connect
   info "Ed context initialized. starting stdio server"
-  new_stdio_transport().serve(enu_server, idle = keep_alive)
+  # Idle ticking keeps the connection alive, reconnecting if Enu restarts.
+  new_stdio_transport().serve(enu_server, idle = proc() = client.tick)
 elif cli_args.len == 0 or cli_args[0] in ["help", "--help", "-h"]:
   echo "enu — drive a running Enu from the command line.\n"
   echo enu_server.help_text("enu")
