@@ -21,42 +21,37 @@ if Player.hit as p:
 if player.near(5):
   say "You're close!"
 
-# Hit detection in a loop
+# Hit detection in a state loop (state procs go BEFORE the loop)
+-idle:
+  if Player.hit as p:
+    say "Touched!"
+    p.velocity = p.velocity + (0.0, 10.0, 0.0)  # bounce up
+    sleep 1
+
 loop:
   nil -> idle
-  -idle:
-    if Player.hit as p:
-      say "Touched!"
-      p.velocity = p.velocity + (0.0, 10.0, 0.0)  # bounce up
-      sleep 1
 ```
 
 ## Collectible (disappears when touched)
 
+Verified script: `.claude/examples/coin.nim`.
+
 ```nim
-# scripts/build_coin.nim
-name Coin
-
-speed = 0
-color = yellow  # use white or green as proxy
-
-# Draw the coin shape
 sphere(size = 3, color = green)
 
 move me
 speed = 20
-var t = 0.0
 var collected = false
 
 forever:
-  t += 0.05
   if not collected:
-    turn right, 2.0   # spin
+    turn right, 5.0   # spinning yields on its own
     if Player.hit:
       collected = true
       show = false
       echo "Coin collected!"
-  sleep()
+  else:
+    sleep 1           # idle branch needs a duration sleep
 ```
 
 ## Counter / Score Display
@@ -67,7 +62,6 @@ Use a bot to show a dynamic score:
 # scripts/bot_score.nim
 lock = true
 color = white
-speed = 0
 
 var score* = 0  # exported so other scripts can increment it
 
@@ -76,122 +70,73 @@ forever:
   sleep 0.5
 ```
 
-Another script increments it:
-```nim
-# Access exported var from score bot
-for bot in Bot.all:
-  if bot.name == "bot_score":
-    # Can't directly access vars, but can use global state
-    discard
-```
-
 ## Win Condition
 
 ```nim
 # scripts/build_win_zone.nim
 name WinSpot
 
-speed = 0
 show = false   # invisible trigger zone
 box(width = 5, height = 5, depth = 5, color = eraser)   # hollow so player can enter
 
+-waiting:
+  if Player.hit as p:
+    p.playing = true
+    say "- You Win!",
+      """
+      # Congratulations!
+
+      You completed the level!
+
+      [Play Again](<nim://reset_level()>)
+      [Next Level](<nim://press_action("next_level")>)
+      """,
+      width = 3.0
+
 loop:
   nil -> waiting
-  -waiting:
-    if Player.hit as p:
-      p.playing = true
-      # Show win sign
-      say "- You Win!",
-        """
-        # Congratulations!
-
-        You completed the level!
-
-        [Play Again](<nim://reset_level()>)
-        [Next Level](<nim://press_action("next_level")>)
-        """,
-        width = 3.0
 ```
 
 ## Player Physics Boosts
 
 ```nim
 # Speed boost pad
-loop:
-  nil -> idle
-  -idle:
-    if Player.hit as p:
-      p.velocity = p.velocity + (0.0, 0.0, -20.0)  # launch forward
-      sleep 0.5
-
-# Bounce pad
-loop:
-  nil -> idle
-  -idle:
-    if Player.hit as p:
-      p.bounce(3.0)  # launch upward (power multiplier)
-      sleep 0.5
-
-# Slippery floor (reduce friction by moving player)
-forever:
+-idle:
   if Player.hit as p:
-    p.velocity = p.velocity + (p.velocity.x * 0.1, 0.0, p.velocity.z * 0.1)
-  sleep()
+    p.velocity = p.velocity + (0.0, 0.0, -20.0)  # launch forward
+    sleep 0.5
+
+loop:
+  nil -> idle
+```
+
+```nim
+# Bounce pad
+-idle:
+  if Player.hit as p:
+    p.bounce(3.0)  # launch upward (power multiplier)
+    sleep 0.5
+
+loop:
+  nil -> idle
 ```
 
 ## Door + Button System
 
-```nim
-# scripts/build_door1.nim
-name Door(open = false, width = 12, height = 8)
-speed = 0
-color = brown
+The verified, wired system lives in `.claude/examples/`:
+`door.nim` (sliding pocket door), `button.nim` (player-pressed,
+auto-closing), `doorway.nim` (the wall + spawner that links them with
+`Button.new(door = d, ...)`). The traps it encodes:
 
-height.times:
-  right width
-  turn 180
-  up 1
+- A proto-typed param defaults to the proto object: `name Button(door = Door, pause = 5)`.
+- Don't declare a `color` proto param; pass `color = ...` to `.new()`
+  (its built-in default is eraser — a turtle-drawn instance would paint
+  invisibly).
+- State procs (`-press:`) are defined before the `loop:`.
+- Nudge the door a fraction of a voxel off the wall plane to avoid
+  z-fighting.
 
-move me
-speed = 8
-
-loop:
-  nil -> sleep as door_closed
-  if open:
-    door_closed -> left(home + width) as door_open
-  else:
-    door_open -> right(home) as door_closed
-```
-
-```nim
-# scripts/build_button1.nim
-var door1* = Door.new(width = 12, height = 8, color = brown)
-
-name Button(door: Door = nil, pause = 0)
-speed = 0
-color = red
-box(width = 2, height = 1, depth = 2, color = red)  # flat button on floor
-
-move me
-speed = 10
-
-loop:
-  nil -> sleep as waiting
-  -waiting:
-    if Player.hit:
-      if door != nil:
-        door.open = true
-      color = green
-      if pause > 0:
-        sleep pause
-        door.open = false
-        color = red
-```
-
-```nim
-# scripts/build_button1_instance.nim
-Button.new(door = door1, pause = 5)
-```
+Open a door from anywhere that holds a reference: `d.open = true`.
 
 ## Enemy / Hazard
 
@@ -210,16 +155,18 @@ speed = 4
 
 -hit_player:
   say "Zap!"
-  # Reset player position
   if Player.hit as p:
-    p.position = p.start_position
+    p.position = p.start_position  # send them back
   sleep 2
 
 loop:
   nil -> wander
-  (wander, hit_player) -> chase if player.near(15)
-  chase -> wander if player.far(30)
-  chase -> hit_player if player.near(2)
+  if player.near(15):
+    (wander, hit_player) ==> chase
+  if player.far(30):
+    chase -> wander
+  if player.near(2):
+    chase -> hit_player
 ```
 
 ## Checkpoint System
@@ -228,22 +175,22 @@ loop:
 # scripts/build_checkpoint.nim
 name Checkpoint
 
-speed = 0
 color = blue
 box(width = 4, height = 6, depth = 1, color = blue)  # visible marker
 
 var activated* = false
 
+-waiting:
+  if Player.hit as p:
+    if not activated:
+      activated = true
+      color = green
+      say "- Checkpoint!", "# Checkpoint Reached!\n\nProgress saved."
+      sleep 3
+      sign.show = false
+
 loop:
   nil -> waiting
-  -waiting:
-    if Player.hit as p:
-      if not activated:
-        activated = true
-        color = green
-        say "- Checkpoint!", "# Checkpoint Reached!\n\nProgress saved."
-        sleep 3
-        sign.show = false
 ```
 
 ## Timed Challenge
@@ -252,7 +199,6 @@ loop:
 # scripts/bot_timer.nim
 lock = true
 color = white
-speed = 0
 turn 180
 
 var time_limit = 60  # seconds
@@ -275,7 +221,6 @@ forever:
 
 ```nim
 # scripts/build_spawner.nim
-speed = 0
 show = false
 
 var wave = 0
@@ -285,11 +230,11 @@ var wave = 0
   say \"""Wave {wave}""", width = 1.5
   let count = wave * 2
   count.times(i):
-    soldier.new()
+    Soldier.new()
     sleep 0.5
   sleep 10
 
 loop:
   nil -> spawn
-  spawn -> spawn  # immediately re-enter spawn after done
+  spawn -> spawn  # immediately re-enter after each wave
 ```

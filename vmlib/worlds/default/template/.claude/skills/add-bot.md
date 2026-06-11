@@ -26,7 +26,9 @@ things, and run complex state-machine AI.
 
 **`scripts/<name>.nim`** — behavior script
 
-Add to `level.json` load_order.
+Touch both files; Enu loads them and manages `level.json` itself.
+A complete verified bot (wander + tether + greet with a markdown sign)
+is at `.claude/examples/bot_greeter.nim`.
 
 ## Bot API
 
@@ -66,16 +68,14 @@ forever:
 ### Player-following guide
 ```nim
 color = green
-speed = 0
+speed = 3
 
 forever:
   turn player
   if player.near(15) and player.far(3):
-    speed = 3
     forward 1
   else:
-    speed = 0
-  sleep()
+    sleep 0.5
 ```
 
 ### Chaser with state machine
@@ -133,7 +133,6 @@ forever:
 ### Guard with alert states
 ```nim
 color = white
-speed = 0
 var alert = false
 
 -idle:
@@ -152,8 +151,10 @@ var alert = false
 
 loop:
   nil -> idle
-  (idle, alerted) -> chase if player.near(8)
-  chase -> idle if player.far(25) or start_position.far(40)
+  if player.near(8):
+    (idle, alerted) ==> chase
+  if player.far(25) or start_position.far(40):
+    chase -> idle
 
   if player.near(15) and not alert:
     idle ==> alerted do:
@@ -165,7 +166,6 @@ loop:
 ```nim
 lock = true
 color = blue
-speed = 0
 
 turn 180    # face the player spawn direction
 
@@ -183,10 +183,9 @@ say "- Talk to me",
   """,
   width = 2.0, height = 3.0
 
-move me
 forever:
-  turn -player    # always face away from player (or use `turn player` to face them)
-  sleep()
+  turn player   # keep facing the player
+  sleep 0.5
 ```
 
 ### Bot that reacts to builds being touched
@@ -195,13 +194,13 @@ color = green
 speed = 2
 
 forever:
-  # Check if player touched a specific build
+  # Check if the player is inside a specific build
   for build in Build.all:
-    if build.name == "trigger_zone" and Player.hit as p:
+    if build.id == "build_trigger_zone" and build.hit(player):
       say "You found the secret!"
       sleep 3
   turn player
-  sleep()
+  sleep 0.5
 ```
 
 ## Multiple Bots
@@ -220,11 +219,9 @@ forever:
   elif position.z > patrol_z:
     turn left
   forward 2
-  sleep()
 
 # In a spawner script:
 drawing = false
-speed = 0
 5.times(i):
   Soldier.new(patrol_z = -10.0 - i.float * 8.0)
 ```

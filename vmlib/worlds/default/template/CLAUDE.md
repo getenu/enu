@@ -1,448 +1,189 @@
 # Enu Level — Claude Code Guide
 
-This directory is an Enu level. You can create and modify it using file edits and
+This directory is an Enu level. Create and modify it with file edits and
 the MCP tools provided by the `enu` server.
 
-## Multi-room / multi-unit builds: use `/build-plan` first
+## Where to look
 
-For anything larger than a single placement — multi-room buildings, a whole
-scene, more than ~3 units — run `/build-plan <description>` before
-constructing. The skill writes a plan to `<level_dir>/plan.md` with an
-inventory of units, their world footprints, dependencies, clearance rules,
-and a walk-through verification checklist. Confirm the plan with the human
-before laying any voxels.
-
-When making furniture or fixtures, default to scaled prototypes
-(`scale = 0.25`) — 1 m³ voxels read as cubes, not chairs or beds. See
-`/build-script` for the prototype mechanism and `/build-plan` for clearance
-+ scale-math guidance.
+- **`/build-plan`** — plan multi-unit builds before laying voxels
+- **`/build-structure`** — shape primitives, structural patterns, furniture
+- **`/build-script`** — turtle drawing, prototypes, anchors, animation
+- **`/add-bot`** — bots and behavior state machines
+- **`/game-mechanics`** — collectibles, triggers, doors, win conditions
+- **`/sign-menu`** — signs, menus, markdown panels
+- **`/reload-verify`** — the edit/verify loop in depth, block annotations
+- **`.claude/examples/`** — verified, working scripts for towers, castles,
+  trees, skyscrapers, doors, furniture, bots, and more. See its README
+  index. **Prefer copying an example over writing from scratch.**
 
 ## Quick Start
 
 1. `get_level_dir` → confirm the level directory path
 2. `screenshot` → see the current state
 3. Edit or create scripts in `scripts/` and JSON in `data/`
-4. Touch modified files, wait 5 seconds, `screenshot` again to verify
+4. `wait_for_script(unit_id)` → loads/reloads the unit and returns its
+   bounds, or the script's error
+5. Sanity-check the bounds, then `screenshot` to verify
 
-## MCP Tools Available
+## MCP Tools
+
+Every screenshot/positioning tool takes an optional `agent_id`: pass a
+short stable id (your name works) to get your own bot, with its own
+color and position. Subagents each passing their own id drive a swarm
+of distinctly-colored bots.
 
 **Looking around:**
-- `screenshot` — From the MCP bot's POV
-- `screenshot_at(x, y, z, distance, height, angle)` — Smoothly move the bot to a vantage and frame a world position
-- `screenshot_from_player(with_ui = false)` — From the human's first-person camera; `with_ui = true` includes toolbar/console overlay
-- `screenshot_top_down(x, z, size)` — Orthographic top-down map view centered on (x, z), no perspective. Use for layout planning. `size` is the half-extent in voxel units (default 30 → 60×60 area).
+- `screenshot(agent_id)` — from your bot's POV
+- `screenshot_at(x, y, z, distance, height, angle, agent_id)` — fly the bot to a vantage and frame a world position
+- `screenshot_top_down(x, z, size, agent_id)` — orthographic map view centered on (x, z); `size` is the half-extent (default 30 → 60×60 area). Use for layout planning.
+- `screenshot_from_player(with_ui = false)` — from the human's first-person camera; `with_ui = true` includes the toolbar/console overlay
+
+**The edit loop:**
+- `wait_for_script(unit_id, timeout = 30)` — reload the unit if its files changed, block until the script finishes. Success returns the unit's world bounds (`bounds: (min) .. (max)`) — check them against the intended footprint (a 1×1×1 box means the script drew nothing; if that looks wrong, re-query once before concluding). Failure returns the script's error with file:line. **Animated builds (`loop:` / `move me`) never finish** — "still running" after the timeout means alive, not stuck; use a short timeout and verify those with bounds or a screenshot.
+- `get_console` — console output (`echo` from eval lands here)
+- `clear_console` — empty the console; clear before a run you want clean error signal from
 
 **Querying:**
-- `get_level_dir` — Absolute path to the current level directory
-- `units_near(x, y, z, radius)` — Sorted nearest-first list of units within an xz-radius
-- `get_block_log` — Recent blocks the human placed (or erased) in-game; used for annotation (see "Working With the Human" below)
-- `get_console` — Recent Enu console output (use after `eval` to see `echo` results)
+- `get_level_dir` — absolute path to the current level directory
+- `units_near(x, y, z, radius)` — sorted nearest-first unit list within an xz-radius; includes spawner clones
+- `get_block_log` — recent blocks the human placed/erased in-game (annotation workflow — see `/reload-verify`)
+- `eval(code, top_level = false, unit_id = "")` — run Nim in the Enu scripting context. Default returns the expression's value from the player's module; `top_level = true` allows `import`/`proc` (no return value); `unit_id` targets a unit's module (spawner clones can't be targeted — use their proto or another root unit).
 
-**Spatial primitives** (call via `eval`):
-- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the inclusive world-space box. Iterate or `.len` it; print with `for u in ...: echo u.id`. "What's in this room?"
-- `floor_at(x, z)` — Top y at (x, z) with a visible voxel, or -1 if column is empty. "Where's the ground here?"
-- `clear_box(x1, y1, z1, x2, y2, z2)` — true if no voxels in the box. "Is this volume empty of blocks?"
-- `find_voxel_overlaps(limit)` — World positions where two builds share a voxel (z-fighting detection)
-
-**Bounds queries** (work on any `Unit` / proto type, return values in world coords):
-- `unit.bounds` — `WorldBox` (`tuple[min, max: Vector3]`) tight world-space AABB after scale/rotation/anchor. On a proto type (`DiningChair.bounds`) returns the proto's own drawn-voxel AABB.
-- `a.overlaps(b)` — true if two units' bounds intersect
-- `units_overlapping(box: WorldBox)` — `seq[Unit]` whose bounds intersect `box` (contrast with `units_in_box`, which is origin-only)
-- `box_is_free(box: WorldBox)` — true if no voxels AND no unit's bounds intersect `box` (contrast with `clear_box`, which is voxels-only)
+**Spatial queries** (via `eval`):
+- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box
+- `floor_at(x, z)` — top y with a visible voxel, or -1
+- `clear_box(...)` — true if no voxels in the box
+- `find_voxel_overlaps(limit)` — positions where two builds share a voxel (z-fighting)
+- `unit.bounds` — tight world-space AABB after scale/rotation/anchor
+- `Proto.bounds_at(position, rotation, scale)` — predicted AABB of a hypothetical instance, for pre-placement clearance checks
+- `a.overlaps(b)`, `units_overlapping(box)`, `box_is_free(box)` — bounds-vs-bounds checks
 - `WorldBox` helpers: `b.size`, `b.centre`, `p in b`, `a.intersects(b)`, `b.expanded(margin)`
 
 **Mutating:**
-- `eval(code, top_level = false, unit_id = "")` — Run Nim code in the Enu scripting context.
-  - Default: runs as an expression inside the player's module, returns the value
-  - `top_level = true`: runs as module-level code (allows `import`, top-level `proc`/`type`); no return value
-  - `unit_id = "..."`: runs in that unit's module instead of the player. Spawner clones (`*_proto_*_instance_*`) can't be targeted; use their proto or another root unit
-- `move_unit(id, x, y, z)` — Move a unit and persist the new spawn position across reload
-- `delete_unit(id)` — Remove a unit and delete its on-disk script + data directory
-- `set_position(x, y, z, rotation, id)` — Smoothly move a unit (default: the MCP bot) for a better view
-- `clear_block_log` — Empty the block log for a fresh annotation session
+- `move_unit(id, x, y, z)` — move a unit and persist the new spawn position
+- `delete_unit(id)` — remove a unit and delete its on-disk files (cannot be undone)
+- `set_position(x, y, z, rotation, id, agent_id)` — glide a unit (default: your bot)
+- `clear_block_log` — empty the block log
 
-## Coordinate System
+## World Rules
 
 ```
       -Z = north / forward (player default facing direction)
-      +Z = south / back (behind player spawn — avoid cluttering here)
-      +X = east
-      -X = west
-       Y = height (0 = ground level)
+      +Z = south / back
+      +X = east, -X = west
+       Y = height (0 = ground surface)
 ```
 
-Player spawns near origin (0, 0, 0) facing north (-Z). Build northward.
+- Player spawns at (0, 0, 0) facing north (-Z). **Keep ≥ 5 m around the
+  spawn clear.**
+- The ground is a 1000×1000 plane centred on the origin: solid floor
+  from x/z = **-500 to +500**. Keep every build's full footprint inside,
+  with a margin.
+- Place origins at **y = 0** so the lowest voxel rests on the ground.
+- Draw distance is 256 m.
+- Colors: `black`, `brown`, `red`, `green`, `blue`, `white` (+ `eraser`
+  to remove voxels). `SCREAMING_CASE` in JSON (`"BROWN"`).
 
-## Available Colors
-
-`BLACK`, `BROWN`, `RED`, `GREEN`, `BLUE`, `WHITE`
-
-In scripts: `black`, `brown`, `red`, `green`, `blue`, `white` (lowercase enum values)
-
-## Level File Structure
+## Level Files
 
 ```
 <level-dir>/
-  level.json          — load order for scripted objects (auto-managed)
-  data/
-    <id>/
-      <id>.json       — voxel data (position + block edits)
-  scripts/
-    <id>.nim          — optional Nim script for a build or bot
+  level.json          — managed by Enu (load order, settings); don't edit
+                        by hand while Enu is running. Settings like
+                        "show_prototypes": false (hide proto self-copies)
+                        are changed by editing it while Enu is down.
+  data/<id>/<id>.json — unit position (+ hand-placed block edits)
+  scripts/<id>.nim    — the unit's script
 ```
 
-Bot IDs start with `bot_`, build IDs with `build_`.
+Build ids start with `build_`, bot ids with `bot_`.
 
-## Voxel Data Format (`data/<id>/<id>.json`)
+**`data/<id>/<id>.json`:**
 
 ```json
 {
   "id": "build_name",
   "start_transform": {
     "basis": [[1,0,0],[0,1,0],[0,0,1]],
-    "origin": [world_x, world_y, world_z]
+    "origin": [world_x, 0.0, world_z]
   },
   "start_color": "BROWN",
-  "edits": {
-    "build_name": [
-      [[local_x, local_y, local_z], [1, "COLOR"]],
-      [[local_x, local_y, local_z], [0, ""]]
-    ]
-  }
+  "edits": {}
 }
 ```
 
-- `origin` = world position of the build object
-- Edit coordinates are **local** to the origin
-- `[1, "COLOR"]` = place voxel; `[0, ""]` = erase voxel
-- `start_color` sets the default color (used by scripted builds)
-- For scripted builds/bots with no static voxels, use `"edits": {"build_name": []}`
-
-## Creating a Static Build (JSON only)
-
-1. Create `data/<name>/` directory
-2. Write `data/<name>/<name>.json` with voxel edits
-3. **No entry in `level.json`** — static builds load automatically
-
-## Creating a Scripted Build or Bot
-
-1. Create `data/<name>/<name>.json` — sets position and `start_color`
-2. Create `scripts/<name>.nim` — the Nim script
-3. Touch both files — Enu auto-detects and loads them (`level.json` is auto-managed)
+To create a unit: write both files and touch them — Enu picks them up
+(then `wait_for_script` to confirm). Static builds can be JSON-only,
+with voxel `edits` entries of the form
+`[[local_x, local_y, local_z], [1, "COLOR"]]` (`[0, ""]` erases).
 
 ## Hot-Reload
 
-Enu watches script + JSON files every ~2 seconds. After editing:
+Enu watches script + JSON files (~2 s poll). `wait_for_script(unit_id)`
+triggers the rescan and blocks until the script ran. A reload is a full
+re-run from a clean voxel state, so edits that remove geometry produce
+a clean rebuild; hand-placed JSON `edits` are preserved.
 
-1. Write all files
-2. `touch` them to bump mtime
-3. Wait 4–5 seconds, then take a screenshot to verify
+When a prototype script changes, scripts that reference it keep their
+previously compiled types until they reload — touch dependents in
+dependency order (proto → referencing protos → spawners).
 
-Hot-reload re-runs the script from a clean voxel state (same path
-the in-game editor uses), so edits that remove geometry produce a
-clean rebuild — no need to manually reset the build first.
+`press_action("save_and_reload")` reloads the entire level and is
+disruptive to anyone else in the world — reserve it for vmlib/engine
+changes or a broken `level.json`.
 
-`press_action("save_and_reload")` reloads the entire level from disk
-and is disruptive to anyone else working in the same world. Only
-reach for it when a vmlib/engine change needs a fresh interpreter,
-or when `level.json` itself is broken — never as part of the normal
-edit loop.
+## Script Crash-Course
 
-## Working With the Human (Block Annotations)
-
-The human can mark units in-world by placing or erasing blocks with the
-in-game block tool. `get_block_log` returns the recent placements (per
-local player), each entry with `unit_id`, color, local position, and
-global position. This is the lightest-weight way to point at specific
-things across a conversation.
-
-Workflow when the human gives instructions referencing colored blocks:
-
-1. `get_block_log` — read what they marked
-2. **Plan** — summarize each marker, decide on changes, confirm
-   anything ambiguous before acting
-3. **Erase the markers first** — block edits are persistent and will
-   stick to the unit's data files otherwise. Erasing first also avoids
-   losing track of which local position belonged to which marker if the
-   underlying unit moves
-4. **Implement** — apply the actual changes
-5. `clear_block_log` — empty the log for the next session
-   (also auto-cleared on `save_and_reload`)
-
-To erase a marker from the player's eval:
-```nim
-place_block(Build(find_by_id("build_some_id")), vec3(x, y, z), eraser)
-```
-using the `unit_id` and `local_position` from the log entry.
-
-See `/reload-verify` for the long version and for `find_voxel_overlaps`,
-which detects actual voxel-level z-fighting between two builds.
-
----
-
-## Build Scripts (procedural drawing)
+Builds draw instantly by default; set `speed = 1`+ only to watch the
+drawing happen. Full reference: `/build-script` and `/build-structure`.
 
 ```nim
-speed = 0          # build instantly (default for scripted builds)
-color = brown      # set draw color
-drawing = true     # enable voxel placement (true by default for builds)
-
-# Movement (draws voxels while moving)
-forward 10         # draw 10 voxels forward
-right 5
+color = brown
+forward 10            # turtle-draw 10 voxels
+turn right            # 90°; turn 45.0 for degrees
+lean back, 30         # pitch; lean left/right = roll
 up 3
-turn right         # turn 90 degrees right
-turn left
-turn 45.0          # turn by degrees
-lean back, 30      # tilt 30 degrees
 
-# Loops
-5.times:
-  forward 3
-  turn right
+place(x, y, z, color)                                  # single voxel
+box(width = W, height = H, depth = D, color = c)       # at the turtle
+box(vec3(x1, y1, z1), vec3(x2, y2, z2), color = c)     # corner-to-corner
+sphere(size = D, at = vec3(x, y, z), color = c)        # D = diameter
+cylinder(size = D, height = H, at = vec3(x, y, z), color = c)
+wall(length = N, height = H, color = c)                # chains forward
+floor(length = N, width = W, color = c)
 
-10.times(i):       # with index
-  forward i.float
-  up 1
-
-# Randomness
-color = random(red, green, blue)
+5.times: ...          # loops; 10.times(i): ... with index
 forward 3 .. 8        # random int in range
-turn -30.0 .. 30.0    # random float in range
-if 1 in 3:            # 1-in-3 chance
-  color = white
-
-# Save and restore position/orientation
-save()
+if 1 in 3: ...        # 1-in-3 chance
+color = cycle(red, white)  # alternates per call
+save()                # save turtle pose + color
 restore()
 ```
 
-## Block Placement Helpers
+`size` accepts ints or floats; rasterisation is voxel-centred, so
+effective widths are odd (`size = 4` and `5` both span 5 voxels) and
+fractional sizes make smooth tapers. Avoid naming locals/proc params
+`height`/`width`/`radius`/`size`/`color` — those are unit accessors.
 
-Use these inside build scripts for direct coordinate-based placement:
+**Prototypes:** `name Tower(height = 10)` makes a reusable proto;
+instantiate from a *different* script with
+`Tower.new(height = 20, position = vec3(0, 0, -10), color = red)`.
+Never call `X.new` in the script that declares `name X` — it recurses
+and crashes Enu. Capture params into locals before drawing, don't
+declare a `color` param (pass color to `.new()` — its default is
+eraser, which draws invisibly), and cover local `(0, 0, 0)` (every
+build starts with a default block there). `/build-script` has the full
+trap list, `anchor:` blocks for rotation pivots, and animation
+(`move me` + `loop:` state machines).
 
-```nim
-# Place a single block at local integer coords
-place(x, y, z, color)
+**Bots** use the same state-machine system with `say`, `turn player`,
+`player.near(N)` — see `/add-bot` and `.claude/examples/bot_greeter.nim`.
 
-# Shape primitives — default to the turtle's current transform.
-# Pass `at = vec3(x, y, z)` for explicit local coords.
-box(width = W, height = H, depth = D, color = c)
-sphere(size = D, color = c)              # D = diameter, not radius
-cylinder(size = D, height = H, color = c)
+## Working With the Human (Block Annotations)
 
-# Turtle-forward wrappers that leave the turtle at the far end so
-# calls chain. Use these to build walls and floors without explicit
-# coords.
-wall(length = N, height = H, color = c)
-floor(length = N, width = W, color = c)
-
-# Examples:
-box(width = 10, height = 1, depth = 10, color = brown)   # 10×10 floor
-box(width = 10, height = 6, depth = 1, color = brown)    # 10×6 wall
-sphere(size = 6, color = green)                          # canopy at turtle
-cylinder(size = 4, height = 8, color = brown)            # round tower
-box(width = 6, height = 1, depth = 6,
-    at = vec3(2, 1, -7), color = eraser)                 # hollow inside a floor
-
-# `fill = false` makes any shape hollow (1-voxel shell). `eraser` color
-# removes voxels.
-```
-
-After drawing, switch to move mode to animate or reposition:
-```nim
-move me
-speed = 5
-forward 10    # moves the build object, doesn't draw
-```
-
-## Named Prototypes (reusable builds)
-
-Use `CamelCase` for prototype names. Lowercased/snake_case names work but
-the convention is `name Tower`, `name WallSegment`, etc. — distinguishes
-type names from regular identifiers.
-
-Origin tip: every Build starts with a default block at local `(0, 0, 0)`
-(it's how the in-game block tool creates the build). If your prototype's
-voxels don't cover that voxel, it'll show through as a stray block. Either
-draw over `(0, 0, 0)` or set spawner positions to `vec3(x, 1, z)` so the
-default block lands above the ground floor.
-
-```nim
-# Define a reusable prototype in a build script:
-name Tower(height = 10, color = brown)
-speed = 0
-
-# Protos run their full script (so `Tower.bounds` etc. work). Hide
-# the proto's own copy via the level's `show_prototypes` setting in
-# `level.json`, or with an explicit `show = false` here.
-height.times:
-  box(width = 4, height = 1, depth = 4, color = color)
-  up 1
-
-# Instantiate from any other script. Bump y by 1 so the default block
-# at local (0, 0, 0) sits above the floor instead of in it:
-Tower.new(height = 20, color = red, position = vec3(0, 1, 0))
-Tower.new(height = 15, color = blue, position = vec3(20, 1, -10))
-```
-
-## Animated Builds (state machine)
-
-```nim
-name Door(open = false, width = 20, height = 11)
-speed = 0
-# Drawing phase:
-height.times:
-  right width
-  turn 180
-  up 1
-
-move me     # switch to move mode (sets `home` to current position)
-speed = 5
-
-loop:
-  nil -> sleep as door_closed
-  if open:
-    door_closed -> left(home + width) as door_open
-  else:
-    door_open -> right(home) as door_closed
-```
-
----
-
-## Bot Scripts
-
-```nim
-color = green
-speed = 3
-
-
-forward 10
-turn right
-turn player    # face the player
-turn 45.0
-```
-
-### Say / Signs
-
-```nim
-# Simple speech bubble:
-say "Hello!"
-
-# Bubble + rich text sign (markdown in the second string):
-say "Hello!", """
-  # Greetings
-
-  I am a friendly bot.
-
-  - [Do something](<nim://some_proc()>)
-  - [Next Level](<nim://press_action("next_level")>)
-"""
-
-# Control sign size:
-say overview, details, height = 2, width = 6, size = 610
-
-# Cycle through multiple messages on repeated calls:
-let messages = ["First time!", "Second time!", "Still here."]
-say cycle(messages)
-```
-
-### State Machine
-
-```nim
-# State procs must be defined BEFORE the loop:
--wander:
-  forward 3 .. 8
-  turn -45.0 .. 45.0
-
--chase:
-  turn player
-  forward 5
-
--caught:
-  say "Got you!"
-  sleep 2
-
-loop:
-  nil -> wander                  # start state
-  if player.near(10):
-    wander -> chase              # conditional transition (use if, not inline)
-  if player.near(3):
-    chase -> caught
-  caught -> wander               # unconditional (always)
-```
-
-State transitions support callbacks and renaming:
-```nim
-if start_position.far(20):
-  wander -> go_home as wander_home
-(wander, wander_home) ==> chase do:
-  say "I see you!"
-```
-
-### Sensing and Position
-
-```nim
-# Distance checks
-if player.near(5): say "You're close!"
-if player.far(20): turn player
-
-# Exact distance/angle
-let d = distance(player)
-let a = angle_to(player)
-
-# Position math
-let home = position    # save current position
-position = home + vec3(5, 0, 0)   # move east 5 units
-```
-
-### Iterating Units
-
-```nim
-for b in Bot.all:
-  echo b.id
-
-# Find a specific bot created after a point in time:
-let before = frame_created
-some_action()
-for b in Bot.all:
-  if b.frame_created > before:
-    echo "new bot: ", b.id
-```
-
----
-
-## Scripting Utilities
-
-```nim
-# Console output (read with get_console MCP tool)
-echo "position: ", position
-echo "level: ", level_name()
-
-# Timing
-sleep 1.0
-let t = now()
-# ...do stuff...
-echo "elapsed: ", now() - t
-
-# Nim standard library is available:
-import math
-let angle = sin(0.5) * 180.0 / PI
-```
-
-## Eval Tips
-
-`eval` runs Nim code globally (not inside any unit):
-
-```nim
-# Check a unit's position:
-echo Player.first.position        # → see with get_console
-echo Bot.all.len
-echo level_name()
-
-# Trigger a reload:
-load_level("level-name")
-press_action("save_and_reload")
-```
-
-Cannot be used to directly create builds or call unit-specific procs like `forward`.
+The human marks units by placing colored blocks in-game;
+`get_block_log` returns each placement with `unit_id`, color, and
+local/global positions. Read the log, plan, **erase the markers first**
+(they persist into the unit's data otherwise), implement, then
+`clear_block_log`. Full workflow + marker-erasing recipe:
+`/reload-verify`.

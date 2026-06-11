@@ -46,7 +46,6 @@ Parameters:
 ```nim
 # scripts/build_sign_welcome.nim
 lock = true
-speed = 0
 turn 180    # face toward player spawn
 
 let overview = "Welcome to my world!"
@@ -90,7 +89,6 @@ Update sign content based on game state:
 
 ```nim
 lock = true
-speed = 0
 
 var score = 0
 
@@ -141,10 +139,9 @@ turn 180
   say "- You found it!", "# Congratulations!\n\nWell done!"
   sleep 5
 
-move me
 forever:
-  turn -player
-  sleep()
+  turn player
+  sleep 0.5
 
 intro()
 hint()
@@ -157,7 +154,6 @@ Standard level menu (shows on builds in default template):
 
 ```nim
 let menu* = me
-speed = 0
 lock = true
 
 let overview = \"""
@@ -180,10 +176,9 @@ up 5
 lean forward, 20
 say overview, details, height = 2, width = 6, size = 610
 
-move me
 forever:
-  turn -player
-  sleep()
+  turn player
+  sleep 0.5
 ```
 
 ## Sign Properties

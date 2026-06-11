@@ -32,11 +32,12 @@ A scripted build needs two files:
 
 **`scripts/<name>.nim`** — Nim script that builds the shape:
 ```nim
-speed = 0
 box(width = 10, height = 8, depth = 1, color = brown)  # 10-wide × 8-tall wall in front of the turtle
 ```
 
-Then add `"build_my_wall"` to the `load_order` array in `level.json`.
+Touch both files; Enu loads them and manages `level.json` itself.
+Full, verified builds (towers, castles, skyscrapers) live in
+`.claude/examples/` — copy and adapt.
 
 ## API Reference
 
@@ -72,6 +73,14 @@ place(x, y, z, color)
 for the other useful pivots (sphere/cylinder default to centre /
 bottom-centre respectively).
 
+`size` on sphere/cylinder accepts ints or floats. Rasterisation is
+centred on the target voxel, so the effective width is always odd:
+`size = 4` and `size = 5` both span 5 voxels (5 is fuller at the
+diagonals) — don't fight this trying to butt an even-width dome flush
+against a wall. Fractional sizes give smooth tapers: a cone is stacked
+1-high disks of shrinking fractional diameter
+(`cylinder(size = d, height = 1, at = ...)` in a loop).
+
 When `at = vec3(x, y, z)` is used, depth extends in **+Z** from the
 anchor (the anchor is the box's min-coord corner), so the call reads
 like an axis-aligned `(x..x+W, y..y+H, z..z+D)` placement. At the
@@ -88,19 +97,16 @@ Colors: `black`, `brown`, `red`, `green`, `blue`, `white`, `eraser`
 
 ### Flat floor / platform
 ```nim
-speed = 0
 box(width = 10, height = 1, depth = 10, color = brown)
 ```
 
 ### Solid wall
 ```nim
-speed = 0
 box(width = 10, height = 8, depth = 1, color = brown)
 ```
 
 ### Hollow box (room)
 ```nim
-speed = 0
 box(width = w, height = h, depth = d, color = brown)  # solid shell
 # Hollow out the interior with eraser inset by 1 on each side:
 box(width = w - 2, height = h - 2, depth = d - 2,
@@ -109,7 +115,6 @@ box(width = w - 2, height = h - 2, depth = d - 2,
 
 ### Arch (wall with opening)
 ```nim
-speed = 0
 let w = 13
 let h = 10
 let arch_w = 5
@@ -129,7 +134,6 @@ box(width = arch_w, height = h - arch_h, depth = 1, color = brown)
 
 ### Stepped pyramid
 ```nim
-speed = 0
 let base = 24
 let tiers = 5
 let tier_height = 3
@@ -146,7 +150,6 @@ for tier in 0 ..< tiers:
 
 ### Tree
 ```nim
-speed = 0
 let trunk_h = 6
 cylinder(size = 1, height = trunk_h, color = brown)  # trunk at turtle
 up trunk_h + 2
@@ -155,7 +158,6 @@ sphere(size = 6, color = green)                       # canopy above
 
 ### Column row
 ```nim
-speed = 0
 let count = 5
 let spacing = 4
 let col_h = 8
@@ -170,13 +172,11 @@ count.times:
 
 ### Tower (hollow cylinder shell)
 ```nim
-speed = 0
 cylinder(size = 8, height = 20, color = brown, fill = false)
 ```
 
 ### Bridge / walkway
 ```nim
-speed = 0
 let length = 30
 let width = 3
 
@@ -197,7 +197,6 @@ position and heading as its anchor, so walking + drawing builds
 naturally:
 
 ```nim
-speed = 0
 import math
 
 # Spiral tower: drop a small cylinder, step up and rotate, repeat
@@ -228,8 +227,10 @@ For shapes that need to rasterise at the turtle's full orientation
 1. Get level dir: `get_level_dir`
 2. Write `data/<name>/<name>.json` (position JSON with `"edits": {}`)
 3. Write `scripts/<name>.nim` using the shape primitives
-4. Add name to `level.json` load_order
-5. Touch the files, wait 4–5 seconds, screenshot to verify
+4. `wait_for_script(unit_id)` — loads/reloads it and returns the unit's
+   bounds (or the script's error)
+5. Sanity-check the bounds against the intended footprint, then
+   screenshot to verify
 
 ## Furniture Inside a Structure
 

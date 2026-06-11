@@ -43,6 +43,16 @@ Coordinate system reminder + a text sketch.
        +Z (south)
 \`\`\`
 
+**Stay on the ground.** The ground is a 1000×1000 plane centred on the
+origin: solid floor from x/z = -500 to +500, surface at y = 0. Keep every
+build's *full footprint* (not just its origin) inside ±500 with a margin —
+a build whose extent crosses -500 hangs half-off into the void. Place
+origins at **y = 0** so the lowest voxel rests on the ground (y = 1 floats
+the build 1 m up).
+
+**Keep the spawn clear.** The player spawns at (0, 0, 0); leave at least
+5 m of open ground in every direction around it.
+
 Top-down ASCII for the major structures, with coordinates marked. Use a
 grid scale that fits (e.g. 1 char = 5 voxels):
 
@@ -61,9 +71,9 @@ What gets built, with sizes and positions:
 
 | Unit | Position (origin) | Footprint (m) | Notes |
 |------|-------------------|---------------|-------|
-| `build_castle_outer_wall` | (0, 1, -20) → (0, 1, -65) | 49 × 6 × 45 | uses Wall proto |
+| `build_castle_outer_wall` | (0, 0, -20) → (0, 0, -65) | 49 × 6 × 45 | uses Wall proto |
 | `build_keep` | (-12, 0, -120) | 24 × 25 × 20 | main building |
-| `BedQueen` instance #1 | (4, 1, -116) | 2 × 0.5 × 3 (after scale 0.25) | master bedroom |
+| `BedQueen` instance #1 | (4, 0, -116) | 2 × 0.5 × 3 (after scale 0.25) | master bedroom |
 | ... |
 
 **Always include the world-space footprint** (extent in metres) for scaled
@@ -196,14 +206,15 @@ To place a queen bed against the north wall of a 5 m × 5 m bedroom (world
 - Headboard at `z = -116` (north wall) means `position.z = -116`
 - Centring the bed in the 5 m wide room: bed origin `x = 4`
   (bed extends `4..6`, leaves 1 m clearance on east, 1 m on west)
-- Final: `BedQueen.new(position = vec3(4, 1, -116))`
+- Final: `BedQueen.new(position = vec3(4, 0, -116))`
 
-> **TODO (Enu API gap):** scaled-instance placement requires hand-computing
-> each instance's footprint and tracking it mentally to avoid overlap with
-> walls, doors, or other instances. There's no built-in collision check
-> between instance footprints. Until Enu exposes a clearance / bounding-box
-> query, list each instance's footprint explicitly in the plan's Inventory
-> table and verify by walk-through after building.
+Check clearance before placing with the bounds queries:
+`box_is_free(DiningChair.bounds_at(vec3(4, 0, -103), rotation = 90))`
+predicts the world AABB of a hypothetical instance; `unit.bounds`,
+`a.overlaps(b)`, and `units_overlapping(box)` cover already-placed
+units. Still list each instance's footprint in the Inventory table —
+the plan should be checkable on paper — and verify by walk-through
+after building.
 
 Rotation is a built-in `.new(...)` parameter and a mutable instance
 field — pass `rotation = 90` to spawn rotated, or assign

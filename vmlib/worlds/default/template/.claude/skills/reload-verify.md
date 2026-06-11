@@ -1,7 +1,7 @@
 # Reload and Verify Changes
 
-Enu hot-reloads JSON files. Use this skill to apply changes and verify them
-visually with screenshots.
+Enu hot-reloads script and JSON files. Use this skill to apply changes
+and verify them visually with screenshots.
 
 ## Usage
 
@@ -13,15 +13,33 @@ visually with screenshots.
 
 After writing JSON or script files:
 
-1. **Touch the files** to ensure Enu sees a newer mtime:
-   ```bash
-   touch "<level_dir>/data/<name>/<name>.json"
-   touch "<level_dir>/scripts/<name>.nim"
-   ```
+1. **`wait_for_script(unit_id)`** — reloads the unit if its files
+   changed and blocks until the script finishes its run. On success
+   returns the unit's world bounds (`bounds: (min) .. (max)`) — check
+   them against the footprint you intended (a 1×1×1 box at the origin
+   means the script drew nothing). On failure returns the script's
+   compile/runtime error with file:line. No sleeps, no mtime games,
+   and errors surface in the tool result instead of having to be
+   fished out of the console.
 
-2. **Wait 4–5 seconds** (Enu polls every ~2 seconds)
+2. **Take a screenshot** *and walk through* to verify
 
-3. **Take a screenshot** *and walk through* to verify
+Caveats:
+
+- **Animated builds never "finish".** A `loop:` state machine or
+  `move me` animation runs forever, so `wait_for_script` reports
+  "still running" after the timeout — that means *alive, not stuck*.
+  Pass a short timeout (e.g. 5) and verify with bounds or a
+  screenshot instead.
+- Rarely, a call that lands mid-rebuild returns success with a 1×1×1
+  bounds — re-query once before concluding the script drew nothing.
+- **Proto dependents go stale.** When a proto script (`name X`) changes,
+  scripts that reference `X` keep their previously compiled types and
+  fail with type-mismatch errors until they reload too. Touch dependents
+  in dependency order: proto → referencing protos → spawners.
+- Without MCP, the CLI does the same job: `enu wait_for_script
+  --unit_id <id>`. (Manual fallback: `touch` the files and wait 4–5
+  seconds — Enu polls every ~2s.)
 
 Hot-reload is a full re-run, not an additive paint. The watcher does
 the same thing as the in-game editor: it resets the unit's voxel
@@ -90,14 +108,15 @@ for b in Build.all:
     echo "Found at: ", b.position
     found = true
 if not found:
-  echo "NOT FOUND - check level.json load_order"
+  echo "NOT FOUND - check data/<id>/<id>.json exists, then wait_for_script"
 ```
 
 ## Troubleshooting
 
 **Build not appearing:**
-- Check `level.json` has the build name in `load_order` (required for scripted builds)
-- Static builds (JSON-only, no script) load automatically — don't need level.json
+- `wait_for_script(unit_id)` — triggers the load and returns the compile
+  error if there is one
+- Check both files exist: `data/<id>/<id>.json` and `scripts/<id>.nim`
 - Verify the JSON file is valid: `python3 -c "import json; json.load(open('path/to/file.json'))"`
 
 **Build looks empty / a part is missing in a screenshot — query the data, don't
@@ -124,19 +143,12 @@ trust the screenshot alone:**
 - Always `touch` files after writing — don't rely on write time alone
 - If still not working: `eval("load_level(\"" & level_name() & "\")")`
 
-## Level JSON Format
+## level.json
 
-If `level.json` is missing or empty, scripted builds won't load:
-
-```json
-{
-  "enu_version": "enu-0.3-pre-godot-upgrade-14-gc3cb91e6",
-  "format_version": "v0.9.2",
-  "load_order": ["build_one", "build_two", "bot_guard"]
-}
-```
-
-Order matters when scripts reference each other (define dependencies first).
+Enu manages `level.json` itself — load order and level settings
+(e.g. `show_prototypes`). Don't edit it by hand while Enu is running;
+the next save overwrites it. To change a setting like
+`show_prototypes`, edit the file while Enu is down.
 
 ## Screenshot Positions for Common Views
 
