@@ -317,7 +317,7 @@ file_logging/max_log_files=20
 
 [physics]
 
-3d/physics_engine="GodotPhysics"
+3d/physics_engine="Bullet"
 3d/active_soft_world=false
 
 [rendering]
