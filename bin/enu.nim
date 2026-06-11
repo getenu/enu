@@ -52,8 +52,8 @@ proc bot_id(agent_id: string): string =
 # yet — root_units on first use, a found bot's containers after a
 # reconnect — pumps I/O until it fills, so there's no fetch list and no
 # hydration ceremony anywhere below.
-let client = EdClient(id: ctx_id, address: connect_addr, partial: true,
-                      blocking: true)
+let client =
+  EdClient(id: ctx_id, address: connect_addr, partial: true, blocking: true)
 
 proc root_units(): EdSeq[Unit] =
   EdSeq[Unit](client.ctx["root_units"])
@@ -99,9 +99,7 @@ proc glide(unit: Unit, target: Vector3, rotation = 0.0, instant = false) =
     unit.move_to(target, rotation)
   else:
     client.every(33.milliseconds):
-      if unit.step_toward(
-        target, rotation, MOVE_SPEED / 30, ANGULAR_SPEED / 30
-      ):
+      if unit.step_toward(target, rotation, MOVE_SPEED / 30, ANGULAR_SPEED / 30):
         break
   client.tick # flush the final pose
 
@@ -112,9 +110,7 @@ proc ask(unit: Unit, q: UnitQuery, timeout = 30.seconds): UnitQuery =
   if client.tick_until(timeout, query.value.state == DONE):
     return query.value
   unit.query = UnitQuery(state: DONE)
-  UnitQuery(
-    state: DONE, error: "Error: Enu did not respond within " & $timeout
-  )
+  UnitQuery(state: DONE, error: "Error: Enu did not respond within " & $timeout)
 
 proc answer(q: UnitQuery): string =
   if q.error != "": q.error else: q.result
@@ -130,9 +126,7 @@ proc run(q: UnitQuery, agent_id = ""): string =
       answer bot_for(agent_id).ask(q)
 
 proc eval_query(code: string, top_level = false, unit_id = ""): UnitQuery =
-  UnitQuery(
-    kind: EVAL, code: code, top_level: top_level, unit_id: unit_id
-  )
+  UnitQuery(kind: EVAL, code: code, top_level: top_level, unit_id: unit_id)
 
 let enu_server = mcp_server("enu", "1.0.0"):
   mcp_tool:
@@ -169,8 +163,14 @@ let enu_server = mcp_server("enu", "1.0.0"):
     proc wait_for_script(unit_id: string, timeout: float = 30.0): string =
       ## Reload the unit's script if it changed on disk, then wait for it
       ## to finish running — up to `timeout` seconds. Returns immediately
-      ## if the script is idle and unchanged; returns the script's error
-      ## if it fails.
+      ## if the script is idle and unchanged. On success returns the
+      ## unit's world-space bounds ("bounds: (min) .. (max)") so geometry
+      ## can be sanity-checked without a follow-up query; returns the
+      ## script's error if it fails. Animated builds (`loop:` state
+      ## machines, `move me` animations) never finish: expect "still
+      ## running" after the timeout — that means alive, not stuck. For
+      ## those, pass a short timeout and verify with bounds or a
+      ## screenshot instead.
       client.online:
         # Any query makes the worker rescan files first, so a PING is a
         # hot reload round-trip; by the time it answers, a changed script
@@ -186,9 +186,21 @@ let enu_server = mcp_server("enu", "1.0.0"):
         ):
           return "Error: " & unit_id & " still running after " & $timeout & "s"
         for error in unit.errors:
-          return "Error: " & error.msg &
-            (if error.location != "": " at " & error.location else: "")
-        ""
+          return
+            "Error: " & error.msg &
+            (if error.location != "": " at " & error.location
+            else: "")
+        let b = bot_for().ask(
+            eval_query \"""
+          let u = find_by_id("{unit_id}")
+          if u.is_nil:
+            ""
+          else:
+            var b = u.bounds
+            "bounds: " & $b.min & " .. " & $b.max
+        """.dedent.strip
+          )
+        if b.error == "": b.result else: ""
 
   mcp_tool:
     proc eval(
@@ -359,7 +371,11 @@ if server_mode:
   client.connect
   info "Ed context initialized. starting stdio server"
   # Idle ticking keeps the connection alive, reconnecting if Enu restarts.
-  new_stdio_transport().serve(enu_server, idle = proc() = client.tick)
+  new_stdio_transport().serve(
+    enu_server,
+    idle = proc() =
+      client.tick,
+  )
 elif cli_args.len == 0 or cli_args[0] in ["help", "--help", "-h"]:
   echo "enu — drive a running Enu from the command line.\n"
   echo enu_server.help_text("enu")
