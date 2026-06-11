@@ -1128,12 +1128,12 @@ proc box_is_free(box: WorldBox): bool =
   true
 
 proc units_in_box(
-    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
 ): seq[Unit] =
   ## Units whose origins are inside the inclusive world-space box.
   ## For "is this unit's body in the box," use `units_overlapping`.
-  let lo = vec3(min(x1, x2).float, min(y1, y2).float, min(z1, z2).float)
-  let hi = vec3(max(x1, x2).float, max(y1, y2).float, max(z1, z2).float)
+  let lo = vec3(min(x1, x2), min(y1, y2), min(z1, z2))
+  let hi = vec3(max(x1, x2), max(y1, y2), max(z1, z2))
   proc walk(unit: Unit, out_units: var seq[Unit]) =
     let p = unit.position
     if p.x >= lo.x and p.x <= hi.x and p.y >= lo.y and p.y <= hi.y and
@@ -1144,28 +1144,29 @@ proc units_in_box(
   for u in state.units.value:
     walk(u, result)
 
-proc floor_at(x: int, z: int): int =
+proc floor_at(x: float, z: float): int =
   ## Return the highest y at (x, z) that has a visible voxel, or -1 if the
   ## column is empty. Walks downward from y=64 to y=-32. Useful for "where
   ## should I place this on the ground".
+  let x = floor(x)
+  let z = floor(z)
   result = -1
   for y in countdown(64, -32):
-    if find_block_at(vec3(x.float, y.float, z.float)).is_some:
+    if find_block_at(vec3(x, y.float, z)).is_some:
       return y
 
 proc clear_box(
-    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
 ): bool =
-  ## True if no visible voxel exists anywhere inside the inclusive box.
-  ## Use before placing a new structure to confirm the volume is empty.
+  ## True if no visible voxel exists anywhere inside the inclusive box
+  ## (snapped to the voxel grid). Use before placing a new structure to
+  ## confirm the volume is empty.
   let
-    lo = vec3(min(x1, x2).float, min(y1, y2).float, min(z1, z2).float)
-    # +1 to make the inclusive int box a half-open float box matching
+    lo = vec3(floor(min(x1, x2)), floor(min(y1, y2)), floor(min(z1, z2)))
+    # +1 to make the inclusive voxel box a half-open float box matching
     # what `voxels_in_box` expects.
     hi = vec3(
-      (max(x1, x2) + 1).float,
-      (max(y1, y2) + 1).float,
-      (max(z1, z2) + 1).float,
+      floor(max(x1, x2)) + 1, floor(max(y1, y2)) + 1, floor(max(z1, z2)) + 1
     )
   not voxels_in_box((lo, hi))
 

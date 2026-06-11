@@ -50,7 +50,7 @@ of distinctly-colored bots.
 - `eval(code, top_level = false, unit_id = "")` — run Nim in the Enu scripting context. Default returns the expression's value from the player's module; `top_level = true` allows `import`/`proc` (no return value); `unit_id` targets a unit's module (spawner clones can't be targeted — use their proto or another root unit).
 
 **Spatial queries** (via `eval`):
-- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box. Coordinates are `int` (floats fail to compile); same for `floor_at` and `clear_box`. To enumerate units by kind/id, loop `Build.all` / `Bot.all` instead (see `/reload-verify`).
+- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box. To enumerate units by kind/id, loop `Build.all` / `Bot.all` instead (see `/reload-verify`).
 - `floor_at(x, z)` — top y with a visible voxel, or -1
 - `clear_box(...)` — true if no voxels in the box
 - `find_voxel_overlaps(limit)` — positions where two builds share a voxel (z-fighting)

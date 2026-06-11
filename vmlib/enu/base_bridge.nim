@@ -59,13 +59,13 @@ bridged_to_host:
   proc all_units*(): seq[Unit]
   proc find_voxel_overlaps*(limit: int = 50): string
   proc units_in_box*(
-    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
   ): seq[Unit]
 
-  proc floor_at*(x: int, z: int): int
+  proc floor_at*(x: float, z: float): int
 
   proc clear_box*(
-    x1: int, y1: int, z1: int, x2: int, y2: int, z2: int
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
   ): bool
 
   proc bounds*(self: Unit): WorldBox
