@@ -3,5 +3,5 @@ if not is_instance:
   show = false
   quit()
 speed = 0
-fill_cylinder(0, 0, height - 3, 0, 0.6, trunk_color)
-fill_sphere(0, height, 0, 3.0, leaf_color)
+cylinder(size = 1.2, height = abs((height - 3) - (0)) + 1, at = vec3(0, min(0, height - 3), 0), color = trunk_color)
+sphere(size = 6, at = vec3(0, height, 0), color = leaf_color)

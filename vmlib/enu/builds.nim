@@ -21,8 +21,8 @@ bridged_to_host:
   proc draw_voxel*(self: Build, position: Vector3, color: Colors)
     ## Paints a COMPUTED block at the given position. Re-runs of the script
     ## regenerate it, so it isn't persisted to the save file. Used by
-    ## fill_box, fill_sphere, fill_cylinder, and place. For persistent
-    ## placement (eg. user edits via eval, holes for windows) use
+    ## place (the box/sphere/cylinder primitives draw host-side). For
+    ## persistent placement (eg. user edits via eval, holes for windows) use
     ## place_block from builds_private, which marks the voxel MANUAL.
 
   proc save_level_now*()
@@ -48,7 +48,7 @@ bridged_to_host:
 
   proc sphere_impl*(
     self: Build,
-    size: int,
+    size: float,
     color: Colors,
     fill: bool,
     at: Vector3,
@@ -57,7 +57,7 @@ bridged_to_host:
 
   proc cylinder_impl*(
     self: Build,
-    size: int,
+    size: float,
     height: int,
     color: Colors,
     fill: bool,
@@ -108,50 +108,6 @@ template place*(x, y, z: int, color: Colors) =
   ## Place a single block at local integer coords in a build script.
   Build(active_unit()).place(x, y, z, color)
 
-proc fill_box*(self: Build, x1, y1, z1, x2, y2, z2: int, color: Colors) =
-  ## Fill a box region with blocks. Use eraser color to hollow out.
-  for y in min(y1, y2) .. max(y1, y2):
-    for x in min(x1, x2) .. max(x1, x2):
-      for z in min(z1, z2) .. max(z1, z2):
-        self.draw_voxel((x.float, y.float, z.float), color)
-
-template fill_box*(x1, y1, z1, x2, y2, z2: int, color: Colors) =
-  ## Fill a box region in a build script.
-  Build(active_unit()).fill_box(x1, y1, z1, x2, y2, z2, color)
-
-proc fill_sphere*(self: Build, cx, cy, cz: int, radius: float, color: Colors) =
-  ## Fill a sphere of blocks centered at (cx, cy, cz).
-  let r = radius.ceil.int
-  for y in cy - r .. cy + r:
-    for x in cx - r .. cx + r:
-      for z in cz - r .. cz + r:
-        let dx = x - cx
-        let dy = y - cy
-        let dz = z - cz
-        if sqrt((dx * dx + dy * dy + dz * dz).float) <= radius:
-          self.draw_voxel((x.float, y.float, z.float), color)
-
-template fill_sphere*(cx, cy, cz: int, radius: float, color: Colors) =
-  ## Fill a sphere in a build script.
-  Build(active_unit()).fill_sphere(cx, cy, cz, radius, color)
-
-proc fill_cylinder*(
-    self: Build, cx, y1, y2, cz: int, radius: float, color: Colors
-) =
-  ## Fill a vertical cylinder from y1 to y2, centered at (cx, cz).
-  let r = radius.ceil.int
-  for y in min(y1, y2) .. max(y1, y2):
-    for x in cx - r .. cx + r:
-      for z in cz - r .. cz + r:
-        let dx = x - cx
-        let dz = z - cz
-        if sqrt((dx * dx + dz * dz).float) <= radius:
-          self.draw_voxel((x.float, y.float, z.float), color)
-
-template fill_cylinder*(cx, y1, y2, cz: int, radius: float, color: Colors) =
-  ## Fill a vertical cylinder in a build script.
-  Build(active_unit()).fill_cylinder(cx, y1, y2, cz, radius, color)
-
 # === Turtle-aware shape primitives ==================================
 #
 # `box`, `sphere`, `cylinder` all default to the turtle's current
@@ -194,8 +150,8 @@ proc box*(
   )
 
 proc box*(self: Build, at, to: Vector3, color: Colors, fill = true) =
-  ## Axis-aligned corner-to-corner. Closest port of today's
-  ## `fill_box(x1, y1, z1, x2, y2, z2, color)`.
+  ## Axis-aligned corner-to-corner, inclusive of both corners. Corner
+  ## order doesn't matter (min/max normalised).
   let lo = vec3(min(at.x, to.x), min(at.y, to.y), min(at.z, to.z))
   let hi = vec3(max(at.x, to.x), max(at.y, to.y), max(at.z, to.z))
   let w = int(hi.x - lo.x) + 1
@@ -231,36 +187,63 @@ template box*(at, to: Vector3, color: Colors, fill = true) =
   Build(active_unit()).box(at, to, color, fill)
 
 # ---- sphere --------------------------------------------------------
+#
+# `size` = diameter in voxels. Rasterisation is centred on the target
+# voxel, so the effective width is always odd: size 4 and size 5 both
+# span 5 voxels (5 is fuller at the diagonals). Fractional sizes are
+# allowed — useful for smooth tapers (stacked-disk cones, spires).
+# Int and float sizes both accepted.
 
-proc sphere*(self: Build, size: int, color: Colors, fill = true) =
+proc sphere*(self: Build, size: float, color: Colors, fill = true) =
   self.sphere_impl(size, color, fill, vec3(0, 0, 0), true)
 
-proc sphere*(self: Build, size: int, at: Vector3, color: Colors, fill = true) =
+proc sphere*(self: Build, size: float, at: Vector3, color: Colors, fill = true) =
   self.sphere_impl(size, color, fill, at, false)
 
-template sphere*(size: int, color: Colors, fill = true) =
+proc sphere*(self: Build, size: int, color: Colors, fill = true) =
+  self.sphere(size.float, color, fill)
+
+proc sphere*(self: Build, size: int, at: Vector3, color: Colors, fill = true) =
+  self.sphere(size.float, at, color, fill)
+
+template sphere*(size: int | float, color: Colors, fill = true) =
   Build(active_unit()).sphere(size, color, fill)
 
-template sphere*(size: int, at: Vector3, color: Colors, fill = true) =
+template sphere*(size: int | float, at: Vector3, color: Colors, fill = true) =
   Build(active_unit()).sphere(size, at, color, fill)
 
 # ---- cylinder ------------------------------------------------------
+#
+# Same `size` semantics as sphere (diameter, voxel-centred, fractional
+# allowed). `height` counts voxels along the axis.
 
 proc cylinder*(
-    self: Build, size: int, height: int, color: Colors, fill = true
+    self: Build, size: float, height: int, color: Colors, fill = true
 ) =
   self.cylinder_impl(size, height, color, fill, vec3(0, 0, 0), true)
 
 proc cylinder*(
-    self: Build, size: int, height: int, at: Vector3, color: Colors, fill = true
+    self: Build, size: float, height: int, at: Vector3, color: Colors,
+    fill = true,
 ) =
   self.cylinder_impl(size, height, color, fill, at, false)
 
-template cylinder*(size: int, height: int, color: Colors, fill = true) =
+proc cylinder*(
+    self: Build, size: int, height: int, color: Colors, fill = true
+) =
+  self.cylinder(size.float, height, color, fill)
+
+proc cylinder*(
+    self: Build, size: int, height: int, at: Vector3, color: Colors,
+    fill = true,
+) =
+  self.cylinder(size.float, height, at, color, fill)
+
+template cylinder*(size: int | float, height: int, color: Colors, fill = true) =
   Build(active_unit()).cylinder(size, height, color, fill)
 
 template cylinder*(
-    size: int, height: int, at: Vector3, color: Colors, fill = true
+    size: int | float, height: int, at: Vector3, color: Colors, fill = true
 ) =
   Build(active_unit()).cylinder(size, height, at, color, fill)
 

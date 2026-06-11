@@ -1211,8 +1211,7 @@ proc count_draw(self: Build) =
 proc draw_voxel(self: Build, position: Vector3, color: Colors) =
   ## Paint a COMPUTED voxel. Goes through Build.draw, which only writes to
   ## local_voxels (not local_edits), so the block is regenerated when the
-  ## script reloads and isn't bloating the save file. Backs fill_box,
-  ## fill_sphere, fill_cylinder, and place.
+  ## script reloads and isn't bloating the save file. Backs place.
   self.count_draw
   let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
   self.draw(position, info)
@@ -1360,19 +1359,20 @@ proc box_impl(
 
 proc sphere_impl(
     self: Build,
-    size: int,
+    size: float,
     color: Colors,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
 ) =
   ## Radially-symmetric, so basis doesn't matter — only the centre.
-  ## `size` = diameter in voxels. Radius = size / 2.
-  if size <= 0:
+  ## `size` = diameter in voxels (fractional sizes give finer-grained
+  ## tapers, e.g. stacked-disk cones). Radius = size / 2.
+  if size <= 0.0:
     return
   self.count_draw
   let centre = if use_turtle: self.draw_transform.origin else: at
-  let radius = size.float / 2.0
+  let radius = size / 2.0
   let r_int = (radius + 0.5).floor.int
   let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
   for dx in -r_int .. r_int:
@@ -1388,7 +1388,7 @@ proc sphere_impl(
 
 proc cylinder_impl(
     self: Build,
-    size: int,
+    size: float,
     height: int,
     color: Colors,
     fill: bool,
@@ -1396,8 +1396,9 @@ proc cylinder_impl(
     use_turtle: bool,
 ) =
   ## Axis = turtle's local up. Pivot = centre of the bottom face.
-  ## `size` = diameter (voxels), `height` = voxels along the axis.
-  if size <= 0 or height <= 0:
+  ## `size` = diameter in voxels (fractional sizes give finer-grained
+  ## tapers), `height` = voxels along the axis.
+  if size <= 0.0 or height <= 0:
     return
   self.count_draw
 
@@ -1410,7 +1411,7 @@ proc cylinder_impl(
     basis = init_basis()
     origin = at
 
-  let radius = size.float / 2.0
+  let radius = size / 2.0
   let r_int = (radius + 0.5).floor.int
 
   # Bounds in cylinder-local coords for the AABB seed.

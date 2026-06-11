@@ -3,4 +3,4 @@ if not is_instance:
   show = false
   quit()
 speed = 0
-fill_sphere(0, size div 2, 0, size.float, color)
+sphere(size = (size.float) * 2.0, at = vec3(0, size div 2, 0), color = color)

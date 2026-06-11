@@ -5,7 +5,7 @@ bridged_to_host:
     ## Place a persistent MANUAL voxel. The block is saved to local_edits
     ## and survives reload. Intended for explicit user-style edits (eg.
     ## carving holes for windows, eval-driven edits from MCP). For
-    ## programmatic block-placement use draw_voxel / fill_box / place,
+    ## programmatic block-placement use draw_voxel / box / place,
     ## which mark voxels COMPUTED and let the script regenerate them on
     ## reload.
 

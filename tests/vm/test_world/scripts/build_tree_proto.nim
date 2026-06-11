@@ -3,5 +3,5 @@ if not is_instance:
   show = false
   quit()
 speed = 0
-fill_box(0, 0, 0, 0, height, 0, trunk_color)
-fill_box(-2, height - 1, -2, 2, height + 1, 2, leaf_color)
+box(vec3(0, 0, 0), vec3(0, height, 0), trunk_color)
+box(vec3(-2, height - 1, -2), vec3(2, height + 1, 2), leaf_color)
