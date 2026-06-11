@@ -1,6 +1,7 @@
 import std/[os, strformat, importutils, options]
 import pkg/compiler/ast except new_node
 import pkg/compiler/[vm, vmdef, lineinfos]
+from pkg/compiler/options import ConfigRef
 import core, eval
 
 export Interpreter, VmArgs, set_result
@@ -28,6 +29,31 @@ proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
 
 proc pause*(ctx: ScriptCtx) =
   ctx.pause_requested = true
+
+proc rebase_call_depth(self: ScriptCtx, tos: PStackFrame) =
+  # The VM's call-depth budget is a single countdown on the shared PCtx —
+  # dec'd on every call, inc'd on every return, error at 0. Every yielded
+  # script parks its stack mid-call and holds its decrements, so the budget
+  # tracks the sum of all parked stacks (and leaks permanently when a parked
+  # context is discarded by a reload or error). With enough animated units
+  # the counter drains and every script in the level fails at once with
+  # "maximum call depth for the VM exceeded". Rebase it to this stack's real
+  # depth at each VM entry so the limit applies per script.
+  let c =
+    if ?self.ctx:
+      self.ctx
+    elif ?self.interpreter:
+      PCtx(self.interpreter.get_graph.vm)
+    else:
+      nil
+  if c.is_nil:
+    return
+  var depth = 0
+  var frame = tos
+  while not frame.is_nil:
+    inc depth
+    frame = frame.next
+  c.call_depth = c.config.max_call_depth_vm - depth
 
 proc load*(self: ScriptCtx, file_name, code: string) =
   self.ctx = nil
@@ -58,6 +84,7 @@ proc run*(self: ScriptCtx): bool =
     pass_context_nil = self.pass_context.is_nil,
     code_len = self.code.len
   try:
+    self.rebase_call_depth(nil)
     self.interpreter.load_module(
       self.file_name, self.code, self.pass_context, raw_dependencies
     )
@@ -87,6 +114,7 @@ proc eval*(self: ScriptCtx, code: string): Option[string] =
       ctx = self.ctx
       pc = self.pc
       tos = self.tos
+    self.rebase_call_depth(nil)
     result = self.interpreter.eval(self.pass_context, self.file_name, code)
     self.ctx = ctx
     self.pc = pc
@@ -133,6 +161,7 @@ proc resume*(self: ScriptCtx): bool =
   assert not self.tos.is_nil
 
   trace "resuming", script = self.file_name, module = self.module_name
+  self.rebase_call_depth(self.tos)
   result =
     try:
       {.gcsafe.}:
