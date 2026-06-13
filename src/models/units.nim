@@ -73,8 +73,15 @@ proc sync_ready*(self: Unit): bool =
   ## arrive as placeholders and fill once the deep fetch lands. SYNC_LOCAL
   ## fields never fill on replicas, so only scene-critical synced fields are
   ## checked.
-  self.global_flags.loaded and self.transform_value.loaded and
+  result = self.global_flags.loaded and self.transform_value.loaded and
     self.shared_value.loaded
+  # A parented unit inherits `shared` from its parent (init_shared copies it).
+  # On a replica the parent can join after us; joining now would copy a nil
+  # `shared` and crash in init_voxels_if_needed. Wait for the parent to resolve
+  # its own `shared` first. Parent chains bottom out at a root that mints or
+  # adopts, so this converges within a few drain passes.
+  if result and ?self.parent:
+    result = ?self.parent.shared
 
 proc pivot_local*(self: Unit): Vector3 =
   ## The unit's anchor pivot in parent-local coords (or world coords if

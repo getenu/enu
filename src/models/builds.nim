@@ -449,6 +449,13 @@ proc init_voxels_if_needed*(self: Build) =
   ## are the Build's own Ed fields — reconnected by reference after sync, so we
   ## just wrap them (no id lookup, no aliasing).
   self.init_shared()
+  if not ?self.shared:
+    # Narrow replica whose `shared` (inherited from the parent on a parented
+    # unit, or our own synced singleton) hasn't filled yet. sync_ready keeps
+    # the join deferred until it's ready, so reaching here means a join slipped
+    # past that gate — bail rather than deref nil. A later join pass heals it.
+    notice "init_voxels_if_needed: shared not ready, deferring", unit = self.id
+    return
   if not ?self.voxels:
     self.voxels = VoxelStore.init(
       ctx = Ed.thread_ctx,
