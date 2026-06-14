@@ -108,11 +108,11 @@ proc fill_square*(self: Build, length = 1) =
       self.forward(length - l, 2)
       self.right(1, 2)
 
-proc place*(self: Build, x, y, z: int, color: Colors) =
+proc place*(self: Build, x, y, z: int, color = self.color) =
   ## Place a single block at local integer coordinates.
   self.draw_voxel((x.float, y.float, z.float), color)
 
-template place*(x, y, z: int, color: Colors) =
+template place*(x, y, z: int, color = active_unit().color) =
   ## Place a single block at local integer coords in a build script.
   Build(active_unit()).place(x, y, z, color)
 
@@ -134,7 +134,7 @@ template place*(x, y, z: int, color: Colors) =
 proc box*(
     self: Build,
     width, height, depth: int,
-    color: Colors,
+    color = self.color,
     fill = true,
     pivot: BoxPivot = corner,
 ) =
@@ -147,7 +147,7 @@ proc box*(
     self: Build,
     width, height, depth: int,
     at: Vector3,
-    color: Colors,
+    color = self.color,
     rotation = 0.0,
     fill = true,
     pivot: BoxPivot = corner,
@@ -157,7 +157,7 @@ proc box*(
     width, height, depth, color, fill, ord(pivot), at, rotation, false
   )
 
-proc box*(self: Build, at, to: Vector3, color: Colors, fill = true) =
+proc box*(self: Build, at, to: Vector3, color = self.color, fill = true) =
   ## Axis-aligned corner-to-corner, inclusive of both corners. Corner
   ## order doesn't matter (min/max normalised).
   let lo = vec3(min(at.x, to.x), min(at.y, to.y), min(at.z, to.z))
@@ -167,13 +167,11 @@ proc box*(self: Build, at, to: Vector3, color: Colors, fill = true) =
   let d = int(hi.z - lo.z) + 1
   # at-mode CORNER pivot extends +X / +Y / +Z from the anchor, so
   # anchor at the min corner to cover the requested range.
-  self.box_impl(
-    w, h, d, color, fill, ord(corner), lo, 0.0, false
-  )
+  self.box_impl(w, h, d, color, fill, ord(corner), lo, 0.0, false)
 
 template box*(
     width, height, depth: int,
-    color: Colors,
+    color = active_unit().color,
     fill = true,
     pivot: BoxPivot = corner,
 ) =
@@ -182,7 +180,7 @@ template box*(
 template box*(
     width, height, depth: int,
     at: Vector3,
-    color: Colors,
+    color = active_unit().color,
     rotation = 0.0,
     fill = true,
     pivot: BoxPivot = corner,
@@ -191,7 +189,7 @@ template box*(
     width, height, depth, at, color, rotation, fill, pivot
   )
 
-template box*(at, to: Vector3, color: Colors, fill = true) =
+template box*(at, to: Vector3, color = active_unit().color, fill = true) =
   Build(active_unit()).box(at, to, color, fill)
 
 # ---- sphere --------------------------------------------------------
@@ -202,22 +200,41 @@ template box*(at, to: Vector3, color: Colors, fill = true) =
 # allowed — useful for smooth tapers (stacked-disk cones, spires).
 # Int and float sizes both accepted.
 
-proc sphere*(self: Build, size: float, color: Colors, fill = true) =
+proc sphere*(self: Build, size: float, color = self.color, fill = true) =
   self.sphere_impl(size, color, fill, vec3(0, 0, 0), true)
 
-proc sphere*(self: Build, size: float, at: Vector3, color: Colors, fill = true) =
+proc sphere*(
+    self: Build, size: float, at: Vector3, color = self.color, fill = true
+) =
   self.sphere_impl(size, color, fill, at, false)
 
-proc sphere*(self: Build, size: int, color: Colors, fill = true) =
+proc sphere*(self: Build, size: int, color = self.color, fill = true) =
   self.sphere(size.float, color, fill)
 
-proc sphere*(self: Build, size: int, at: Vector3, color: Colors, fill = true) =
+proc sphere*(
+    self: Build, size: int, at: Vector3, color = self.color, fill = true
+) =
   self.sphere(size.float, at, color, fill)
 
-template sphere*(size: int | float, color: Colors, fill = true) =
+template sphere*(size: int | float, color = active_unit().color, fill = true) =
   Build(active_unit()).sphere(size, color, fill)
 
-template sphere*(size: int | float, at: Vector3, color: Colors, fill = true) =
+template sphere*(
+    size: int | float, at: Vector3, color = active_unit().color, fill = true
+) =
+  Build(active_unit()).sphere(size, at, color, fill)
+
+# ---- ball: kid-friendly alias for sphere ---------------------------
+#
+# `ball 10` reads better than `sphere 10` for young builders. Same
+# args as `sphere`; color defaults to the current turtle color.
+
+template ball*(size: int | float, color = active_unit().color, fill = true) =
+  Build(active_unit()).sphere(size, color, fill)
+
+template ball*(
+    size: int | float, at: Vector3, color = active_unit().color, fill = true
+) =
   Build(active_unit()).sphere(size, at, color, fill)
 
 # ---- cylinder ------------------------------------------------------
@@ -226,32 +243,65 @@ template sphere*(size: int | float, at: Vector3, color: Colors, fill = true) =
 # allowed). `height` counts voxels along the axis.
 
 proc cylinder*(
-    self: Build, size: float, height: int, color: Colors, fill = true
+    self: Build, size: float, height: int, color = self.color, fill = true
 ) =
   self.cylinder_impl(size, height, color, fill, vec3(0, 0, 0), true)
 
 proc cylinder*(
-    self: Build, size: float, height: int, at: Vector3, color: Colors,
+    self: Build,
+    size: float,
+    height: int,
+    at: Vector3,
+    color = self.color,
     fill = true,
 ) =
   self.cylinder_impl(size, height, color, fill, at, false)
 
 proc cylinder*(
-    self: Build, size: int, height: int, color: Colors, fill = true
+    self: Build, size: int, height: int, color = self.color, fill = true
 ) =
   self.cylinder(size.float, height, color, fill)
 
 proc cylinder*(
-    self: Build, size: int, height: int, at: Vector3, color: Colors,
+    self: Build,
+    size: int,
+    height: int,
+    at: Vector3,
+    color = self.color,
     fill = true,
 ) =
   self.cylinder(size.float, height, at, color, fill)
 
-template cylinder*(size: int | float, height: int, color: Colors, fill = true) =
+template cylinder*(
+    size: int | float, height: int, color = active_unit().color, fill = true
+) =
   Build(active_unit()).cylinder(size, height, color, fill)
 
 template cylinder*(
-    size: int | float, height: int, at: Vector3, color: Colors, fill = true
+    size: int | float,
+    height: int,
+    at: Vector3,
+    color = active_unit().color,
+    fill = true,
+) =
+  Build(active_unit()).cylinder(size, height, at, color, fill)
+
+# ---- can: kid-friendly alias for cylinder --------------------------
+#
+# `can 5, 10` reads better than `cylinder 5, 10` for young builders.
+# Same args as `cylinder`; color defaults to the current turtle color.
+
+template can*(
+    size: int | float, height: int, color = active_unit().color, fill = true
+) =
+  Build(active_unit()).cylinder(size, height, color, fill)
+
+template can*(
+    size: int | float,
+    height: int,
+    at: Vector3,
+    color = active_unit().color,
+    fill = true,
 ) =
   Build(active_unit()).cylinder(size, height, at, color, fill)
 

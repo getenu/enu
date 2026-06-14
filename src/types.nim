@@ -280,7 +280,11 @@ type
     start_transform*: Transform
     scale_value*: EdValue[float]
     glow_value*: EdValue[float]
-    speed*: float
+    # Runtime move/draw speed, set by the script (on the worker). An EdValue so
+    # it syncs worker -> main like scale/glow; as a plain field it stayed at the
+    # main replica's default and clobbered the worker's live value whenever the
+    # unit was re-published (e.g. opening its code), freezing animations.
+    speed_value*: EdValue[float]
     code_value*: EdValue[Code]
     script_ctx*: ScriptCtx
     disabled*: bool

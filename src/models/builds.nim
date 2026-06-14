@@ -419,7 +419,6 @@ proc init*(
       start_color: color,
       drawing: true,
       bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
-      speed: 0.0, # draw ASAP unless the script sets a speed
       clone_of: clone_of,
       bot_collisions: bot_collisions,
       parent: parent,

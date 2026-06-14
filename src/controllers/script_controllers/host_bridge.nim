@@ -526,18 +526,18 @@ proc delete(self: Unit) =
     self.parent.units -= self
 
 proc speed(self: Unit): float =
-  self.speed
+  types.speed(self)
 
 const ASAP_VALUE = 0
 
 proc `speed=`(self: Unit, speed: float) =
   if self of Build and speed == ASAP_VALUE:
     Build(self).begin_asap()
-    self.speed = 0
+    types.`speed=`(self, 0.0)
   else:
     if self of Build:
       Build(self).end_asap()
-    self.speed = speed
+    types.`speed=`(self, speed)
 
 proc scale(self: Unit): float =
   types.scale(self)

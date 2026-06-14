@@ -96,13 +96,13 @@ proc init*(
       id: id,
       start_transform: transform,
       animation_value: ed("auto"),
-      speed: 1.0,
       clone_of: clone_of,
       start_color: ACTION_COLORS[BLACK],
       parent: parent,
     )
 
     self.init_unit
+    self.speed = 1.0 # bots walk by default (init_unit defaults speed to 0/ASAP)
 
     if global:
       self.global_flags += GLOBAL

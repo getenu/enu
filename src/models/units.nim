@@ -51,6 +51,7 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     velocity_value = EdValue[Vector3].init()
     scale_value = ed(1.0)
     glow_value = EdValue[float].init()
+    speed_value = ed(0.0) # draw ASAP unless the script sets a speed
     color_value = ed(self.start_color)
     errors = ScriptErrors.init
     current_line_value = ed(0)
