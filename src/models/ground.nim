@@ -32,7 +32,7 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
       state.units += add_to
   elif state.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
     var t = Transform.init(origin = self.target_point)
-    state.units += Bot.init(transform = t, ephemeral = false)
+    state.units += Bot.init(transform = t)
 
 proc init*(_: type Ground, node: Spatial): Ground =
   let self = Ground(

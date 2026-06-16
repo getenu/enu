@@ -236,8 +236,15 @@ type
     # `chunk_deltas`) are owned by the Build (Build Ed fields) and merely
     # referenced here; the rest (`local_voxels`, `pending_*`, …) is local state
     # rebuilt on each side.
-    ctx* {.cursor.}: EdContext # back-ref; the Build owns this VoxelStore, ctx outlives it
+    ctx* {.cursor.}: EdContext
+      # back-ref; the Build owns this VoxelStore, ctx outlives it
     unit_id*: string # For edit key construction
+    immediate*: bool
+      ## Apply draws straight to the synced `chunk_deltas`/`edit_deltas` tables
+      ## instead of buffering into `pending_*` for a later `flush_dirty_*`. The
+      ## app's worker batches through the buffer; an external client that draws
+      ## without a flush loop sets this so its voxels sync as they're drawn —
+      ## the same path the in-process "main" context already takes.
     # Back-ref to the owning Build (cursor — the Build outlives its wrapper). The
     # synced tables `packed_chunks`/`chunk_deltas` are read LIVE from it via procs
     # (see voxels.nim), not cached — a reload reincarnates those Ed fields, and a
@@ -280,10 +287,6 @@ type
     start_transform*: Transform
     scale_value*: EdValue[float]
     glow_value*: EdValue[float]
-    # Runtime move/draw speed, set by the script (on the worker). An EdValue so
-    # it syncs worker -> main like scale/glow; as a plain field it stayed at the
-    # main replica's default and clobbered the worker's live value whenever the
-    # unit was re-published (e.g. opening its code), freezing animations.
     speed_value*: EdValue[float]
     code_value*: EdValue[Code]
     script_ctx*: ScriptCtx
@@ -303,18 +306,17 @@ type
     eval_value*: EdValue[string]
     anchor_value*: EdValue[Transform]
     rendered_voxel_count_value*: EdValue[int]
-    # Voxel pipeline work the unit's terrain hasn't finished applying yet
-    # (queued, in-flight, or awaiting apply). Pushed from the node each frame;
-    # 0 = everything submitted is meshed and visible.
     pending_block_updates_value*: EdValue[int]
     query_value*: EdValue[UnitQuery]
 
-  BlockLogEntry* = tuple
-    unit_id: string
-    color: Colors
-    local_position: Vector3
-    global_position: Vector3
-    timestamp: MonoTime
+  BlockLogEntry* =
+    tuple[
+      unit_id: string,
+      color: Colors,
+      local_position: Vector3,
+      global_position: Vector3,
+      timestamp: MonoTime,
+    ]
 
   Player* = ref object of Unit
     colliders*: HashSet[Model]
@@ -489,9 +491,9 @@ type
     module_names*: HashSet[string]
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
-    eval_proc*: proc(code: string, top_level: bool, unit_id: string): tuple[
-      result: string, error: string
-    ] {.gcsafe.}
+    eval_proc*: proc(
+      code: string, top_level: bool, unit_id: string
+    ): tuple[result: string, error: string] {.gcsafe.}
     update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object

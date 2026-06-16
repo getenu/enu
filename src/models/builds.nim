@@ -11,6 +11,7 @@ export
   encode_chunk, decode_chunk, encode_delta, decode_delta, pack_voxel,
   unpack_voxel, linear_position, from_linear, is_empty, flush_dirty_chunks,
   flush_dirty_edits, chunk_id_for_pos
+export units
 
 include "build_code_template.nim.nimf"
 
@@ -134,6 +135,22 @@ proc end_asap*(self: Build) {.gcsafe.} =
     self.voxels.flush_dirty_chunks()
     self.global_flags -= ASAP_MODE
 
+template buffer*(self: Build, body: untyped) =
+  ## Batch many draws into a single flush. `draw` normally syncs each voxel,
+  ## which is costly for large procedural builds; inside `buffer:` the draws
+  ## accumulate locally (ASAP mode) and flush once — chunks and MANUAL edits —
+  ## when the block exits (even on exception). Suspends `immediate` for the
+  ## duration so the draws actually batch, then restores it.
+  let was_immediate = self.voxels.immediate
+  self.voxels.immediate = false
+  self.begin_asap()
+  try:
+    body
+  finally:
+    self.end_asap()
+    self.voxels.flush_dirty_edits()
+    self.voxels.immediate = was_immediate
+
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
   self.voxels.add_voxel(position, voxel)
 
@@ -245,7 +262,7 @@ proc fire(self: Build) =
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
-    state.units += Bot.init(transform = transform, ephemeral = false)
+    state.units += Bot.init(transform = transform)
   elif state.tool == CODE_MODE:
     let root = self.find_root
     state.open_unit = root
@@ -386,7 +403,7 @@ method destroy*(self: Build) =
 
 proc init*(
     _: type Build,
-    id = "build_" & generate_id(),
+    id = "build_" & generate_id() & "-" & Ed.thread_ctx.id,
     transform = Transform.init,
     color = default_color,
     clone_of: Unit = nil,
@@ -441,6 +458,22 @@ proc init*(
       self.global_flags += GLOBAL
     self.reset()
     result = self
+
+proc init*(_: type Build, x, y, z: float, save = false): Build =
+  ## A build at (x, y, z) for demos and external agents. EPHEMERAL by default
+  ## (reaped when the session ends); pass `save = true` to persist it with the
+  ## level. Draws render as they're made — each `draw` syncs immediately — so a
+  ## shell appears block by block; wrap a batch in `build.buffer:` to accumulate
+  ## and flush once instead (far faster for large procedural builds).
+  result = Build.init(transform = Transform.init(vec3(x, y, z)))
+  if not save:
+    result.global_flags += EPHEMERAL
+  # enu's Build.init starts in ASAP mode (batched meshing — the right default
+  # for scripted builds that draw a lot before their first frame). An agent
+  # drawing directly wants the opposite: visible as it goes. Leave ASAP and sync
+  # each draw. `buffer:` flips both back for the span of a batch.
+  result.end_asap()
+  result.voxels.immediate = true
 
 proc init_voxels_if_needed*(self: Build) =
   ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
@@ -516,6 +549,21 @@ method worker_thread_joined*(self: Build, worker: Worker) =
   # Only clients need to apply packed chunks received from server
   if SERVER notin state.local_flags:
     self.setup_packed_chunk_watches()
+  # A build authored by a remote client (no local script) arrives stuck in
+  # ASAP_MODE (Build.init -> reset -> begin_asap): its synced voxels sit
+  # buffered and never mesh. A scripted build finishes via end_asap when its
+  # code runs, and a reloaded build via the load path — a remote, script-less
+  # build gets neither. Do it here: draw the default block to re-kick the
+  # build's terrain streaming, then end_asap so the synced chunks mesh
+  # directly. Gated to remote-owned, not-loading, script-less builds, so
+  # local in-game drawing and scripted builds are untouched.
+  elif self.code.owner != state.worker_ctx_name and
+      SCRIPT_INITIALIZING notin self.global_flags and
+      self.code.nim.strip == "" and
+      not (?self.script_ctx and self.script_ctx.script != "" and
+        file_exists(self.script_ctx.script)):
+    self.draw(vec3(), (COMPUTED, self.start_color))
+    self.end_asap()
 
 method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))

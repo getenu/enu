@@ -1,6 +1,7 @@
 import std/[math, sugar, monotimes, os]
 import godotapi/spatial
 import core, models/[states, units, colors]
+export units
 include "bot_code_template.nim.nimf"
 
 method code_template*(self: Bot, imports: string): string =
@@ -80,17 +81,16 @@ method destroy*(self: Bot) =
 
 proc init*(
     _: type Bot,
-    id = "bot_" & generate_id(),
+    id = "bot_" & generate_id() & "-" & Ed.thread_ctx.id,
     transform = Transform.init,
     clone_of: Bot = nil,
     global = true,
     parent: Unit = nil,
-    ephemeral = true,
 ): Bot =
-  ## Bots are EPHEMERAL by default: they belong to the session that created
-  ## them (surviving level reloads, skipped by persistence, reaped when the
-  ## session ends) — the right lifecycle for external agents. Bots that
-  ## belong to the level (placed, loaded, cloned) pass `ephemeral = false`.
+  ## The level-bot initializer enu uses internally (placed, loaded, cloned):
+  ## the bot belongs to the level and persists with it. Demos and external
+  ## agents want a session-scoped bot instead — see the `(x, y, z, save = ...)`
+  ## overload below, which sets EPHEMERAL.
   id.own:
     var self = Bot(
       id: id,
@@ -106,9 +106,22 @@ proc init*(
 
     if global:
       self.global_flags += GLOBAL
-    if ephemeral:
-      self.global_flags += EPHEMERAL
     result = self
+
+proc init*(
+    _: type Bot,
+    x, y, z: float,
+    save = false,
+    color = ACTION_COLORS[BLACK],
+    id = "bot_" & generate_id() & "-" & Ed.thread_ctx.id,
+): Bot =
+  ## A bot at (x, y, z) for demos and external agents. EPHEMERAL by default —
+  ## session-scoped: it survives reloads, is skipped by persistence, and is
+  ## reaped when the session ends. Pass `save = true` to keep it in the level.
+  result = Bot.init(id = id, transform = Transform.init(vec3(x, y, z)))
+  result.color = color
+  if not save:
+    result.global_flags += EPHEMERAL
 
 method clone*(self: Bot, clone_to: Unit, id: string): Unit =
   var transform = clone_to.transform
@@ -118,7 +131,6 @@ method clone*(self: Bot, clone_to: Unit, id: string): Unit =
       transform = transform,
       clone_of = self,
       parent = clone_to,
-      ephemeral = false,
     )
 
 method on_collision*(self: Unit, partner: Model, normal: Vector3) =

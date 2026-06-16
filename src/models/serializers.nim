@@ -129,7 +129,6 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
   self = Bot.init(
     id = json["id"].json_to(string),
     transform = json["start_transform"].json_to(Transform),
-    ephemeral = false,
   )
 
   if not load_chunks and "edits" in json:
@@ -326,6 +325,13 @@ proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
         unit.code = Code.init(read_file(unit.script_ctx.script))
       else:
         unit.global_flags -= SCRIPT_INITIALIZING
+        # A scripted build renders its restored edits when its code loads
+        # (change_code -> reset, then end_asap when the script finishes). A
+        # build with no script never gets that pass, so do it here: reset()
+        # restores+draws into the ASAP buffer, end_asap() flushes it to a mesh.
+        if unit of Build:
+          Build(unit).reset()
+          Build(unit).end_asap()
     except Exception as e:
       error "Failed to load unit", unit_id, error = e
 

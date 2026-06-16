@@ -486,7 +486,7 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   )
   let packed = pack_voxel(voxel.color.action_index.ord, voxel.kind.ord)
 
-  if self.ctx.metrics_label == "main":
+  if self.ctx.metrics_label == "main" or self.immediate:
     self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
     let delta_count =
       if chunk_id in self.chunk_deltas:
@@ -517,7 +517,7 @@ proc del_voxel*(self: VoxelStore, position: Vector3) =
     )
     let packed = EMPTY_VOXEL
 
-    if self.ctx.metrics_label == "main":
+    if self.ctx.metrics_label == "main" or self.immediate:
       self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
       let delta_count =
         if chunk_id in self.chunk_deltas:
@@ -552,7 +552,7 @@ proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
 
   let packed = pack_voxel(info.color.action_index.ord, info.kind.ord)
 
-  if self.ctx.metrics_label == "main":
+  if self.ctx.metrics_label == "main" or self.immediate:
     self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
     let key: EditKey = (self.unit_id, chunk_id)
     let delta_count =
@@ -575,7 +575,7 @@ proc del_edit*(self: VoxelStore, position: Vector3) =
       self.local_edits.del(chunk_id)
 
     let packed = EMPTY_VOXEL
-    if self.ctx.metrics_label == "main":
+    if self.ctx.metrics_label == "main" or self.immediate:
       self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
       let key: EditKey = (self.unit_id, chunk_id)
       let delta_count =

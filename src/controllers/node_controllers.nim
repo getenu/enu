@@ -81,6 +81,17 @@ proc add_to_scene(unit: Unit) =
     # TODO: PlayerNode should work for connected players as well
     if player.id == state.player.id:
       player.add(PlayerNode, parent_node)
+      # The local player is a bodiless first-person camera, so a bot's camera
+      # can't photograph it. Add a BotNode avatar that every other camera draws
+      # (and that casts a shadow) but the player's own camera culls. Always on,
+      # even solo — so you cast a shadow.
+      let avatar = BotNode.init
+      avatar.model = player
+      avatar.transform = player.transform
+      state.nodes.data.add_child(avatar)
+      avatar.owner = state.nodes.data
+      avatar.setup
+      avatar.as_self_avatar
     else:
       player.start_transform = player.transform
       player.add(BotNode, state.nodes.data)

@@ -139,11 +139,21 @@ proc rotation*(self: Unit): float =
       degrees += 360.0
     result = degrees
 
-proc move_to*(self: Unit, pos: Vector3, yaw_deg: float) =
+proc move_to*(self: Unit, pos: Vector3, yaw_deg = 0.0) =
   ## Set the unit's position and yaw (no pitch).
   self.transform = Transform.init(pos, yaw_deg)
   if self of Player:
     Player(self).rotation = yaw_deg
+
+proc `position=`*(self: Unit, pos: Vector3) =
+  ## Move the unit to `pos`, keeping its orientation. Pairs with `position`.
+  self.transform_value.origin = pos
+
+proc `rotation=`*(self: Unit, degrees: float) =
+  ## Set the unit's yaw in degrees, keeping its position. Pairs with `rotation`.
+  self.transform_value.basis = yaw_basis(degrees)
+  if self of Player:
+    Player(self).rotation = degrees
 
 proc look_at*(self: Unit, target: Vector3) =
   ## Aim the unit at `target` from its current position — yaw plus

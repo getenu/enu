@@ -127,6 +127,13 @@ proc load_unit_from_json(unit_id, json_file: string) =
       new_unit.code = Code.init(read_file(new_unit.script_ctx.script))
     else:
       new_unit.global_flags -= SCRIPT_INITIALIZING
+      # A scripted build renders its restored edits when its code loads
+      # (change_code -> reset, then end_asap when the script finishes). A
+      # build with no script never gets that pass, so do it here: reset()
+      # restores+draws into the ASAP buffer, end_asap() flushes it to a mesh.
+      if new_unit of Build:
+        Build(new_unit).reset()
+        Build(new_unit).end_asap()
 
 proc write_script_file(unit: Unit, code: string) =
   # Code changes that originate from disk (level load, file-watcher reloads)
@@ -329,7 +336,7 @@ proc watch_code(self: Worker, unit: Unit) =
         if state.config.auto_show_console:
           state.push_flags CONSOLE_VISIBLE
 
-      if removed:
+      if removed and state.config.auto_show_console:
         state.pop_flags CONSOLE_VISIBLE
   unit.errors.bind_lifetime(unit.require_lifetime, errors_zid)
 
@@ -569,7 +576,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           # unit's ownership closure — see OWNS_MEMBERS on root_units. Our own
           # writes still flow up (the reverse direction stays full).
           connect_address,
-          partial = true,
+          # Non-blocking partial: placeholders fill on later ticks, never
+          # stalling the frame loop waiting on the network.
+          mode = PARTIAL_ASYNC,
           # deep stays default-false for now: a stress test of the narrow path
           # (placeholders + materialize-on-access). Flip to deep = true if it
           # doesn't hold up — that pushes unit closures so units arrive

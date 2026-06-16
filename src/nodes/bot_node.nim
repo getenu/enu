@@ -6,9 +6,15 @@ import
     scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
     animation_player, resource_loader, packed_scene, spatial_material,
     text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
+    area,
   ]
 import gdutils, core, models/[colors, units], ui/markdown_label
 import ./queries
+
+const SELF_AVATAR_LAYER = 1'i64 shl 19
+  ## Render layer for the local player's own avatar: the player's first-person
+  ## camera culls it (you never see your own body), every other camera draws
+  ## it, and shadow casting is unaffected — so you still see your own shadow.
 
 gdobj BotNode of KinematicBody:
   var
@@ -150,7 +156,12 @@ gdobj BotNode of KinematicBody:
           )
 
       player.cursor_position_value.watch:
-        if added:
+        # Only a BotNode carrying the code-popup sign has this editor; the
+        # local player's self-avatar (and plain bots) don't, so this is a
+        # no-op for them. Without the guard, the avatar — bound to the local
+        # player's model — would deref a nil node the moment the editor
+        # cursor moves and take the process down.
+        if added and self.has_node("SignNode/Viewport/TextEdit"):
           let editor = self.get_node("SignNode/Viewport/TextEdit") as TextEdit
           editor.cursor_set_line(change.item.line, true)
           editor.cursor_set_column(change.item.col, true)
@@ -204,6 +215,28 @@ gdobj BotNode of KinematicBody:
         # cooking colliders along every bot's path is a main-thread cost.
         viewer.requires_collisions = false
         self.add_child(viewer)
+
+  proc as_self_avatar*() =
+    ## Make this the local player's stand-in body: inert (no collision, no
+    ## per-frame process — it follows the player through the transform/rotation/
+    ## velocity watches set up in `track_changes`) and on SELF_AVATAR_LAYER, so
+    ## the player's own camera culls it while every other camera renders it,
+    ## shadow and all.
+    self.set_process(false)
+    self.collision_layer = 0
+    self.collision_mask = 0
+    # The body isn't the only collider: bots are targeted through their
+    # SelectionArea (layer 16), which the player's aim rays hit. Left enabled,
+    # the avatar — co-located with the camera — intercepts every aim, so block
+    # placement, unit highlight, and code-open all resolve to the player's own
+    # model. Zero its layer too so the rays pass through to the world.
+    let selection = self.get_node("SelectionArea") as Area
+    selection.collision_layer = 0
+    self.mesh.layers = SELF_AVATAR_LAYER
+    self.mesh.cast_shadow = 1 # SHADOW_CASTING_SETTING_ON
+    if not state.player_camera.is_nil:
+      let cam = Camera(state.player_camera)
+      cam.cull_mask = cam.cull_mask and not SELF_AVATAR_LAYER
 
   method process(delta: float) =
     if self.model of Bot:
