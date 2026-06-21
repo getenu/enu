@@ -15,7 +15,7 @@
     "ed.getenu.github.com": {
       "dir": "$deps/ed",
       "url": "https://github.com/getenu/ed",
-      "commit": "39ee2258b7e073b290cad310f475d81751177390",
+      "commit": "5b60795e5caf16f2373c89c585bf215081ba2079",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
@@ -99,7 +99,7 @@
     "nimcp": {
       "dir": "$deps/nimcp",
       "url": "https://github.com/gokr/nimcp",
-      "commit": "99c2498f775adc16dc04183f65adbccd3b847057",
+      "commit": "bc650535a1a5f496c352267d3c831089130db785",
       "version": ""
     },
     "mummyx.gokr.github.com": {
