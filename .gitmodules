@@ -5,7 +5,7 @@
 [submodule "vendor/godot"]
 	path = vendor/godot
 	url = https://github.com/dsrw/godot.git
-	branch = enu
+	branch = 3.6.2-enu
 	ignore = untracked
 [submodule "vendor/pcre"]
 	path = vendor/pcre
