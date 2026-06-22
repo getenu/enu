@@ -897,7 +897,7 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
 
 proc buffer_snapshot*(
     self: VoxelRenderer, chunk_id: Vector3, snapshot: SnapshotData
-) =
+): int {.discardable.} =
   if snapshot.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
@@ -913,9 +913,12 @@ proc buffer_snapshot*(
         color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64,
         buffer_pos.z.int64,
       )
+      inc result
   self.dirty = true
 
-proc buffer_delta*(self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate) =
+proc buffer_delta*(
+    self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate
+): int {.discardable.} =
   if delta.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
@@ -933,6 +936,7 @@ proc buffer_delta*(self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate) =
         color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64,
         buffer_pos.z.int64,
       )
+      inc result
   self.dirty = true
 
 proc begin_asap*(self: VoxelRenderer) =

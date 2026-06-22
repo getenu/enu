@@ -59,10 +59,14 @@ gdobj BuildNode of VoxelTerrain:
 
     let zid = delta_seq.watch:
       if added and chunk_id in self.loaded_chunks:
+        var painted = 0
         if ASAP_MODE in self.model.global_flags:
-          self.renderer.buffer_delta(chunk_id, change.item)
+          painted = self.renderer.buffer_delta(chunk_id, change.item)
         elif ?self.renderer.voxel_tool:
-          render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
+          painted =
+            render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
+        self.model.rendered_voxel_count =
+          self.model.rendered_voxel_count + painted
 
     self.tracked_delta_seqs[chunk_id] = zid
 
@@ -86,14 +90,15 @@ gdobj BuildNode of VoxelTerrain:
 
       if chunk_id in self.model.voxels.packed_chunks:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
+        var painted = 0
         if ASAP_MODE in self.model.global_flags:
-          self.renderer.buffer_snapshot(chunk_id, snapshot)
+          painted = self.renderer.buffer_snapshot(chunk_id, snapshot)
         elif ?self.renderer.voxel_tool:
-          let painted = render_snapshot_direct(
+          painted = render_snapshot_direct(
             self.renderer.voxel_tool, chunk_id, snapshot
           )
-          self.model.rendered_voxel_count =
-            self.model.rendered_voxel_count + painted
+        self.model.rendered_voxel_count =
+          self.model.rendered_voxel_count + painted
 
       if chunk_id in self.model.voxels.chunk_deltas:
         let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
@@ -101,7 +106,7 @@ gdobj BuildNode of VoxelTerrain:
           var painted = 0
           for delta in delta_seq:
             if ASAP_MODE in self.model.global_flags:
-              self.renderer.buffer_delta(chunk_id, delta)
+              painted = painted + self.renderer.buffer_delta(chunk_id, delta)
             elif ?self.renderer.voxel_tool:
               painted = painted + render_delta_direct(
                 self.renderer.voxel_tool, chunk_id, delta

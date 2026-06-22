@@ -872,11 +872,12 @@ proc has_block_at(position: Vector3): bool =
   find_block_at(position).is_some
 
 proc rendered_voxel_count_get(self: Build): int =
-  ## Total voxels the build_node has actually painted into the
-  ## terrain via render_snapshot_direct / render_delta_direct's
-  ## paste-based path. Diagnostic for catching when writes are
-  ## dropped by VoxelTool::is_area_editable; lags the model count
-  ## if the paste hasn't caught up yet.
+  ## Total voxels the build_node has painted into the terrain, across
+  ## every render path: the on_block_loaded snapshot/delta paste, the
+  ## watch_delta_seq deltas to already-loaded chunks, and the ASAP
+  ## buffer. Diagnostic for catching dropped writes; lags the model
+  ## count while paints are still catching up. May slightly over-count
+  ## if a delta is re-pasted (idempotent), so compare with `>=`.
   self.rendered_voxel_count
 
 proc pending_block_updates_get(self: Unit): int =
