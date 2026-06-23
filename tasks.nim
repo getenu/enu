@@ -171,8 +171,14 @@ task godot_tests, "run godot tests":
 
 task world_tests,
   "run in-world tests (headless for server build, dist for dist build)":
+  # Each level runs in sequence via `--enu-test`; test mode exits with a code
+  # derived from script errors and signal_test_complete calls, and a non-zero
+  # exit from any level fails the task. Add fixtures to test_levels below.
   let
-    test_level = this_dir() / "vmlib/worlds/tests/unit-tests"
+    test_levels = @[
+      this_dir() / "vmlib/worlds/tests/unit-tests",
+      this_dir() / "vmlib/worlds/tests/bulk-spawn",
+    ]
     params = command_line_params()
     headless = "headless" in params
     use_dist = "dist" in params
@@ -197,14 +203,142 @@ task world_tests,
     else:
       godot_bin()
 
-  let cmd =
-    if use_dist:
-      bin & " --level-dir " & test_level & " --enu-test --temp-workdir"
-    else:
-      "cd app && " & bin & " --level-dir " & test_level &
-        " --enu-test scenes/game.tscn --temp-workdir"
+  for test_level in test_levels:
+    p &"Running world test: {test_level.split_path.tail}"
+    let cmd =
+      if use_dist:
+        bin & " --level-dir " & test_level & " --enu-test --temp-workdir"
+      else:
+        "cd app && " & bin & " --level-dir " & test_level &
+          " --enu-test scenes/game.tscn --temp-workdir"
+    exec cmd
 
-  exec cmd
+task client_smoke,
+  "Two-instance smoke: server + partial-replica client; verify sync via logs":
+  p "Building enu..."
+  exec "nim build"
+
+  p "Stopping previous harness-launched enu (if any)..."
+  discard gorge_ex(
+    "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
+  )
+  discard gorge_ex("pkill -x enu || true")
+  exec "sleep 1"
+  let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
+  if port_check.output.strip.len > 0:
+    echo "Port 9632 is in use by an enu this harness didn't start — not killing it:"
+    echo port_check.output
+    quit 1
+
+  let godot = godot_bin()
+  p "Starting server..."
+  exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose " &
+    "scenes/game.tscn > /tmp/enu_server.log 2>&1 & echo $! > /tmp/enu_server.pid"
+  exec "sleep 6"
+
+  p "Starting client (partial replica)..."
+  exec &"cd app && ENU_CONNECT_ADDRESS=127.0.0.1 {godot} --verbose " &
+    "scenes/game.tscn --temp-workdir > /tmp/enu_client.log 2>&1 & echo $! > /tmp/enu_client.pid"
+  exec "sleep 20" # boot + connect + initial sync + scripts
+
+  p "Checking logs..."
+  let client_log = gorge_ex("cat /tmp/enu_client.log").output
+  let server_log = gorge_ex("cat /tmp/enu_server.log").output
+
+  var failures: seq[string]
+  template expect_check(cond: bool, msg: string) =
+    if cond:
+      echo "  ok: " & msg
+    else:
+      failures.add msg
+      echo "  FAIL: " & msg
+
+  expect_check "connected to server" in client_log, "client connected"
+  expect_check "Unable to connect to server" notin client_log,
+    "no connect timeout"
+  expect_check "adding child" in client_log,
+    "client renders units (add_to_scene)"
+  expect_check client_log.count("player-") >= 2,
+    "client sees both players (own + server's)"
+  expect_check server_log.count("adding child") >= 1 and
+    server_log.count("player-") >= 2,
+    "server sees the client's player"
+  expect_check "unowned Ed field" notin client_log, "client: no unowned fields"
+  expect_check "unowned Ed field" notin server_log, "server: no unowned fields"
+  expect_check "voxel paging" in client_log,
+    "client pages voxel chunks (LAZY tables + view-driven request/release)"
+  expect_check "SIGSEGV" notin client_log and "Traceback" notin client_log,
+    "client: no crashes"
+  expect_check "SIGSEGV" notin server_log and "Traceback" notin server_log,
+    "server: no crashes"
+
+  p "Stopping harness enu instances..."
+  discard gorge_ex(
+    "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
+  )
+
+  if failures.len > 0:
+    echo &"\nResult: FAIL ({failures.len} checks failed)"
+    quit 1
+  echo "\nResult: PASS"
+
+task mcp_repro,
+  "Build enu, restart it, and run MCP integration tests (repeat N times, default 5)":
+  let
+    params = command_line_params()
+    # parse optional count argument, e.g. `nim mcp_repro 10`
+    count_str = params.filter_it(it.all_chars_in_set({'0'..'9'}))
+    iterations = if count_str.len > 0: count_str[0].parse_int else: 5
+
+  p "Building enu..."
+  exec "nim build"
+
+  p "Stopping previous harness-launched enu (if any)..."
+  # Only kill instances *this harness* started (pidfile) — never a manually
+  # launched enu. If the port is still busy, fail loudly instead.
+  discard gorge_ex(
+    "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
+  )
+  discard gorge_ex("pkill -x enu || true")
+  exec "sleep 1"
+  let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
+  if port_check.output.strip.len > 0:
+    echo "Port 9632 is in use by an enu this harness didn't start — not killing it:"
+    echo port_check.output
+    quit 1
+
+  p &"Starting enu in background..."
+  let godot = godot_bin()
+  exec &"cd app && ENU_LISTEN_ADDRESS=127.0.0.1 {godot} --verbose scenes/game.tscn > /tmp/enu_repro.log 2>&1 & echo $! > /tmp/enu_repro.pid"
+  exec "sleep 4"
+
+  p &"Running MCP integration tests ({iterations} iterations)..."
+  var pass_count = 0
+  var fail_count = 0
+  for i in 1 .. iterations:
+    echo &"\n--- Iteration {i}/{iterations} ---"
+    let result = gorge_ex(
+      "ENU_CONNECT_ADDRESS=127.0.0.1 nim c -r bin/enu_mcp_test.nim 2>&1"
+    )
+    echo result.output
+    if result.exit_code == 0:
+      inc pass_count
+      echo &"PASS ({pass_count} passed, {fail_count} failed so far)"
+    else:
+      inc fail_count
+      echo &"FAIL ({pass_count} passed, {fail_count} failed so far)"
+      # Stop early once we've reproduced the failure
+      echo "Bug reproduced — stopping."
+      break
+
+  p "Stopping harness enu..."
+  discard gorge_ex(
+    "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
+  )
+
+  echo &"\nResult: {pass_count}/{iterations} passed"
+  if fail_count > 0:
+    quit 1
 
 task test, "run all tests":
   var failed: seq[string]

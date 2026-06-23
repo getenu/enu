@@ -23,13 +23,10 @@ import std/[with, sets, tables]
 import std/times except seconds
 import pkg/[pretty, flatty]
 
-export with, sets, tables, pretty, flatty
+export with, sets, tables, pretty, flatty, times.`<`
 
 template init*[K, V](_: type Table[K, V]): Table[K, V] =
   Table[K, V].default
-
-proc minutes*(m: float | int): Duration {.inline.} =
-  init_duration(seconds = int(m * 60))
 
 ### Debug
 
@@ -269,9 +266,28 @@ proc `basis=`*(self: EdValue[Transform], value: Basis) =
 proc init*(_: type Basis): Basis =
   init_basis()
 
+proc yaw_basis*(degrees: float): Basis =
+  init_basis(vec3(0.0, float32(deg_to_rad(degrees)), 0.0))
+
 proc init*(_: type Transform, origin = vec3()): Transform =
   result = init_transform()
   result.origin = origin
+
+proc init*(_: type Transform, origin: Vector3, yaw_deg: float): Transform =
+  result.basis = yaw_basis(yaw_deg)
+  result.origin = origin
+
+proc write_file_if_changed*(path, content: string) =
+  ## Skip the write when the on-disk content already matches, so unchanged
+  ## saves don't bump the mtime. File watchers — including other Enu
+  ## instances on the same level — treat any mtime change as a change, and
+  ## rewriting identical content makes two instances reload-loop forever.
+  try:
+    if read_file(path) == content:
+      return
+  except OSError, IOError:
+    discard
+  write_file(path, content)
 
 proc init*(_: type Code, nim: string): Code =
   Code(owner: state.worker_ctx_name, runner: state.server_ctx_name, nim: nim)
@@ -285,12 +301,22 @@ proc update_action_index*(state: GameState, change: int) =
 
   state.tool = Tools(index)
 
+proc require_lifetime*(unit: Unit): Lifetime =
+  ## The Unit's owner Lifetime, created on demand. Locally built units get one in
+  ## `init_unit`, but units arriving via sync are reconstructed through flatty's
+  ## `parse` (which skips `init_unit`), so their lifetime is nil until first use.
+  ## Any code binding a watcher to a unit goes through here, so a synced unit
+  ## still gets a real Lifetime the moment it's watched.
+  if unit.lifetime.is_nil:
+    unit.lifetime = new_lifetime()
+  unit.lifetime
+
 template watch*[T, O](zen: Ed[T, O], unit: untyped, body: untyped) =
   when unit is Unit:
     mixin thread_ctx
     let zid = zen.changes:
       body
-    unit.eids.add(zid)
+    zen.bind_lifetime(unit.require_lifetime, zid)
     make_discardable(zid)
   else:
     {.

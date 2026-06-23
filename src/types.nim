@@ -1,4 +1,41 @@
 import std/[tables, monotimes, times, sets, options, macros]
+
+type
+  # A general way to run a query against a unit from another context (another
+  # thread, or a remote process over the network). The asker fills in a
+  # UnitQuery and sets the unit's `query` to it with state PENDING; the
+  # context that owns the unit's behavior answers by writing the same value
+  # back with `result`/`error` filled in and state DONE. Today only
+  # EPHEMERAL bots subscribe for answers (see bots.nim and bot_node.nim), but the
+  # slot exists on every unit.
+  UnitQueryKind* = enum
+    BLANK
+    SCREENSHOT
+    EVAL
+    CONSOLE
+    CLEAR_CONSOLE
+    LEVEL_DIR
+    PING
+
+  UnitQueryState* = enum
+    IDLE
+    PENDING
+    READY
+    DONE
+
+  UnitQuery* = object
+    kind*: UnitQueryKind
+    code*: string
+    result*: string
+    error*: string
+    state*: UnitQueryState
+    top_level*: bool
+    unit_id*: string
+    screenshot_from_player*: bool
+    screenshot_with_ui*: bool
+    screenshot_top_down*: bool
+    screenshot_size*: float
+
 import godotapi/[spatial, ray_cast]
 import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
@@ -8,7 +45,7 @@ import models/colors, libs/[eval]
 
 from pkg/godot import NimGodotObject
 
-export Vector3, Transform, vector3, basis, AABB, aabb
+export Vector3, Transform, Basis, vector3, basis, AABB, aabb
 export godotbase except print
 export Interpreter
 export lineinfos.`==`
@@ -96,11 +133,28 @@ type
     LOCK
     READY
     SCRIPT_INITIALIZING
+    SCRIPT_LOADING
     SCRIPT_RUNNING
     DIRTY
     RESETTING
     HIGHLIGHT_ERROR
     ASAP_MODE
+    EPHEMERAL
+      ## Set on units owned by a remote client context — the human's
+      ## Player and any client-owned bot (MCP, scripted agents). Agent
+      ## units survive level reloads (peer to the human), are skipped
+      ## by level persistence (their lifecycle is the client's, not
+      ## the level's), and get cleaned up when their owning context
+      ## unsubscribes. Convention: agent unit ids contain the owning
+      ## context name as a substring (e.g. `player-{ctx_name}`,
+      ## `mcp_bot-{ctx_name}`) so worker.nim can match them on
+      ## unsubscribe.
+    VOXEL_VIEWER
+      ## The unit streams voxel terrain around itself: the server attaches
+      ## a VoxelViewer node so chunks near the unit get meshed even when no
+      ## player is nearby. Off by default — players bring their own viewer,
+      ## and most units don't need one. Set it on agent bots that take
+      ## screenshots away from the player.
 
   Tools* = enum
     CODE_MODE
@@ -130,12 +184,17 @@ type
     tool_value*: EdValue[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
+    screenshot_camera*: Node
+    screenshot_viewport*: Node
+    player_camera*: Node
+    screenshot_counter*: int
     player_value*: EdValue[Player]
     units*: EdSeq[Unit]
     ground*: Ground
     draw_unit_id*: string
     console*: ConsoleModel
     paused*: bool
+    show_prototypes*: bool
     frame_count*: int
     skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format
@@ -155,9 +214,9 @@ type
     net_bytes_sent_value*: EdValue[int64]
     net_bytes_received_value*: EdValue[int64]
     net_connections_value*: EdValue[int]
+    ed_mem_value*: EdValue[int] # worker ctx resident body bytes (evictor)
 
-  Model* = ref object of RootObj
-    id*: string
+  Model* = ref object of EdRef
     target_point*: Vector3
     target_normal*: Vector3
     local_flags*: EdSet[LocalModelFlags]
@@ -166,19 +225,32 @@ type
 
   Ground* = ref object of Model
 
-  Shared* = ref object of RootObj
-    id*: string
+  Shared* = ref object of EdRef
     materials*: seq[ShaderMaterial]
     emission_colors*: seq[godot.Color]
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
 
   VoxelStore* = ref object
-    id*: string
-    ctx*: EdContext
+    # Local per-side render wrapper. The synced tables (`packed_chunks`,
+    # `chunk_deltas`) are owned by the Build (Build Ed fields) and merely
+    # referenced here; the rest (`local_voxels`, `pending_*`, …) is local state
+    # rebuilt on each side.
+    ctx* {.cursor.}: EdContext
+      # back-ref; the Build owns this VoxelStore, ctx outlives it
     unit_id*: string # For edit key construction
-    packed_chunks*: EdTable[Vector3, SnapshotData]
-    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
+    immediate*: bool
+      ## Apply draws straight to the synced `chunk_deltas`/`edit_deltas` tables
+      ## instead of buffering into `pending_*` for a later `flush_dirty_*`. The
+      ## app's worker batches through the buffer; an external client that draws
+      ## without a flush loop sets this so its voxels sync as they're drawn —
+      ## the same path the in-process "main" context already takes.
+    # Back-ref to the owning Build (cursor — the Build outlives its wrapper). The
+    # synced tables `packed_chunks`/`chunk_deltas` are read LIVE from it via procs
+    # (see voxels.nim), not cached — a reload reincarnates those Ed fields, and a
+    # cached copy would dangle on the destroyed table (ed revives the Build's
+    # field in place, so reading through it always sees the current table).
+    build* {.cursor.}: Build
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
     local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
@@ -210,12 +282,12 @@ type
     answer*: Option[bool]
 
   Unit* = ref object of Model
-    parent*: Unit
+    parent* {.cursor.}: Unit # back-ref; the parent owns this child via `units`
     units*: EdSeq[Unit]
     start_transform*: Transform
     scale_value*: EdValue[float]
     glow_value*: EdValue[float]
-    speed*: float
+    speed_value*: EdValue[float]
     code_value*: EdValue[Code]
     script_ctx*: ScriptCtx
     disabled*: bool
@@ -228,17 +300,30 @@ type
     color_value*: EdValue[Color]
     sight_ray*: RayCast
     frame_created*: int
-    eids* {.ed_ignore.}: seq[EID]
     errors*: ScriptErrors
     current_line_value*: EdValue[int]
     sight_query_value*: EdValue[SightQuery]
     eval_value*: EdValue[string]
+    anchor_value*: EdValue[Transform]
+    rendered_voxel_count_value*: EdValue[int]
+    pending_block_updates_value*: EdValue[int]
+    query_value*: EdValue[UnitQuery]
+
+  BlockLogEntry* =
+    tuple[
+      unit_id: string,
+      color: Colors,
+      local_position: Vector3,
+      global_position: Vector3,
+      timestamp: MonoTime,
+    ]
 
   Player* = ref object of Unit
     colliders*: HashSet[Model]
     rotation_value*: EdValue[float]
     input_direction_value*: EdValue[Vector3]
     cursor_position_value*: EdValue[tuple[line: int, col: int]]
+    block_log_entries*: EdSeq[BlockLogEntry]
 
   Bot* = ref object of Unit
     animation_value*: EdValue[string]
@@ -252,6 +337,13 @@ type
     text_only*: bool
 
   Build* = ref object of Unit
+    # The synced voxel tables ride the build's closure as real Ed fields (like
+    # `units`) — reconnected by reference after sync, with generated ids. So they
+    # need no id lookup, and a reload gets fresh ids (no destroy+recreate-same-id
+    # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
+    # at these.
+    packed_chunks*: EdTable[Vector3, SnapshotData]
+    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
     voxels*: VoxelStore
     draw_transform_value*: EdValue[Transform]
     voxels_per_frame*: float
@@ -295,6 +387,7 @@ type
     gamepad_sensitivity*: float
     invert_gamepad_y_axis*: bool
     screen_scale*: float
+    auto_show_console*: bool
 
   UserConfig* = object
     font_size*: Option[int]
@@ -318,6 +411,7 @@ type
     invert_gamepad_y_axis*: Option[bool]
     listen_address*: Option[string]
     connect_address*: Option[string]
+    auto_show_console*: Option[bool]
 
   Code* = object
     owner*: string
@@ -327,7 +421,21 @@ type
   ScriptCtx* = ref object
     script*: string
     timer*: MonoTime
-    timeout_at*: MonoTime
+    # Instruction budget for the non-yielding-script watchdog: decremented by
+    # the VM exec hook, TIMEOUT when exhausted. Deterministic (the same script
+    # costs the same count on any machine or build type), unlike the wall-clock
+    # deadline it replaces — a cold or busy machine could stall a legitimate
+    # compile past any wall-clock limit, and a timeout aborting a module load
+    # poisons the interpreter's import graph.
+    fuel*: int64
+    # Immediate draw calls (box/sphere/cylinder/draw_voxel) since the last
+    # yield. The logo APIs yield naturally (they animate in-engine); the
+    # immediate APIs do all their work in the bridged call, so a build script
+    # could otherwise run its whole control flow in one unyielding resume.
+    # Every draw_yield_interval calls the bridge requests a pause — bounding
+    # the worker stall per resume and re-arming `fuel` on resume, so no
+    # legitimate drawing script can exhaust the budget.
+    unyielded_draws*: int
     ctx: PCtx
     pc: int
     tos: PStackFrame
@@ -368,6 +476,9 @@ type
     worker_thread*: system.Thread[tuple[ctx: EdContext, state: GameState]]
 
   Worker* = ref object
+    # Units that arrived before their data (narrow partial replica): the worker
+    # join is deferred until their core containers fill. Drained per loop tick.
+    pending_units*: seq[Unit]
     retry_failures*: bool
     interpreter*: Interpreter
     active_unit*: Unit
@@ -377,10 +488,18 @@ type
     failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
-    initial_load_done*: bool
     module_names*: HashSet[string]
+    watch_files_at*: MonoTime
+    orphan_scripts_reported*: HashSet[string]
+    eval_proc*: proc(
+      code: string, top_level: bool, unit_id: string
+    ): tuple[result: string, error: string] {.gcsafe.}
+    update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object
+    # Units that arrived before their data (narrow partial replica): the scene
+    # add is deferred until their core containers fill. Drained per frame.
+    pending*: seq[Unit]
 
   SavedState* = object
     transform*: Transform
@@ -407,6 +526,15 @@ proc from_flatty*(s: string, i: var int, n: var EdContext) =
 
 proc to_flatty*(s: var string, n: EdContext) =
   discard
+
+proc packed_chunks*(self: VoxelStore): EdTable[Vector3, SnapshotData] =
+  ## Read the Build's table live — never cache it: a reload reincarnates the Ed
+  ## field (ed revives it in place), so reading through the Build always sees the
+  ## current table; a cached copy would dangle on the destroyed one.
+  self.build.packed_chunks
+
+proc chunk_deltas*(self: VoxelStore): EdTable[Vector3, EdSeq[DeltaUpdate]] =
+  self.build.chunk_deltas
 
 Ed.register(Player)
 Ed.register(Build)

@@ -1,4 +1,4 @@
-import std/[locks, os, random, net, json, jsonutils]
+import std/[locks, os, random, net, json, jsonutils, strutils]
 import std/times except seconds, minutes
 from pkg/netty import Reactor
 import core, models, models/serializers, libs/[interpreters, eval]
@@ -11,8 +11,11 @@ var
 worker_lock.init_lock
 work_done.init_cond
 
-proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
-  ## Convert CatchableError to VMQuit and display in console with stack trace
+proc handle_catchable_error(self: Worker, unit: Unit, e: ref Exception) =
+  ## Convert host-side exception to VMQuit and display in console.
+  ## Accepts Defect as well as CatchableError so VM-level bugs (e.g.
+  ## IndexDefect from corrupted register frames after module reset) don't
+  ## crash the worker thread.
   let ctx = unit.script_ctx
   let info =
     if ?ctx:
@@ -33,6 +36,7 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref CatchableError) =
     (ref VMQuit)(info: info, kind: UNKNOWN, msg: e.msg, location: loc)
   if ?ctx:
     self.interpreter.reset_module(ctx.module_name)
+    self.module_names.excl ctx.module_name
   self.script_error(unit, vm_error)
 
 proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
@@ -58,12 +62,12 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       ctx.last_ran = now
       if ctx.callback == nil or (;
         task_state = ctx.callback(delta, timeout)
-        task_state in {DONE, NEXT_TASK}
+        task_state in {TaskStates.DONE, NEXT_TASK}
       ):
         ctx.timer = MonoTime.high
         ctx.action_running = false
         self.active_unit = unit
-        ctx.timeout_at = now + script_timeout
+        ctx.fuel = script_fuel
         ctx.running = ctx.resume()
         if not ctx.running:
           if unit of Build:
@@ -79,12 +83,19 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
         ctx.saved_callback = ctx.callback
         ctx.callback = nil
         self.active_unit = unit
-        ctx.timeout_at = now + script_timeout
+        ctx.fuel = script_fuel
         discard ctx.resume()
     except VMQuit as e:
       self.interpreter.reset_module(unit.script_ctx.module_name)
+      self.module_names.excl unit.script_ctx.module_name
       self.script_error(unit, e)
     except CatchableError as e:
+      self.handle_catchable_error(unit, e)
+    except Defect as e:
+      # Bytecode-level defects (e.g. IndexDefect inside vm.nim from a
+      # corrupted register frame after module reset) are bugs in the VM/script
+      # path, not the host. Treat them as script errors so a single bad script
+      # doesn't take down the worker thread.
       self.handle_catchable_error(unit, e)
     finally:
       self.active_unit = nil
@@ -115,9 +126,19 @@ proc load_unit_from_json(unit_id, json_file: string) =
       new_unit.code = Code.init(read_file(new_unit.script_ctx.script))
     else:
       new_unit.global_flags -= SCRIPT_INITIALIZING
+      # A scripted build renders its restored edits when its code loads
+      # (change_code -> reset, then end_asap when the script finishes). A
+      # build with no script never gets that pass, so do it here: reset()
+      # restores+draws into the ASAP buffer, end_asap() flushes it to a mesh.
+      if new_unit of Build:
+        Build(new_unit).reset()
+        Build(new_unit).end_asap()
 
 proc write_script_file(unit: Unit, code: string) =
-  write_file(unit.script_ctx.script, code)
+  # Code changes that originate from disk (level load, file-watcher reloads)
+  # round-trip through here; write_file_if_changed keeps them from bumping
+  # the mtime and reload-looping another instance on the same level dir.
+  write_file_if_changed(unit.script_ctx.script, code)
   try:
     unit.script_ctx.last_saved_mtime =
       get_last_modification_time(unit.script_ctx.script)
@@ -134,9 +155,13 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
   unit.reset()
   if LOADING_SCRIPT notin state.local_flags and code.nim.strip == "":
     self.interpreter.reset_module(unit.script_ctx.module_name)
+    self.module_names.excl unit.script_ctx.module_name
     debug "reset module", module = unit.script_ctx.module_name
     unit.script_ctx.running = false
-    remove_file unit.script_ctx.script
+    try:
+      remove_file unit.script_ctx.script
+    except OSError:
+      discard
   elif code.nim.strip != "":
     debug "loading unit", unit_id = unit.id
     if LOADING_SCRIPT notin state.local_flags and not self.retry_failures:
@@ -149,6 +174,138 @@ proc change_code(self: Worker, unit: Unit, code: Code) =
         assert unit.id == state.player.id
     else:
       self.load_script(unit)
+
+const file_watch_interval = 2.seconds
+
+proc update_files*(self: Worker) =
+  if SERVER notin state.local_flags:
+    return
+
+  # Mid-reload there is no level: switch_world(0) writes level_dir = "" then
+  # back, and unload_level has already emptied state.units. Scanning now would
+  # make every on-disk unit look newly added and batch-load the whole level
+  # into a VM that hasn't run initialize_state yet.
+  if state.config.level_dir == "" or RESETTING_VM in state.local_flags or
+      LOADING_LEVEL in state.global_flags:
+    return
+
+  # Detect on-disk deletions before the mtime scans (which silently swallow
+  # OSError for missing files and so would leave a deleted unit in state).
+  var unit_deletions: seq[Unit]
+  var script_clears: seq[Unit]
+  for unit in state.units.value:
+    if not ?unit.script_ctx:
+      continue
+    # Skip units whose JSON has never been observed (still initializing) —
+    # we can't tell "deleted" from "never existed yet".
+    if unit.script_ctx.last_saved_json_mtime != Time.default and
+        not file_exists(unit.data_file):
+      unit_deletions.add(unit)
+      continue
+    if unit.script_ctx.script != "" and
+        unit.script_ctx.last_saved_mtime != Time.default and
+        not file_exists(unit.script_ctx.script):
+      script_clears.add(unit)
+
+  for unit in unit_deletions:
+    debug "unit data file deleted on disk; removing", unit_id = unit.id
+    if unit.parent.is_nil:
+      state.units -= unit
+    else:
+      unit.parent.units -= unit
+  if unit_deletions.len > 0:
+    save_level(state.config.level_dir)
+
+  for unit in script_clears:
+    debug "script file deleted on disk; clearing code", unit_id = unit.id
+    # Mark the script as unobserved so a future re-add re-loads it.
+    unit.script_ctx.last_saved_mtime = Time.default
+    unit.code = Code.init("")
+
+  # Script mtime scan (root-level units only; nested units handled via deps).
+  # Use `touch` rather than `=` so the watcher re-runs the script even when
+  # the file's mtime changed but its content didn't (e.g. an explicit save
+  # to force a re-run). watch_code -> change_code already does reset + reload,
+  # mirroring the in-game editor's save path.
+  for unit in state.units.value:
+    if ?unit.script_ctx and unit.script_ctx.script != "":
+      try:
+        let mtime = get_last_modification_time(unit.script_ctx.script)
+        if mtime != unit.script_ctx.last_saved_mtime:
+          let code = read_file(unit.script_ctx.script)
+          unit.script_ctx.last_saved_mtime = mtime
+          unit.code_value.touch Code.init(code)
+      except OSError:
+        discard
+
+  # Build root-unit table once for JSON watch and orphan detection
+  var root_units: Table[string, Unit]
+  for unit in state.units.value:
+    root_units[unit.id] = unit
+
+  # JSON watch: reload changed units inline; collect newly-appeared ones to
+  # load together as a batch afterward.
+  var new_units: seq[tuple[id, json_file: string]]
+  for dir in walk_dirs(state.config.data_dir / "*"):
+    let unit_id = dir.split_path.tail
+    let json_file = dir / unit_id & ".json"
+    if not file_exists(json_file):
+      continue
+    if unit_id in root_units:
+      let unit = root_units[unit_id]
+      if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
+        continue
+      if unit.script_ctx.last_saved_json_mtime == Time.default:
+        continue
+      try:
+        let json_mtime = get_last_modification_time(unit.data_file)
+        if json_mtime != unit.script_ctx.last_saved_json_mtime:
+          let parent = unit.parent
+          state.push_flag LOADING_SCRIPT
+          if parent.is_nil:
+            state.units -= unit
+          else:
+            parent.units -= unit
+          state.pop_flag LOADING_SCRIPT
+          load_unit_from_json(unit_id, json_file)
+      except OSError:
+        discard
+    else:
+      new_units.add (unit_id, json_file)
+
+  # Load newly-appeared units as one batch: queue each (deferring "symbol not
+  # found" failures) under retry_failures, then retry until they all resolve.
+  # Cross-script dependencies between simultaneously-added units (e.g. a proto
+  # and the spawner that references it) sort themselves out regardless of
+  # filesystem order, the same way a full level load does.
+  if new_units.len > 0:
+    state.push_flag LOADING_SCRIPT
+    self.retry_failures = true
+    for (unit_id, json_file) in new_units:
+      try:
+        load_unit_from_json(unit_id, json_file)
+      except Exception as e:
+        error "Failed to load new unit from JSON", unit_id, error = e
+    self.retry_failed_scripts()
+    self.retry_failures = false
+    state.pop_flag LOADING_SCRIPT
+    save_level(state.config.level_dir)
+
+  # Detect orphan scripts (report once)
+  for script_path in walk_files(state.config.script_dir / "*.nim"):
+    let stem = script_path.split_file.name
+    if stem == "players":
+      continue
+    if stem notin root_units:
+      let json_file = state.config.data_dir / stem / stem & ".json"
+      if not file_exists(json_file) and
+          script_path notin self.orphan_scripts_reported:
+        # Log only — an orphan is a developer-side curiosity, not something
+        # the player should see in the console.
+        warn "orphan script (no data file)", script_path
+        self.orphan_scripts_reported.incl(script_path)
+
+  self.watch_files_at = get_mono_time() + file_watch_interval
 
 proc watch_code(self: Worker, unit: Unit) =
   unit.code_value.changes:
@@ -165,21 +322,22 @@ proc watch_code(self: Worker, unit: Unit) =
     if added or touched and change.item != "":
       unit.eval = ""
       try:
-        self.eval(unit, change.item)
+        discard self.eval(unit, change.item)
       except VMQuit as e:
         self.script_error(unit, e)
 
-  unit.eids.add:
-    unit.errors.changes:
-      if unit.code.owner == Ed.thread_ctx.id:
-        if added and change.item.log:
-          state.err(
-            \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
-          )
+  let errors_zid = unit.errors.changes:
+    if unit.code.owner == Ed.thread_ctx.id:
+      if added and change.item.log:
+        state.err(
+          \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
+        )
+        if state.config.auto_show_console:
           state.push_flags CONSOLE_VISIBLE
 
-        if removed:
-          state.pop_flags CONSOLE_VISIBLE
+      if removed and state.config.auto_show_console:
+        state.pop_flags CONSOLE_VISIBLE
+  unit.errors.bind_lifetime(unit.require_lifetime, errors_zid)
 
   if unit.script_ctx.is_nil:
     unit.script_ctx =
@@ -215,8 +373,18 @@ proc watch_units(
         # FIXME: this is being set for the main thread in node_controller
         unit.fix_parents(parent)
         unit.frame_created = state.frame_count
+        if SERVER notin state.local_flags and not unit.sync_ready:
+          # Narrow partial replica: the unit arrived without its data. One deep
+          # fetch pulls its whole ownership closure (containers + subtree); the
+          # fills relay to the node ctx, whose deferred scene add completes.
+          discard Ed.thread_ctx.fetch(unit.id, deep = true)
         unit.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
-          unit.script_ctx.timer = get_mono_time()
+          # script_ctx is nil for a unit that never finished joining (a narrow
+          # replica's deferred join, destroyed before its fetch completed — e.g.
+          # an agent bot churned during a reload). The CLOSED this watcher gets
+          # from that destroy must not deref it.
+          if ?unit.script_ctx:
+            unit.script_ctx.timer = get_mono_time()
         self.watch_units(unit.units, unit, body)
 
 template for_all_units(self: Worker, body: untyped) {.dirty.} =
@@ -240,12 +408,18 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       main_thread_state.config.connect_address
     worker_ctx: EdContext
 
+  let is_server = ?listen_address or not ?connect_address
   worker_ctx = EdContext.init(
     id = "work-" & generate_id(),
     chan_size = 500,
     buffer = false,
     listen_address = listen_address,
     label = "worker",
+    is_authority = is_server,
+    # Partial clients page voxel data on demand; cap resident body memory so
+    # the evictor reclaims dormant chunks/residue (LRU). A low see-it-work
+    # value for now — the server (full authority) holds everything (Unbounded).
+    mem_limit = (if is_server: Unbounded else: 16 * 1024 * 1024),
   )
 
   Ed.thread_ctx = worker_ctx
@@ -254,7 +428,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   state = GameState.init_from(main_thread_state)
   state.init_logger
 
-  if ?listen_address or not ?connect_address:
+  if is_server:
     state.push_flag SERVER
     state.server_ctx_name = worker_ctx.id
 
@@ -273,8 +447,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   worker.for_all_units:
     if added:
-      unit.worker_thread_joined
-      worker.watch_code unit
+      if unit.sync_ready:
+        unit.worker_thread_joined(worker)
+        worker.watch_code unit
+      else:
+        # Narrow replica: the unit's data is still arriving (the deep fetch in
+        # watch_units pulls it). Join once it lands — drained per loop tick.
+        worker.pending_units.add unit
 
     if removed:
       worker.unmap_unit(unit)
@@ -287,13 +466,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           remove_file unit.script_ctx.script
           remove_dir unit.data_dir
 
-      for zid in unit.eids:
-        debug "untracking zid", zid, unit = unit.id
-        Ed.thread_ctx.untrack zid
-      unit.eids = @[]
       unit.destroy
 
   let player = state.player
+
   # add player before interpreter is initialized to get to an interactive
   # state quicker
   if SERVER in state.local_flags:
@@ -307,6 +483,57 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   worker.init_interpreter("")
   worker.bridge_to_vm
+
+  worker.eval_proc = proc(
+      code: string, top_level: bool, unit_id: string
+  ): tuple[result: string, error: string] {.gcsafe.} =
+    try:
+      var unit: Unit = state.player
+      if unit_id != "":
+        unit = nil
+        proc find_in(units: EdSeq[Unit]): Unit =
+          for u in units.value:
+            if u.id == unit_id:
+              return u
+            let found = find_in(u.units)
+            if not found.is_nil:
+              return found
+
+        unit = find_in(state.units)
+        if unit.is_nil:
+          return ("", "Error: unit not found: " & unit_id)
+        if unit.script_ctx.is_nil or unit.script_ctx.interpreter.is_nil:
+          return ("", "Error: unit has no script context: " & unit_id)
+        # Clones share the proto's module — they don't have one of their
+        # own. The interpreter.eval below would assert on a missing
+        # module, taking the worker thread down. Surface a clean error
+        # instead.
+        if not unit.clone_of.is_nil:
+          return (
+            "",
+            "Error: unit " & unit_id & " is a clone; eval in clone context " &
+              "isn't supported. Try the proto: " & unit.clone_of.id,
+          )
+      let wrapped =
+        if top_level:
+          code
+        else:
+          let indented = code.split_lines.map_it("  " & it).join("\n")
+          "(block:\n" & indented & "\n)"
+      (worker.eval(unit, wrapped).get(""), "")
+    except VMQuit as e:
+      (
+        "",
+        if e.location.len > 0:
+          "Error at " & e.location & ": " & e.msg
+        else:
+          "Error: " & e.msg,
+      )
+    except CatchableError as e:
+      ("", "Error: " & e.msg)
+
+  worker.update_files_proc = proc() {.gcsafe.} =
+    worker.update_files()
 
   let load_level = proc() =
     var level_dir = state.config.level_dir
@@ -326,8 +553,12 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             worker.init_interpreter("")
             worker.bridge_to_vm
             player.script_ctx.interpreter = worker.interpreter
-            worker.initial_load_done = false
             worker.load_script_and_dependents(player)
+            # The fresh VM has no `player` global until initialize_state runs,
+            # and load_level (which normally runs it) may not happen until a
+            # later change event. Anything that loads a unit script in that
+            # window hits a nil player at script top level.
+            worker.run_state_initializers()
           level_dir = change.item.level_dir
           if level_dir != "":
             worker.load_level(level_dir)
@@ -339,7 +570,20 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     var connected = false
     while not connected and get_mono_time() < timeout_at:
       try:
-        Ed.thread_ctx.subscribe(connect_address)
+        Ed.thread_ctx.subscribe(
+          # Partial replica: the unit directory plus (server-pushed) each
+          # unit's ownership closure — see OWNS_MEMBERS on root_units. Our own
+          # writes still flow up (the reverse direction stays full).
+          connect_address,
+          # Non-blocking partial: placeholders fill on later ticks, never
+          # stalling the frame loop waiting on the network.
+          mode = PARTIAL_ASYNC,
+          # deep stays default-false for now: a stress test of the narrow path
+          # (placeholders + materialize-on-access). Flip to deep = true if it
+          # doesn't hold up — that pushes unit closures so units arrive
+          # render-ready.
+          fetch = ["root_units"],
+        )
         connected = true
         # Get the remote server's context ID from subscribers
         for sub in Ed.thread_ctx.subscribers:
@@ -408,11 +652,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   const test_timeout = 5.minutes
   const stats_log_interval = 5.seconds
   const asap_flush_interval = 2.seconds
-  const file_watch_interval = 2.seconds
-  var orphan_scripts_reported: HashSet[string]
   var save_at = get_mono_time() + auto_save_interval
   var backup_at = MonoTime.low
-  var watch_files_at = MonoTime.low
   var test_started_at = MonoTime.high
   var last_stats_log = MonoTime.low
   var last_asap_flush = MonoTime.low
@@ -430,6 +671,36 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       let wait_until = frame_start + min_time
       inc tick_count
 
+      if worker.pending_units.len > 0:
+        var still_pending: seq[Unit]
+        for unit in worker.pending_units:
+          if unit.destroyed:
+            continue
+          if unit.sync_ready:
+            unit.worker_thread_joined(worker)
+            worker.watch_code unit
+          else:
+            still_pending.add unit
+        worker.pending_units = still_pending
+
+      for ctx_name in Ed.thread_ctx.drain_unsubscribed:
+        var i = 0
+        while i < state.units.len:
+          let unit = state.units[i]
+          # EPHEMERAL units encode their owning context name in their id
+          # (`player-{ctx_name}`, `mcp_bot-{ctx_name}`, ...). When the
+          # context unsubscribes, drop the corresponding agents.
+          if EPHEMERAL in unit.global_flags and ctx_name in unit.id:
+            debug "reaping agent unit on ctx unsubscribe",
+              unit_id = unit.id, ctx_name
+            state.units.del i
+          else:
+            i += 1
+
+        if SERVER notin state.local_flags:
+          state.push_flag(NEEDS_RESTART)
+          break
+
       var to_process: seq[Unit]
       state.units.value.walk_tree proc(unit: Unit) =
         if unit.code.runner == Ed.thread_ctx.id and ?unit.script_ctx:
@@ -438,19 +709,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           else:
             unit.global_flags -= SCRIPT_RUNNING
         to_process.add unit
-
-      for ctx_name in Ed.thread_ctx.unsubscribed:
-        var i = 0
-        while i < state.units.len:
-          if state.units[i].id == \"player-{ctx_name}":
-            var player = Player(state.units[i])
-            state.units.del i
-          else:
-            i += 1
-
-        if SERVER notin state.local_flags:
-          state.push_flag(NEEDS_RESTART)
-          break
       to_process.shuffle
 
       # Check if any unit is in ASAP mode - if so, skip voxel_tasks check
@@ -506,6 +764,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         state.net_connections = Ed.thread_ctx.reactor.connections.len
       else:
         state.net_connections = 0
+      # Surface the worker ctx's resident body bytes (the evictor's pool) to
+      # the main-thread stats screen.
+      state.ed_mem = Ed.thread_ctx.used_bytes
 
       # Log stats periodically
       if frame_start > last_stats_log + stats_log_interval:
@@ -529,7 +790,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             snapshots = total_snapshots,
             snapshots_delta = snapshots_this_period,
             deltas = total_deltas,
-            deltas_delta = deltas_this_period
+            deltas_delta = deltas_this_period,
+            ed_objects = Ed.thread_ctx.len
         last_stats_log = frame_start
         last_snapshots_flushed = total_snapshots
         last_deltas_flushed = total_deltas
@@ -582,71 +844,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         Ed.thread_ctx.tick_keepalives()
         backup_at = now + backup_interval
 
-      if SERVER in state.local_flags and now > watch_files_at:
-        # Script mtime scan (root-level units only; nested units handled via deps)
-        for unit in state.units.value:
-          if ?unit.script_ctx and unit.script_ctx.script != "":
-            try:
-              let mtime = get_last_modification_time(unit.script_ctx.script)
-              if mtime != unit.script_ctx.last_saved_mtime:
-                let code = read_file(unit.script_ctx.script)
-                unit.script_ctx.last_saved_mtime = mtime
-                unit.code = Code.init(code)
-            except OSError:
-              discard
-
-        # Build root-unit table once for JSON watch and orphan detection
-        var root_units: Table[string, Unit]
-        for unit in state.units.value:
-          root_units[unit.id] = unit
-
-        # JSON watch: reload changed units and detect new ones in a single pass
-        for dir in walk_dirs(state.config.data_dir / "*"):
-          let unit_id = dir.split_path.tail
-          let json_file = dir / unit_id & ".json"
-          if not file_exists(json_file):
-            continue
-          if unit_id in root_units:
-            let unit = root_units[unit_id]
-            if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
-              continue
-            if unit.script_ctx.last_saved_json_mtime == Time.default:
-              continue
-            try:
-              let json_mtime = get_last_modification_time(unit.data_file)
-              if json_mtime != unit.script_ctx.last_saved_json_mtime:
-                let parent = unit.parent
-                state.push_flag LOADING_SCRIPT
-                if parent.is_nil:
-                  state.units -= unit
-                else:
-                  parent.units -= unit
-                state.pop_flag LOADING_SCRIPT
-                load_unit_from_json(unit_id, json_file)
-            except OSError:
-              discard
-          else:
-            try:
-              load_unit_from_json(unit_id, json_file)
-              save_level(state.config.level_dir)
-            except Exception as e:
-              error "Failed to load new unit from JSON", unit_id, error = e
-
-        # Detect orphan scripts (report once)
-        for script_path in walk_files(state.config.script_dir / "*.nim"):
-          let stem = script_path.split_file.name
-          if stem == "players":
-            continue
-          if stem notin root_units:
-            let json_file = state.config.data_dir / stem / stem & ".json"
-            if not file_exists(json_file) and
-                script_path notin orphan_scripts_reported:
-              state.err(
-                "Orphan script: " & script_path & " (no data file)"
-              )
-              orphan_scripts_reported.incl(script_path)
-
-        watch_files_at = now + file_watch_interval
+      if now > worker.watch_files_at:
+        worker.update_files()
 
       # Track max tick time for debugging
       let tick_time = get_mono_time() - frame_start
@@ -663,9 +862,14 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     error "Unhandled worker thread exception",
       kind = $e.type, msg = e.msg, stacktrace = e.get_stack_trace
 
-    # Re-raise to crash properly instead of restarting
-    raise e
-    # state.push_flag(NEEDS_RESTART)
+    # Crash on purpose (a wedged worker must not zombie on), but exit directly
+    # rather than re-raising: the unwind crosses godot-nim's C++ frames and
+    # dies in libc++ ("recursive_mutex lock failed" + SIGABRT) with a
+    # misleading traceback from whatever the main thread happened to be doing.
+    # The error log above carries the real story; exit with it intact.
+    stderr.write_line "worker thread died: " & e.msg
+    stderr.write_line e.get_stack_trace
+    quit(1)
 
   try:
     if NEEDS_RESTART in state.local_flags:
@@ -675,6 +879,12 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       state.pop_flag NEEDS_RESTART
 
     Ed.thread_ctx.tick
+
+    # The worker thread is exiting (quit or NEEDS_RESTART → relaunch). Release
+    # the context's bodies + buffers; without this every restart leaks the whole
+    # worker context and its voxel bodies (the body closures pin it — ORC can't
+    # collect the cycle, so it needs the explicit ed EdContext.destroy).
+    worker_ctx.destroy()
   except Exception:
     discard
 

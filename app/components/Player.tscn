@@ -22,6 +22,11 @@ transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0 )
 
 [node name="VoxelViewer" type="VoxelViewer" parent="."]
 view_distance = 256
+requires_collisions = false
+
+[node name="CollisionViewer" type="VoxelViewer" parent="."]
+view_distance = 96
+requires_visuals = false
 
 [node name="DownRay" type="RayCast" parent="."]
 transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -0.5 )

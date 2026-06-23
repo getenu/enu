@@ -48,10 +48,14 @@ var
 # :( Most of this needs to be moved into player model
 gdobj PlayerNode of KinematicBody:
   var
-    alt_speed, skip_release, skip_next_mouse_move, jump_down: bool
+    alt_speed, skip_release, skip_next_mouse_move: bool
+    # Written by GUI's input handler (which owns jump events); read by
+    # calculate_velocity for the hold-to-float reduced gravity.
+    jump_down*: bool
+    jump_time*: Option[MonoTime]
 
     aim_ray, world_ray, down_ray: RayCast
-    jump_time, run_time, crouch_time: Option[MonoTime]
+    run_time, crouch_time: Option[MonoTime]
 
     position_start: Vector3
     input_relative* = vec2()
@@ -156,6 +160,7 @@ gdobj PlayerNode of KinematicBody:
 
     self.position_start = self.camera_rig.translation
     state.nodes.player = self
+    state.player_camera = self.camera
 
     let x = state.config.mouse_sensitivity / 1000.0
     mouse_sensitivity = vec2(x, -x)

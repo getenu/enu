@@ -1,4 +1,4 @@
-import types, base_api, vm_bridge_utils
+import types, base_api, vm_bridge_utils, builds_private
 
 bridged_to_host:
   proc tool*(self: Player): Tools
@@ -16,6 +16,8 @@ bridged_to_host:
   proc open_sign*(self: Player): Sign
   proc `open_sign=`*(self: Player, value: Sign)
   proc executing_player*(): Player
+  proc block_log*(self: Unit): string
+  proc clear_block_log*(self: Unit)
 
 var player*: Player
 template runner*(): Player =

@@ -8,6 +8,7 @@
 [node name="Camera" type="Camera" parent="."]
 visible = false
 current = true
+fov = 85.0
 far = 512.0
 
 [node name="AimRay" type="RayCast" parent="Camera"]

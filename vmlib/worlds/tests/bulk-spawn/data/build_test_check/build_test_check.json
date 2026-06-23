@@ -1,0 +1,29 @@
+{
+  "id": "build_test_check",
+  "start_transform": {
+    "basis": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ],
+    "origin": [
+      100.0,
+      0.0,
+      100.0
+    ]
+  },
+  "start_color": "BLACK",
+  "edits": {}
+}

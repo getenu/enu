@@ -15,6 +15,11 @@ bridged_to_host:
 
   proc sleep_impl*(seconds = 1.0)
   proc position_set*(self: Unit, position: Vector3)
+  proc start_position_set*(self: Unit, position: Vector3)
+  proc reset_anchor*(self: Unit)
+  proc delete*(self: Unit)
+  proc keep_alive*()
+  proc claim_name*(requested: string)
 
   proc new_markdown_sign*(
     self: Unit,
