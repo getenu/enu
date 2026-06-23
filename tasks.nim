@@ -115,6 +115,15 @@ proc build_godot(target = target, cpu = cpu, opts = godot_opts, force = false) =
   with_dir "vendor/godot":
     exec &"{scons} custom_modules=../modules platform={target} arch={cpu} {cross_compile_opts}{opts} -j{cores}"
 
+proc build_mcp(opts = "", output = "bin/enu" & exe_ext) =
+  # The MCP/CLI server (`enu mcp`) — a standalone `--define:no_godot` binary,
+  # separate from the Godot-hosted game lib. `.mcp.json` points Claude at it.
+  p "Building MCP server..."
+  exec &"nim c -d:release {opts} -o:{output} bin/enu.nim"
+
+task build_mcp, "Build the MCP/CLI server (bin/enu)":
+  build_mcp()
+
 task ios_prereqs, "Build godot for ios":
   with_dir "vendor/pcre":
     exec "./configure  --host=arm-apple-darwin10 --target=arm-apple-darwin10"
@@ -148,6 +157,10 @@ task build, "Build enu":
       else:
         ""
   exec &"nim c -o:{output}{cross_opts}{extra} src/enu.nim"
+  # Also build the MCP server for dev runs. dist builds + bundles it per-platform
+  # below, so skip the redundant copy there.
+  if "-d:dist" notin command_line_params():
+    build_mcp()
 
 task build_godot, "Build godot. Use --force to re-init submodules":
   build_godot(force = "--force" in command_line_params())
@@ -553,6 +566,10 @@ task dist_package, "Build distribution binaries":
     find_and_copy_dlls mingw_path(), root, gcc_dlls
     find_and_copy_dlls get_current_compiler_exe().parent_dir, root, nim_dlls
     copy_vmlib "vmlib", root & "/vmlib"
+    # MCP server — resolves to <root>/bin/enu.exe (lib_dir.parent/bin); the
+    # bin/ subdir avoids colliding with the enu.exe launcher at the root.
+    mk_dir root & "/bin"
+    build_mcp("", root & "/bin/enu.exe")
     with_dir "dist":
       exec &"zip -r enu-{git_version}-windows-x64.zip enu-{git_version}"
   elif host_os == "macosx":
@@ -595,6 +612,19 @@ task dist_package, "Build distribution binaries":
 
     copy_vmlib "vmlib", "dist/Enu.app/Contents/Resources/vmlib"
 
+    # MCP server, universal — resolves to <Resources>/bin/enu (lib_dir.parent/bin).
+    mk_dir "dist/Enu.app/Contents/Resources/bin"
+    build_mcp(
+      "--cpu:amd64 -l:'-target x86_64-apple-macos11' -t:'-target x86_64-apple-macos11'",
+      "dist/mcp.x86_64",
+    )
+    build_mcp(
+      "--cpu:arm64 -l:'-target arm64-apple-macos11' -t:'-target arm64-apple-macos11'",
+      "dist/mcp.arm64",
+    )
+    exec "lipo -create dist/mcp.x86_64 dist/mcp.arm64 -output dist/Enu.app/Contents/Resources/bin/enu"
+    exec "rm dist/mcp.x86_64 dist/mcp.arm64"
+
     if config["sign"].get_bool:
       let id = config["id"].get_str
       if "keychain" in config:
@@ -602,6 +632,7 @@ task dist_package, "Build distribution binaries":
         let password = config["keychain-password"].get_str
         exec &"security unlock-keychain -p \"{password}\" {keychain}"
       code_sign(id, "dist/Enu.app/Contents/Frameworks/enu.dylib")
+      code_sign(id, "dist/Enu.app/Contents/Resources/bin/enu")
       code_sign(id, "dist/Enu.app")
 
     let package_name = &"enu-{git_version}.dmg"
@@ -631,6 +662,10 @@ task dist_package, "Build distribution binaries":
     cp_file release_bin, root & "/bin/enu"
     cp_file "app/enu.so", root & "/lib/enu.so"
     copy_vmlib "vmlib", root & "/lib/vmlib"
+    # MCP server — resolves to <root>/lib/bin/enu (lib_dir.parent/bin).
+    mk_dir root & "/lib/bin"
+    build_mcp("", root & "/lib/bin/enu")
+    exec "chmod +x " & root & "/lib/bin/enu"
     exec "chmod +x " & root & "/bin/enu"
     exec &"{gen()} write_export_presets --enu_version {git_version}"
     let pck_path = this_dir() & "/" & root & "/enu.pck"
