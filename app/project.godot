@@ -315,6 +315,10 @@ file_logging/enable_file_logging=true
 file_logging/log_path="user://logs/enu.log"
 file_logging/max_log_files=20
 
+[memory]
+
+limits/multithreaded_server/rid_pool_prealloc=500
+
 [physics]
 
 3d/physics_engine="GodotPhysics"

@@ -1,14 +1,14 @@
-import std/[os, re, posix, sets]
+import std/[os, re, posix, sets, options]
 
 import pkg/godot except print
 import pkg/compiler/ast except new_node
 import
   pkg/compiler/
-    [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents]
+    [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents, vm]
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, units, signs, players]
-import libs/[interpreters, eval]
+import libs/[interpreters, eval, fd_tracking]
 import ./vars
 
 type ScriptCycleError* = object of VMQuit
@@ -23,7 +23,7 @@ proc init*(
   result = ScriptCtx(
     module_name: if ?clone_of: clone_of.id else: "",
     interpreter: interpreter,
-    timeout_at: MonoTime.high,
+    fuel: int64.high,
     timer: MonoTime.high,
   )
 
@@ -75,6 +75,13 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
 
   let controller = self
 
+  # module_names tracks modules successfully loaded into the CURRENT
+  # interpreter (script wrappers only import those). A fresh interpreter has
+  # none — carrying the old set over makes every wrapper import modules that
+  # aren't compiled yet, which falls back to compiling the raw script files
+  # off disk and fails on unwrapped user code (issue #51).
+  self.module_names.clear()
+
   self.interpreter = interpreter
   interpreter.config.spell_suggest_max = 0
 
@@ -87,7 +94,12 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
     let ctx = controller.active_unit.script_ctx
     let errors = controller.active_unit.errors
     if severity == Severity.Error and config.error_counter >= config.error_max:
-      echo msg
+      # While retrying (level load / new-unit batch), a failure here may just
+      # be an as-yet-unloaded cross-script dependency that resolves on a later
+      # pass. Don't echo it as an error; if it's genuinely broken, the unit
+      # stays in `failed` and script_error reports it once retries are done.
+      if not controller.retry_failures:
+        echo msg
       var file_name =
         if info.file_index.int >= 0:
           config.m.file_infos[info.file_index.int].full_path.string
@@ -126,7 +138,6 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       ctx.exit_code = error_code
       raise (ref VMQuit)(info: info, msg: msg, location: loc)
 
-  var count: byte = 0
   interpreter.enter_hook = proc(
       c: PCtx, pc: int, tos: PStackFrame, instr: TInstr
   ) =
@@ -141,20 +152,18 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
     ctx.tos = tos
 
     let info = c.debug[pc]
-    inc count
-    if count == 255:
-      # don't call get_mono_time for every instruction for a 5-10% speedup.
-      count = 0
-      let now = get_mono_time()
-      if ctx.timeout_at < now:
-        let duration = script_timeout
-        raise (ref VMQuit)(
-          info: info,
-          kind: TIMEOUT,
-          msg:
-            \"Timeout. Script {ctx.script} executed for too long without " &
-            \"yielding: {duration}",
-        )
+    # The old wall-clock watchdog batched its check behind a byte counter to
+    # avoid a get_mono_time() per instruction; a fuel decrement is just another
+    # field write next to the ctx.pc/tos writes above, so check it directly.
+    ctx.fuel -= 1
+    if ctx.fuel <= 0:
+      raise (ref VMQuit)(
+        info: info,
+        kind: TIMEOUT,
+        msg:
+          \"Timeout. Script {ctx.script} executed too many instructions " &
+          "without yielding (instruction budget exhausted)",
+      )
 
     # We don't care about the line info if we're not in our enu script.
     # Store the file index the first time we hit our file and only change
@@ -173,7 +182,26 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       ctx.pause_requested = false
       raise VMPause.new_exception("vm paused")
 
-proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
+proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
+  if SCRIPT_LOADING in unit.global_flags:
+    # Re-entry on the same unit is a bug — an Ed callback fired during a
+    # script load that drove back through load_level → retry_failed_scripts.
+    # Crash with as much context as possible so we can diagnose.
+    let outer = if self.active_unit.is_nil: "<nil>" else: self.active_unit.id
+    error "load_script re-entered",
+      unit_id = unit.id,
+      script = unit.script_ctx.script,
+      outer_active_unit = outer,
+      stack = get_stack_trace()
+    logger("err",
+      "load_script re-entered for " & unit.id & " (outer active=" & outer &
+      "); see log for stack trace.")
+    raise (ref AssertionDefect)(
+      msg: "load_script re-entered for " & unit.id & "; outer active=" & outer
+    )
+  unit.global_flags += SCRIPT_LOADING
+  defer:
+    unit.global_flags -= SCRIPT_LOADING
   let ctx = unit.script_ctx
   try:
     self.active_unit = unit
@@ -182,31 +210,78 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
 
     if not state.paused:
       let module_name = ctx.script.split_file.name
+      let script_dir = ctx.script.split_file.dir
+      # Only import modules that have already successfully loaded (they're
+      # added to module_names at the end of a successful load, below). An
+      # import of a not-yet-loaded unit resolves to its RAW script file (the
+      # scripts dir is on the VM search path) — unwrapped user code with no
+      # API in scope — and fails with confusing built-in-symbol errors
+      # ('undeclared identifier: speed'). A real cross-script reference to a
+      # not-yet-loaded unit now fails on the user's own symbol instead, and
+      # converges through the normal retry pass. (github issue #51)
       var others = self.module_names
-      self.module_names.incl module_name
       others.excl module_name
+      # Only inject imports for modules whose script files exist in the current
+      # script dir. Stale entries (e.g. from a previous level) are silently
+      # dropped rather than causing "cannot open file" errors.
+      var valid_others: HashSet[string]
+      for name in others:
+        if file_exists(script_dir / name & ".nim"):
+          valid_others.incl(name)
       let imports =
-        if others.card > 0:
-          "import " & others.to_seq.join(", ")
+        if valid_others.card > 0:
+          "import " & valid_others.to_seq.join(", ")
         else:
           ""
       let code = unit.code_template(imports)
 
-      # Write generated code to a 'generated' directory for tooling like nimlangserver
-      let script_dir = ctx.script.split_file.dir
+      # Write generated code to a 'generated' directory for tooling like
+      # nimlangserver.
       let generated_dir = script_dir.parentDir / "generated"
       create_dir(generated_dir)
       let generated_file = generated_dir / module_name & ".nim"
-      write_file(generated_file, code)
+      try:
+        write_file(generated_file, code)
+      except IOError:
+        # Surface as much OS-level context as possible before re-raising.
+        let err = errno
+        let dir_exists = dir_exists(generated_dir)
+        let file_exists = file_exists(generated_file)
+        var dir_perms = ""
+        var dir_owner = ""
+        try:
+          let info = get_file_info(generated_dir)
+          dir_perms = $info.permissions
+        except CatchableError:
+          discard
+        error "writeFile failed",
+          path = generated_file,
+          unit_id = unit.id,
+          errno = err,
+          strerror = $strerror(err),
+          generated_dir = generated_dir,
+          generated_dir_exists = dir_exists,
+          generated_file_exists = file_exists,
+          generated_dir_permissions = dir_perms,
+          script_loading_flag = (SCRIPT_LOADING in unit.global_flags),
+          script_initializing_flag =
+            (SCRIPT_INITIALIZING in unit.global_flags),
+          stack = get_stack_trace()
+        logger("err",
+          "writeFile failed for " & generated_file & " (errno=" & $err &
+          " " & $strerror(err) & "); see log for details.")
+        raise
 
-      ctx.timeout_at = get_mono_time() + timeout
+      ctx.fuel = fuel
       ctx.file_index = -1
       info "loading script", script = ctx.script
       ctx.load(ctx.script, code)
 
     if not state.paused:
-      ctx.timeout_at = get_mono_time() + timeout
+      ctx.fuel = fuel
       ctx.running = ctx.run()
+      debug "script fuel consumed", script = ctx.script,
+        consumed = fuel - ctx.fuel
 
       var temp_visited: HashSet[string]
       proc visit(node: string) =
@@ -228,14 +303,22 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
 
       visit(ctx.file_name.extract_filename)
 
+      # Loaded successfully: other units' wrappers may now import this module.
+      self.module_names.incl ctx.module_name
+
       if not ctx.running and not ?unit.clone_of:
         unit.collect_garbage
         unit.ensure_visible
   except VMQuit as e:
     ctx.running = false
     self.interpreter.reset_module(unit.script_ctx.module_name)
+    self.module_names.excl unit.script_ctx.module_name
     if self.retry_failures and e.kind != TIMEOUT:
-      info "retrying failed script later",
+      # One calm line per transient failure; the detail is DEBUG. If the
+      # retries exhaust, script_error reports it loudly.
+      info "script failed, will retry",
+        script = unit.script_ctx.script.extract_filename
+      debug "script failure detail",
         script = unit.script_ctx.script, error = e.msg
       self.failed.add (unit, e)
     else:
@@ -246,6 +329,8 @@ proc load_script*(self: Worker, unit: Unit, timeout = script_timeout) =
     self.active_unit = nil
 
 proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
+  sample_open_fds()
+  info "retry_failed_scripts entry", fds = open_fd_count()
   var prev_failed: self.failed.type = @[]
   while prev_failed.len != self.failed.len:
     prev_failed = self.failed
@@ -253,6 +338,8 @@ proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
     for f in prev_failed:
       debug "retrying", script = f.unit.script_ctx.script
       self.load_script(f.unit)
+  sample_open_fds()
+  info "retry_failed_scripts exit", fds = open_fd_count()
 
   if prev_failed.len == self.failed.len and self.failed.len > 0:
     debug "retry loop terminated because no progress was made",
@@ -289,13 +376,10 @@ proc load_script_and_dependents*(self: Worker, unit: Unit) =
     if other != unit:
       debug "resetting", module = other.script_ctx.module_name
       self.interpreter.reset_module(other.script_ctx.module_name)
+      self.module_names.excl other.script_ctx.module_name
 
   debug "loading unit", unit_id = unit.id
-  # Use longer timeout for first script load (system.nim compilation can be slow)
-  let timeout =
-    if not self.initial_load_done: initial_script_timeout else: script_timeout
-  self.load_script(unit, timeout)
-  self.initial_load_done = true
+  self.load_script(unit)
 
   for other in units_to_reload:
     if other != unit:
@@ -313,12 +397,12 @@ proc script_file_for*(self: Unit): string =
   else:
     ""
 
-proc eval*(self: Worker, unit: Unit, code: string) =
+proc eval*(self: Worker, unit: Unit, code: string): Option[string] =
   let active = self.active_unit
   self.active_unit = unit
   defer:
     self.active_unit = active
 
-  unit.script_ctx.timeout_at = get_mono_time() + script_timeout
+  unit.script_ctx.fuel = script_fuel
   {.gcsafe.}:
-    discard unit.script_ctx.eval(code)
+    result = unit.script_ctx.eval(code)

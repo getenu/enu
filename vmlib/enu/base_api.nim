@@ -1,9 +1,13 @@
 import system except echo
-import std/[strformat, math, importutils, strutils, options, sets, sequtils]
+import
+  std/[
+    strformat, math, importutils, strutils, options, sets, sequtils, algorithm
+  ]
 import random as rnd except rand
 import types, state_machine, base_bridge, base_bridge_private
 
 export base_bridge
+export strutils
 export Timestamp, Duration
 
 proc now*(): Timestamp =
@@ -33,8 +37,28 @@ proc quit*(code = 0, msg = "") =
 proc `position=`*(self: Unit, position: Vector3) =
   self.position_set(position)
 
+proc apply_position*(self: Unit, position: Vector3) =
+  if position.x != float.high:
+    self.position = position
+
 proc `position=`*(self: Unit, unit: Unit) =
   self.position_set(unit.position)
+
+proc `start_position=`*(self: Unit, position: Vector3) =
+  ## Update the unit's spawn position. Persists across reload (unlike `position=`,
+  ## which only moves the live transform).
+  self.start_position_set(position)
+
+proc delete*(self: Unit) =
+  ## Remove the unit from the level and delete its on-disk script + data
+  ## directory. Distinct from `destroy`, which only tears down the in-memory
+  ## instance. Cannot be undone.
+  base_bridge_private.delete(self)
+
+proc keep_alive*() =
+  ## Reset the per-script execution timeout. For long-running non-yielding
+  ## loops that need more than the default ~2s budget. Call periodically.
+  base_bridge_private.keep_alive()
 
 proc go*(self: Unit, position: Unit | Vector3) =
   self.position = position
@@ -354,6 +378,36 @@ template build*(new_enu_target: Unit) =
   enu_target = new_enu_target
   move_mode = 1
 
+template anchor*(body: untyped) =
+  ## Declare the unit's pivot. Inside the block, turtle commands
+  ## (`forward`, `right`, `up`, `turn`, `lean`, …) accumulate into the
+  ## unit's anchor pose instead of drawing voxels or moving the unit.
+  ## The turtle starts at the proto's local `(0, 0, 0)` facing -Z.
+  ##
+  ## After the block, `position` places the anchor pivot at the given
+  ## world coord, `rotation` pivots around it, and `move me; forward`
+  ## moves along the anchor's intrinsic forward.
+  mixin reset_anchor
+  enu_target.reset_anchor()
+  let saved_move_mode = move_mode
+  move_mode = 3
+  body
+  move_mode = saved_move_mode
+
+template anchor*(target: Unit, body: untyped) =
+  ## Re-anchor an existing instance. Visibly moves/reorients the
+  ## instance because it's already rendered; the unit's `position` and
+  ## `rotation` stay constant from the user's perspective.
+  mixin reset_anchor
+  let saved_enu_target = enu_target
+  let saved_move_mode = move_mode
+  enu_target = target
+  enu_target.reset_anchor()
+  move_mode = 3
+  body
+  enu_target = saved_enu_target
+  move_mode = saved_move_mode
+
 proc turn*(self: Unit, position: Vector3, move_mode: int) =
   self.turn(self.angle_to(position), move_mode)
 
@@ -392,6 +446,36 @@ proc distance*(position: Vector3): float =
 
 proc distance*(node: Unit): float =
   node.position.distance
+
+proc find_by_id*(id: string): Unit =
+  ## Recursively search every unit in the world for one with this id.
+  ## Returns nil if not found.
+  for u in all_units():
+    if u.id == id:
+      return u
+
+proc units_near*(x, y, z: float, radius = 30.0): string =
+  ## Lists every Unit in the world whose xz-distance to (x, y, z) is <=
+  ## radius, sorted nearest-first. One line per unit, formatted as:
+  ##   d=DD.D  unit_id  (X, Y, Z)
+  ## Useful when chasing overlap reports / "# CLAUDE: ..." marker blocks
+  ## from MCP: pass the marker's position and skim the candidates.
+  var rows: seq[(float, string)] = @[]
+  for u in all_units():
+    if u.is_nil: continue
+    let p = u.position
+    let dx = p.x - x
+    let dz = p.z - z
+    let d = sqrt(dx * dx + dz * dz)
+    if d <= radius:
+      rows.add(
+        (d, &"d={d:5.1f}  {u.id:30s} ({p.x:6.1f}, {p.y:4.1f}, {p.z:6.1f})")
+      )
+  rows.sort(proc(a, b: (float, string)): int = cmp(a[0], b[0]))
+  var lines: seq[string] = @[]
+  for r in rows:
+    lines.add(r[1])
+  lines.join("\n")
 
 proc near*(node: Unit | Vector3, less_than = 5.0): bool =
   result = node.distance < less_than

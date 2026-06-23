@@ -46,6 +46,7 @@ bridged_to_host:
   proc `lock=`*(self: Unit, value: bool)
   proc reset*(self: Unit, clear = false)
   proc press_action*(name: string)
+  proc release_action*(name: string)
   proc load_level*(level: string, world = "")
   proc reset_level*()
   proc level_name*(): string
@@ -56,6 +57,25 @@ bridged_to_host:
   proc all_signs*(): seq[Sign]
   proc all_players*(): seq[Player]
   proc all_units*(): seq[Unit]
+  proc find_voxel_overlaps*(limit: int = 50): string
+  proc units_in_box*(
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
+  ): seq[Unit]
+
+  proc floor_at*(x: float, z: float): int
+
+  proc clear_box*(
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
+  ): bool
+
+  proc bounds*(self: Unit): WorldBox
+  proc overlaps*(a: Unit, b: Unit): bool
+  proc units_overlapping*(box: WorldBox): seq[Unit]
+  proc box_is_free*(box: WorldBox): bool
+  proc bounds_at*(
+    self: Build, position: Vector3, rotation: float = 0.0, scale: float = 0.0
+  ): WorldBox
+
   proc added_units*(): seq[Unit]
   proc register_template_node*(self: Unit, name: string)
 
@@ -64,6 +84,7 @@ bridged_to_host:
   proc exit*(exit_code = 0, msg = "")
   proc new_instance*(src, dest: Unit)
   proc exec_instance*(self: Unit)
+  proc capture_start_transform*(self: Unit)
   proc wake*(self: Unit)
   proc create_new*(self: Unit)
   proc frame_count*(): int

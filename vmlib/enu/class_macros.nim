@@ -33,7 +33,7 @@ proc params_to_ident_defs(nodes: seq[NimNode]): seq[NimNode] =
   for node in nodes:
     let node = node.copy_nim_tree
     let prop = node[0]
-    if prop.str_val notin ["global", "speed", "color"]:
+    if prop.str_val notin ["global", "speed", "color", "position"]:
       if node.kind == nnkExprEqExpr:
         result.add nnkIdentDefs.new_tree(node[0], new_empty_node(), node[1])
       elif node.kind == nnkExprColonExpr:
@@ -49,7 +49,7 @@ proc params_to_properties(nodes: seq[NimNode]): NimNode =
   for node in nodes:
     let node = node.copy_nim_tree
     let prop = node[0]
-    if prop.str_val notin ["global", "speed", "color"]:
+    if prop.str_val notin ["global", "speed", "color", "position"]:
       if node.kind == nnkExprEqExpr:
         result.add nnkIdentDefs.new_tree(
           node[0], new_call(ident"type", node[1]), empty
@@ -67,7 +67,7 @@ proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
   for node in nodes:
     let node = node.copy_nim_tree
     let getter = node[0]
-    if getter.str_val notin ["global", "speed", "color"]:
+    if getter.str_val notin ["global", "speed", "color", "position"]:
       let setter = ident(getter.str_val & "=")
       let typ =
         if node.kind == nnkExprEqExpr:
@@ -128,8 +128,37 @@ proc build_ctors(
     if `color` != `eraser`:
       result.color = `color`
 
+  var position = "position".ident
+  if "position" notin var_names:
+    params &= new_ident_defs(position, new_empty_node(), ident"UNSET_POSITION")
+  ctor_body.add quote do:
+    apply_position(result, `position`)
+
+  var rotation = "rotation".ident
+  if "rotation" notin var_names:
+    params &= new_ident_defs(rotation, new_empty_node(), new_float_lit_node(0.0))
+
+  var scale = "scale".ident
+  if "scale" notin var_names:
+    params &= new_ident_defs(scale, new_empty_node(), new_float_lit_node(0.0))
+
   ctor_body.add quote do:
     exec_instance(result)
+
+  # Apply rotation and scale after the proto body has drawn its voxels so
+  # the body can't accidentally clobber the caller's requested values. 0
+  # is the "not specified" sentinel for both (a 0 rotation is a no-op, a
+  # 0 scale would be invisible — neither is a useful value to actually
+  # pass through).
+  ctor_body.add quote do:
+    if `rotation` != 0.0:
+      result.rotation = `rotation`
+    if `scale` != 0.0:
+      result.scale = `scale`
+    # The clone was seeded with the spawner's transform as its
+    # start_transform; re-stamp it now that the requested spawn pose is
+    # applied so start_position is the instance's own spawn point.
+    capture_start_transform(result)
 
   # add baked in constructor params for speed, color, etc.
   # probably shouldn't be here.
@@ -189,6 +218,7 @@ proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
       include loops
 
       register_active(me)
+      claim_name(`name_str`)
       let home {.inject.} = PositionOffset(position: me.local_position)
       let `var_name`* {.inject.} = me
       `ctors`

@@ -22,9 +22,10 @@ gdobj GUI of Control:
     left_stick: Control
     up: Button
     down: Button
-    # Fields moved from PlayerNode
-    alt_speed, skip_release, skip_next_mouse_move, jump_down: bool
-    jump_time, run_time, crouch_time: Option[MonoTime]
+    # Fields moved from PlayerNode. jump_down/jump_time stay on the node:
+    # its physics loop reads them for the hold-to-float reduced gravity.
+    alt_speed, skip_release, skip_next_mouse_move: bool
+    run_time, crouch_time: Option[MonoTime]
     input_relative* = vec2()
     pan_delta = 0.0
     command_timer = 0.0
@@ -145,20 +146,20 @@ gdobj GUI of Control:
 
     if event.is_action_pressed("jump"):
       self.get_tree().set_input_as_handled()
-      self.jump_down = true
-      let toggle = ?self.jump_time and time < self.jump_time.get + fly_toggle
+      player.jump_down = true
+      let toggle = ?player.jump_time and time < player.jump_time.get + fly_toggle
 
       if toggle and PLAYING notin state.local_flags:
-        self.jump_time = nil_time
+        player.jump_time = nil_time
         state.toggle_flag(FLYING)
       elif player.is_on_floor():
         player.velocity += vec3(0, jump_impulse, 0)
-        self.jump_time = some time
+        player.jump_time = some time
       else:
-        self.jump_time = some time
+        player.jump_time = some time
     elif event.is_action_released("jump"):
       self.get_tree().set_input_as_handled()
-      self.jump_down = false
+      player.jump_down = false
 
     if event.is_action_pressed("crouch") and player.flying:
       self.get_tree().set_input_as_handled()

@@ -3,20 +3,25 @@ import godotapi/spatial
 import core, models/units
 
 proc init*(_: type Player): Player =
-  let self = Player(
-    id: \"player-{Ed.thread_ctx.id}",
-    rotation_value: ed(0.0),
-    start_transform: Transform.init(origin = vec3(0, 1, 0)),
-    input_direction_value: EdValue[Vector3].init(),
-    cursor_position_value: ed((0, 0)),
-  )
-  self.init_unit(shared = false)
-  self.global_flags += GLOBAL
+  let player_id = \"player-{Ed.thread_ctx.id}"
+  player_id.own:
+    let self = Player(
+      id: player_id,
+      rotation_value: ed(0.0),
+      start_transform: Transform.init(origin = vec3(0, 1, 0)),
+      input_direction_value: EdValue[Vector3].init(),
+      cursor_position_value: ed((0, 0)),
+      block_log_entries: EdSeq[BlockLogEntry].init(flags = {SYNC_LOCAL}),
+    )
+    self.init_unit(shared = false)
+    self.global_flags += GLOBAL
+    self.global_flags += EPHEMERAL
 
-  state.local_flags.changes:
-    if RESETTING_VM.added:
-      self.frame_created = state.frame_count
-  result = self
+    self.own: # callback on external state, scoped to the player's lifetime
+      state.local_flags.changes:
+        if RESETTING_VM.added:
+          self.frame_created = state.frame_count
+    result = self
 
 method on_begin_turn*(
     self: Player, direction: Vector3, degrees: float, lean: bool, move_mode: int

@@ -1,6 +1,6 @@
 import std/[options, os, strutils]
 import pkg/pretty
-import compiler/[syntaxes, reorder, vmdef, msgs]
+import compiler/[syntaxes, reorder, vmdef, msgs, renderer, vm]
 import compiler/passes {.all.}
 import compiler/lineinfos
 
@@ -15,9 +15,9 @@ export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 # is in `camelCase` rather than `snake_case` like the rest of the project.
 
 # adapted from
-# https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
-# Normal module loading procedure, but makes PContext a param so it can be
-# passed to extend_module
+# https://github.com/nim-lang/Nim/blob/v2.2.10/compiler/pipelines.nim#L94
+# (was originally based on v2.0.2). Normal module loading procedure, but makes
+# PContext a param so it can be passed to extend_module.
 # Recursive proc to find import statements in AST
 proc getImports(n: PNode, result: var seq[PNode]) =
   if n.kind in {nkImportStmt, nkFromStmt}:
@@ -39,14 +39,15 @@ proc processModule*(
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
-    p: Parser
+    p: Parser = default(Parser)
     s: PLLStream
     fileIdx = module.fileIdx
 
   prepareConfigNotes(graph, module)
   graph.config.notes.incl(warnUnusedImportX)
   graph.config.notes.incl(hintXDeclaredButNotUsed)
-  if stream == nil:
+  let we_opened_stream = stream == nil
+  if we_opened_stream:
     let filename = toFullPathConsiderDirty(graph.config, fileIdx)
     s = llStreamOpen(filename, fmRead)
     if s == nil:
@@ -54,6 +55,11 @@ proc processModule*(
       return false
   else:
     s = stream
+  defer:
+    # Only close streams we opened — caller-provided streams are theirs
+    # to close.
+    if we_opened_stream and s != nil:
+      llStreamClose(s)
 
   # Extract dependencies by examining resolved symbols in the typed AST
   var pendingModules = newSeq[string]()
@@ -144,6 +150,22 @@ proc processModule*(
   assert graph.pipelinePass == EvalPass
   # Old unusedImports handling logic removed as we processed it above
 
+  # Required: every script's module body must raise VMPause before reaching
+  # here (via exit() at the end of build_code_template.nim.nimf and
+  # bot_code_template.nim.nimf). If a script completes naturally:
+  #   - closePContext below finalizes the PContext and queues generic
+  #     instances (eg. class constructors) into finalNode via
+  #     addCodeForGenerics
+  #   - interpreterCode runs evalStmt+execute on finalNode, which sizes
+  #     tos.slots from the current c.prc.regInfo.len -- often smaller
+  #     than the bytecode the second-execute ends up touching, surfacing
+  #     as cross-script IndexDefects
+  #   - that second-execute also causes spawner scripts to re-run their
+  #     constructor instantiations, producing unbounded unit growth
+  #     (~6.5x over the correct count on the api-test level)
+  # Keeping exit() in the templates is the production fix. Removing it
+  # without first dropping this finalize sequence will re-introduce both
+  # bugs.
   let finalNode = closePContext(graph, ctx, nil)
   discard interpreterCode(bModule, finalNode)
 
@@ -202,6 +224,26 @@ proc resetModule*(i: Interpreter, moduleName: string) =
       iface.module.ast = nil
       break
 
+template with_import_stack_recovery(graph: ModuleGraph, body: untyped) =
+  ## An aborted compile (a VMQuit timeout raised from the exec hook mid-import)
+  ## skips importer.nim's `importStack.setLen(L)` pop, leaving the in-flight
+  ## files on the stack — every later import of them then reports "recursive
+  ## module dependency", permanently. Worse, those modules sit half-compiled in
+  ## the graph and would be treated as loaded with missing symbols. The stack
+  ## itself records exactly which modules were mid-compile: on the way out,
+  ## pop anything above our depth and reset those modules so the next load
+  ## recompiles them from scratch.
+  let stack_depth = graph.importStack.len
+  try:
+    body
+  finally:
+    while graph.importStack.len > stack_depth:
+      let aborted = graph.importStack.pop
+      let m = graph.getModule(aborted)
+      if m != nil:
+        initStrTables(graph, m)
+        m.ast = nil
+
 import std/posix
 
 proc loadModule*(
@@ -236,23 +278,38 @@ proc loadModule*(
   ctx = preparePContext(i.graph, module, i.idgen)
 
   {.gcsafe.}:
-    discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
+    with_import_stack_recovery(i.graph):
+      discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
+
+proc node_to_str(n: PNode): string =
+  case n.kind
+  of nkStrLit .. nkTripleStrLit:
+    n.strVal
+  of nkIntLit .. nkUInt64Lit:
+    $n.intVal
+  of nkFloatLit .. nkFloat128Lit:
+    $n.floatVal
+  of nkNilLit:
+    "nil"
+  else:
+    renderTree(n, {renderNoComments})
 
 # adapted from
-# https://github.com/nim-lang/Nim/blob/v2.0.2/compiler/pipelines.nim#L88
+# https://github.com/nim-lang/Nim/blob/v2.2.10/compiler/pipelines.nim#L94
+# (was originally based on v2.0.2).
 proc extendModule*(
     graph: ModuleGraph,
     module: PSym,
     idgen: IdGenerator,
     stream: PLLStream,
     ctx: var PContext,
-): bool {.discardable.} =
+): Option[string] {.discardable.} =
   if graph.stopCompile():
-    return true
+    return
   let bModule = setupEvalGen(graph, module, idgen)
 
   var
-    p: Parser
+    p: Parser = default(Parser)
     s = stream
     fileIdx = module.fileIdx
 
@@ -278,16 +335,61 @@ proc extendModule*(
 
       prePass(ctx, sl)
 
+      # `eval` should return the value of a bare trailing expression (e.g.
+      # `1 + 1`). The compiler rejects a bare expression in statement context
+      # with a single "expression has to be used" error, so we sem with
+      # errorMax raised (so it does not quit) and capture errors via the hook.
+      # If that is the only error and the node has a value type, we re-run it
+      # as an expression below; otherwise the captured errors are replayed so
+      # genuine errors still propagate.
+      let old_hook = ctx.config.structuredErrorHook
+      let old_error_count = ctx.config.errorCounter
+      let old_error_max = ctx.config.errorMax
+      let old_error_outputs = ctx.config.m.errorOutputs
+      ctx.config.errorMax = high(int)
+      ctx.config.m.errorOutputs = {}
+      type CapturedError = tuple[info: TLineInfo, msg: string, sev: Severity]
+      var captured: seq[CapturedError]
+      let captured_ptr = captured.addr
+      ctx.config.structuredErrorHook = proc(
+          config: ConfigRef, info: TLineInfo, msg: string, severity: Severity
+      ) {.gcsafe.} =
+        {.gcsafe.}: captured_ptr[].add((info, msg, severity))
+
       var semNode = semWithPContext(ctx, sl)
+      let errors_added = ctx.config.errorCounter - old_error_count
+
+      ctx.config.structuredErrorHook = old_hook
+      ctx.config.errorMax = old_error_max
+      ctx.config.m.errorOutputs = old_error_outputs
+
+      # If exactly one error (the "discard" error) and the node has a non-void
+      # type, it's a bare expression — evaluate and return its value.
+      # Note: semStmtList unwraps single-element lists, so semNode is the
+      # expression directly, not a nkStmtList wrapper.
+      if errors_added == 1 and semNode.typ != nil and
+          semNode.typ.kind notin {tyVoid, tyError, tyNone}:
+        ctx.config.errorCounter = old_error_count
+        let r = evalExpr(PCtx(graph.vm), semNode)
+        if r != nil and r.kind notin {nkEmpty, nkError}:
+          result = some(node_to_str(r))
+        break processCode
+
+      # Replay any captured errors through the original hook so they propagate.
+      ctx.config.errorCounter = old_error_count
+      for e in captured:
+        if e.sev == Severity.Error:
+          inc ctx.config.errorCounter
+        if old_hook != nil:
+          old_hook(ctx.config, e.info, e.msg, e.sev)
+
       discard processPipeline(graph, semNode, bModule)
 
     closeParser(p)
     if s.kind != llsStdIn:
       break
 
-  result = true
-
-proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string) =
+proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[string] =
   ## This can also be used to *reload* the script.
   assert i != nil
   var module: PSym
@@ -298,8 +400,17 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string) =
       break
 
   assert module != nil, "no valid module selected"
+  # If closePContext was called (for scripts that complete without VMPause,
+  # e.g. players.nim), restore the context so extendModule can work.
+  # closePContext also pops the proc context and owner, both of which must
+  # be restored or evalAtCompileTime crashes accessing c.p.owner.
+  if ctx.currentScope == nil:
+    ctx.currentScope = ctx.topLevelScope
+    pushProcCon(ctx, module)
+    pushOwner(ctx, module)
   let s = llStreamOpen(code)
-  extendModule(i.graph, module, i.idgen, s, ctx)
+  with_import_stack_recovery(i.graph):
+    result = extendModule(i.graph, module, i.idgen, s, ctx)
 
 proc config*(i: Interpreter): ConfigRef =
   i.graph.config

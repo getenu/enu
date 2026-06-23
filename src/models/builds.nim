@@ -11,6 +11,7 @@ export
   encode_chunk, decode_chunk, encode_delta, decode_delta, pack_voxel,
   unpack_voxel, linear_position, from_linear, is_empty, flush_dirty_chunks,
   flush_dirty_edits, chunk_id_for_pos
+export units
 
 include "build_code_template.nim.nimf"
 
@@ -134,6 +135,22 @@ proc end_asap*(self: Build) {.gcsafe.} =
     self.voxels.flush_dirty_chunks()
     self.global_flags -= ASAP_MODE
 
+template buffer*(self: Build, body: untyped) =
+  ## Batch many draws into a single flush. `draw` normally syncs each voxel,
+  ## which is costly for large procedural builds; inside `buffer:` the draws
+  ## accumulate locally (ASAP mode) and flush once — chunks and MANUAL edits —
+  ## when the block exits (even on exception). Suspends `immediate` for the
+  ## duration so the draws actually batch, then restores it.
+  let was_immediate = self.voxels.immediate
+  self.voxels.immediate = false
+  self.begin_asap()
+  try:
+    body
+  finally:
+    self.end_asap()
+    self.voxels.flush_dirty_edits()
+    self.voxels.immediate = was_immediate
+
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
   self.voxels.add_voxel(position, voxel)
 
@@ -197,6 +214,22 @@ proc has_visible_voxels(self: Build): bool =
       return true
   false
 
+const BLOCK_LOG_CAP = 200
+
+proc log_block_placement(self: Build, local: Vector3, color: Colors) =
+  if state.player.is_nil:
+    return
+  let entry: BlockLogEntry = (
+    unit_id: self.id,
+    color: color,
+    local_position: local,
+    global_position: local.global_from(self),
+    timestamp: get_mono_time(),
+  )
+  state.player.block_log_entries.add entry
+  while state.player.block_log_entries.len > BLOCK_LOG_CAP:
+    state.player.block_log_entries.del 0
+
 proc remove(self: Build) =
   if state.tool notin {CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
@@ -208,6 +241,7 @@ proc remove(self: Build) =
     skip_point = vec3()
     last_point = self.target_point
     self.draw(point, (HOLE, ACTION_COLORS[ERASER]))
+    self.log_block_placement(point, ERASER)
 
     if self.units.len == 0 and not self.has_visible_voxels:
       if self.parent.is_nil:
@@ -224,6 +258,7 @@ proc fire(self: Build) =
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
     self.draw(point, (MANUAL, state.selected_color))
+    self.log_block_placement(point, Colors(ord state.tool))
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
@@ -235,9 +270,16 @@ proc fire(self: Build) =
 proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
 
+proc is_setting_anchor(move_mode: int): bool =
+  move_mode == 3
+
 method on_begin_move*(
     self: Build, direction: Vector3, steps: float, move_mode: int
 ): Callback =
+  if is_setting_anchor(move_mode):
+    let offset = self.anchor_value.basis.xform(direction) * steps
+    self.anchor_value.origin = self.anchor_value.origin + offset
+    return
   let move = self.is_moving(move_mode)
   if move:
     self.end_asap() # Exit ASAP mode when switching to movement
@@ -256,7 +298,6 @@ method on_begin_move*(
       else:
         self.transform_value.origin =
           self.transform.origin + (moving * self.speed * delta)
-
         return RUNNING
   else:
     if self.speed == 0:
@@ -289,6 +330,12 @@ method on_begin_turn*(
     else:
       {LEFT: UP, RIGHT: DOWN, UP: RIGHT, DOWN: LEFT}.to_table
   let axis = map[axis]
+  if is_setting_anchor(move_mode):
+    let world_axis = self.anchor_value.basis.xform(axis)
+    self.anchor_value.basis =
+      self.anchor_value.basis.rotated(world_axis, deg_to_rad(degrees))
+        .orthonormalized
+    return
   let move = self.is_moving(move_mode)
   if move:
     self.end_asap()
@@ -316,7 +363,6 @@ method on_begin_turn*(
     let axis = self.draw_transform.basis.xform(axis)
     self.draw_transform_value.basis =
       self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
-
     self.draw_transform = self.draw_transform.orthonormalized()
 
 proc reset_state*(self: Build) =
@@ -328,7 +374,8 @@ method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
-  self.speed = 1
+  self.speed = 0 # draw ASAP unless the script sets a speed
+  self.begin_asap()
   self.scale = 1
 
   self.global_flags += RESETTING
@@ -356,7 +403,7 @@ method destroy*(self: Build) =
 
 proc init*(
     _: type Build,
-    id = "build_" & generate_id(),
+    id = "build_" & generate_id() & "-" & Ed.thread_ctx.id,
     transform = Transform.init,
     color = default_color,
     clone_of: Unit = nil,
@@ -364,73 +411,91 @@ proc init*(
     bot_collisions = true,
     parent: Unit = nil,
 ): Build =
-  let voxel_id = id & ".voxels"
-  let voxels = VoxelStore.init(id = voxel_id, unit_id = id)
-  var self = Build(
-    id: id,
-    voxels: voxels,
-    start_transform: transform,
-    draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
-    start_color: color,
-    drawing: true,
-    bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
-    speed: 1.0,
-    clone_of: clone_of,
-    bot_collisions: bot_collisions,
-    parent: parent,
-  )
+  # Everything built here is owned by this build's id (containers stamp owner_id
+  # = id, riding their CREATE), so destroy_owned(id) tears it all down. init_unit,
+  # called within, inherits the scope through the threadvar.
+  id.own:
+    # The synced voxel tables: real Build Ed fields, generated ids (no derived
+    # id, so a reload mints fresh ones — no destroy+recreate-same-id race).
+    # LAZY: pull-only on partial replicas (page chunks in/out); full replicas
+    # get the data.
+    let packed_chunks = EdTable[Vector3, SnapshotData].init(
+      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
+    )
+    let chunk_deltas = EdTable[Vector3, EdSeq[DeltaUpdate]].init(
+      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
+    )
+    let voxels = VoxelStore.init(unit_id = id)
+    var self = Build(
+      id: id,
+      packed_chunks: packed_chunks,
+      chunk_deltas: chunk_deltas,
+      voxels: voxels,
+      start_transform: transform,
+      draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
+      start_color: color,
+      drawing: true,
+      bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
+      clone_of: clone_of,
+      bot_collisions: bot_collisions,
+      parent: parent,
+    )
 
-  self.init_unit
+    voxels.build = self # back-ref for live table reads (set once self exists)
+    self.init_unit
 
-  # Set up edit references after init_unit creates Shared
-  self.voxels.edit_snapshots = self.shared.edit_snapshots
-  self.voxels.edit_deltas = self.shared.edit_deltas
-  self.voxels.rebuild_local_edits()
+    # Set up edit references after init_unit creates Shared
+    self.voxels.edit_snapshots = self.shared.edit_snapshots
+    self.voxels.edit_deltas = self.shared.edit_deltas
+    self.voxels.rebuild_local_edits()
 
-  # Expand bounds as chunks are created (for early chunk loading)
-  let build = self
-  self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
-    build.expand_bounds_to_chunk(chunk_id)
+    # Expand bounds as chunks are created (for early chunk loading)
+    let build = self
+    self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
+      build.expand_bounds_to_chunk(chunk_id)
 
-  if global:
-    self.global_flags += GLOBAL
-  self.reset()
-  result = self
+    if global:
+      self.global_flags += GLOBAL
+    self.reset()
+    result = self
+
+proc init*(_: type Build, x, y, z: float, save = false): Build =
+  ## A build at (x, y, z) for demos and external agents. EPHEMERAL by default
+  ## (reaped when the session ends); pass `save = true` to persist it with the
+  ## level. Draws render as they're made — each `draw` syncs immediately — so a
+  ## shell appears block by block; wrap a batch in `build.buffer:` to accumulate
+  ## and flush once instead (far faster for large procedural builds).
+  result = Build.init(transform = Transform.init(vec3(x, y, z)))
+  if not save:
+    result.global_flags += EPHEMERAL
+  # enu's Build.init starts in ASAP mode (batched meshing — the right default
+  # for scripted builds that draw a lot before their first frame). An agent
+  # drawing directly wants the opposite: visible as it goes. Leave ASAP and sync
+  # each draw. `buffer:` flips both back for the span of a batch.
+  result.end_asap()
+  result.voxels.immediate = true
 
 proc init_voxels_if_needed*(self: Build) =
-  ## Initialize voxels if nil (happens when Build is synced between threads)
+  ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
+  ## ride the closure, so it's nil after a cross-thread sync). The synced tables
+  ## are the Build's own Ed fields — reconnected by reference after sync, so we
+  ## just wrap them (no id lookup, no aliasing).
   self.init_shared()
+  if not ?self.shared:
+    # Narrow replica whose `shared` (inherited from the parent on a parented
+    # unit, or our own synced singleton) hasn't filled yet. sync_ready keeps
+    # the join deferred until it's ready, so reaching here means a join slipped
+    # past that gate — bail rather than deref nil. A later join pass heals it.
+    notice "init_voxels_if_needed: shared not ready, deferring", unit = self.id
+    return
   if not ?self.voxels:
-    let voxel_id = self.id & ".voxels"
-    let ctx = Ed.thread_ctx
-    let packed_id = voxel_id & ".packed_chunks"
-    let deltas_id = voxel_id & ".chunk_deltas"
-    notice "init_voxels_if_needed",
-      build_id = self.id,
-      packed_id,
-      deltas_id,
-      packed_exists = (packed_id in ctx),
-      deltas_exists = (deltas_id in ctx)
-    if packed_id notin ctx or deltas_id notin ctx:
-      notice "voxel EdTables not in context, creating new ones",
-        build_id = self.id
-      self.voxels = VoxelStore.init(
-        id = voxel_id,
-        unit_id = self.id,
-        ctx = ctx,
-        edit_snapshots = self.shared.edit_snapshots,
-        edit_deltas = self.shared.edit_deltas,
-      )
-    else:
-      self.voxels = VoxelStore(
-        id: voxel_id,
-        ctx: ctx,
-        unit_id: self.id,
-        packed_chunks: EdTable[Vector3, SnapshotData](ctx[packed_id]),
-        chunk_deltas: EdTable[Vector3, EdSeq[DeltaUpdate]](ctx[deltas_id]),
-        edit_snapshots: self.shared.edit_snapshots,
-        edit_deltas: self.shared.edit_deltas,
-      )
+    self.voxels = VoxelStore.init(
+      ctx = Ed.thread_ctx,
+      unit_id = self.id,
+      build = self,
+      edit_snapshots = self.shared.edit_snapshots,
+      edit_deltas = self.shared.edit_deltas,
+    )
     self.voxels.rebuild_local_edits()
     # Expand bounds as chunks are created
     let build = self
@@ -458,6 +523,11 @@ proc setup_packed_chunk_watches(self: Build) =
   self.voxels.packed_chunks.watch:
     if added:
       self.voxels.apply_snapshot(change.item.key, change.item.value)
+    elif removed and not modified:
+      # Paged out (a rewrite is REMOVED+MODIFIED and skipped): drop the
+      # chunk's local voxel state. The authority keeps the data; moving back
+      # re-requests it.
+      self.voxels.unload_chunk(change.item.key)
 
   self.voxels.chunk_deltas.watch:
     if added:
@@ -467,14 +537,33 @@ proc setup_packed_chunk_watches(self: Build) =
         for delta in delta_seq:
           self.voxels.apply_delta(chunk_id, delta)
         watch_delta_seq(chunk_id, delta_seq)
+    elif removed and not modified:
+      if change.item.key notin self.voxels.packed_chunks:
+        # Delta-only chunk paged out; no packed_chunks REMOVED will fire.
+        self.voxels.unload_chunk(change.item.key)
 
-method worker_thread_joined*(self: Build) =
-  proc_call worker_thread_joined(Unit(self))
+method worker_thread_joined*(self: Build, worker: Worker) =
+  proc_call worker_thread_joined(Unit(self), worker)
   self.init_shared()
   self.init_voxels_if_needed()
   # Only clients need to apply packed chunks received from server
   if SERVER notin state.local_flags:
     self.setup_packed_chunk_watches()
+  # A build authored by a remote client (no local script) arrives stuck in
+  # ASAP_MODE (Build.init -> reset -> begin_asap): its synced voxels sit
+  # buffered and never mesh. A scripted build finishes via end_asap when its
+  # code runs, and a reloaded build via the load path — a remote, script-less
+  # build gets neither. Do it here: draw the default block to re-kick the
+  # build's terrain streaming, then end_asap so the synced chunks mesh
+  # directly. Gated to remote-owned, not-loading, script-less builds, so
+  # local in-game drawing and scripted builds are untouched.
+  elif self.code.owner != state.worker_ctx_name and
+      SCRIPT_INITIALIZING notin self.global_flags and
+      self.code.nim.strip == "" and
+      not (?self.script_ctx and self.script_ctx.script != "" and
+        file_exists(self.script_ctx.script)):
+    self.draw(vec3(), (COMPUTED, self.start_color))
+    self.end_asap()
 
 method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Unit(self))

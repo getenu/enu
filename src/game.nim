@@ -6,15 +6,16 @@ from dotenv import nil
 import
   godotapi/[
     input, input_event, gd_os, node, scene_tree, packed_scene, sprite, control,
-    viewport, viewport_texture, performance, label, theme, dynamic_font,
-    resource_loader, main_loop, project_settings, input_map, input_event_action,
-    input_event_key, input_event, global_constants, scroll_container,
-    voxel_server, world_environment,
+    viewport, viewport_texture, texture, image, performance, label, theme,
+    dynamic_font, resource_loader, main_loop, project_settings, input_map,
+    input_event_action, input_event_key, input_event, global_constants,
+    scroll_container, voxel_server, world_environment, camera,
   ]
 
 import ui/virtual_joystick
 import
   core, types, gdutils, controllers, models/[serializers, units, colors, builds]
+import libs/fd_tracking
 
 if file_exists(".env"):
   dotenv.overload()
@@ -67,10 +68,23 @@ gdobj Game of Node:
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
+    screenshot_camera_node: Camera
+    screenshot_viewport_node: Viewport
 
   method process*(delta: float) =
+    if state.is_nil or state.nodes.game != self:
+      # A scene reload (the NEEDS_RESTART worker-restart path) instantiates a
+      # fresh Game whose init replaces the global `state`; this superseded
+      # node can still get a frame or two before teardown. It must not touch
+      # the shared state — its node_controller's pending units would
+      # add_to_scene against the new instance's half-initialized nodes
+      # (state.nodes.data is nil until the new ready() runs): a nil-parent
+      # SIGSEGV observed when a client self-restarted mid-join.
+      return
     Ed.thread_ctx.tick
     inc state.frame_count
+    self.node_controller.drain_pending()
+
     let time = get_mono_time()
     when defined(metrics):
       if self.update_metrics_at < time:
@@ -86,8 +100,15 @@ gdobj Game of Node:
 
       let vram = get_monitor(RENDER_VIDEO_MEM_USED)
       var unit_count = 0
+      # Loaded chunk entries across all builds — the number voxel paging
+      # actually moves (chunk values live inside their tables, so the object
+      # count doesn't reflect page-in/out).
+      var chunk_count = 0
       state.units.value.walk_tree proc(unit: Unit) =
         inc unit_count
+        if unit of Build and ?Build(unit).voxels:
+          chunk_count += Build(unit).voxels.packed_chunks.len
+          chunk_count += Build(unit).voxels.chunk_deltas.len
 
       self.stats.text =
         \"""
@@ -95,11 +116,19 @@ gdobj Game of Node:
         scale_factor: {state.scale_factor}
         vram: {vram}
         units: {unit_count}
-        zen objects: {Ed.thread_ctx.len}
+        ed objects: {Ed.thread_ctx.len}
+        chunks: {chunk_count}
+        ed mem: {state.ed_mem div 1024} KiB
         level: {state.level_name}
         {get_network_stats()}
         {get_stats()}
         """
+      # Periodic main-thread counterpart of "worker stats": ed object growth
+      # here is how reload/sync leaks surface (see docs/notes on the reload
+      # leaks) — keep it greppable.
+      if state.frame_count mod 300 == 0:
+        info "main stats", ed_objects = Ed.thread_ctx.len, units = unit_count,
+          chunks = chunk_count
     state.voxel_tasks =
       parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
 
@@ -160,8 +189,9 @@ gdobj Game of Node:
         get_screen_dpi(-1).float / 96.0
 
     var args = get_cmdline_args().to_seq
-    let work_dir =
-      if (let i = args.find("--temp-workdir"); i) > -1:
+    let work_dir = block:
+      let i = args.find("--temp-workdir")
+      if i > -1:
         args.delete(i)
         let temp = get_temp_dir() / ("enu-test-" & $get_current_process_id())
         create_dir temp
@@ -179,6 +209,12 @@ gdobj Game of Node:
       buffer = true,
       label = "main",
       max_recv_duration = (1.0 / 30.0).seconds,
+      # No mem_limit: the node ctx is a full clone (subscribes partial = false),
+      # and full clones never evict — everything they hold is synced state
+      # something may read back, so there's no safe residue to drop. Voxel
+      # memory is managed at the worker (the partial replica), which caches
+      # chunks per-key and sheds under its own budget. (ed enforces this: a
+      # full clone ignores mem_limit. See interest-tiers-design.md.)
     )
 
     state = GameState.init
@@ -194,27 +230,39 @@ gdobj Game of Node:
     var level_dir_override = ""
     var test_mode = false
 
-    if (let i = args.find("--connect"); i) > -1 and args.len > i + 1:
-      connect_address_override = args[i + 1]
-      args.delete(i .. i + 1)
-    if (let i = args.find("--listen"); i) > -1:
-      if args.len > i + 1:
-        listen_address_override = args[i + 1]
+    block:
+      let i = args.find("--connect")
+      if i > -1 and args.len > i + 1:
+        connect_address_override = args[i + 1]
         args.delete(i .. i + 1)
-      else:
-        listen_address_override = "0.0.0.0"
+    block:
+      let i = args.find("--listen")
+      if i > -1:
+        if args.len > i + 1:
+          listen_address_override = args[i + 1]
+          args.delete(i .. i + 1)
+        else:
+          listen_address_override = "0.0.0.0"
+          args.delete(i)
+    block:
+      let i = args.find("--level-dir")
+      if i > -1 and args.len > i + 1:
+        level_dir_override = args[i + 1]
+        args.delete(i .. i + 1)
+    block:
+      let i = args.find("--enu-test")
+      if i > -1:
+        test_mode = true
         args.delete(i)
-    if (let i = args.find("--level-dir"); i) > -1 and args.len > i + 1:
-      level_dir_override = args[i + 1]
-      args.delete(i .. i + 1)
-    if (let i = args.find("--enu-test"); i) > -1:
-      test_mode = true
-      args.delete(i)
-    if (let i = args.find("--level"); i) > -1:
-      let parts = args[i + 1].split("/")
-      uc.world = some(parts[0])
-      uc.level = some(parts[1])
-      args.delete(i .. i + 1)
+    block:
+      let i = args.find("--level")
+      if i > -1:
+        let parts = args[i + 1].split("/")
+        uc.world = some(parts[0])
+        uc.level = some(parts[1])
+        args.delete(i .. i + 1)
+
+    raise_fd_limit()
 
     if ?get_env("ENU_LISTEN_ADDRESS") and not ?listen_address_override:
       listen_address_override = get_env("ENU_LISTEN_ADDRESS")
@@ -271,6 +319,7 @@ gdobj Game of Node:
       gamepad_sensitivity = uc.gamepad_sensitivity ||= 2.5
       invert_gamepad_y_axis = uc.invert_gamepad_y_axis ||= false
       environment = uc.environment ||= "default"
+      auto_show_console = uc.auto_show_console ||= true
       megapixels_override = environments[value.environment]
 
     if ?listen_address_override:
@@ -414,6 +463,18 @@ gdobj Game of Node:
       assert not state.nodes.data.is_nil
       self.scaled_viewport =
         self.get_node("ViewportContainer/Viewport") as Viewport
+      self.screenshot_viewport_node = gdnew[Viewport]()
+      self.screenshot_viewport_node.name = "ScreenshotViewport"
+      self.screenshot_viewport_node.size = vec2(640, 360)
+      self.screenshot_viewport_node.render_target_update_mode = UPDATE_ALWAYS
+      self.add_child(self.screenshot_viewport_node)
+      self.screenshot_viewport_node.world = self.scaled_viewport.find_world()
+      self.screenshot_camera_node = gdnew[Camera]()
+      self.screenshot_camera_node.name = "ScreenshotCamera"
+      self.screenshot_viewport_node.add_child(self.screenshot_camera_node)
+      self.screenshot_camera_node.make_current()
+      state.screenshot_camera = self.screenshot_camera_node
+      state.screenshot_viewport = self.screenshot_viewport_node
 
       self.bind_signals(self.get_viewport(), "size_changed")
       self.bind_signals(self.get_tree(), "global_menu_action")
@@ -526,10 +587,13 @@ gdobj Game of Node:
 
     state.queued_action_value.changes:
       if added and change.item != "":
-        var ev = gdnew[InputEventAction]()
-        ev.action = state.queued_action
-        ev.pressed = true
+        # First byte is the edge: '+' press, '-' release (see
+        # press_action/release_action in host_bridge).
+        let queued = state.queued_action
         state.queued_action = ""
+        var ev = gdnew[InputEventAction]()
+        ev.action = queued[1 .. ^1]
+        ev.pressed = queued[0] == '+'
         parse_input_event(ev)
 
   method on_size_changed() =

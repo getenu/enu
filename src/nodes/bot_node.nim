@@ -1,13 +1,20 @@
-import std/[tables, math]
+import std/[tables, math, os]
 import pkg/godot except print
 import pkg/[chroma]
 import
   godotapi/[
     scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
-    animation_player, resource_loader, packed_scene, spatial_material, text_edit
+    animation_player, resource_loader, packed_scene, spatial_material,
+    text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
+    area,
   ]
-import gdutils, core, models/[colors], ui/markdown_label
+import gdutils, core, models/[colors, units], ui/markdown_label
 import ./queries
+
+const SELF_AVATAR_LAYER = 1'i64 shl 19
+  ## Render layer for the local player's own avatar: the player's first-person
+  ## camera culls it (you never see your own body), every other camera draws
+  ## it, and shadow casting is unaffected — so you still see your own shadow.
 
 gdobj BotNode of KinematicBody:
   var
@@ -19,6 +26,14 @@ gdobj BotNode of KinematicBody:
     mesh: MeshInstance
     animation_player: AnimationPlayer
     transform_zid: EID
+    # A screenshot query is multi-phase: positioning the camera doesn't take
+    # effect until the next render, and a projection-mode change (ortho ↔
+    # perspective) needs an extra frame on top of that. -1 = idle, N > 0 =
+    # warming up (decrement each frame), 0 = capture this frame.
+    screenshot_warmup_frames: int = -1
+    # Bot hides its own skin during capture so it doesn't fill its own POV
+    # when the camera sits near the bot's body (screenshot, screenshot_at).
+    skin_hidden_during_screenshot: bool
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -141,17 +156,19 @@ gdobj BotNode of KinematicBody:
           )
 
       player.cursor_position_value.watch:
-        if added:
+        # Only a BotNode carrying the code-popup sign has this editor; the
+        # local player's self-avatar (and plain bots) don't, so this is a
+        # no-op for them. Without the guard, the avatar — bound to the local
+        # player's model — would deref a nil node the moment the editor
+        # cursor moves and take the process down.
+        if added and self.has_node("SignNode/Viewport/TextEdit"):
           let editor = self.get_node("SignNode/Viewport/TextEdit") as TextEdit
           editor.cursor_set_line(change.item.line, true)
           editor.cursor_set_column(change.item.col, true)
 
-    self.model.scale_value.watch:
-      if added:
-        let scale = change.item
-        self.scale = vec3(scale, scale, scale)
-        self.model.transform_value.pause(self.transform_zid):
-          self.model.transform = self.transform
+    # Scale is composed into transform.basis by `scale=` and applied via the
+    # transform_value watch below — no separate node-scale writeback (it used
+    # to race with rotation).
 
     self.model.color_value.watch:
       if added:
@@ -173,9 +190,172 @@ gdobj BotNode of KinematicBody:
     self.model.sight_ray = self.get_node("SightRay") as RayCast
 
     if self.model of Bot:
-      self.set_process(SCRIPT_RUNNING in self.model.global_flags)
+      let bot = Bot(self.model)
+      # Unit queries are answered only by the server. A connected client also
+      # holds the synced bot (and its query_value); answering here too makes
+      # two writers race on the same synced response container — seen live as
+      # an eval answered with a screenshot path.
+      let serves_queries =
+        EPHEMERAL in bot.global_flags and SERVER in state.local_flags
+      if serves_queries:
+        info "agent bot node setup",
+          id = bot.id, has_query_value = ?bot.query_value
+      self.set_process(
+        SCRIPT_RUNNING in self.model.global_flags or serves_queries
+      )
+      # A VOXEL_VIEWER unit streams voxel terrain around itself, so screenshots
+      # render even when no player is nearby. Server-side only: that's
+      # where queries (and their renders) are served. (Qualified: in Nim
+      # `VOXEL_VIEWER` and godot's `VoxelViewer` are the same identifier.)
+      if GlobalModelFlags.VOXEL_VIEWER in bot.global_flags and
+          SERVER in state.local_flags:
+        let viewer = gdnew[voxel_viewer.VoxelViewer]()
+        viewer.view_distance = 256
+        # Meshing only — these viewers exist so screenshots render, and
+        # cooking colliders along every bot's path is a main-thread cost.
+        viewer.requires_collisions = false
+        self.add_child(viewer)
+
+  proc as_self_avatar*() =
+    ## Make this the local player's stand-in body: inert (no collision, no
+    ## per-frame process — it follows the player through the transform/rotation/
+    ## velocity watches set up in `track_changes`) and on SELF_AVATAR_LAYER, so
+    ## the player's own camera culls it while every other camera renders it,
+    ## shadow and all.
+    self.set_process(false)
+    self.collision_layer = 0
+    self.collision_mask = 0
+    # The body isn't the only collider: bots are targeted through their
+    # SelectionArea (layer 16), which the player's aim rays hit. Left enabled,
+    # the avatar — co-located with the camera — intercepts every aim, so block
+    # placement, unit highlight, and code-open all resolve to the player's own
+    # model. Zero its layer too so the rays pass through to the world.
+    let selection = self.get_node("SelectionArea") as Area
+    selection.collision_layer = 0
+    self.mesh.layers = SELF_AVATAR_LAYER
+    self.mesh.cast_shadow = 1 # SHADOW_CASTING_SETTING_ON
+    if not state.player_camera.is_nil:
+      let cam = Camera(state.player_camera)
+      cam.cull_mask = cam.cull_mask and not SELF_AVATAR_LAYER
+
+  proc process_screenshot() =
+    if self.model of Bot:
+      let bot = Bot(self.model)
+      if EPHEMERAL in bot.global_flags and SERVER in state.local_flags:
+        let q = bot.query
+        if q.kind == SCREENSHOT and q.state == READY and
+            self.screenshot_warmup_frames > 0:
+          dec self.screenshot_warmup_frames
+        elif q.kind == SCREENSHOT and q.state == READY and
+            self.screenshot_warmup_frames == 0:
+          let vp =
+            if q.screenshot_with_ui:
+              self.get_tree().root
+            else:
+              Viewport(state.screenshot_viewport)
+          # A minimized window halts the VisualServer draw cycle, so the
+          # viewport's texture would otherwise be frozen on the last frame
+          # rendered before minimizing. Force a synchronous draw (no buffer
+          # swap — the window may have no drawable) so the capture reflects
+          # the current camera regardless of window state. `process` keeps
+          # running while minimized, so the warm-up frames above committed
+          # the camera transform/projection; this just renders them.
+          force_draw(swap_buffers = false)
+          let img = vp.get_texture.get_data
+          img.flip_y
+          inc state.screenshot_counter
+          let path =
+            get_temp_dir() /
+            ("enu_screenshot_" & $state.screenshot_counter & ".png")
+          discard img.save_png(path)
+          info "screenshot captured", path
+          self.screenshot_warmup_frames = -1
+          if self.skin_hidden_during_screenshot:
+            self.skin.visible = true
+            self.skin_hidden_during_screenshot = false
+          bot.query =
+            UnitQuery(kind: SCREENSHOT, result: path, state: DONE)
+        elif q.state == READY and q.kind == SCREENSHOT and
+            self.screenshot_warmup_frames < 0:
+          # with_ui captures the root viewport (game + GUI overlay) so the
+          # camera positioning below has no effect — root is already the
+          # composited screen. For without-UI we still drive the
+          # screenshot camera.
+          if not q.screenshot_with_ui:
+            # screenshot_viewport's `world` reference is captured at game.ready
+            # time, but the world changes on level switches. Refresh it
+            # each shot so the ortho/perspective camera renders against
+            # the current level.
+            let vp = Viewport(state.screenshot_viewport)
+            let main_vp = self.get_tree().root
+            if not main_vp.is_nil:
+              vp.world = main_vp.find_world()
+            let cam = Camera(state.screenshot_camera)
+            if q.screenshot_top_down:
+              # Orthographic camera high above the target looking straight
+              # down. Half-extent (screenshot_size) controls coverage.
+              let half = if q.screenshot_size > 0: q.screenshot_size else: 30.0
+              cam.set_orthogonal(half * 2, 0.1, 500.0)
+              let target = self.global_transform.origin
+              var t: Transform
+              # Camera forward is local -Z. To look at -Y (straight down)
+              # with world -Z as "image up" (so north stays at the top of
+              # the frame), the local axes in world space are:
+              #   local +X = world +X     (east stays right)
+              #   local +Y = world -Z     (north points up in the image)
+              #   local +Z = world +Y     (so local -Z = world -Y = down)
+              # Row-major Basis (rows are the world-space components of
+              # the local axes). Equivalent column form:
+              #   local +X -> (1, 0, 0)   east stays right in the image
+              #   local +Y -> (0, 0, -1)  north stays up in the image
+              #   local +Z -> (0, 1, 0)   so local -Z (camera forward) = down
+              # Constructing this from euler angles via init_basis(vec3(...))
+              # is fragile: when pitched ±π/2 the camera ends up looking at
+              # the sky.
+              t.basis = init_basis(
+                vec3(1, 0, 0),
+                vec3(0, 0, 1),
+                vec3(0, -1, 0),
+              )
+              # y=60 is enough headroom for anything voxel-sized while
+              # staying within Enu's voxel renderer's draw distance. At
+              # y=200+ the world clips and the frame goes black.
+              t.origin = vec3(target.x, 60, target.z)
+              cam.transform = t
+            else:
+              # set_perspective restores FOV/near/far if a prior top-down
+              # shot left the camera in orthogonal mode.
+              cam.set_perspective(70.0, 0.05, 500.0)
+              var t =
+                if q.screenshot_from_player and not state.player_camera.is_nil:
+                  Camera(state.player_camera).global_transform
+                else:
+                  var bt = self.global_transform
+                  bt.origin += vec3(0, 0.8, 0)
+                  bt
+              cam.transform = t
+            cam.make_current()
+            # Hide the bot's own skin so it doesn't fill the frame when
+            # the camera sits at the bot's position. Skipped for the
+            # from-player path since that uses the human player's camera,
+            # not the bot's. Restored once the screenshot is captured.
+            if not q.screenshot_from_player and not self.skin.is_nil:
+              self.skin.visible = false
+              self.skin_hidden_during_screenshot = true
+            info "screenshot positioning camera",
+              from_player = q.screenshot_from_player,
+              top_down = q.screenshot_top_down,
+              origin = cam.global_transform.origin
+          # Two warm-up frames: one for the transform write to land, one for
+          # a projection-mode change (ortho ↔ perspective) to take effect.
+          # A single frame was enough most of the time but a perspective
+          # capture immediately after an orthographic one occasionally read
+          # back the prior frame's ortho render.
+          self.screenshot_warmup_frames = 2
 
   method process(delta: float) =
+    self.process_screenshot()
+
     if ?self.model:
       if self.model.code.owner == state.worker_ctx_name:
         self.model.transform_value.pause self.transform_zid:

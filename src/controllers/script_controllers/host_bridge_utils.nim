@@ -83,10 +83,31 @@ macro bridged_from_vm(
       let script_engine {.inject.} = `self`
 
   for proc_ref in proc_refs:
+    let symbol = bind_sym($proc_ref)
+    var chosen = symbol
+    if symbol.kind != nnkSym:
+      # Overloaded. Prefer, in order: a proc defined in this module — the
+      # bridge wraps host_bridge's own procs first (`save` must bind the
+      # draw-position save here, not serializers' persist-the-unit save);
+      # then a Unit-first overload (procs that live in models, like
+      # `rotation`); then the first candidate.
+      chosen = symbol[0]
+      var found_local = false
+      for candidate in symbol:
+        # The impl's line info is the declaration site (the sym's own is
+        # the bind_sym call site — this macro).
+        if "host_bridge" in candidate.get_impl.line_info:
+          chosen = candidate
+          found_local = true
+          break
+      if not found_local:
+        for candidate in symbol:
+          let params = candidate.get_impl[3]
+          if params.len > 1 and params[1][1].repr == "Unit":
+            chosen = candidate
+            break
     let
-      symbol = bind_sym($proc_ref)
-      proc_impl = (if symbol.kind == nnkSym: symbol
-      else: symbol[0]).get_impl
+      proc_impl = chosen.get_impl
       proc_name = proc_impl[0].str_val
       proc_impl_name = proc_name.replace("=", "_set") & "_impl"
       return_node = proc_impl[3][0]

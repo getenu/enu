@@ -4,10 +4,12 @@ var global_default* = false
 
 const yes* = true
 const no* = false
-const ASAP* = float.high  ## Magic value for speed to enable ASAP mode
+const ASAP* = 0.0  ## Magic value for speed to enable ASAP mode
 
 type
   Vector3* = tuple[x, y, z: float]
+
+  WorldBox* = tuple[min, max: Vector3]
 
   Directions* = enum
     up
@@ -93,6 +95,7 @@ const
   FORWARD* = vec3(0, 0, -1)
   RIGHT* = vec3(1, 0, 0)
   LEFT* = vec3(-1, 0, 0)
+  UNSET_POSITION* = vec3(float.high, float.high, float.high)
 
 # math from https://github.com/pragmagic/godot-nim/blob/7fb22f69af92aa916e56dba14ba3938fc7fa1dd1/godot/core/godotbase.nim
 
@@ -420,3 +423,26 @@ proc `<`*(a, b: Timestamp): bool =
 
 proc `>`*(a, b: Timestamp): bool =
   a.seconds_since_start > b.seconds_since_start
+
+# WorldBox helpers — axis-aligned world-space bounding box queries.
+# Returned by `bounds()` and consumed by `box_is_free`, `units_overlapping`,
+# `overlaps`, etc. See `docs/notes/instance-query-api.md`.
+
+proc size*(b: WorldBox): Vector3 {.inline.} =
+  b.max - b.min
+
+proc centre*(b: WorldBox): Vector3 {.inline.} =
+  (b.min + b.max) * 0.5
+
+proc contains*(b: WorldBox, p: Vector3): bool {.inline.} =
+  p.x >= b.min.x and p.x <= b.max.x and p.y >= b.min.y and p.y <= b.max.y and
+    p.z >= b.min.z and p.z <= b.max.z
+
+proc intersects*(a, b: WorldBox): bool {.inline.} =
+  not (
+    a.max.x < b.min.x or a.min.x > b.max.x or a.max.y < b.min.y or
+    a.min.y > b.max.y or a.max.z < b.min.z or a.min.z > b.max.z
+  )
+
+proc expanded*(b: WorldBox, margin: float): WorldBox {.inline.} =
+  (b.min - vec3(margin, margin, margin), b.max + vec3(margin, margin, margin))

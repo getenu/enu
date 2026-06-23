@@ -134,7 +134,7 @@ proc selected_color*(self: GameState): Color =
 
 proc init_logger*(self: GameState) =
   self.logger = proc(level, msg: string) {.closure.} =
-    if level == "err":
+    if level == "err" and state.config.auto_show_console:
       debug "console visible"
       state.push_flag CONSOLE_VISIBLE
     let msg = \"[b]{level.to_upper}[/b] {msg}"
@@ -147,11 +147,18 @@ proc init*(_: type GameState): GameState =
     player_value: EdValue[Player].init(flags = flags),
     local_flags: EdSet[LocalStateFlags].init(flags = flags),
     global_flags: EdSet[GlobalStateFlags].init(id = "state_global_flags"),
-    units: EdSeq[Unit].init(id = "root_units"),
+    units: EdSeq[Unit].init(
+      # OWNS_MEMBERS (ownerless): nothing cascades into root units, but ed
+      # indexes the members so partial subscribers get each unit's ownership
+      # closure pushed ahead of the collection (husk-free parse).
+      id = "root_units",
+      flags = DEFAULT_FLAGS + {OWNS_MEMBERS},
+    ),
     open_unit_value: EdValue[Unit].init(flags = flags),
     config_value: EdValue[Config].init(flags = flags, id = "config"),
     tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
     gravity: -80.0,
+    show_prototypes: true,
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
     open_sign_value: EdValue[Sign].init(flags = flags),
     wants: EdSeq[LocalStateFlags].init(flags = flags),
@@ -164,6 +171,7 @@ proc init*(_: type GameState): GameState =
     net_bytes_sent_value: EdValue[int64].init(0'i64, flags = flags),
     net_bytes_received_value: EdValue[int64].init(0'i64, flags = flags),
     net_connections_value: EdValue[int].init(0, flags = flags),
+    ed_mem_value: EdValue[int].init(0, flags = flags),
   )
 
   self.init_logger

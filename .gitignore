@@ -45,3 +45,14 @@ deps/
 nimbledeps/
 nim.cfg
 .build_arch
+app/level.json
+app/project.nim
+app/project.nimble
+
+# Per-level IDE/agent files Enu generates into worlds (regenerated on load).
+# nim.cfg, generated/ and .claude/ are already ignored globally above; the
+# per-level .gitignore self-ignores.
+vmlib/worlds/**/project.nim
+vmlib/worlds/**/project.nimble
+vmlib/worlds/**/CLAUDE.md
+vmlib/worlds/**/.mcp.json

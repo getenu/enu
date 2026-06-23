@@ -56,6 +56,7 @@ gdobj Toolbar of HBoxContainer:
       self.preview_maker.generate_object_preview obj,
         proc(preview: Image) =
           self.preview_result = some (color: obj, preview: preview)
+          self.waiting = false
 
   method on_action_changed*(button_name: string) =
     state.tool_value.pause(self.zid):
