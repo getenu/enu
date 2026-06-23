@@ -1,0 +1,13 @@
+{
+  "name": "getenu",
+  "owner": {
+    "name": "Enu"
+  },
+  "plugins": [
+    {
+      "name": "enu",
+      "source": "./tools/claude-plugin",
+      "description": "Skills, commands, and verified example scripts for building Enu voxel worlds with Claude."
+    }
+  ]
+}
