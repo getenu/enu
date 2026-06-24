@@ -189,9 +189,11 @@ gdobj Game of Node:
         get_screen_dpi(-1).float / 96.0
 
     var args = get_cmdline_args().to_seq
+    var temp_workdir = false
     let work_dir = block:
       let i = args.find("--temp-workdir")
       if i > -1:
+        temp_workdir = true
         args.delete(i)
         let temp = get_temp_dir() / ("enu-test-" & $get_current_process_id())
         create_dir temp
@@ -347,6 +349,14 @@ gdobj Game of Node:
       let new_world = world_dir_path.split_path.tail
       var final_world_dir = world_dir_path
       var final_level_dir = level_dir_override
+
+      if temp_workdir:
+        # Isolate from the source: copy the level into the temp work dir and run
+        # against the copy, so a test run never modifies — or deletes scripts
+        # from — the real level.
+        final_world_dir = join_path(work_dir, new_world)
+        final_level_dir = join_path(final_world_dir, new_level)
+        copy_dir(level_dir_override, final_level_dir)
 
       state.config_value.value:
         level = new_level
