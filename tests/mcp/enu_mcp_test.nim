@@ -12,6 +12,7 @@
 
 import std/[osproc, streams, json, strutils, os, times, md5]
 import enu_mcp_reconnect_test
+import client
 
 type McpSession = object
   process: Process
@@ -495,22 +496,37 @@ proc run_hang_repro() =
 
 # ---- Main -----------------------------------------------------------------
 
-let is_integration =
-  get_env("ENU_CONNECT_ADDRESS", "") != "" or
-  get_env("ENU_LISTEN_ADDRESS", "") != ""
-
 echo "=== enu_mcp test suite ==="
 echo ""
 
 run_protocol_tests()
 
-if is_integration:
+# The integration tests need an Enu to talk to. If the caller points us at one
+# (ENU_CONNECT_ADDRESS / ENU_LISTEN_ADDRESS) we use it; otherwise we launch a
+# private, minimized instance on a free port and tear it down afterward — which
+# is what lets the suite run unattended under `nim test`.
+let external =
+  get_env("ENU_CONNECT_ADDRESS", "") != "" or
+  get_env("ENU_LISTEN_ADDRESS", "") != ""
+var managed = false
+if not external:
+  const repo = current_source_path().parent_dir.parent_dir.parent_dir
+  let address = Enu.launch(
+    repo / "vmlib" / "worlds" / "tutorial" / "tutorial-1", id = "enu_mcp_test"
+  )
+  put_env("ENU_CONNECT_ADDRESS", address)
+  managed = true
+
+if external or managed:
   run_integration_tests()
   run_reconnect_tests()
   run_hang_repro()
 else:
   echo ""
-  echo "(skipping integration tests — run with ENU_LISTEN_ADDRESS=127.0.0.1)"
+  echo "(skipping integration tests — set ENU_CONNECT_ADDRESS or launch one)"
+
+if managed:
+  Enu.kill()
 
 echo ""
 echo "=== All tests passed ==="

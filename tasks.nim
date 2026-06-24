@@ -353,10 +353,13 @@ task mcp_repro,
   if fail_count > 0:
     quit 1
 
+task mcp_tests, "run MCP integration tests (launches a private Enu)":
+  # The test self-launches a minimized Enu on a free port and tears it down, so
+  # no manually-running Enu is needed. Assumes the app is built, as `nim test`
+  # does for the world tests.
+  exec "nim c -r tests/mcp/enu_mcp_test.nim"
+
 task test, "run all tests":
-  # TODO: fold the MCP integration tests (tests/mcp/) into `nim test` once the
-  # MCP server can launch a private Enu instance on a free port. Until then they
-  # need a manually-running Enu — run them with `nim mcp_repro`.
   var failed: seq[string]
 
   echo "\n=== Running unit tests ===\n"
@@ -376,6 +379,12 @@ task test, "run all tests":
   echo world_result.output
   if world_result.exit_code != 0:
     failed.add "world_tests"
+
+  echo "\n=== Running MCP tests ===\n"
+  let mcp_result = gorge_ex("nim mcp_tests")
+  echo mcp_result.output
+  if mcp_result.exit_code != 0:
+    failed.add "mcp_tests"
 
   echo "\n=== Test Summary ===\n"
   if failed.len > 0:
@@ -572,7 +581,7 @@ task dist_package, "Build distribution binaries":
     # MCP server — resolves to <root>/bin/enu.exe (lib_dir.parent/bin); the
     # bin/ subdir avoids colliding with the enu.exe launcher at the root.
     mk_dir root & "/bin"
-    build_mcp("", root & "/bin/enu.exe")
+    build_mcp("-d:dist", root & "/bin/enu.exe")
     with_dir "dist":
       exec &"zip -r enu-{git_version}-windows-x64.zip enu-{git_version}"
   elif host_os == "macosx":
@@ -618,11 +627,11 @@ task dist_package, "Build distribution binaries":
     # MCP server, universal — resolves to <Resources>/bin/enu (lib_dir.parent/bin).
     mk_dir "dist/Enu.app/Contents/Resources/bin"
     build_mcp(
-      "--cpu:amd64 -l:'-target x86_64-apple-macos11' -t:'-target x86_64-apple-macos11'",
+      "-d:dist --cpu:amd64 -l:'-target x86_64-apple-macos11' -t:'-target x86_64-apple-macos11'",
       "dist/mcp.x86_64",
     )
     build_mcp(
-      "--cpu:arm64 -l:'-target arm64-apple-macos11' -t:'-target arm64-apple-macos11'",
+      "-d:dist --cpu:arm64 -l:'-target arm64-apple-macos11' -t:'-target arm64-apple-macos11'",
       "dist/mcp.arm64",
     )
     exec "lipo -create dist/mcp.x86_64 dist/mcp.arm64 -output dist/Enu.app/Contents/Resources/bin/enu"
@@ -667,7 +676,7 @@ task dist_package, "Build distribution binaries":
     copy_vmlib "vmlib", root & "/lib/vmlib"
     # MCP server — resolves to <root>/lib/bin/enu (lib_dir.parent/bin).
     mk_dir root & "/lib/bin"
-    build_mcp("", root & "/lib/bin/enu")
+    build_mcp("-d:dist", root & "/lib/bin/enu")
     exec "chmod +x " & root & "/lib/bin/enu"
     exec "chmod +x " & root & "/bin/enu"
     exec &"{gen()} write_export_presets --enu_version {git_version}"
