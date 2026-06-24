@@ -168,21 +168,21 @@ task build_godot, "Build godot. Use --force to re-init submodules":
 task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
 
-task unit_tests, "run unit tests":
+task test_unit, "run unit tests":
   exec "nim c -r tests/unit/script_ctx_test"
   exec "nim c -r tests/unit/serializers_test"
   exec "nim c -r tests/unit/dependency_graph_test"
 
-task vm_tests, "run VM script tests":
+task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"
 
-task godot_tests, "run godot tests":
+task test_godot, "run godot tests":
   exec "nim c tests/godot/tnode_factories"
   cd "tests/godot/app"
   exec this_dir() /
     &"vendor/godot/bin/godot_server.osx.opt.tools.{cpu} --quiet --script tests/tests.gdns"
 
-task world_tests,
+task test_world,
   "run in-world tests (headless for server build, dist for dist build)":
   # Each level runs in sequence via `--enu-test`; test mode exits with a code
   # derived from script errors and signal_test_complete calls, and a non-zero
@@ -353,45 +353,32 @@ task mcp_repro,
   if fail_count > 0:
     quit 1
 
-task mcp_tests, "run MCP integration tests (launches a private Enu)":
+task test_mcp, "run MCP integration tests (launches a private Enu)":
   # The test self-launches a minimized Enu on a free port and tears it down, so
-  # no manually-running Enu is needed. Assumes the app is built, as `nim test`
-  # does for the world tests.
+  # no manually-running Enu is needed. Assumes the app is already built.
   exec "nim c -r tests/mcp/enu_mcp_test.nim"
 
-task test, "run all tests":
+proc run_tests(names: openArray[string]) =
+  ## Run each `nim <name>` task in turn, echo its output, and fail the whole
+  ## run (quit 1) if any of them fail.
   var failed: seq[string]
-
-  echo "\n=== Running unit tests ===\n"
-  let unit_result = gorge_ex("nim unit_tests")
-  echo unit_result.output
-  if unit_result.exit_code != 0:
-    failed.add "unit_tests"
-
-  echo "\n=== Running VM tests ===\n"
-  let vm_result = gorge_ex("nim vm_tests")
-  echo vm_result.output
-  if vm_result.exit_code != 0:
-    failed.add "vm_tests"
-
-  echo "\n=== Running world tests ===\n"
-  let world_result = gorge_ex("nim world_tests")
-  echo world_result.output
-  if world_result.exit_code != 0:
-    failed.add "world_tests"
-
-  echo "\n=== Running MCP tests ===\n"
-  let mcp_result = gorge_ex("nim mcp_tests")
-  echo mcp_result.output
-  if mcp_result.exit_code != 0:
-    failed.add "mcp_tests"
-
+  for name in names:
+    echo &"\n=== Running {name} ===\n"
+    let r = gorge_ex("nim " & name)
+    echo r.output
+    if r.exit_code != 0:
+      failed.add name
   echo "\n=== Test Summary ===\n"
   if failed.len > 0:
     echo "FAILED: " & failed.join(", ")
     quit 1
-  else:
-    echo "All tests passed!"
+  echo "All tests passed!"
+
+task test, "fast default tests (unit + vm); run test_all for the full suite":
+  run_tests ["test_unit", "test_vm"]
+
+task test_all, "full test suite (unit + vm + world + mcp)":
+  run_tests ["test_unit", "test_vm", "test_world", "test_mcp"]
 
 proc find_and_copy_dlls(dep_path, dest: string, dlls: varargs[string]) =
   for dep in dlls:

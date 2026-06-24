@@ -64,12 +64,12 @@ jobs:
       - name: Dist
         run: nim dist_package
       - name: Run unit tests
-        run: nim unit_tests
+        run: nim test_unit
       - name: Run VM tests
-        run: nim vm_tests
-      # world_tests disabled on Windows - no headless support until Godot 4
+        run: nim test_vm
+      # test_world disabled on Windows - no headless support until Godot 4
       # - name: Run world tests
-      #   run: nim world_tests dist
+      #   run: nim test_world dist
 
       # Upload unsigned dist for zip signing
       - name: Upload unsigned dist for zip signing

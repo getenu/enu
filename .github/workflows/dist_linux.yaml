@@ -45,13 +45,13 @@ jobs:
       - name: Dist
         run: nim dist_package
       - name: Run unit tests
-        run: nim unit_tests
+        run: nim test_unit
       - name: Run VM tests
-        run: nim vm_tests
+        run: nim test_vm
       - name: Rebuild for headless tests
         run: nim build
       - name: Run world tests
-        run: nim world_tests headless
+        run: nim test_world headless
       - uses: actions/upload-artifact@v4
         with:
           name: Enu Linux Distribution
