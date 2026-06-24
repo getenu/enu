@@ -220,10 +220,10 @@ task world_tests,
     p &"Running world test: {test_level.split_path.tail}"
     let cmd =
       if use_dist:
-        bin & " --level-dir " & test_level & " --enu-test --temp-workdir"
+        bin & " --level-dir " & test_level & " --enu-test --minimized --temp-workdir"
       else:
         "cd app && " & bin & " --level-dir " & test_level &
-          " --enu-test scenes/game.tscn --temp-workdir"
+          " --enu-test --minimized scenes/game.tscn --temp-workdir"
     exec cmd
 
 task client_smoke,
