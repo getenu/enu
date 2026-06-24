@@ -279,6 +279,31 @@ let enu_server = mcp_server("enu", "1.0.0"):
         unit.glide(vec3(x, y, z), rotation, instant = not server_mode)
         ""
 
+  mcp_tool:
+    proc launch_enu(level_dir: string, port: int = 0): string =
+      ## Launch your own private Enu that opens `level_dir`, on a random free
+      ## port (or `port`), and connect to it. Use this when working on your own;
+      ## when collaborating, connect to the Enu the user is running instead.
+      ## Starts minimized. Returns the address.
+      if Enu.managing:
+        mark_tool_error()
+        return "Error: already managing an Enu — kill_enu first"
+      try:
+        "connected at " & Enu.launch(level_dir, port, id = ctx_id)
+      except CatchableError as e:
+        mark_tool_error()
+        "Error: " & e.msg
+
+  mcp_tool:
+    proc kill_enu(): string =
+      ## Terminate the Enu you launched with launch_enu and disconnect. Only
+      ## affects an instance you started.
+      if not Enu.managing:
+        mark_tool_error()
+        return "Error: no managed Enu to kill"
+      Enu.kill()
+      "killed"
+
 proc remove_bots() =
   if Enu.client.connected:
     for unit in Enu.units.value:
@@ -294,6 +319,9 @@ if server_mode:
     idle = proc() =
       Enu.client.tick,
   )
+  # Don't orphan a managed Enu when the client disconnects and serve returns.
+  if Enu.managing:
+    Enu.kill()
 elif cli_args.len == 0 or cli_args[0] in ["help", "--help", "-h"]:
   echo "enu — drive a running Enu from the command line.\n"
   echo enu_server.help_text("enu")
