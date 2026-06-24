@@ -2,6 +2,8 @@ import types
 export types
 
 import ed/utils
+import ed/lifecycle
+export lifecycle
 import
   std/[
     sequtils, strutils, sugar, macros, asyncfutures, importutils, typetraits,
