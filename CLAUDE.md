@@ -36,9 +36,12 @@ Enu is a 3D sandbox environment for creating and exploring voxel worlds using a 
 - `nim dist_package` - Package distribution binaries
 
 ### Testing and Documentation
-- `nim test` - Run all tests
-- `nim unit_tests` - Run unit tests
-- `nim vm_tests` - Run VM script tests
+- `nim test` - Run the fast default tests (unit + VM) — use while iterating
+- `nim test_all` - Run the full suite (unit + VM + world + MCP) — before opening a PR
+- `nim test_unit` - Run unit tests
+- `nim test_vm` - Run VM script tests
+- `nim test_world` - Run in-world tests (boots Godot)
+- `nim test_mcp` - Run MCP integration tests (launches a private Enu)
 - `nim docs` - Build documentation using nimibook
 - `nim clean` - Remove build artifacts
 
