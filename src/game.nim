@@ -229,6 +229,7 @@ gdobj Game of Node:
     var listen_address_override = ""
     var level_dir_override = ""
     var test_mode = false
+    var minimized = false
 
     block:
       let i = args.find("--connect")
@@ -253,6 +254,11 @@ gdobj Game of Node:
       let i = args.find("--enu-test")
       if i > -1:
         test_mode = true
+        args.delete(i)
+    block:
+      let i = args.find("--minimized")
+      if i > -1:
+        minimized = true
         args.delete(i)
     block:
       let i = args.find("--level")
@@ -354,7 +360,13 @@ gdobj Game of Node:
 
     state.set_flag(GOD, uc.god_mode ||= false)
 
-    set_window_fullscreen state.config.full_screen
+    if minimized:
+      # Launch out of the way (test runs, MCP-managed instances): minimize and
+      # skip fullscreen. The screenshot path force-draws a minimized window, so
+      # captures still work.
+      set_window_minimized true
+    else:
+      set_window_fullscreen state.config.full_screen
     when defined(metrics):
       let metrics_port =
         if ?get_env("ENU_METRICS_PORT"):
