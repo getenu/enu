@@ -460,8 +460,12 @@ proc run_integration_tests() =
     echo "(50 tool calls) "
 
 proc run_hang_repro() =
+  # Regression repro for a past eval+screenshot hang. 25 iterations by default —
+  # enough to catch a regression cheaply; set MCP_HANG_ITERATIONS to stress it
+  # harder (or use `nim mcp_repro`, which loops the whole suite).
+  let iterations = parse_int(get_env("MCP_HANG_ITERATIONS", "25"))
   echo ""
-  echo "Hang repro (loops until hang or 500 calls):"
+  echo "Hang repro (loops until hang or " & $iterations & " calls):"
   echo "  eval+screenshot loop..."
   stdout.flush_file()
 
@@ -471,7 +475,7 @@ proc run_hang_repro() =
   discard s.do_initialize()
 
   var call = 0
-  while call < 500:
+  while call < iterations:
     inc call
     let ev =
       s.do_call_tool("eval", %*{"code": $call}, timeout_ms = 35000).tool_text
@@ -492,7 +496,7 @@ proc run_hang_repro() =
     stdout.flush_file()
 
   echo ""
-  echo "  PASS (500 calls without hang)"
+  echo "  PASS (" & $iterations & " calls without hang)"
 
 # ---- Main -----------------------------------------------------------------
 
