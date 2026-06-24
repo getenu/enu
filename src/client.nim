@@ -144,12 +144,19 @@ proc kill*(_: type Enu) =
   Enu.disconnect
 
 proc launch*(
-    _: type Enu, level_dir: string, port = 0, id = "", timeout = 30.seconds
+    _: type Enu,
+    level_dir: string,
+    port = 0,
+    id = "",
+    timeout = 30.seconds,
+    temp_workdir = false,
 ): string =
   ## Launch a managed Enu that opens `level_dir`, listening on `port` (0 = a
   ## random free port), connect to it, and return its "host:port" address. The
   ## window starts minimized. `level_dir` is required: a managed instance always
   ## opens a specific level rather than whatever was last saved.
+  ## `temp_workdir` runs against a throwaway copy of the level (for tests) so the
+  ## source is never modified.
   if level_dir == "":
     raise ValueError.init("Enu.launch requires a level_dir")
   Enu.disconnect
@@ -157,7 +164,9 @@ proc launch*(
     p = if port == 0: free_port() else: port
     address = "127.0.0.1:" & $p
     spec = launch_spec()
-    flags = @["--level-dir", level_dir, "--listen", address, "--minimized"]
+    flags =
+      @["--level-dir", level_dir, "--listen", address, "--minimized"] &
+      (if temp_workdir: @["--temp-workdir"] else: @[])
     log = get_temp_dir() / "enu_managed.log"
   when defined(windows):
     # TODO: Windows managed launch (no /bin/sh; needs output redirection).

@@ -516,7 +516,9 @@ var managed = false
 if not external:
   const repo = current_source_path().parent_dir.parent_dir.parent_dir
   let address = Enu.launch(
-    repo / "vmlib" / "worlds" / "tutorial" / "tutorial-1", id = "enu_mcp_test"
+    repo / "vmlib" / "worlds" / "tutorial" / "tutorial-1",
+    id = "enu_mcp_test",
+    temp_workdir = true,
   )
   put_env("ENU_CONNECT_ADDRESS", address)
   managed = true
