@@ -1,0 +1,15 @@
+{
+  "id": "bot_guide",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [3.0, 0.0, -7.0]
+  },
+  "start_color": "BLACK",
+  "edits": {
+    
+  }
+}
