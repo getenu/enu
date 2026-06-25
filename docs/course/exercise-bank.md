@@ -34,18 +34,19 @@ reuse the already-proven `build_lamp.nim` checker (poll `Build.all` → read
 
 Pick 2–3, build them well, keep the best. Overproduce variants.
 
-## The one feasibility question gating *traversal*
+## Riding a moving platform — verified
 
-The moving-mechanism ideas (ferry, elevator, conveyor, drawbridge) are very
-"alive" but **all depend on one unverified question: does a player/bot *ride* a
-`move me` platform, or slide off / get left behind?** Working assumption (our +
-the agents' consensus): bots do **not** auto-ride — they'd need a lip and/or
-syncing the rider's position to the platform each tick.
+- **Elevators (vertical):** work now, no change.
+- **Horizontal platforms (ferry/barge):** work with a **1-block lip** around the
+  edge. The player doesn't stick to the floor yet (someday they will), but the lip
+  keeps them on as it moves. Bots: same fix — a lip (or sync the bot's position to
+  the platform).
+- **Conveyors:** the rider is *not* dragged along the surface. Needs **ribs/bars**
+  to hook and pull them, or a voxel-plugin change to the platform's body/mesh
+  (worked once historically, wasn't kept). Fake-with-ribs or defer.
 
-**Verify with a clean in-Enu test before building any ferry/elevator exercise.**
-Fallbacks if it doesn't work: player-rides (lower risk than bots), a position-sync
-helper on the platform, or just favor build-to-unlock. (A first scripted test was
-inconclusive — JSON-escaping snag, not an Enu result.)
+So the traversal family is buildable now: **elevator** (as-is) and **ferry/barge**
+(with a lip) are good to go; **conveyor** is the only one needing real work.
 
 ## Two checker patterns cover almost everything
 
@@ -69,7 +70,7 @@ these so `up N` / `floor` can't shortcut them.
 
 ## Full idea bank
 
-### Loops — traversal & moving mechanisms (needs the riding verdict)
+### Loops — traversal & moving mechanisms (elevator + lipped ferry verified; see "Riding")
 - ⭐ Ferry/barge across a chasm (`move me; forever: forward N; sleep; back N; sleep`).
 - ⭐ Extending bridge (loop *builds* the span — no riding needed; see above).
 - Elevator platform (vertical shuttle to a high doorway).
@@ -124,7 +125,9 @@ these so `up N` / `floor` can't shortcut them.
 
 ## Small Enu changes surfaced (confirm / build as needed)
 
-- **Rider on a `move me` platform** (the linchpin above).
+- **Conveyor drag** — the rider isn't pulled along a moving surface; needs
+  ribs/bars or a voxel-plugin body/mesh change (worked once historically).
+  (Elevators and *lipped* ferries already work — see "Riding a moving platform".)
 - **Real light sources** — torches/beacons are visual spheres now; true lights
   would need a light node exposed to the VM.
 - **Read a voxel's color** at a position from a checker (needed by checkerboard +
