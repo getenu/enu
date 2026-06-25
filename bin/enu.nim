@@ -51,6 +51,10 @@ proc glide(unit: Unit, target: Vector3, rotation = 0.0, instant = false) =
   Enu.client.tick
 
 proc run(q: UnitQuery, agent_id = "", flag_errors = true): string =
+  if not Enu.client.connected:
+    if flag_errors:
+      mark_tool_error()
+    return "Error: not connected to Enu — call connect or launch_and_connect first"
   Enu.client.online:
     let answered =
       try:
@@ -280,29 +284,35 @@ let enu_server = mcp_server("enu", "1.0.0"):
         ""
 
   mcp_tool:
-    proc launch_enu(level_dir: string, port: int = 0): string =
-      ## Launch your own private Enu that opens `level_dir`, on a random free
-      ## port (or `port`), and connect to it. Use this when working on your own;
-      ## when collaborating, connect to the Enu the user is running instead.
-      ## Starts minimized. Returns the address.
-      if Enu.managing:
+    proc connect(address: string = ""): string =
+      ## Attach to a running Enu. `address` defaults to $ENU_CONNECT_ADDRESS,
+      ## then 127.0.0.1 (ed's default port). The Enu must be listening (started
+      ## with --listen). Use when collaborating with a user who has Enu open.
+      if Enu.connect(address, id = ctx_id):
+        "connected to " & Enu.client.address
+      else:
         mark_tool_error()
-        return "Error: already managing an Enu — kill_enu first"
+        "Error: no Enu listening at " &
+          (if address != "": address else: "the default address") &
+          " — is it running and started with --listen?"
+
+  mcp_tool:
+    proc launch_and_connect(level_dir: string): string =
+      ## Launch your own private Enu opening `level_dir` (random free port,
+      ## minimized) and connect to it. Use when working solo. The instance is
+      ## killed on disconnect or when the server exits.
       try:
-        "connected at " & Enu.launch(level_dir, port, id = ctx_id)
+        "connected to " & Enu.launch_and_connect(level_dir, id = ctx_id)
       except CatchableError as e:
         mark_tool_error()
         "Error: " & e.msg
 
   mcp_tool:
-    proc kill_enu(): string =
-      ## Terminate the Enu you launched with launch_enu and disconnect. Only
-      ## affects an instance you started.
-      if not Enu.managing:
-        mark_tool_error()
-        return "Error: no managed Enu to kill"
-      Enu.kill()
-      "killed"
+    proc disconnect(): string =
+      ## Disconnect from Enu. If you launched it with launch_and_connect, this
+      ## kills it too.
+      Enu.disconnect
+      "disconnected"
 
 proc remove_bots() =
   if Enu.client.connected:
@@ -312,16 +322,22 @@ proc remove_bots() =
     Enu.client.flush
 
 if server_mode:
-  Enu.client(id = ctx_id).connect
+  # Create the client but DON'T connect here — connecting to an absent peer in
+  # PARTIAL (blocking) mode would block the main thread, so serve() would never
+  # run and clients couldn't even handshake. The server must always come up; the
+  # agent attaches with the connect / launch_and_connect tools. Only tick the
+  # client once we actually have a connection (ticking while down would block on
+  # the same reconnect).
+  discard Enu.client(id = ctx_id)
   info "enu mcp started", pid = get_current_process_id(), address = Enu.client.address
   new_stdio_transport().serve(
     enu_server,
     idle = proc() =
-      Enu.client.tick,
+      if Enu.client.connected:
+        Enu.client.tick,
   )
-  # Don't orphan a managed Enu when the client disconnects and serve returns.
-  if Enu.managing:
-    Enu.kill()
+  # Don't orphan a managed Enu when serve returns.
+  Enu.disconnect
 elif cli_args.len == 0 or cli_args[0] in ["help", "--help", "-h"]:
   echo "enu — drive a running Enu from the command line.\n"
   echo enu_server.help_text("enu")

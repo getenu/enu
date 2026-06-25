@@ -9,14 +9,19 @@ This level ships with the Enu integration preconfigured — it loads
 automatically when you open Claude here, no install step:
 
 - **MCP server** — `.mcp.json` registers the `enu` server and
-  `.claude/settings.local.json` pre-approves it, so the tools below are
-  available with no prompt. If you don't see them, run `/mcp` to check status.
+  `.claude/settings.local.json` pre-approves it, so the tools are available with
+  no prompt. If you don't see them, run `/mcp` to check status.
+- **Attach to an Enu first.** The server starts *without* an Enu — before any
+  other tool, attach to one: `launch_and_connect(level_dir)` to spin up your own
+  private instance (working solo), or `connect()` to attach to one the user is
+  already running (it must have been started with `--listen`). Call `disconnect`
+  when done — that also closes an instance you launched.
 - **Skills & commands** — auto-loaded from `.claude/skills/` and
   `.claude/commands/`. Skills are model-invoked or callable directly as
   `/<skill>`; commands as `/enu:<command>`.
 
-If the `enu` MCP tools aren't available, tell the user to approve the MCP
-server (`/mcp`) before continuing.
+If a tool reports "not connected to Enu", call `launch_and_connect` / `connect`
+first. If the tools don't appear at all, run `/mcp` to check the server.
 
 ## Where to look
 
@@ -36,12 +41,14 @@ reference them. **Prefer copying an example over writing from scratch.**
 
 ## Quick Start
 
-1. `get_level_dir` → confirm the level directory path
-2. `screenshot` → see the current state
-3. Edit or create scripts in `scripts/` and JSON in `data/`
-4. `wait_for_script(unit_id)` → loads/reloads the unit and returns its
+1. `launch_and_connect(<this level's dir>)` (solo) or `connect()` (attach to the
+   user's running Enu) → attach before anything else
+2. `get_level_dir` → confirm the level directory path
+3. `screenshot` → see the current state
+4. Edit or create scripts in `scripts/` and JSON in `data/`
+5. `wait_for_script(unit_id)` → loads/reloads the unit and returns its
    bounds, or the script's error
-5. Sanity-check the bounds, then `screenshot` to verify
+6. Sanity-check the bounds, then `screenshot` to verify
 
 ## MCP Tools
 

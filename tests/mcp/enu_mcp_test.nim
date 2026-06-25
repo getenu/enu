@@ -515,7 +515,7 @@ let external =
 var managed = false
 if not external:
   const repo = current_source_path().parent_dir.parent_dir.parent_dir
-  let address = Enu.launch(
+  let address = Enu.launch_and_connect(
     repo / "share" / "worlds" / "tutorial" / "tutorial-1",
     id = "enu_mcp_test",
     temp_workdir = true,
@@ -532,7 +532,7 @@ else:
   echo "(skipping integration tests — set ENU_CONNECT_ADDRESS or launch one)"
 
 if managed:
-  Enu.kill()
+  Enu.disconnect
 
 echo ""
 echo "=== All tests passed ==="

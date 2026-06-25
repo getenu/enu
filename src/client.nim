@@ -121,48 +121,58 @@ proc launch_spec(): tuple[exe, workdir: string, args: seq[string]] =
   if override != "":
     result.exe = override
 
+proc terminate_managed() =
+  ## Stop the Enu we launched, if any. Never touches an Enu the user runs.
+  if not enu_process.is_nil:
+    enu_process.terminate()
+    discard enu_process.wait_for_exit(timeout = 3000)
+    if enu_process.running:
+      enu_process.kill()
+      discard enu_process.wait_for_exit()
+    enu_process.close()
+    enu_process = nil
+
 proc disconnect*(_: type Enu) =
-  ## Close and drop the client so the next `Enu.client` / `Enu.launch` opens a
-  ## fresh connection (to a possibly different address).
+  ## Drop the client connection. If we launched the Enu (via launch_and_connect)
+  ## terminate it too — we never kill an Enu the user is running. Safe to call
+  ## when nothing is connected.
+  terminate_managed()
   if not enu_client.is_nil:
     if not enu_client.ctx.is_nil:
       enu_client.ctx.close
     enu_client = nil
 
-proc kill*(_: type Enu) =
-  ## Terminate the Enu we launched and disconnect. Raises if we don't manage
-  ## one.
-  if enu_process.is_nil:
-    raise ValueError.init("No managed Enu to kill")
-  enu_process.terminate()
-  discard enu_process.wait_for_exit(timeout = 3000)
-  if enu_process.running:
-    enu_process.kill()
-    discard enu_process.wait_for_exit()
-  enu_process.close()
-  enu_process = nil
+proc connect*(_: type Enu, address = "", id = ""): bool {.discardable.} =
+  ## Attach to a running Enu at `address` (else $ENU_CONNECT_ADDRESS, else
+  ## "127.0.0.1" on ed's default port). Drops any current connection / managed
+  ## process first; does NOT launch anything. Returns whether it connected. The
+  ## target Enu must be listening (started with --listen); the client's
+  ## connect_timeout bounds the attempt so an absent peer fails fast.
   Enu.disconnect
+  let resolved =
+    if address != "": address else: get_env("ENU_CONNECT_ADDRESS", "127.0.0.1")
+  Enu.client(address = resolved, id = id).connect
+  result = Enu.client.connected
+  if not result:
+    Enu.disconnect
 
-proc launch*(
+proc launch_and_connect*(
     _: type Enu,
     level_dir: string,
-    port = 0,
     id = "",
     timeout = 30.seconds,
     temp_workdir = false,
 ): string =
-  ## Launch a managed Enu that opens `level_dir`, listening on `port` (0 = a
-  ## random free port), connect to it, and return its "host:port" address. The
-  ## window starts minimized. `level_dir` is required: a managed instance always
-  ## opens a specific level rather than whatever was last saved.
+  ## Launch a private Enu opening `level_dir` on a random free port (listening,
+  ## minimized), connect to it, and return its "host:port" address. The instance
+  ## is ours: `disconnect` (or process exit) kills it. `level_dir` is required.
   ## `temp_workdir` runs against a throwaway copy of the level (for tests) so the
   ## source is never modified.
   if level_dir == "":
-    raise ValueError.init("Enu.launch requires a level_dir")
+    raise ValueError.init("launch_and_connect requires a level_dir")
   Enu.disconnect
   let
-    p = if port == 0: free_port() else: port
-    address = "127.0.0.1:" & $p
+    address = "127.0.0.1:" & $free_port()
     spec = launch_spec()
     flags =
       @["--level-dir", level_dir, "--listen", address, "--minimized"] &
@@ -181,9 +191,11 @@ proc launch*(
       " 2>&1"
     enu_process =
       start_process("/bin/sh", working_dir = spec.workdir, args = ["-c", cmd])
+  # Retry until the launched Enu boots and answers; each attempt is bounded by
+  # the client's connect_timeout.
   Enu.client(address = address, id = id).connect
   if not Enu.client.tick_until(timeout, Enu.client.connected):
-    Enu.kill()
+    Enu.disconnect
     raise ValueError.init("Launched Enu but could not connect at " & address)
   address
 
