@@ -3,7 +3,7 @@ import core
 import std/os
 import engine/contexts
 let
-  vmlib = "vmlib"
+  vmlib = "share/vmlib"
   e1 = Engine()
   e2 = Engine()
   script_dir = nim_filename().parent_dir & "/scripts"

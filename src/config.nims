@@ -77,7 +77,7 @@ else:
 
 switch("path", this_dir())
 switch("path", this_dir() & "/../generated")
-switch("path", this_dir() & "/../vmlib/enu")
+switch("path", this_dir() & "/../share/vmlib/enu")
 
 when with_dir(this_dir(), system.file_exists("user_config.nims")):
   include "user_config.nims"

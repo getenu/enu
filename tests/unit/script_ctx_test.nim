@@ -11,7 +11,7 @@ suite "Interpreter":
   var interp: Interpreter
 
   setup:
-    interp = Interpreter.init(script_dir, "vmlib")
+    interp = Interpreter.init(script_dir, "share/vmlib")
 
   test "load and run simple script":
     var ctx = ScriptCtx(interpreter: interp)

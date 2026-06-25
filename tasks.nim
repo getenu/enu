@@ -190,8 +190,8 @@ task test_world,
   # exit from any level fails the task. Add fixtures to test_levels below.
   let
     test_levels = @[
-      this_dir() / "vmlib/worlds/tests/unit-tests",
-      this_dir() / "vmlib/worlds/tests/bulk-spawn",
+      this_dir() / "tests/worlds/unit-tests",
+      this_dir() / "tests/worlds/bulk-spawn",
     ]
     params = command_line_params()
     headless = "headless" in params
@@ -445,7 +445,7 @@ proc gen_binding_and_copy_stdlib(target = target) =
   mk_dir generated_dir
   exec &"{godot_bin(target)} --verbose --gdnative-generate-json-api {join_path generated_dir, api_json}"
   exec &"{gen()} generate_api -d={generated_dir} -j={api_json}"
-  exec &"{gen()} copy_stdlib -d=vmlib/stdlib"
+  exec &"{gen()} copy_stdlib -d=share/vmlib/stdlib"
 
 task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   when host_os == "windows":
@@ -543,7 +543,7 @@ task dist_prereqs, "Build godot debug and release versions, and verify fonts":
   when host_os == "macosx":
     build_godot(cpu = "arm64", opts = release_opts)
 
-proc copy_vmlib(src, dest: string) =
+proc copy_share(src, dest: string) =
   cp_dir src, dest
 
 task build_installer, "Build Windows installer (requires dist files to exist)":
@@ -577,7 +577,7 @@ task dist_package, "Build distribution binaries":
     cp_file "app/enu.dll", root & "/enu.dll"
     find_and_copy_dlls mingw_path(), root, gcc_dlls
     find_and_copy_dlls get_current_compiler_exe().parent_dir, root, nim_dlls
-    copy_vmlib "vmlib", root & "/vmlib"
+    copy_share "share", root & "/share"
     # MCP server — resolves to <root>/bin/enu.exe (lib_dir.parent/bin); the
     # bin/ subdir avoids colliding with the enu.exe launcher at the root.
     mk_dir root & "/bin"
@@ -622,7 +622,7 @@ task dist_package, "Build distribution binaries":
     exec "lipo -create dist/Enu.app/Contents/MacOS/Enu.x86_64 dist/Enu.app/Contents/MacOS/Enu.arm64 -output dist/Enu.app/Contents/MacOS/Enu"
     exec "rm dist/Enu.app/Contents/MacOS/Enu.*"
 
-    copy_vmlib "vmlib", "dist/Enu.app/Contents/Resources/vmlib"
+    copy_share "share", "dist/Enu.app/Contents/Resources/share"
 
     # MCP server, universal — resolves to <Resources>/bin/enu (lib_dir.parent/bin).
     mk_dir "dist/Enu.app/Contents/Resources/bin"
@@ -673,7 +673,7 @@ task dist_package, "Build distribution binaries":
     exec "strip " & release_bin
     cp_file release_bin, root & "/bin/enu"
     cp_file "app/enu.so", root & "/lib/enu.so"
-    copy_vmlib "vmlib", root & "/lib/vmlib"
+    copy_share "share", root & "/lib/share"
     # MCP server — resolves to <root>/lib/bin/enu (lib_dir.parent/bin).
     mk_dir root & "/lib/bin"
     build_mcp("-d:dist", root & "/lib/bin/enu")

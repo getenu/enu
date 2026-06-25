@@ -10,7 +10,7 @@ state.logger = proc(level, msg: string) =
 
 state.config.script_dir =
   current_source_path().parent_dir / "scripts" / "instancing"
-state.config.lib_dir = current_source_path().parent_dir / ".." / ".." / "vmlib"
+state.config.lib_dir = current_source_path().parent_dir / ".." / ".." / "share" / "vmlib"
 
 let controller = ScriptController.init
 

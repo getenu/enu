@@ -277,5 +277,5 @@ proc run_all_tests(test_dir, vmlib_path: string): int =
 when is_main_module:
   let project_root = get_current_dir()
   let test_dir = project_root / "tests/vm"
-  let vmlib_path = project_root / "vmlib"
+  let vmlib_path = project_root / "share/vmlib"
   quit run_all_tests(test_dir, vmlib_path)

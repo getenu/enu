@@ -3,7 +3,7 @@
 # TODO in tasks.nim. Run against a live Enu with `nim mcp_repro`.
 switch("path", "$projectDir/../../src")
 switch("path", "$projectDir/../../generated")
-switch("path", "$projectDir/../../vmlib")
+switch("path", "$projectDir/../../share/vmlib")
 
 --threads:on
 --mm:orc

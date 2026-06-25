@@ -295,11 +295,11 @@ gdobj Game of Node:
 
     when host_os == "ios":
       state.push_flag TOUCH_CONTROLS
-      let vmlib = join_path(get_executable_path().parent_dir(), "vmlib")
+      let share = join_path(get_executable_path().parent_dir(), "share")
     else:
       # state.push_flag TOUCH_CONTROLS
-      let vmlib =
-        join_path(get_executable_path().parent_dir(), "..", "..", "..", "vmlib")
+      let share =
+        join_path(get_executable_path().parent_dir(), "..", "..", "..", "share")
 
     state.config_value.value:
       screen_scale = screen_scale
@@ -313,7 +313,7 @@ gdobj Game of Node:
       megapixels = uc.megapixels ||= 2.0
       full_screen = uc.full_screen ||= true
       semicolon_as_colon = uc.semicolon_as_colon ||= false
-      lib_dir = vmlib
+      lib_dir = share
       connect_address = uc.connect_address ||= ""
       listen_address = uc.listen_address ||= ""
       player_color = uc.player_color ||= color(rand(1.0), rand(1.0), rand(1.0))
@@ -391,13 +391,13 @@ gdobj Game of Node:
       let exe_dir = parent_dir get_executable_path()
       if host_os == "macosx":
         state.config_value.value:
-          lib_dir = join_path(exe_dir.parent_dir, "Resources", "vmlib")
+          lib_dir = join_path(exe_dir.parent_dir, "Resources", "share")
       elif host_os == "windows":
         state.config_value.value:
-          lib_dir = join_path(exe_dir, "vmlib")
+          lib_dir = join_path(exe_dir, "share")
       elif host_os == "linux":
         state.config_value.value:
-          lib_dir = join_path(exe_dir.parent_dir, "lib", "vmlib")
+          lib_dir = join_path(exe_dir.parent_dir, "lib", "share")
 
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init

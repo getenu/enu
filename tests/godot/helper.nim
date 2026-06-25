@@ -11,6 +11,6 @@ logger = proc(level, msg: string) =
 
 game_node = gdnew[Node]()
 config = Config(
-  lib_dir: get_current_dir() & "/../vmlib",
+  lib_dir: get_current_dir() & "/../share/vmlib",
   script_dir: nim_filename().parent_dir & "/scripts",
 )

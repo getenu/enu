@@ -2,7 +2,7 @@ import engine/engine, core
 import std/[strformat, sugar, os]
 
 let
-  vmlib = "vmlib"
+  vmlib = "share/vmlib"
   e1 = Engine()
   script_dir = nim_filename().parent_dir & "/scripts"
 var

@@ -4,7 +4,7 @@ import std/[os, strutils]
 
 var output = ""
 let
-  vmlib = "vmlib"
+  vmlib = "share/vmlib"
   e = Engine()
   script_dir = nim_filename().parent_dir & "/scripts/instancing"
   script_1 = """

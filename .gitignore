@@ -28,7 +28,7 @@ generated/
 app/export_presets.cfg
 docs/build
 dist/
-vmlib/stdlib
+share/vmlib/stdlib
 dist_config.json
 user_config.nims
 /build_env
@@ -49,10 +49,12 @@ app/level.json
 app/project.nim
 app/project.nimble
 
-# Per-level IDE/agent files Enu generates into worlds (regenerated on load).
-# nim.cfg, generated/ and .claude/ are already ignored globally above; the
-# per-level .gitignore self-ignores.
-vmlib/worlds/**/project.nim
-vmlib/worlds/**/project.nimble
-vmlib/worlds/**/CLAUDE.md
-vmlib/worlds/**/.mcp.json
+# Per-level IDE/agent files + runtime artifacts Enu generates into worlds
+# (regenerated on load). Worlds live under share/ (shipped) and tests/
+# (fixtures), so match any worlds dir. nim.cfg, generated/ and .claude/ are
+# already ignored globally above; the per-level .gitignore self-ignores.
+**/worlds/**/project.nim
+**/worlds/**/project.nimble
+**/worlds/**/CLAUDE.md
+**/worlds/**/.mcp.json
+**/worlds/**/backups/
