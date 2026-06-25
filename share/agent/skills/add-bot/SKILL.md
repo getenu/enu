@@ -32,7 +32,7 @@ things, and run complex state-machine AI.
 
 Touch both files; Enu loads them and manages `level.json` itself.
 A complete verified bot (wander + tether + greet with a markdown sign)
-is at `${CLAUDE_PLUGIN_ROOT}/examples/bot_greeter.nim`.
+is at `.claude/examples/bot_greeter.nim`.
 
 ## Bot API
 

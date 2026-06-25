@@ -1,6 +1,0 @@
-{
-  "name": "enu",
-  "description": "Skills, commands, and examples for building Enu voxel worlds with Claude.",
-  "version": "0.1.0",
-  "author": { "name": "Enu" }
-}

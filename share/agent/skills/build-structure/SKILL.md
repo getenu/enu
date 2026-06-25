@@ -41,7 +41,7 @@ box(width = 10, height = 8, depth = 1, color = brown)  # 10-wide × 8-tall wall 
 
 Touch both files; Enu loads them and manages `level.json` itself.
 Full, verified builds (towers, castles, skyscrapers) live in
-`${CLAUDE_PLUGIN_ROOT}/examples/` — copy and adapt.
+`.claude/examples/` — copy and adapt.
 
 ## API Reference
 

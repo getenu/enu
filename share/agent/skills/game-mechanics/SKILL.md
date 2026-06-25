@@ -38,7 +38,7 @@ loop:
 
 ## Collectible (disappears when touched)
 
-Verified script: `${CLAUDE_PLUGIN_ROOT}/examples/coin.nim`.
+Verified script: `.claude/examples/coin.nim`.
 
 ```nim
 sphere(size = 3, color = green)
@@ -127,7 +127,7 @@ loop:
 
 ## Door + Button System
 
-The verified, wired system lives in `${CLAUDE_PLUGIN_ROOT}/examples/`:
+The verified, wired system lives in `.claude/examples/`:
 `door.nim` (sliding pocket door), `button.nim` (player-pressed,
 auto-closing), `doorway.nim` (the wall + spawner that links them with
 `Button.new(door = d, ...)`). The traps it encodes:

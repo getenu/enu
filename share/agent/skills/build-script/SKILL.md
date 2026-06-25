@@ -8,7 +8,7 @@ Create voxel structures using turtle-style movement — ideal for spirals, tower
 fractals, and organic shapes. Also covers animated builds (doors, platforms, etc.)
 using the state machine `loop:` system.
 
-Full, verified scripts live in `${CLAUDE_PLUGIN_ROOT}/examples/` — see its README for
+Full, verified scripts live in `.claude/examples/` — see its README for
 an index. Prefer copying one and adapting it over writing from scratch.
 
 ## Usage
@@ -97,7 +97,7 @@ Rules that keep prototypes working:
   instance paints in the unit color, so an eraser-colored instance draws
   its whole shape invisibly. Callers pass `color = ...` to `.new()`.
 - **Proto-typed params default to the proto object**:
-  `name Button(door = Door, pause = 5)` — see `${CLAUDE_PLUGIN_ROOT}/examples/button.nim`.
+  `name Button(door = Door, pause = 5)` — see `.claude/examples/button.nim`.
 - **Cover local `(0, 0, 0)`.** Every Build starts with a default block
   there (how the in-game block tool creates builds). If the proto's
   voxels don't cover it, it shows through as a stray block — draw over
@@ -111,9 +111,9 @@ Rules that keep prototypes working:
   you can see what you're drawing, and remove it when the proto is
   done. Regular (non-proto) scripts show by default.
 
-Reference pair: `${CLAUDE_PLUGIN_ROOT}/examples/tower.nim` + `${CLAUDE_PLUGIN_ROOT}/examples/tower_cluster.nim`
-(randomised instances), `${CLAUDE_PLUGIN_ROOT}/examples/spiral_tree.nim` +
-`${CLAUDE_PLUGIN_ROOT}/examples/tree_showcase.nim` (params + internal randomness).
+Reference pair: `.claude/examples/tower.nim` + `.claude/examples/tower_cluster.nim`
+(randomised instances), `.claude/examples/spiral_tree.nim` +
+`.claude/examples/tree_showcase.nim` (params + internal randomness).
 
 ## Scaled-down prototypes (furniture etc.)
 
@@ -122,7 +122,7 @@ beds, fixtures), draw the prototype at higher internal voxel resolution
 and set `scale = 0.25` (or similar). The internal detail makes it
 recognisable; the scale keeps it human-sized. Scale things to fit a
 space or a scene — not for detail's own sake. A pyramid is fine at full
-scale with 1 m blocks (`${CLAUDE_PLUGIN_ROOT}/examples/pyramid.nim`); a chair is not.
+scale with 1 m blocks (`.claude/examples/pyramid.nim`); a chair is not.
 
 ```nim
 ## Queen-size bed. 8x5x12 internal voxels at scale 0.25 = 2 × 1.25 × 3 m.
@@ -193,7 +193,7 @@ anchor:
 
 Now `position` places the seat centre and `rotation` spins in place —
 four chairs around a table need no offset arithmetic
-(`${CLAUDE_PLUGIN_ROOT}/examples/furniture_plaza.nim`).
+(`.claude/examples/furniture_plaza.nim`).
 
 The anchor is also a *direction*: `turn` inside the block changes the
 unit's intrinsic forward, so `move me; forward 10` moves along the
@@ -204,7 +204,7 @@ from a corner (walls, floors) that you never rotate.
 ## Patterns
 
 Big worked examples (towers, castles, trees, skyscrapers) are in
-`${CLAUDE_PLUGIN_ROOT}/examples/` — copy and adapt. Small derivable patterns:
+`.claude/examples/` — copy and adapt. Small derivable patterns:
 
 ### Spiral staircase
 ```nim
@@ -217,12 +217,12 @@ color = brown
 
 ### Drifting polygon tower
 Walk a polygon but over- or under-turn each corner; every ring lands
-slightly rotated and the shaft twists (`${CLAUDE_PLUGIN_ROOT}/examples/candy_tower.nim`).
+slightly rotated and the shaft twists (`.claude/examples/candy_tower.nim`).
 
 ### Recursive branching
 Pitch the turtle vertical, then at each split ROLL around the branch
 axis before pitching away from it — without the roll, branches fork in
-one plane and the tree becomes a vine (`${CLAUDE_PLUGIN_ROOT}/examples/fractal_tree.nim`).
+one plane and the tree becomes a vine (`.claude/examples/fractal_tree.nim`).
 
 ### Grid of instances (city)
 ```nim
@@ -332,9 +332,9 @@ forever:
 
 ### Doors, buttons, collectibles
 
-See `${CLAUDE_PLUGIN_ROOT}/examples/door.nim` + `${CLAUDE_PLUGIN_ROOT}/examples/button.nim` + `${CLAUDE_PLUGIN_ROOT}/examples/doorway.nim`
+See `.claude/examples/door.nim` + `.claude/examples/button.nim` + `.claude/examples/doorway.nim`
 for the full wired system (sliding pocket door, player-pressed button,
-cross-unit `door.open = true`), and `${CLAUDE_PLUGIN_ROOT}/examples/coin.nim` for a
+cross-unit `door.open = true`), and `.claude/examples/coin.nim` for a
 player-touch collectible. The traps they encode: pass `color` to
 `.new()`, proto-object param defaults, state procs before the `loop:`,
 and the z-fighting nudge.

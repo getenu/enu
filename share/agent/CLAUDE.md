@@ -5,32 +5,32 @@ the MCP tools provided by the `enu` server.
 
 ## Setup
 
-This level ships with the Enu integration preconfigured:
+This level ships with the Enu integration preconfigured — it loads
+automatically when you open Claude here, no install step:
 
-- **MCP server** — `.mcp.json` registers the `enu` server. On first open
-  Claude asks you to approve it; the tools below appear once you do. If you
-  don't see them, run `/mcp` to check the server's status.
-- **Skills & commands** — `.claude/settings.json` points at the Enu plugin.
-  When you trust this folder Claude offers to install it; accept to get the
-  `/enu:*` skills and commands. To add it by hand:
-  `/plugin marketplace add getenu/enu` then `/plugin install enu@getenu`.
+- **MCP server** — `.mcp.json` registers the `enu` server and
+  `.claude/settings.local.json` pre-approves it, so the tools below are
+  available with no prompt. If you don't see them, run `/mcp` to check status.
+- **Skills & commands** — auto-loaded from `.claude/skills/` and
+  `.claude/commands/`. Skills are model-invoked or callable directly as
+  `/<skill>`; commands as `/enu:<command>`.
 
 If the `enu` MCP tools aren't available, tell the user to approve the MCP
-server (and install the plugin) before continuing.
+server (`/mcp`) before continuing.
 
 ## Where to look
 
-The Enu plugin provides these skills (model-invoked, or call directly):
+These skills auto-load (model-invoked, or call directly):
 
-- **`/enu:build-plan`** — plan multi-unit builds before laying voxels
-- **`/enu:build-structure`** — shape primitives, structural patterns, furniture
-- **`/enu:build-script`** — turtle drawing, prototypes, anchors, animation
-- **`/enu:add-bot`** — bots and behavior state machines
-- **`/enu:game-mechanics`** — collectibles, triggers, doors, win conditions
-- **`/enu:sign-menu`** — signs, menus, markdown panels
-- **`/enu:reload-verify`** — the edit/verify loop in depth, block annotations
+- **`/build-plan`** — plan multi-unit builds before laying voxels
+- **`/build-structure`** — shape primitives, structural patterns, furniture
+- **`/build-script`** — turtle drawing, prototypes, anchors, animation
+- **`/add-bot`** — bots and behavior state machines
+- **`/game-mechanics`** — collectibles, triggers, doors, win conditions
+- **`/sign-menu`** — signs, menus, markdown panels
+- **`/reload-verify`** — the edit/verify loop in depth, block annotations
 
-The plugin also ships verified, working example scripts (towers, castles,
+Verified, working example scripts ship in `.claude/examples/` (towers, castles,
 trees, skyscrapers, doors, furniture, bots, and more); the build skills
 reference them. **Prefer copying an example over writing from scratch.**
 
@@ -64,11 +64,11 @@ of distinctly-colored bots.
 **Querying:**
 - `get_level_dir` — absolute path to the current level directory
 - `units_near(x, y, z, radius)` — sorted nearest-first unit list within an xz-radius; includes spawner clones
-- `get_block_log` — recent blocks the human placed/erased in-game (annotation workflow — see `/enu:reload-verify`)
+- `get_block_log` — recent blocks the human placed/erased in-game (annotation workflow — see `/reload-verify`)
 - `eval(code, top_level = false, unit_id = "")` — run Nim in the Enu scripting context. Default returns the expression's value from the player's module; `top_level = true` allows `import`/`proc` (no return value); `unit_id` targets a unit's module (spawner clones can't be targeted — use their proto or another root unit).
 
 **Spatial queries** (via `eval`):
-- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box. To enumerate units by kind/id, loop `Build.all` / `Bot.all` instead (see `/enu:reload-verify`).
+- `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box. To enumerate units by kind/id, loop `Build.all` / `Bot.all` instead (see `/reload-verify`).
 - `floor_at(x, z)` — top y with a visible voxel, or -1
 - `clear_box(...)` — true if no voxels in the box
 - `find_voxel_overlaps(limit)` — positions where two builds share a voxel (z-fighting)
@@ -156,7 +156,7 @@ changes or a broken `level.json`.
 ## Script Crash-Course
 
 Builds draw instantly by default; set `speed = 1`+ only to watch the
-drawing happen. Full reference: `/enu:build-script` and `/enu:build-structure`.
+drawing happen. Full reference: `/build-script` and `/build-structure`.
 
 ```nim
 color = brown
@@ -194,12 +194,12 @@ Never call `X.new` in the script that declares `name X` — it recurses
 and crashes Enu. Capture params into locals before drawing, don't
 declare a `color` param (pass color to `.new()` — its default is
 eraser, which draws invisibly), and cover local `(0, 0, 0)` (every
-build starts with a default block there). `/enu:build-script` has the full
+build starts with a default block there). `/build-script` has the full
 trap list, `anchor:` blocks for rotation pivots, and animation
 (`move me` + `loop:` state machines).
 
 **Bots** use the same state-machine system with `say`, `turn player`,
-`player.near(N)` — see `/enu:add-bot` and the plugin's `bot_greeter.nim` example.
+`player.near(N)` — see `/add-bot` and the `bot_greeter.nim` example.
 
 ## Working With the Human (Block Annotations)
 
@@ -208,4 +208,4 @@ The human marks units by placing colored blocks in-game;
 local/global positions. Read the log, plan, **erase the markers first**
 (they persist into the unit's data otherwise), implement, then
 `clear_block_log`. Full workflow + marker-erasing recipe:
-`/enu:reload-verify`.
+`/reload-verify`.
