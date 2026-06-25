@@ -413,18 +413,6 @@ proc copy_fonts() =
   with_dir "fonts/fa":
     cp_file "Font Awesome 6 Free-Solid-900.otf", "../../" & dest / "icons.otf"
 
-proc verify_fonts() =
-  ## Fonts are now committed to the repo (OFL licensed).
-  ## This just verifies they exist.
-  p "Verifying fonts..."
-  let required = [
-    "fonts/ibm/IBMPlexMono-Regular.otf", "fonts/jost/Jost-400-Book.otf",
-    "fonts/fa/Font Awesome 6 Free-Solid-900.otf",
-  ]
-  for path in required:
-    if not file_exists(path):
-      raise new_exception(IOError, "Missing font: " & path)
-
 proc mingw_path(): string =
   var pre, match: string
   let shim_help = gorge_ex("gcc --shimgen-help")
@@ -496,7 +484,6 @@ task prereqs,
   when host_os == "windows":
     extract_dlls_task()
   build_godot(force = "--force" in command_line_params())
-  verify_fonts()
   copy_fonts()
   gen_binding_and_copy_stdlib()
 
@@ -536,7 +523,6 @@ task dist_prereqs, "Build godot debug and release versions, and verify fonts":
     build_godot(target = "server")
   else:
     build_godot()
-  verify_fonts()
 
   let release_opts = "target=release tools=no"
   build_godot(cpu = "64", opts = release_opts)
