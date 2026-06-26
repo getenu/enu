@@ -412,7 +412,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   worker_ctx = EdContext.init(
     id = "work-" & generate_id(),
     chan_size = 500,
-    buffer = false,
+    # Non-blocking sends. A blocking send (buffer = false) freezes the whole
+    # worker thread mid-flush when main's inbox is full -- the level-change
+    # deadlock. With buffer = true the worker overflows into its per-subscriber
+    # buffer instead; the existing `pressure < 0.9` advance gate keeps that
+    # overflow bounded by declining to produce while main is behind. See the
+    # ed channel_bench harness.
+    buffer = true,
     listen_address = listen_address,
     label = "worker",
     is_authority = is_server,
@@ -647,6 +653,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   const max_time = (1.0 / 30.0).seconds
   const min_time = (1.0 / 60.0).seconds
+  # Stop flushing voxels into the channel once it's this full, leaving the rest
+  # to coalesce in pending_chunks for a later frame. Matches the advance gate so
+  # production and flushing back off together. See ed's channel_bench harness.
+  const flush_pressure_gate = 0.9
   const auto_save_interval = 30.seconds
   const backup_interval = 15.minutes
   const test_timeout = 5.minutes
@@ -747,9 +757,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           let should_flush = not in_asap or can_flush_asap
           if should_flush:
             if build.voxels.pending_chunks.len > 0:
-              build.voxels.flush_dirty_chunks()
-              if in_asap:
-                did_flush_asap = true
+              # Flush chunk-by-chunk, backing off once the channel hits the gate
+              # (the rest stay in pending_chunks and coalesce next frame).
+              for _ in build.voxels.flush_dirty_chunks():
+                if in_asap:
+                  did_flush_asap = true
+                if Ed.thread_ctx.pressure >= flush_pressure_gate:
+                  break
             if build.voxels.pending_edits.len > 0:
               build.voxels.flush_dirty_edits()
       # Only reset timer if we actually flushed during ASAP mode

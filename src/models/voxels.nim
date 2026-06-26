@@ -1,4 +1,4 @@
-import std/[varints, options, math, tables, monotimes, times]
+import std/[varints, options, math, tables, monotimes, times, sequtils]
 import pkg/godot except print, Color
 import godotapi/[voxel_buffer, voxel_tool]
 import core
@@ -377,8 +377,15 @@ proc flush_chunk_delta(
   self.chunk_deltas[chunk_id].add delta
   inc self.deltas_flushed
 
-proc flush_dirty_chunks*(self: VoxelStore) =
-  for chunk_id, changes in self.pending_chunks:
+iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
+  ## Flush each dirty chunk as one synced message, yielding its id after it's
+  ## flushed and removed from `pending_chunks`. The caller drives the cadence and
+  ## may stop early -- the worker breaks on channel pressure -- leaving the
+  ## remaining chunks to coalesce and flush on a later frame, so a single large
+  ## (ASAP) draw burst can't overshoot the channel in one go. Drain it fully (the
+  ## `proc` overload below) to flush everything, e.g. for save / end_asap.
+  for chunk_id in self.pending_chunks.keys.to_seq:
+    let changes = self.pending_chunks[chunk_id]
     let has_snapshot = chunk_id in self.packed_chunks
     let delta_count =
       if chunk_id in self.chunk_deltas:
@@ -392,8 +399,14 @@ proc flush_dirty_chunks*(self: VoxelStore) =
       self.flush_chunk_snapshot(chunk_id)
     else:
       self.flush_chunk_delta(chunk_id, changes)
+    self.pending_chunks.del chunk_id
+    yield chunk_id
 
-  self.pending_chunks.clear
+proc flush_dirty_chunks*(self: VoxelStore) =
+  ## Flush every dirty chunk (save / end_asap). The worker uses the iterator form
+  ## to flush incrementally and stop under channel pressure.
+  for _ in self.flush_dirty_chunks():
+    discard
 
 proc flush_edit_snapshot(self: VoxelStore, chunk_id: Vector3) =
   let key: EditKey = (self.unit_id, chunk_id)
