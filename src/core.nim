@@ -295,13 +295,21 @@ proc init*(_: type Code, nim: string): Code =
   Code(owner: state.worker_ctx_name, runner: state.server_ctx_name, nim: nim)
 
 proc update_action_index*(state: GameState, change: int) =
-  var index = int(state.tool) + change
-  if index < 0:
-    index = int Tools.high
-  elif index > int Tools.high:
-    index = int Tools.low
+  # Cycle through the available tools only, skipping NONE/DISABLED and any tool
+  # the scripts have hidden.
+  let available = to_seq(CODE_MODE .. PLACE_BOT).filter_it(it in state.tools)
+  if available.len == 0:
+    return
 
-  state.tool = Tools(index)
+  var index = available.find(state.tool)
+  if index == -1:
+    # Not currently on an available tool (e.g. NONE) — step in from the edge.
+    index = if change >= 0: -1 else: 0
+  index = (index + change) mod available.len
+  if index < 0:
+    index += available.len
+
+  state.tool = available[index]
 
 proc require_lifetime*(unit: Unit): Lifetime =
   ## The Unit's owner Lifetime, created on demand. Locally built units get one in

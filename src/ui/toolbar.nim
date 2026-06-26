@@ -1,4 +1,8 @@
-import godotapi/[h_box_container, scene_tree, button, image_texture]
+import
+  godotapi/[
+    h_box_container, scene_tree, scene_tree_tween, property_tweener,
+    method_tweener, tween, button, image_texture,
+  ]
 import pkg/[godot]
 import core
 import gdutils, ui/preview_maker
@@ -13,6 +17,9 @@ gdobj Toolbar of HBoxContainer:
     preview_result: Option[PreviewResult]
     waiting = false
     zid: EID
+    tween: SceneTreeTween
+    rest_y: float
+    rest_y_set: bool
 
   method ready*() =
     self.bind_signals self, "action_changed"
@@ -25,13 +32,66 @@ gdobj Toolbar of HBoxContainer:
         state.tool = DISABLED
       if PLAYING.removed:
         self.visible = true
-        state.tool = BLUE_BLOCK
+        state.tool = if BLUE_BLOCK in state.tools: BLUE_BLOCK else: NONE
 
     self.zid = state.tool_value.changes:
       if added:
-        let b = self.get_child(int(change.item)) as Button
+        self.show_pressed change.item
+
+    self.apply_visibility()
+    state.tools.changes:
+      self.animate_tools()
+
+  proc apply_visibility() =
+    for tool in CODE_MODE .. PLACE_BOT:
+      let b = self.get_child(int tool) as Button
+      if ?b:
+        b.visible = tool in state.tools
+
+  proc show_pressed(tool: Tools) =
+    if tool in {CODE_MODE .. PLACE_BOT}:
+      let b = self.get_child(int tool) as Button
+      if ?b:
+        b.set_pressed true
+    else:
+      # NONE / DISABLED: clear the selection so nothing looks active.
+      for t in CODE_MODE .. PLACE_BOT:
+        let b = self.get_child(int t) as Button
         if ?b:
-          b.set_pressed true
+          b.set_pressed false
+
+  method apply_tools*() {.gdexport.} =
+    # Runs at the bottom of the slide, while the toolbar is off-screen, so the
+    # button set changes out of sight.
+    self.apply_visibility()
+    self.show_pressed state.tool
+
+  proc animate_tools() =
+    # Slide the toolbar down and back up, swapping in the updated tool set at the
+    # bottom — matching the Settings slide-up look (vertical only).
+    if not self.rest_y_set:
+      self.rest_y = self.rect_position.y
+      self.rest_y_set = true
+    if ?self.tween:
+      self.tween.kill
+    self.rect_position = vec2(self.rect_position.x, self.rest_y)
+
+    let drop = self.rect_size.y + 10.0
+    self.tween = self.get_tree.create_tween()
+    discard self.tween
+      .tween_property(
+        self, "rect_position:y", (self.rest_y + drop).to_variant,
+        animation_duration,
+      )
+      .set_trans(TRANS_EXPO)
+      .set_ease(EASE_IN_OUT)
+    discard self.tween.tween_callback(self, "_apply_tools")
+    discard self.tween
+      .tween_property(
+        self, "rect_position:y", self.rest_y.to_variant, animation_duration
+      )
+      .set_trans(TRANS_EXPO)
+      .set_ease(EASE_IN_OUT)
 
   method process*(delta: float) =
     if self.preview_result.is_some:

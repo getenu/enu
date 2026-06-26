@@ -725,6 +725,18 @@ proc tool(self: Unit): int =
 proc `tool=`(self: Unit, value: int) =
   state.tool = Tools(value)
 
+proc tools_has(self: Unit, tool: int): bool =
+  Tools(tool) in state.tools
+
+proc tools_incl(self: Unit, tool: int) =
+  state.tools += Tools(tool)
+
+proc tools_excl(self: Unit, tool: int) =
+  state.tools -= Tools(tool)
+
+proc tools_clear(self: Unit) =
+  state.tools.clear()
+
 proc open_sign(self: Unit): Sign =
   state.open_sign
 
@@ -1549,7 +1561,8 @@ proc bridge_to_vm*(worker: Worker) =
     size, `size=`, open, `open=`, billboard, `billboard=`
 
   result.bridged_from_vm "players",
-    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`, coding,
+    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`,
+    tools_has, tools_incl, tools_excl, tools_clear, coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log
 

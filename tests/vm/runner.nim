@@ -193,6 +193,34 @@ proc setup_mock_functions(interp: Interpreter) =
     "position_set_impl",
     proc(args: VmArgs) = discard
 
+  # Mock the available-tools set with a plain host-side set, ignoring `self`
+  # (the test uses a single global player). `tool` is arg 1.
+  var mock_tools {.global.}: set[uint8]
+  interp.implement_routine pkg,
+    "players",
+    "tools_has_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        args.set_result(uint8(args.get_int(1)) in mock_tools)
+  interp.implement_routine pkg,
+    "players",
+    "tools_incl_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        mock_tools.incl uint8(args.get_int(1))
+  interp.implement_routine pkg,
+    "players",
+    "tools_excl_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        mock_tools.excl uint8(args.get_int(1))
+  interp.implement_routine pkg,
+    "players",
+    "tools_clear_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        mock_tools = {}
+
 proc run_test_script(script_path: string): TestResult =
   result.name = script_path.extract_filename.change_file_ext("")
 

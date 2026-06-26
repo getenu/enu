@@ -165,6 +165,7 @@ type
     WHITE_BLOCK
     BROWN_BLOCK
     PLACE_BOT
+    NONE
     DISABLED
 
   TaskStates* = enum
@@ -182,6 +183,7 @@ type
     config_value*: EdValue[Config]
     open_unit_value*: EdValue[Unit]
     tool_value*: EdValue[Tools]
+    tools*: EdSet[Tools]
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
     screenshot_camera*: Node

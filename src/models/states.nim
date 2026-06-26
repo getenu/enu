@@ -132,6 +132,12 @@ proc `-=`*(
 proc selected_color*(self: GameState): Color =
   ACTION_COLORS[Colors(ord self.tool)]
 
+proc select_tool*(self: GameState, tool: Tools) =
+  ## Make `tool` active, but only when it's available. Selecting an
+  ## unavailable tool is a no-op so the player can't pick a hidden tool.
+  if tool in self.tools:
+    self.tool = tool
+
 proc init_logger*(self: GameState) =
   self.logger = proc(level, msg: string) {.closure.} =
     if level == "err" and state.config.auto_show_console:
@@ -157,6 +163,7 @@ proc init*(_: type GameState): GameState =
     open_unit_value: EdValue[Unit].init(flags = flags),
     config_value: EdValue[Config].init(flags = flags, id = "config"),
     tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
+    tools: Ed.init({CODE_MODE .. PLACE_BOT}, flags = {SYNC_LOCAL, SYNC_REMOTE}),
     gravity: -80.0,
     show_prototypes: true,
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
@@ -183,6 +190,12 @@ proc init*(_: type GameState): GameState =
     elif added:
       self.push_flag EDITOR_OPENING
       self.pop_flag EDITOR_VISIBLE
+
+  self.tools.changes:
+    # Lose the active tool when it's removed; stay in NONE until something is
+    # explicitly selected (no auto-recovery when tools come back).
+    if removed and change.item == self.tool:
+      self.tool = NONE
 
   self.local_flags.changes:
     if EDITOR_VISIBLE.added:
