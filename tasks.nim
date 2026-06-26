@@ -463,9 +463,21 @@ task extract_dlls, "Extract Nim DLLs to compiler bin directory (Windows only)":
   else:
     echo "extract_dlls is only needed on Windows"
 
+proc dep_dir(repo: string): string =
+  ## Resolve where atlas installed a dependency from atlas.lock's `dir` field --
+  ## the source of truth. atlas's on-disk naming has changed across versions (the
+  ## getenu/Nim fork was once deps/Nim.getenu.github.com, now deps/nim), so match
+  ## the dep by its repo name (the last path segment of its url) and read the dir
+  ## rather than hardcoding a name that drifts. atlas has no query command for it.
+  let lock = parse_json(read_file("atlas.lock"))
+  for _, item in lock["items"].pairs:
+    if item["url"].get_str.split('/')[^1] == repo:
+      return item["dir"].get_str.replace("$deps", "deps")
+  raise new_exception(IOError, "dependency not found in atlas.lock: " & repo)
+
 task setup_checksums, "setup checksum module in nim dependency":
   p "Setting up Nim checksums..."
-  with_dir "deps/Nim.getenu.github.com":
+  with_dir dep_dir("Nim"):
     exec "nim c koch"
     let koch_cmd = if host_os == "windows": "koch.exe" else: "./koch"
     exec koch_cmd & " checksums"
