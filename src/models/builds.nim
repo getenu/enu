@@ -403,7 +403,7 @@ method destroy*(self: Build) =
 
 proc init*(
     _: type Build,
-    id = "build_" & generate_id() & "-" & Ed.thread_ctx.id,
+    id = "build_" & generate_id(),
     transform = Transform.init,
     color = default_color,
     clone_of: Unit = nil,

@@ -697,10 +697,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         var i = 0
         while i < state.units.len:
           let unit = state.units[i]
-          # EPHEMERAL units encode their owning context name in their id
-          # (`player-{ctx_name}`, `mcp_bot-{ctx_name}`, ...). When the
-          # context unsubscribes, drop the corresponding agents.
-          if EPHEMERAL in unit.global_flags and ctx_name in unit.id:
+          # EPHEMERAL units carry the ctx that created them in `owner_ctx`.
+          # When that context unsubscribes, drop the corresponding agents.
+          if EPHEMERAL in unit.global_flags and unit.owner_ctx == ctx_name:
             debug "reaping agent unit on ctx unsubscribe",
               unit_id = unit.id, ctx_name
             state.units.del i

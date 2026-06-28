@@ -81,7 +81,7 @@ method destroy*(self: Bot) =
 
 proc init*(
     _: type Bot,
-    id = "bot_" & generate_id() & "-" & Ed.thread_ctx.id,
+    id = "bot_" & generate_id(),
     transform = Transform.init,
     clone_of: Bot = nil,
     global = true,
@@ -113,7 +113,7 @@ proc init*(
     x, y, z: float,
     save = false,
     color = ACTION_COLORS[BLACK],
-    id = "bot_" & generate_id() & "-" & Ed.thread_ctx.id,
+    id = "bot_" & generate_id(),
 ): Bot =
   ## A bot at (x, y, z) for demos and external agents. EPHEMERAL by default —
   ## session-scoped: it survives reloads, is skipped by persistence, and is

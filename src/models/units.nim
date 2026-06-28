@@ -63,6 +63,9 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     rendered_voxel_count_value = ed(0)
     pending_block_updates_value = ed(0)
     query_value = EdValue[UnitQuery].init(UnitQuery())
+    # Stamp the creating context (init_unit only runs on the creating side;
+    # synced replicas are reconstructed via parse), synced remote+local.
+    owner_ctx_value = ed(Ed.thread_ctx.id)
 
   self.init_shared
   self.global_flags += VISIBLE

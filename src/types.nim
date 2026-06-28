@@ -145,10 +145,8 @@ type
       ## units survive level reloads (peer to the human), are skipped
       ## by level persistence (their lifecycle is the client's, not
       ## the level's), and get cleaned up when their owning context
-      ## unsubscribes. Convention: agent unit ids contain the owning
-      ## context name as a substring (e.g. `player-{ctx_name}`,
-      ## `mcp_bot-{ctx_name}`) so worker.nim can match them on
-      ## unsubscribe.
+      ## unsubscribes — matched on the unit's `owner_ctx` (the ctx that
+      ## created it), which worker.nim reaps on unsubscribe.
     VOXEL_VIEWER
       ## The unit streams voxel terrain around itself: the server attaches
       ## a VoxelViewer node so chunks near the unit get meshed even when no
@@ -310,6 +308,9 @@ type
     rendered_voxel_count_value*: EdValue[int]
     pending_block_updates_value*: EdValue[int]
     query_value*: EdValue[UnitQuery]
+    owner_ctx_value*: EdValue[string]
+      # ctx id that created the unit, synced so the authority can reap EPHEMERAL
+      # units when that context drops -- without encoding the ctx in the id.
 
   BlockLogEntry* =
     tuple[
