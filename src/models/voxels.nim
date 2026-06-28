@@ -964,7 +964,10 @@ proc begin_asap*(self: VoxelRenderer) =
   self.buffer_size = vec3()
   self.dirty = false
   self.asap_active = true
-  self.last_paste_time = get_mono_time()
+  # Backdate so the first dirty buffer paints on the next tick instead of
+  # waiting a full interval — the initial draw shows immediately, then
+  # sustained drawing batches at ASAP_PASTE_INTERVAL.
+  self.last_paste_time = get_mono_time() - ASAP_PASTE_INTERVAL
 
 proc tick*(self: VoxelRenderer, is_local: bool) =
   ## Periodic paste for local ASAP mode only (visual progress feedback).
