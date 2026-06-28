@@ -231,7 +231,7 @@ proc log_block_placement(self: Build, local: Vector3, color: Colors) =
     state.player.block_log_entries.del 0
 
 proc remove(self: Build) =
-  if state.tool notin {CODE_MODE, PLACE_BOT}:
+  if state.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point =
@@ -251,7 +251,7 @@ proc remove(self: Build) =
 
 proc fire(self: Build) =
   let global_point = self.target_point.global_from(self)
-  if state.tool notin {DISABLED, CODE_MODE, PLACE_BOT}:
+  if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point = (self.target_point + (self.target_normal * 0.5)).floor

@@ -6,7 +6,7 @@ var add_to {.threadvar.}: Build
 proc fire(self: Ground, append = false) {.gcsafe.} =
   state.draw_unit_id = "ground"
   let point = (self.target_point - vec3(0.5, 0, 0.5)).trunc
-  if state.tool notin {DISABLED, CODE_MODE, PLACE_BOT}:
+  if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     if not append:
       # Check if we should stick to the last modified build (within 500ms)
       let now = get_mono_time()
@@ -50,7 +50,7 @@ proc init*(_: type Ground, node: Spatial): Ground =
 
   self.local_flags.changes:
     if PRIMARY_DOWN in state.local_flags and state.draw_unit_id == "ground":
-      if change.item == TARGET_MOVED and state.tool != PLACE_BOT:
+      if change.item == TARGET_MOVED and state.tool notin {PLACE_BOT, Tools.NONE}:
         self.fire(append = true)
 
   result = self

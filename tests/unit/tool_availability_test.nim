@@ -53,3 +53,10 @@ suite "Tool availability":
     check state.tool == NONE
     state.update_action_index(1)
     check state.tool == NONE
+
+  test "NONE hides the block target and keeps the reticle, like play mode":
+    state.tool = NONE
+    state.push_flag MOUSE_CAPTURED
+    state.push_flag BLOCK_TARGET_VISIBLE
+    check BLOCK_TARGET_VISIBLE notin state.local_flags
+    check RETICLE_VISIBLE in state.local_flags

@@ -32,7 +32,9 @@ proc resolve_flags*(
           result.excl f
     result.incl flag
 
-  if self.tool == CODE_MODE:
+  # CODE_MODE and NONE (no tool) don't target blocks: hide the block target and
+  # keep the reticle up, like play mode.
+  if self.tool in {CODE_MODE, NONE}:
     for flag in groups[1]:
       result.excl(flag)
     result.incl(RETICLE_VISIBLE)
