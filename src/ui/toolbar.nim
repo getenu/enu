@@ -40,7 +40,12 @@ gdobj Toolbar of HBoxContainer:
 
     self.apply_visibility()
     state.tools.changes:
-      self.animate_tools()
+      # Level load seeds the tool set before the scene is interactive — snap to
+      # it instead of sliding, so a customized level doesn't open with a switch.
+      if LOADING_LEVEL in state.global_flags:
+        self.apply_tools()
+      else:
+        self.animate_tools()
 
   proc apply_visibility() =
     for tool in CODE_MODE .. PLACE_BOT:

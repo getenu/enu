@@ -17,6 +17,7 @@ type LevelInfo = object
   enu_version*, format_version*: string
   load_order*: seq[string]
   show_prototypes*: bool
+  show_tools*: bool
 
 proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   self.enu_version = json{"enu_version"}.get_str
@@ -31,6 +32,11 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
     self.show_prototypes = json["show_prototypes"].get_bool
   else:
     self.show_prototypes = true
+
+  if "show_tools" in json:
+    self.show_tools = json["show_tools"].get_bool
+  else:
+    self.show_tools = true
 
 proc to_json_hook(self: Color): JsonNode =
   result =
@@ -478,6 +484,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       format_version: "v0.9.2",
       load_order: sorted_scripts,
       show_prototypes: state.show_prototypes,
+      show_tools: state.show_tools,
     )
     write_file_if_changed level_dir / "level.json",
       jsonutils.to_json(level).pretty
@@ -617,6 +624,7 @@ proc load_level*(worker: Worker, level_dir: string) =
   var load_order = newSeq[string]()
 
   state.show_prototypes = true
+  state.show_tools = true
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
@@ -625,8 +633,17 @@ proc load_level*(worker: Worker, level_dir: string) =
       if level.load_order.len > 0:
         load_order = level.load_order
       state.show_prototypes = level.show_prototypes
+      state.show_tools = level.show_tools
     except Exception as e:
       error "Failed to load level", error = e
+
+  # Seed the available tools before scripts run and the player can interact:
+  # full set by default, empty when the level opts out (its script adds back
+  # what it needs). Happens inside LOADING_LEVEL so the toolbar snaps, no slide.
+  if state.show_tools:
+    state.tools.value = {CODE_MODE .. PLACE_BOT}
+  else:
+    state.tools.clear()
 
   worker.run_state_initializers()
 

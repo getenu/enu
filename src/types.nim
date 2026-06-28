@@ -195,6 +195,7 @@ type
     console*: ConsoleModel
     paused*: bool
     show_prototypes*: bool
+    show_tools*: bool # level.json: false starts with no tools (script adds them)
     frame_count*: int
     skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format

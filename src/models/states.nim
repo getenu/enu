@@ -168,6 +168,7 @@ proc init*(_: type GameState): GameState =
     tools: Ed.init({CODE_MODE .. PLACE_BOT}, flags = {SYNC_LOCAL, SYNC_REMOTE}),
     gravity: -80.0,
     show_prototypes: true,
+    show_tools: true,
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
     open_sign_value: EdValue[Sign].init(flags = flags),
     wants: EdSeq[LocalStateFlags].init(flags = flags),
