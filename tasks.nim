@@ -157,10 +157,8 @@ task build, "Build enu":
       else:
         ""
   exec &"nim c -o:{output}{cross_opts}{extra} src/enu.nim"
-  # Also build the MCP server for dev runs. dist builds + bundles it per-platform
-  # below, so skip the redundant copy there.
-  if "-d:dist" notin command_line_params():
-    build_mcp()
+  # The MCP server (`bin/enu`) builds separately — `nim build_mcp`. dist_package
+  # bundles it per-platform; the MCP tests compile it themselves (`nim r`).
 
 task build_godot, "Build godot. Use --force to re-init submodules":
   build_godot(force = "--force" in command_line_params())
@@ -356,7 +354,9 @@ task mcp_repro,
 
 task test_mcp, "run MCP integration tests (launches a private Enu)":
   # The test self-launches a minimized Enu on a free port and tears it down, so
-  # no manually-running Enu is needed. Assumes the app is already built.
+  # no manually-running Enu is needed. It compiles + runs the MCP server itself
+  # (`nim r ./bin/enu.nim mcp`), so it needs no prebuilt `bin/enu`; it does assume
+  # the game lib is already built (`nim build`).
   exec "nim c -r tests/mcp/enu_mcp_test.nim"
 
 proc run_tests(names: openArray[string]) =
