@@ -90,6 +90,7 @@ proc init*(
     clone_of: Bot = nil,
     global = true,
     parent: Unit = nil,
+    color = ACTION_COLORS[BLACK],
 ): Bot =
   ## The level-bot initializer enu uses internally (placed, loaded, cloned):
   ## the bot belongs to the level and persists with it. Demos and external
@@ -101,7 +102,7 @@ proc init*(
       start_transform: transform,
       animation_value: ed("auto"),
       clone_of: clone_of,
-      start_color: ACTION_COLORS[BLACK],
+      start_color: color,
       parent: parent,
     )
 
@@ -122,20 +123,20 @@ proc init*(
   ## A bot at (x, y, z) for demos and external agents. EPHEMERAL by default —
   ## session-scoped: it survives reloads, is skipped by persistence, and is
   ## reaped when the session ends. Pass `save = true` to keep it in the level.
-  result = Bot.init(id = id, transform = Transform.init(vec3(x, y, z)))
-  result.color = color
+  result =
+    Bot.init(id = id, transform = Transform.init(vec3(x, y, z)), color = color)
   if not save:
     result.global_flags += EPHEMERAL
 
 method clone*(self: Bot, clone_to: Unit, id: string): Unit =
   var transform = clone_to.transform
-  result =
-    Bot.init(
-      id = id,
-      transform = transform,
-      clone_of = self,
-      parent = clone_to,
-    )
+  result = Bot.init(
+    id = id,
+    transform = transform,
+    clone_of = self,
+    parent = clone_to,
+    color = self.start_color,
+  )
 
 method on_collision*(self: Unit, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)

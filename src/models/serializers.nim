@@ -132,9 +132,17 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     self.voxels.rebuild_local_edits()
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
+  # `start_color` is always written (the shared unit serializer), but tolerate
+  # hand-authored or ancient files that lack it.
+  let color =
+    if "start_color" in json:
+      json["start_color"].json_to(Color)
+    else:
+      ACTION_COLORS[BLACK]
   self = Bot.init(
     id = json["id"].json_to(string),
     transform = json["start_transform"].json_to(Transform),
+    color = color,
   )
 
   if not load_chunks and "edits" in json:
