@@ -85,23 +85,17 @@ The old caveats no longer apply; the new reality is strictly better:
 - Details + known interim limits: PR #66's description and the
   `platform-riding-transform-matching` memory note.
 
-## Loops pilot — state
+## Loops pilot — state: BUILT + VERIFIED (2026-07-02)
 
-`share/worlds/course/loops/` currently has the lesson-opening prototypes —
-`bot_guide` (greeter "Pip"), `build_path` (black road + curbs), `build_demo`
-(self-building spiral), `build_lesson1` + `build_trydemo` (signs) — plus the
-**old place-based `build_lighthouse`/`build_lamp`** exercise (to be replaced by
-turtle exercises).
-
-**Verified staircase exercise** (built + tested in `/tmp`, not yet in the level —
-the cleanest first exercise: strictly loop-required, build-measure checker, fully
-verifiable). Reproduce:
-- student solution — `color = brown` then `8.times:` → `box(2,1,2,brown)`,
-  `forward 1`, `up 1` (a 9-tall staircase).
-- checker (`build_gate`, at the ledge) — `box(5,4,1,black)` sealed, then
-  `forever:` poll `Build.all` for `build_stairs` with
-  `bounds.max.y - bounds.min.y >= 7` → `box(5,4,1,white)` (opens) + `echo`.
-  Verified: the gate opened.
+`share/worlds/course/loops` is a complete level — see `loops.md` for the
+as-built spec. Teaching arc (Pip -> self-rebuilding spiral demo -> lesson sign
+-> tap-to-loop sign) + three verified exercises: the striped lighthouse (lamp
++ beam + gate + boat rewards), Salty's stepping-stone crossing (bot puzzle
+using the new fall/climb riding mechanics), and Art Beach (pure build).
+Code-tool-only via show_tools + a director unit. All seven reward markers
+verified headlessly on a pristine copy; signs/facings verified by screenshot.
+Remaining: the nim:// tap-to-loop links need one interactive click-test, and
+an in-person playthrough for feel.
 
 ## Next steps (suggested order)
 
