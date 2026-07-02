@@ -99,21 +99,17 @@ an in-person playthrough for feel.
 
 ## Next steps (suggested order)
 
-1. **Build loops exercises** (course progress, no engine change): formalize the
-   **staircase** into the loops level (real ledge/gate scene + the student
-   *stub* + a teaching sign + `lock = true` on non-student units); then
-   **stepping-stones-with-gaps** (build-measure, verifiable); then the
-   **ferry** — which riding (PR #66) made much richer than originally scoped:
-   the player *and* bots ride any moving platform with no lip and no code, so
-   ferry/elevator/turning-barge exercises are all open, including the
-   "bumbling pack of robots crossing bridges and elevators" level (10–15 bots
-   shuffling together; bots fall off edges and climb single blocks, so herding
-   and containment are real mechanics). Tool restriction (code-tool-only via
-   `show_tools`) is on main.
-2. **Demo-station + replay** — the reusable demo component: a `lock = true` real
-   unit with the messy logic + a sign showing *idealized* code + controls that
-   update both the build and the shown snippet; replay on a ~10s timer, paused
-   while the controls sign is open.
+1. **Playtest Loops Island in person** — the one thing headless can't check:
+   feel, pacing, sign sizes/reading order, and the nim:// tap-to-loop links.
+2. **Promote Redrock Canyon to a full level** — it has the setting + two
+   verified exercises; needs the teaching arc (show/tell/play beats), gating,
+   a re-rolled gap for the bridge (anti-copy-paste), and narration.
+3. **Fold the ferry into the course** — as the loops level's extension or the
+   traversal beat of its own level; the pack-crossing scene is the course's
+   marquee moment.
+4. **Nested loops + Procedures levels** — pyramid/orchard snippets are
+   verified; the Cactus proto proves `name` works in course levels.
+5. **Demo-station + replay component** (unchanged from before).
 
 ## Gotchas
 

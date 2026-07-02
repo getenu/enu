@@ -135,3 +135,48 @@ these so `up N` / `floor` can't shortcut them.
 - **Bot senses the cell ahead** (wall-following bot).
 - **Reward animations driven by the checker** (receding water, settling roof) —
   the `door.nim` open-flag pattern already works for doors.
+
+---
+
+## Verified in-world (2026-07-02 build session)
+
+Everything below ran in MCP with reference solutions; markers + screenshots.
+
+- **Loops Island** (`share/worlds/course/loops`) — complete level: striped
+  lighthouse (3 independent latched reactions), Salty's stepping-stone
+  crossing (bot bumbles through the gaps — falls in, climbs out), Art Beach
+  free-build. See `loops.md` for the as-built spec.
+- **Redrock Canyon** (`share/worlds/course/variables`) — setting prototype +
+  two "change one number" exercises: water-tower legs (tank lines up with a
+  ring) and gorge-bridge planks (span reaches the far mesa). The saguaros are
+  a `name Cactus(height)` proto instanced at varying heights — **proto
+  mechanics confirmed working in course levels** (unblocks level 6).
+- **Ferry pack** (`share/worlds/course/ferry-proto`) — six colored bots ride
+  a student-driven shuttle loop across a chasm and hop off at the far cliff.
+  Riding needs zero setup. One bot sometimes misses the stop and rides back —
+  leave it; it's charming.
+- **Nested-loops candidates** (snippets, verified): stepped **pyramid**
+  (`7.times(level):` with size shrinking per level) and a 4×4 **orchard**
+  (loop-of-rows × loop-of-trees, turtle-only with pen-up hops).
+
+## Authoring gotchas (hard-won; check before building levels)
+
+1. **Checkers read `bounds`**, never `rendered_voxel_count` (counts *meshed*
+   voxels — 0 away from viewers).
+2. **Every build paints a default block at its origin** — keep scene-unit
+   origins inside their drawn bodies.
+3. **`at = vec3(...)` is unit-local, not turtle-local.** All 16 orchard
+   canopies landed on one spot until the canopy was drawn *at the turtle*
+   (move up, `sphere`, move down). Turtle style is also just better kid-code.
+   Related: at-mode coords rotate with the unit's basis — on a rotated unit,
+   draw before turning or expect mirrored extents.
+4. **Signs are single-sided** — turn the unit toward the player's approach
+   before `say`.
+5. **Guard `find_by_id` for nil** (checkers can poll before targets load) and
+   **latch every reaction**.
+6. **Pen-up/pen-down** (`drawing = false/true`) is genuinely needed for
+   non-trivial builds — consider teaching it as its own small beat (classic
+   Logo). The orchard is unwritable without it.
+7. Course levels: `show_tools: false` + a director unit doing
+   `player.tools.incl CodeMode; player.tool = CodeMode`. No script API to
+   disable flying yet — design so flight skips nothing.
