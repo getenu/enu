@@ -1,4 +1,4 @@
-import std/[tables, math, os]
+import std/[tables, math, os, options]
 import pkg/godot except print
 import pkg/[chroma]
 import
@@ -8,8 +8,26 @@ import
     text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
     area, ray_cast,
   ]
-import gdutils, core, models/[colors, units], ui/markdown_label
+import gdutils, core, models/[colors, units, builds], ui/markdown_label
 import ./queries
+
+const climb_speed = 10.0
+  ## How fast a bot rises onto a block (units/sec) — the climb is animated at
+  ## this rate (~0.1s per block) instead of snapping; the drop back down is
+  ## animated by gravity.
+
+const foot_offset = 0.0
+  ## How far a bot's origin sits above the surface it stands on — the target for
+  ## the vertical floor-follow (surface top + this). The bot's feet are AT its
+  ## origin (the collision capsule spans 0..1.75 upward from it), verified
+  ## visually: origin = surface top reads as standing; +1 floats a full voxel.
+
+proc solid_at(build: Build, cell: Vector3): bool =
+  ## Is this build-local grid cell a solid (standable) voxel?
+  if cell notin build:
+    return false
+  let info = build.voxel_info(cell)
+  info.kind != HOLE and info.color != ACTION_COLORS[ERASER]
 
 const SELF_AVATAR_LAYER = 1'i64 shl 19
   ## Render layer for the local player's own avatar: the player's first-person
@@ -37,11 +55,14 @@ gdobj BotNode of KinematicBody:
     # Platform transform-matching: carry the bot by the rigid motion of the build
     # under its feet (rotation + translation) so it rides a moving/turning
     # platform while staying a world-space body — its coordinates never change.
-    # `down_ray` finds the surface; we track its node id + world transform to
-    # apply each frame's delta. (Riding static ground is a zero-delta no-op.)
-    down_ray: RayCast
+    # The floor is found by querying voxel data (not a physics ray: colliders
+    # are only cooked near viewers, so a ray finds nothing away from the player
+    # and the bot would fall through the world). We track the floor node's id +
+    # world transform to apply each frame's delta.
     floor_prev_id: int64
     floor_prev_transform: Transform
+    fall_velocity: float # node-side fake gravity for walking off ledges
+    floor_seen: bool # gravity only starts once the bot has stood on something
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -193,14 +214,6 @@ gdobj BotNode of KinematicBody:
 
     if self.model of Bot:
       let bot = Bot(self.model)
-
-      # Downward ray for platform-riding: finds the build directly underfoot.
-      # Mask 5 = the build/ground layers (same as the player's DownRay).
-      self.down_ray = gdnew[RayCast]()
-      self.down_ray.enabled = true
-      self.down_ray.cast_to = vec3(0, -1.95, 0)
-      self.down_ray.collision_mask = 5
-      self.add_child(self.down_ray)
 
       # Unit queries are answered only by the server. A connected client also
       # holds the synced bot (and its query_value); answering here too makes
@@ -369,31 +382,153 @@ gdobj BotNode of KinematicBody:
           # back the prior frame's ortho render.
           self.screenshot_warmup_frames = 2
 
-  proc ride_platform() =
-    ## Transform-matching: carry the bot by the world-space rigid motion of the
-    ## surface under its feet, so it rides a moving/turning platform. The bot
-    ## stays a world-space body (no reparenting), so its coordinates never change
-    ## under the script. Applied after the bot's own walk, so walking and riding
-    ## compose. Detection is the down-ray; static ground gives a zero delta.
-    if self.down_ray.is_nil:
+  proc find_floor(
+      reach: float, reach_up = 0.0
+  ): Option[tuple[node: Spatial, top: float32]] =
+    ## The surface under the bot's feet within `reach` below them (or, with
+    ## `reach_up`, embedded up to that far above them — how a walked-into step
+    ## is climbed): build voxels or the world ground plane (y = 0). Queried
+    ## from voxel data, NOT physics colliders — those are only cooked near
+    ## viewers, so a ray finds nothing away from the player. Returns the
+    ## surface's node (nil for the ground) and its world-space top height.
+    let pos = self.global_transform.origin
+    let feet = pos.y - foot_offset
+    # Sample top-down so the highest surface wins (a step above the feet beats
+    # the floor below). Half-voxel steps can't skip a full-height slab (a thin
+    # *scaled-down* slab could slip through — rare, accepted).
+    var dy = -reach_up
+    while dy <= reach:
+      let sample = vec3(pos.x, feet - 0.01 - dy, pos.z)
+      for unit in state.units.value:
+        if unit of Build and ?unit.node:
+          let bnode = Spatial(unit.node)
+          # Through the node's full transform, so rotated/scaled builds
+          # (turning barges) resolve correctly — model local_to is origin-only.
+          let local = bnode.global_transform.xform_inv_vector3(sample)
+          let cell = vec3(floor(local.x), floor(local.y), floor(local.z))
+          if Build(unit).solid_at(cell):
+            let top = bnode.global_transform.xform_vector3(
+              vec3(local.x, cell.y + 1.0, local.z)
+            ).y
+            return some((node: bnode, top: top))
+      if ?state.ground and sample.y <= 0.0:
+        return some((node: Spatial(nil), top: 0.0'f32))
+      dy += 0.5
+
+  proc climb_step(floor_top: float32): Option[float32] =
+    ## The world top of a single climbable block directly in the bot's walking
+    ## path: solid at shin height just ahead, with headroom above it (so walls
+    ## two or more blocks tall still block). A walking bot needs this probe —
+    ## where colliders exist (near the player) move_and_slide stops it at the
+    ## block's face, so its feet never embed and find_floor's reach_up never
+    ## sees the step. Anchored to the STANDING floor, not the bot's current
+    ## feet: mid-climb the feet are already lifted, and a feet-relative probe
+    ## would scan above the step, lose it, and drop the bot — an oscillation.
+    if not (self.model of Bot):
       return
-    self.down_ray.force_raycast_update
-    let platform =
-      if self.down_ray.is_colliding: self.down_ray.get_collider as Spatial
-      else: nil
-    if platform.is_nil:
-      self.floor_prev_id = 0
+    var dir = Bot(self.model).velocity
+    dir.y = 0
+    if dir.length < 0.1:
       return
     let
-      id = platform.get_instance_id
-      now = platform.global_transform
-    # Skip a static surface: `now * now.inverse` isn't exactly identity in
-    # float32, so applying it every frame would slowly drift the bot.
-    if id == self.floor_prev_id and now != self.floor_prev_transform:
-      let delta = now * self.floor_prev_transform.affine_inverse
-      self.global_transform = delta * self.global_transform
-    self.floor_prev_id = id
-    self.floor_prev_transform = now
+      pos = self.global_transform.origin
+      ahead = pos + dir.normalized * 0.6
+      probe = vec3(ahead.x, floor_top + 0.45, ahead.z)
+    for unit in state.units.value:
+      if unit of Build and ?unit.node:
+        let
+          build = Build(unit)
+          bnode = Spatial(unit.node)
+          local = bnode.global_transform.xform_inv_vector3(probe)
+          cell = vec3(floor(local.x), floor(local.y), floor(local.z))
+        if build.solid_at(cell) and not build.solid_at(cell + vec3(0, 1, 0)):
+          let top = bnode.global_transform.xform_vector3(
+            vec3(local.x, cell.y + 1.0, local.z)
+          ).y
+          if top > floor_top + 0.05 and top <= floor_top + 1.1:
+            return some(top)
+
+  proc ride_and_fall(delta: float) =
+    ## Two node-side, world-space (no reparenting) behaviours off one floor
+    ## query:
+    ## - Ride: carry the bot by the rigid motion (rotation + translation) of the
+    ##   surface under its feet, so it rides a moving/turning platform.
+    ## - Floor-follow: keep the bot on that surface vertically — step up onto
+    ##   blocks, and fall off ledges under a fake gravity matching the player's.
+    ## Horizontal (walk + ride) and vertical (this) are independent; the script's
+    ## turtle moves own X/Z, this owns Y. Applied after the bot's own walk.
+    if LOADING_LEVEL in state.global_flags:
+      return
+    # Fell out of the world (genuinely bottomless): reset high instead of a
+    # runaway free-fall to -inf.
+    if self.translation.y < -50:
+      var t = self.translation
+      t.y = 30
+      self.translation = t
+      self.fall_velocity = 0.0
+      return
+    # Look past this frame's fall step: a long fall drops more per frame than a
+    # fixed reach, so it would step across a floor between frames (tunnel).
+    # When grounded, also look one block up, so a step the bot has walked into
+    # (feet embedded) is climbed; never while falling, so dropping past a
+    # ledge's edge doesn't yank the bot up onto it.
+    let next_fall = self.fall_velocity + state.gravity * delta
+    let reach_up = if self.fall_velocity < 0: 0.0 else: 0.99
+    let floor_hit = self.find_floor(1.0 - next_fall * delta, reach_up)
+    if floor_hit.is_none:
+      # Nothing underfoot. Only fall if we've stood on something before — a bot
+      # placed in mid-air (or mid level-load) should wait, not drop forever.
+      self.floor_prev_id = 0
+      if self.floor_seen:
+        self.fall_velocity = next_fall
+        var t = self.translation
+        t.y += self.fall_velocity * delta
+        self.translation = t
+      return
+    self.floor_seen = true
+    var target_y = floor_hit.get.top + foot_offset
+    if self.fall_velocity >= 0:
+      # A single block in the walking path becomes the floor target: the bot
+      # lifts onto it while its center is still behind the block's face (the
+      # probe keeps seeing the step ahead), and the walk carries it across.
+      # Skipped while falling, so dropping past a ledge isn't yanked sideways.
+      let step = self.climb_step(floor_hit.get.top)
+      if step.is_some and step.get > target_y:
+        target_y = step.get
+    block:
+      var t = self.translation
+      if t.y > target_y + 0.01:
+        # Airborne above the surface (walked off / stepping down) — fall toward
+        # it, landing exactly on it. No ride carry while airborne.
+        self.floor_prev_id = 0
+        self.fall_velocity = next_fall
+        t.y = max(t.y + self.fall_velocity * delta, target_y)
+        if t.y == target_y:
+          self.fall_velocity = 0.0
+        self.translation = t
+        return
+    self.fall_velocity = 0.0
+    let fnode = floor_hit.get.node
+    if fnode.is_nil:
+      # The ground plane — static, nothing to ride.
+      self.floor_prev_id = 0
+    else:
+      let
+        id = fnode.get_instance_id
+        now = fnode.global_transform
+      # Ride (horizontal + rotation). Skip a static surface: `now * now.inverse`
+      # isn't exactly identity in float32, so applying it every frame would
+      # drift.
+      if id == self.floor_prev_id and now != self.floor_prev_transform:
+        let motion = now * self.floor_prev_transform.affine_inverse
+        self.global_transform = motion * self.global_transform
+      self.floor_prev_id = id
+      self.floor_prev_transform = now
+    # Settle / step up onto the surface. Rising (climb, step-up) is animated at
+    # climb_speed rather than snapped; already-settled stays pinned exactly.
+    var t = self.translation
+    t.y = min(t.y + climb_speed * delta, target_y)
+    self.translation = t
 
   method process(delta: float) =
     # Render-tick only: the screenshot warm-up counts render frames. Movement and
@@ -410,7 +545,7 @@ gdobj BotNode of KinematicBody:
         # whether or not it's running a script.
         if SCRIPT_RUNNING in self.model.global_flags and bot.velocity.length > 0:
           discard self.move_and_slide(self.model.velocity, UP)
-        self.ride_platform()
+        self.ride_and_fall(delta)
       if self.model.code.owner == state.worker_ctx_name:
         self.model.transform_value.pause self.transform_zid:
           self.model.transform = self.transform

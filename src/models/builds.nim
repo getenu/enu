@@ -223,7 +223,7 @@ proc log_block_placement(self: Build, local: Vector3, color: Colors) =
     unit_id: self.id,
     color: color,
     local_position: local,
-    global_position: local.global_from(self),
+    global_position: local.world_from(self),
     timestamp: get_mono_time(),
   )
   state.player.block_log_entries.add entry
@@ -250,7 +250,9 @@ proc remove(self: Build) =
         self.parent.units -= self
 
 proc fire(self: Build) =
-  let global_point = self.target_point.global_from(self)
+  # Full transform, not global_from: on a rotated platform the origin-only sum
+  # drops the rotation, so the dropped bot lands blocks from the aim target.
+  let global_point = self.target_point.world_from(self)
   if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal

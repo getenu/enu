@@ -246,6 +246,18 @@ proc local_to*(self: Vector3, unit: Unit): Vector3 =
     result -= unit.transform.origin
     unit = unit.parent
 
+proc world_from*(self: Vector3, unit: Unit): Vector3 =
+  ## Local point -> world through each ancestor's FULL transform, so it's
+  ## correct on rotated/scaled units. `global_from` above only sums origins,
+  ## which silently breaks once a unit has turned: a point on a rotated
+  ## platform maps to where it would be had the platform never rotated. The
+  ## exact inverse of the node's `to_local`.
+  result = self
+  var unit = unit
+  while unit != nil:
+    result = unit.transform.xform_vector3(result)
+    unit = unit.parent
+
 proc `+=`*(self: EdValue[string], str: string) =
   self.value = self.value & str
 
