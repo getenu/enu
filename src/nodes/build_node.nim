@@ -20,7 +20,7 @@ var hidden_shader {.threadvar.}: Shader
 
 gdobj BuildNode of VoxelTerrain:
   var
-    model*: Build
+    model* {.cursor.}: Build
     transform_zid: EID
     default_view_distance: int
     toggle_error_highlight_at = MonoTime.high

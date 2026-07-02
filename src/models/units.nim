@@ -278,10 +278,11 @@ proc walk_tree*(root: Unit, callback: proc(unit: Unit) {.gcsafe.}) =
   walk_tree(@[root], callback)
 
 proc data_dir*(self: Unit): string =
-  if self.parent.is_nil:
-    state.config.data_dir / self.id
-  else:
-    self.parent.data_dir / self.id
+  ## Always top-level: a unit's on-disk data lives at `config.data_dir/<id>/`
+  ## regardless of in-memory nesting (adopt, instances). Reparenting a unit
+  ## never moves its files, and the file watcher finds every unit at a stable,
+  ## flat path — so an adopted (nested) unit isn't mistaken for a deleted one.
+  state.config.data_dir / self.id
 
 proc data_file*(self: Unit): string =
   self.data_dir / self.id & ".json"
@@ -332,6 +333,24 @@ method on_collision*(
 
 method off_collision*(self: Model, partner: Model) {.base, gcsafe.} =
   discard
+
+proc reparent_to_root*(self: Unit) =
+  ## Move `self` out of its current parent's `units` into the top-level
+  ## `state.units`, re-rooting its node and restoring its world transform — the
+  ## reverse of `adopt`. Also used to evacuate a non-owned child when its parent
+  ## is destroyed. `TRANSFERRING` keeps the collection move from being read as a
+  ## delete; it's cleared on the next tick.
+  let parent = self.parent
+  if parent.is_nil:
+    return
+  self.global_flags += TRANSFERRING
+  state.units.add self
+  parent.units -= self
+  self.parent = nil
+  self.global_flags += GLOBAL
+  self.transform_value.origin = self.transform.origin + parent.transform.origin
+  after_boop:
+    self.global_flags -= TRANSFERRING
 
 method destroy*(self: Unit) {.gcsafe.} =
   # Override of ed's EdRef base: a Unit must be destroyed through a concrete

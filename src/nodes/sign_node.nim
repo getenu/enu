@@ -12,7 +12,7 @@ const
   viewport_y = 1200
 
 gdobj SignNode of Spatial:
-  var model*: Sign
+  var model* {.cursor.}: Sign
   var zid: EID
   var material: SpatialMaterial
   var viewport: Viewport

@@ -153,6 +153,14 @@ type
       ## player is nearby. Off by default — players bring their own viewer,
       ## and most units don't need one. Set it on agent bots that take
       ## screenshots away from the player.
+    TRANSFERRING
+      ## Transient: the unit is being moved between units collections (see
+      ## `adopt`/`release`). Set across the collection remove/add so the
+      ## destroy-on-remove watchers (node controller + worker) detach/re-attach
+      ## the node instead of tearing the unit down. Synced (SYNC_REMOTE, via
+      ## GlobalModelFlags) because every context applies the membership move and
+      ## runs the same ungated destroy. Interim until destructor-driven teardown
+      ## (getenu/enu#65) makes remove==detach; then this flag goes away.
 
   Tools* = enum
     CODE_MODE
@@ -295,6 +303,12 @@ type
     velocity_value*: EdValue[Vector3]
     transform_value*: EdValue[Transform]
     clone_of*: Unit
+    spawned_by*: string
+      ## Id of the unit whose script `.new()`'d this instance, set once at
+      ## creation and never changed. Distinguishes *my* instances from foreign
+      ## ones (both have `clone_of`): when a unit is destroyed, only children
+      ## with `spawned_by == self.id` go down with it; everything else (real
+      ## units, the player, instances spawned elsewhere) is re-rooted.
     collisions*: EdSeq[tuple[id: string, normal: Vector3]]
     shared_value*: EdValue[Shared]
     start_color*: Color
