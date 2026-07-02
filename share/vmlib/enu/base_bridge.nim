@@ -45,6 +45,8 @@ bridged_to_host:
   proc lock*(self: Unit): bool
   proc `lock=`*(self: Unit, value: bool)
   proc reset*(self: Unit, clear = false)
+  proc adopt*(self: Unit, unit: Unit)
+  proc release*(self: Unit)
   proc press_action*(name: string)
   proc release_action*(name: string)
   proc load_level*(level: string, world = "")

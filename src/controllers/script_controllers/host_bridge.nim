@@ -117,6 +117,7 @@ proc new_instance(self: Worker, src: Unit, dest: PNode) =
 
   var clone = src.clone(self.active_unit, id)
   assert not clone.is_nil
+  clone.spawned_by = self.active_unit.id
   clone.script_ctx = ScriptCtx.init(
     owner = clone, clone_of = src, interpreter = self.interpreter
   )
@@ -505,6 +506,16 @@ proc delete(self: Unit) =
   ## Remove the unit from the level and delete its on-disk script + data.
   ## Distinct from the `destroy` method, which only tears down the in-memory
   ## instance.
+
+  # Evacuate children we don't own so they outlive us: real units, the player,
+  # and instances spawned elsewhere (e.g. one adopted onto us to ride). Our own
+  # instances (`spawned_by == self.id`) stay and are torn down in the cascade
+  # when we're removed below. Done here, before removal, so it isn't re-entrant
+  # with the destroy cascade (which mutating ed mid-teardown would be).
+  for child in self.units.value:
+    if child.spawned_by != self.id:
+      child.reparent_to_root()
+
   if ?self.script_ctx and self.script_ctx.script != "" and
       file_exists(self.script_ctx.script):
     try:
@@ -521,6 +532,34 @@ proc delete(self: Unit) =
     state.units -= self
   else:
     self.parent.units -= self
+
+proc adopt(self: Unit, unit: Unit) =
+  ## Make `unit` ride `self` (e.g. a moving platform): move it from its current
+  ## units collection into `self.units` and nest its node under `self`'s, so the
+  ## engine composes transforms and `unit` follows `self`. Bots don't auto-ride a
+  ## moving platform — this is how you make them. Ownership moves with membership
+  ## for now (`self` owns `unit` until destructor-driven teardown lands — see
+  ## getenu/enu#65). `TRANSFERRING` keeps the remove/add from tearing the unit
+  ## down (it's a move, not a delete).
+  if unit == self or unit.parent == self:
+    return
+  unit.global_flags += TRANSFERRING
+  let old_owner = if ?unit.parent: unit.parent.units else: state.units
+  self.units.add unit
+  old_owner -= unit
+  unit.parent = self
+  unit.global_flags -= GLOBAL
+  # World -> parent-local origin. Origin-only is fine for a translating platform;
+  # a rotating one needs basis composition (see docs/notes/adopt-*). `self` is
+  # GLOBAL, so its node sits at the world root and its origin is the offset.
+  unit.transform_value.origin = unit.transform.origin - self.transform.origin
+  after_boop:
+    unit.global_flags -= TRANSFERRING
+
+proc release(self: Unit) =
+  ## Reverse of `adopt`: re-root `self` to the top-level units collection and
+  ## restore its world transform, so it stops riding its parent.
+  self.reparent_to_root()
 
 proc speed(self: Unit): float =
   types.speed(self)
@@ -1539,7 +1578,7 @@ proc bridge_to_vm*(worker: Worker) =
     reset_level, current_colliders, added_units, all_players, all_builds,
     all_bots, all_signs, all_units, signal_test_complete, now_seconds,
     dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box, bounds,
-    overlaps, units_overlapping, box_is_free, bounds_at
+    overlaps, units_overlapping, box_is_free, bounds_at, adopt, release
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,

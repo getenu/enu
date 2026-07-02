@@ -18,7 +18,7 @@ const SELF_AVATAR_LAYER = 1'i64 shl 19
 
 gdobj BotNode of KinematicBody:
   var
-    model*: Unit
+    model* {.cursor.}: Unit
     material* {.gdExport.},
       highlight_material* {.gdExport.},
       selected_material* {.gdExport.}: Material

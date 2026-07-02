@@ -105,16 +105,23 @@ proc add_to_scene(unit: Unit) =
 proc set_global(unit: Unit, global: bool) =
   var parent_node = unit.node.get_node("..")
   parent_node.remove_child(unit.node)
+  # During a transfer (adopt/release) the node reparents here, but `adopt`
+  # sets the unit's parent-local transform explicitly, so skip the
+  # start_transform-based origin shift (it's the wrong offset for an arbitrary
+  # adoptee — it assumes the unit was instanced at its parent).
+  let transferring = TRANSFERRING in unit.global_flags
   if global:
     state.nodes.data.add_child(unit.node)
     unit.node.owner = state.nodes.data
-    unit.transform_value.origin =
-      unit.transform.origin + unit.start_transform.origin
+    if not transferring:
+      unit.transform_value.origin =
+        unit.transform.origin + unit.start_transform.origin
   else:
     unit.parent.node.add_child(unit.node)
     unit.node.owner = unit.parent.node
-    unit.transform_value.origin =
-      unit.transform.origin - unit.start_transform.origin
+    if not transferring:
+      unit.transform_value.origin =
+        unit.transform.origin - unit.start_transform.origin
 
 proc reset_nodes() =
   current_build = nil
@@ -131,8 +138,9 @@ proc find_nested_changes(parent: Change[Unit]) =
         change.item.fix_parents(parent.item)
         change.item.add_to_scene()
       elif Removed in change.changes:
-        reset_nodes()
-        change.item.remove_from_scene()
+        if TRANSFERRING notin change.item.global_flags:
+          reset_nodes()
+          change.item.remove_from_scene()
     elif change.type_name == $Change[GlobalModelFlags]:
       let change = Change[GlobalModelFlags](change)
       if change.item == GLOBAL:
@@ -149,8 +157,9 @@ proc watch_units(self: NodeController, unit: Unit) {.gcsafe.} =
       change.item.fix_parents(unit)
       self.add_or_defer(change.item)
     elif removed:
-      reset_nodes()
-      change.item.remove_from_scene()
+      if TRANSFERRING notin change.item.global_flags:
+        reset_nodes()
+        change.item.remove_from_scene()
 
   unit.global_flags.watch(unit):
     if GLOBAL.added:
@@ -163,6 +172,11 @@ proc add_or_defer(self: NodeController, unit: Unit) {.gcsafe.} =
   ## containers). Defer the scene add until the core containers fill — the
   ## worker's deep fetch brings them, and `drain_pending` (per frame) finishes
   ## the join. Field watchers self-heal the rest via Fill changes.
+  if ?unit.node:
+    # Relink: the unit already has a node (it's moving between collections, not
+    # being freshly spawned). Don't re-instance or re-watch — the live node is
+    # reparented by `set_global` when the synced GLOBAL change lands.
+    return
   if unit.sync_ready:
     unit.add_to_scene()
     self.watch_units(unit)
@@ -188,9 +202,15 @@ proc watch*(self: NodeController, state: GameState) =
   state.units.changes:
     info "node_ctrl state.units change", added, removed, id = change.item.id
     if added:
+      # A direct member of root `state.units` is top-level (parentless). Clear a
+      # stale back-ref left by `release` (which re-roots an adopted unit).
+      change.item.parent = nil
       self.add_or_defer(change.item)
     elif removed:
-      change.item.remove_from_scene()
+      if TRANSFERRING in change.item.global_flags:
+        discard
+      else:
+        change.item.remove_from_scene()
       # No explicit queue_free: the Unit is an EdRef, reclaimed by ORC once
       # unreferenced (ed then prunes its ref_pool entry). remove_from_scene
       # already handles the Godot node teardown. (step 4.3)

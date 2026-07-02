@@ -238,10 +238,14 @@ proc update_files*(self: Worker) =
       except OSError:
         discard
 
-  # Build root-unit table once for JSON watch and orphan detection
-  var root_units: Table[string, Unit]
-  for unit in state.units.value:
-    root_units[unit.id] = unit
+  # Table of every loaded unit (whole tree, not just top level) for the JSON
+  # watch + orphan detection. A unit adopted onto another lives nested in memory
+  # but its data stays at the flat top-level path, so it'd otherwise look "new"
+  # to the walk_dirs scan below and get reconstructed. Walking the tree keeps it
+  # recognized as already-loaded.
+  var loaded_units: Table[string, Unit]
+  state.units.value.walk_tree proc(unit: Unit) {.gcsafe.} =
+    loaded_units[unit.id] = unit
 
   # JSON watch: reload changed units inline; collect newly-appeared ones to
   # load together as a batch afterward.
@@ -251,8 +255,8 @@ proc update_files*(self: Worker) =
     let json_file = dir / unit_id & ".json"
     if not file_exists(json_file):
       continue
-    if unit_id in root_units:
-      let unit = root_units[unit_id]
+    if unit_id in loaded_units:
+      let unit = loaded_units[unit_id]
       if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
         continue
       if unit.script_ctx.last_saved_json_mtime == Time.default:
@@ -296,7 +300,7 @@ proc update_files*(self: Worker) =
     let stem = script_path.split_file.name
     if stem == "players":
       continue
-    if stem notin root_units:
+    if stem notin loaded_units:
       let json_file = state.config.data_dir / stem / stem & ".json"
       if not file_exists(json_file) and
           script_path notin self.orphan_scripts_reported:
@@ -453,7 +457,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   worker.for_all_units:
     if added:
-      if unit.sync_ready:
+      if TRANSFERRING in unit.global_flags:
+        # Relink (adopt/release): the unit is already joined and its script is
+        # running. Re-adding it to a new collection must not re-join or re-watch.
+        discard
+      elif unit.sync_ready:
         unit.worker_thread_joined(worker)
         worker.watch_code unit
       else:
@@ -462,17 +470,22 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         worker.pending_units.add unit
 
     if removed:
-      worker.unmap_unit(unit)
+      if TRANSFERRING in unit.global_flags:
+        # Moving between collections, not leaving the level: keep the unit, its
+        # script mapping, and its on-disk script/data intact.
+        discard
+      else:
+        worker.unmap_unit(unit)
 
-      if ?unit.script_ctx:
-        unit.script_ctx.running = false
-        unit.script_ctx.callback = nil
-        if not (unit of Player) and LOADING_SCRIPT notin state.local_flags and
-            not ?unit.clone_of:
-          remove_file unit.script_ctx.script
-          remove_dir unit.data_dir
+        if ?unit.script_ctx:
+          unit.script_ctx.running = false
+          unit.script_ctx.callback = nil
+          if not (unit of Player) and LOADING_SCRIPT notin state.local_flags and
+              not ?unit.clone_of:
+            remove_file unit.script_ctx.script
+            remove_dir unit.data_dir
 
-      unit.destroy
+        unit.destroy
 
   let player = state.player
 

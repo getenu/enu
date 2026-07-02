@@ -67,7 +67,7 @@ gdobj PlayerNode of KinematicBody:
     index = 0
     collision_shape: CollisionShape
     command_timer = 0.0
-    model*: Player
+    model* {.cursor.}: Player
     velocity_zid, rotation_zid: EID
     boosted = false
     # touch_time = MonoTime.low
