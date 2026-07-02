@@ -9,38 +9,52 @@
 ## startup. open_fd_count walks /dev/fd so we can watch the actual
 ## usage over time.
 
-import std/[os, posix]
+import std/os
 import pkg/metrics
 import chronicles
 
+when not defined(windows):
+  import std/posix
+
 declare_gauge enu_open_fds, "Open file descriptors held by the Enu process."
 
-proc raise_fd_limit*() =
-  ## Set RLIMIT_NOFILE soft limit to the hard limit (or 8192, whichever
-  ## is smaller). Logs the before/after for diagnosis.
-  var lim: RLimit
-  if getrlimit(RLIMIT_NOFILE, lim) != 0:
-    error "getrlimit failed", errno = errno
-    return
-  let before = lim.rlim_cur
-  let target = min(8192, lim.rlim_max)
-  if lim.rlim_cur >= target:
-    info "fd limit already at target", soft = before, hard = lim.rlim_max
-    return
-  lim.rlim_cur = target
-  if setrlimit(RLIMIT_NOFILE, lim) != 0:
-    error "setrlimit failed", errno = errno, target = target
-    return
-  info "raised fd limit", before, after = lim.rlim_cur, hard = lim.rlim_max
+when defined(windows):
+  proc raise_fd_limit*() =
+    ## No-op on Windows — there's no RLIMIT_NOFILE equivalent, and the CRT
+    ## fd limit is high enough that the reload-cycle EMFILE this guards
+    ## against on macOS doesn't apply.
+    discard
 
-proc open_fd_count*(): int =
-  ## Count entries in /dev/fd (macOS/Linux). Returns -1 if unavailable.
-  ## The directory handle we open is counted, so the result is one
-  ## higher than the steady-state count.
-  if not dir_exists("/dev/fd"):
-    return -1
-  for _, _ in walk_dir("/dev/fd"):
-    inc result
+  proc open_fd_count*(): int =
+    ## Unavailable on Windows (no /dev/fd).
+    -1
+else:
+  proc raise_fd_limit*() =
+    ## Set RLIMIT_NOFILE soft limit to the hard limit (or 8192, whichever
+    ## is smaller). Logs the before/after for diagnosis.
+    var lim: RLimit
+    if getrlimit(RLIMIT_NOFILE, lim) != 0:
+      error "getrlimit failed", errno = errno
+      return
+    let before = lim.rlim_cur
+    let target = min(8192, lim.rlim_max)
+    if lim.rlim_cur >= target:
+      info "fd limit already at target", soft = before, hard = lim.rlim_max
+      return
+    lim.rlim_cur = target
+    if setrlimit(RLIMIT_NOFILE, lim) != 0:
+      error "setrlimit failed", errno = errno, target = target
+      return
+    info "raised fd limit", before, after = lim.rlim_cur, hard = lim.rlim_max
+
+  proc open_fd_count*(): int =
+    ## Count entries in /dev/fd (macOS/Linux). Returns -1 if unavailable.
+    ## The directory handle we open is counted, so the result is one
+    ## higher than the steady-state count.
+    if not dir_exists("/dev/fd"):
+      return -1
+    for _, _ in walk_dir("/dev/fd"):
+      inc result
 
 proc sample_open_fds*() =
   ## Update the enu_open_fds gauge from /dev/fd. Cheap; safe to call
