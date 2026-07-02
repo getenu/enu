@@ -71,8 +71,8 @@ proc eval*(unit: Unit, code: string, top_level = false): string =
 # random port and tear it down again.
 
 var enu_process {.threadvar.}: Process
-  ## The Enu we launched, if any. Only this process may be `Enu.kill`ed — we
-  ## never touch an Enu the user is running.
+  ## The Enu we launched, if any. Only this process may be terminated on
+  ## `disconnect` — we never touch an Enu the user is running.
 
 const exe_ext = when defined(windows): ".exe" else: ""
 
