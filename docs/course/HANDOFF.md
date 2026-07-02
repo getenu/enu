@@ -2,30 +2,25 @@
 
 Snapshot for resuming cold. For the course *design*, read
 `docs/course/{design,loops,exercise-bank}.md`; this doc is "where we are + what's
-next."
+next." (Updated 2026-07-02: all the infra this doc used to track — the reorg,
+the MCP connection model, and the whole platform-riding/adopt feature — has
+merged to `main`; the course is unblocked.)
 
 ## Branches & PRs
 
-- **PR #63 `reorg-agent-mcp` → `main`** (awaiting review + FF-merge). Three infra
-  changes split out of the course work:
-  1. `vmlib/` → `share/{vmlib, worlds, agent}`; test worlds → `tests/worlds/`.
-  2. Agent files: dropped the Claude plugin; Enu generates a project `.claude/`
-     (skills/commands/examples + `settings.local.json` that pre-approves the MCP)
-     owned via a single `.enu_managed` marker (wipe-and-rewrite if present,
-     hands-off if the user deletes it).
-  3. MCP server connection fix (see below).
-  `nim build` + `nim test` green on the branch. **When it merges, `course` is
-  already on top of it** — rebasing `course` onto `main` is a no-op.
-- **PR #62 `unpin-deps` → `main`** (awaiting review). `ed 0.30.1`/`nimcp 0.10.0`
-  + `--temp-workdir` test isolation + bulk-spawn fix. Independent; `course`
-  doesn't need it yet, but the isolation fix matters before running the full test
-  suite / letting multiple agents build levels (so runs can't corrupt sources).
-- **`course`** (working branch): the 0.3 course, sitting on top of
-  `reorg-agent-mcp`. Content commits: design+spec, loops pilot (WIP), exercise
-  bank, this handoff.
-- **`course-backup`** (local only): pre-rebase `course` history; delete once happy.
+- **`course`** (working branch): the 0.3 course, freshly rebased onto latest
+  `main`. Content commits: design+spec, loops pilot (WIP), exercise bank, this
+  handoff.
+- Everything previously pending is merged: the `share/` reorg + agent files +
+  MCP connection model (PR #63), dep unpin + test isolation (PR #62), and
+  **platform riding / bot floor-follow / explicit adopt (PR #66)** — see the
+  riding section below, it changes the course's feasibility picture
+  substantially. Bots also honor `start_color` now (PR #69), so course scenes
+  can have colored bots.
+- **`course-old` / `course-backup`** (local only): pre-rebase history; delete
+  once happy.
 
-## MCP server — new connection model (PR #63)
+## MCP server — connection model (merged)
 
 The server now **serves immediately** (it used to block on a startup connect to
 an absent Enu → the client's `initialize` timed out → `-32000`). Tools:
@@ -74,13 +69,21 @@ an absent Enu → the client's `initialize` timed out → `-32000`). Tools:
 - **Build-measure checkers** (read the student's build) are headless-verifiable;
   **player/bot-position checkers** need a human to confirm the traversal.
 
-**Verified platform/riding feasibility:**
-- Elevators work as-is.
-- Ferry / horizontal platform: the **player** rides with a **1-block lip**
-  (confirmed); needs raised terrain on flat ground.
-- **Bots do NOT auto-ride** a moving platform (verified — a bot stayed at its
-  spawn z while the barge moved away). → bot-ferry needs the `adopt` task below,
-  or position-sync.
+**Platform/riding feasibility — SUPERSEDED by PR #66 (merged 2026-07-02).**
+The old caveats no longer apply; the new reality is strictly better:
+- **Bots auto-ride** any moving/turning platform they stand on (transform
+  matching, no `adopt` call, no lip): they orbit and yaw 1:1 with a turning
+  barge, still or walking. Bot-ferries need zero setup.
+- **The player rides too** (same mechanism, no lip needed), turns its view with
+  the platform's yaw, and inherits platform velocity when jumping off.
+- **Bots fall off ledges** (gravity matching the player's) and **climb single
+  blocks** (animated hop; 2+-block walls still block) — courses can use ledges,
+  gaps, and stairs the bots navigate physically.
+- Explicit `me.adopt(unit)` / `unit.release` also exists for deliberate
+  reparenting (top-level units only; adopting a nested unit errors — release
+  first).
+- Details + known interim limits: PR #66's description and the
+  `platform-riding-transform-matching` memory note.
 
 ## Loops pilot — state
 
@@ -100,46 +103,20 @@ verifiable). Reproduce:
   `bounds.max.y - bounds.min.y >= 7` → `box(5,4,1,white)` (opens) + `echo`.
   Verified: the gate opened.
 
-## OPEN TASK — `adopt` (reparent a unit so it rides a platform)
-
-Designed + investigated, **not implemented**. Lets a platform carry a bot
-(bot-ferry) or the player (rider-sticks). Decided to do this as a focused, tested
-pass rather than rush it at the end of a long session.
-
-- **Machinery already exists:** the node controller reparents Godot nodes when a
-  unit moves between `.units` collections (`src/controllers/node_controllers.nim`
-  `watch_units` ~:146) and when `GLOBAL` toggles (`set_global` ~:105); Godot
-  composes transforms through the nesting (instanced children move with the
-  parent — user-confirmed). `.units` + `global_flags` are ed-synced, so **no new
-  bridge plumbing** is needed.
-- **adopt(parent, child):** detach `child` from its owner (root `state.units` or
-  current `parent.units`), drop `GLOBAL` (so it nests under the parent, not at
-  root), add to `parent.units`, shift transform **world → parent-local** so it
-  doesn't jump.
-- **release(child):** reverse → back to root `state.units`, transform → world.
-  (Required: must be able to re-root an adopted unit.)
-- **Three things to nail:** (1) expose `me.adopt(unit)` / `unit.release` to the VM
-  (`.units`/`parent` aren't script-reachable today — add bridged ops in
-  `share/vmlib/enu/base_bridge.nim`); (2) the **transform conversion** — mirror
-  `set_global`'s origin shift (`node_controllers.nim:111-117`, which uses
-  `start_transform.origin` as the parent offset) so the rider stays put on
-  (de)parenting — the fiddly part; (3) **GLOBAL fit** — adopted units must be
-  non-GLOBAL (node nests under the parent).
-- **Key files:** `src/types.nim` (`Unit.units` :286, `GLOBAL` :131),
-  `src/models/units.nim` (`fix_parents` :6), `src/controllers/node_controllers.nim`
-  (`set_global` :105, `watch_units` :146), `share/vmlib/enu/base_bridge.nim`.
-- **Test:** nest a bot under a moving platform via `adopt` → it rides; `release`
-  → re-roots; neither jumps.
-
 ## Next steps (suggested order)
 
 1. **Build loops exercises** (course progress, no engine change): formalize the
    **staircase** into the loops level (real ledge/gate scene + the student
    *stub* + a teaching sign + `lock = true` on non-student units); then
    **stepping-stones-with-gaps** (build-measure, verifiable); then the
-   **player-ferry** (raised terrain + lipped barge + player-crossing checker).
-2. **`adopt` feature** — implement + test, if we want bot-ferries / player-carry.
-3. **Demo-station + replay** — the reusable demo component: a `lock = true` real
+   **ferry** — which riding (PR #66) made much richer than originally scoped:
+   the player *and* bots ride any moving platform with no lip and no code, so
+   ferry/elevator/turning-barge exercises are all open, including the
+   "bumbling pack of robots crossing bridges and elevators" level (10–15 bots
+   shuffling together; bots fall off edges and climb single blocks, so herding
+   and containment are real mechanics). Tool restriction (code-tool-only via
+   `show_tools`) is on main.
+2. **Demo-station + replay** — the reusable demo component: a `lock = true` real
    unit with the messy logic + a sign showing *idealized* code + controls that
    update both the build and the shown snippet; replay on a ~10s timer, paused
    while the controls sign is open.
