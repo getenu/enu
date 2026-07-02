@@ -27,7 +27,11 @@ method on_begin_move*(
     duration += delta
     if duration >= finish_time:
       self.velocity_value.touch(vec3())
-      self.transform_value.origin = finish.snapped(vec3(0.1, 0.1, 0.1))
+      var f = finish.snapped(vec3(0.1, 0.1, 0.1))
+      # Y is owned by the node-side floor-follow (gravity / step-up); don't reset
+      # it, or a bot that fell during the move would snap back up to cliff height.
+      f.y = self.transform.origin.y
+      self.transform_value.origin = f
       return DONE
     else:
       self.velocity_value.touch(moving * self.speed)

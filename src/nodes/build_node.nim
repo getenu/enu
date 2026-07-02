@@ -321,7 +321,12 @@ gdobj BuildNode of VoxelTerrain:
 
   method process(delta: float) =
     if ?self.model:
-      if self.model.code.owner == state.worker_ctx_name:
+      # Sync node->model only when the script isn't driving us this frame. While a
+      # model->node update is pending (applied next physics_process), the node is
+      # a frame stale, so writing it back would fight the script and bounce. With
+      # no pending, this still carries node-side edits to the model.
+      if self.model.code.owner == state.worker_ctx_name and
+          self.pending_transform.is_none:
         self.model.transform_value.pause self.transform_zid:
           self.model.transform = self.transform
 
