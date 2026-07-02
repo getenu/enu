@@ -130,8 +130,9 @@ these so `up N` / `floor` can't shortcut them.
   (Elevators and *lipped* ferries already work — see "Riding a moving platform".)
 - **Real light sources** — torches/beacons are visual spheres now; true lights
   would need a light node exposed to the VM.
-- **Read a voxel's color** at a position from a checker (needed by checkerboard +
-  altitude-painter; `floor_at`/`clear_box` give presence, not color).
+- ~~**Read a voxel's color**~~ — DONE: `block_color_at(vec3)` exists and works
+  (verified 2026-07-02: an if/elif altitude-painted tower read back
+  blue/green/white correctly). Checkerboard + altitude-painter are unblocked.
 - **Bot senses the cell ahead** (wall-following bot).
 - **Reward animations driven by the checker** (receding water, settling roof) —
   the `door.nim` open-flag pattern already works for doors.
@@ -158,6 +159,9 @@ Everything below ran in MCP with reference solutions; markers + screenshots.
 - **Nested-loops candidates** (snippets, verified): stepped **pyramid**
   (`7.times(level):` with size shrinking per level) and a 4×4 **orchard**
   (loop-of-rows × loop-of-trees, turtle-only with pen-up hops).
+- **Conditionals candidate** (snippet, verified): the **altitude painter** —
+  `if i < 3: color = blue elif i < 7: green else: white` up a tower, and a
+  checker reading the result back with `block_color_at`. Both halves work.
 
 ## Authoring gotchas (hard-won; check before building levels)
 
