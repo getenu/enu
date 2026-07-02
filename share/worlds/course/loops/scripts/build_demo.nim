@@ -1,10 +1,24 @@
-# SHOW before tell: this staircase builds ITSELF with a loop, so the
-# player watches what a loop does before we ever name it. Turtle commands
-# only (forward / turn / up) — exactly how they'll build.
-color = cycle(red, white)
-speed = 4 # draw slowly enough to watch it climb
+# SHOW before tell: a staircase spiral that builds itself with a loop,
+# over and over, so the player watches what a loop does before we name it.
+# Turtle commands only — exactly what they'll write.
+lock = true
 
-24.times:
-  forward 4
-  turn 30
-  up 1
+forever:
+  save()
+  speed = 6
+  12.times:
+    color = cycle(red, white)
+    forward 3
+    turn 60
+    up 1
+  sleep 6
+  restore()
+  speed = 0
+  color = eraser
+  12.times:
+    forward 3
+    turn 60
+    up 1
+  restore()
+  color = red
+  sleep 2

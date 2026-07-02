@@ -1,11 +1,11 @@
 {
-  "id": "build_demo",
+  "id": "bot_salty",
   "start_transform": {
     "basis": [
       [
-        1.0,
         0.0,
-        0.0
+        0.0,
+        -1.0
       ],
       [
         0.0,
@@ -13,17 +13,17 @@
         0.0
       ],
       [
+        1.0,
         0.0,
-        0.0,
-        1.0
+        0.0
       ]
     ],
     "origin": [
-      -12.0,
+      13.0,
       1.0,
-      -20.0
+      -30.0
     ]
   },
-  "start_color": "RED",
+  "start_color": "GREEN",
   "edits": {}
 }

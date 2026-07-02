@@ -1,5 +1,5 @@
 {
-  "id": "build_demo",
+  "id": "build_artsign",
   "start_transform": {
     "basis": [
       [
@@ -19,11 +19,11 @@
       ]
     ],
     "origin": [
-      -12.0,
+      -18.0,
       1.0,
-      -20.0
+      -32.0
     ]
   },
-  "start_color": "RED",
+  "start_color": "WHITE",
   "edits": {}
 }

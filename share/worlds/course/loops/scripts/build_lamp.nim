@@ -1,24 +1,23 @@
-# The lamp room, floating at the target height. It starts DARK because the
-# tower below is unfinished. This unit is also the level's checker + reward:
-# it watches build_lighthouse and lights up once the tower reaches it.
-#
-# (Goal -> reaction template: poll a condition in `forever:`, latch, react.)
-
-const target = 10
-var lit = false
+# The lamp room, floating at the target height. Dark until the tower
+# below reaches it — this unit is also the checker and the reward.
+lock = true
+speed = 0
+const TARGET = 10.0
 
 color = black
-box(width = 3, height = 3, depth = 3, color = black) # dark lamp = the target
+box(3, 3, 3, at = vec3(0, 0, -2), color = black)
 
+var lit = false
 forever:
   if not lit:
     for b in Build.all:
       if b.id == "build_lighthouse":
-        let tower_height = b.bounds.max.y - b.bounds.min.y
-        if tower_height >= target.float:
+        let height = b.bounds.max.y - b.bounds.min.y
+        if height >= TARGET:
           lit = true
-          echo "Lighthouse reached ", target, " — lighting the lamp!"
-          box(width = 3, height = 3, depth = 3, color = white) # lamp on
-          for d in 1 .. 24: # beam out over the sea (north = -z)
-            place(0, 1, -1 - d, white)
+          echo "COURSE: lighthouse complete - lamp lit"
+          box(3, 3, 3, at = vec3(0, 0, -2), color = white)
+          26.times(i): # the beam grows out over the sea
+            box(vec3(1, 1, -3 - i), vec3(1, 1, -3 - i), color = white)
+            sleep 0.05
   sleep 0.5

@@ -1,5 +1,5 @@
 {
-  "id": "build_demo",
+  "id": "build_extras",
   "start_transform": {
     "basis": [
       [
@@ -19,11 +19,11 @@
       ]
     ],
     "origin": [
-      -12.0,
+      -4.0,
       1.0,
-      -20.0
+      -50.0
     ]
   },
-  "start_color": "RED",
+  "start_color": "WHITE",
   "edits": {}
 }
