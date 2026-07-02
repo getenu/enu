@@ -5,8 +5,9 @@ color = brown
 box(vec3(-2, 0, 6), vec3(2, 0, -8), color = brown) # causeway through the gate
 box(vec3(-6, 0, -8), vec3(6, 0, -14), color = brown) # pier platform
 
+turn 180 # face the causeway
 up 2
-forward 10
+forward 4
 say "- Next stop: Variables!",
   """
   # Next stop: **Variables**

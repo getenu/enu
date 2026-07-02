@@ -5,5 +5,6 @@ speed = 0
 show = false
 
 player.tools.incl CodeMode
+player.tool = CodeMode
 # TODO(course): disable flying once a proper flying_allowed flag exists.
 # For now the level is designed so flying doesn't skip anything.

@@ -1,6 +1,7 @@
 # The reward on Chest Island: when Salty arrives, up goes the flag.
 lock = true
 speed = 0
+turn 180 # face arriving visitors
 color = brown
 box(2, 2, 2, at = vec3(-1, 0, -1), color = brown) # the chest
 

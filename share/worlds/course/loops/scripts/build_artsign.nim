@@ -3,6 +3,7 @@ lock = true
 speed = 0
 color = white
 box(vec3(0, 0, 0), vec3(0, 3, 0), color = white) # signpost
+turn right # face the road, to the east
 
 let art_sign = say("- Art Beach",
   """

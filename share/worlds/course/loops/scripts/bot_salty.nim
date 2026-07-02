@@ -3,6 +3,7 @@
 # and climbing out) to reach Chest Island. He is his own checker.
 lock = true
 color = green
+turn left # face west, toward the arriving player
 
 say "- Help! I can't swim!",
   """
@@ -29,6 +30,7 @@ forever:
           echo "COURSE: stones span the channel - salty crossing"
           say "- Stones! Here I go!"
           sleep 1
+          turn 180 # about-face: west -> east, toward the island
           speed = 2
           forward 27
           say "- I MADE it! Check the chest!", width = 2.0

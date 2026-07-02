@@ -8,6 +8,7 @@ color = black
 box(vec3(-3, 0, 0), vec3(3, 4, 0), color = black)
 box(vec3(-3, 4, 0), vec3(3, 4, 0), color = white) # top rail
 
+turn 180 # face the approaching player
 let gate_sign = say("- The pier is closed",
   """
   # Pier closed!
