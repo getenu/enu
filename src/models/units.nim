@@ -348,7 +348,9 @@ proc reparent_to_root*(self: Unit) =
   parent.units -= self
   self.parent = nil
   self.global_flags += GLOBAL
-  self.transform_value.origin = self.transform.origin + parent.transform.origin
+  # Local -> world through the parent chain's full transforms: an origin-only
+  # sum would restore the position the unit had before the parent ever rotated.
+  self.transform_value.origin = self.transform.origin.world_from(parent)
   after_boop:
     self.global_flags -= TRANSFERRING
 

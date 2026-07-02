@@ -11,12 +11,12 @@ import
 import gdutils, core, models/[colors, units, builds], ui/markdown_label
 import ./queries
 
-const climb_speed = 10.0
+const CLIMB_SPEED = 10.0
   ## How fast a bot rises onto a block (units/sec) — the climb is animated at
   ## this rate (~0.1s per block) instead of snapping; the drop back down is
   ## animated by gravity.
 
-const foot_offset = 0.0
+const FOOT_OFFSET = 0.0
   ## How far a bot's origin sits above the surface it stands on — the target for
   ## the vertical floor-follow (surface top + this). The bot's feet are AT its
   ## origin (the collision capsule spans 0..1.75 upward from it), verified
@@ -382,8 +382,18 @@ gdobj BotNode of KinematicBody:
           # back the prior frame's ortho render.
           self.screenshot_warmup_frames = 2
 
+  proc scan_builds(): seq[Build] =
+    ## Every build in the level with a live node, nested included —
+    ## script-spawned instances and adopted builds live under other units, not
+    ## at the top level, and bots must stand on those too.
+    var found: seq[Build]
+    state.units.value.walk_tree proc(unit: Unit) {.gcsafe.} =
+      if unit of Build and ?unit.node:
+        found.add Build(unit)
+    found
+
   proc find_floor(
-      reach: float, reach_up = 0.0
+      builds: seq[Build], reach: float, reach_up = 0.0
   ): Option[tuple[node: Spatial, top: float32]] =
     ## The surface under the bot's feet within `reach` below them (or, with
     ## `reach_up`, embedded up to that far above them — how a walked-into step
@@ -392,30 +402,29 @@ gdobj BotNode of KinematicBody:
     ## viewers, so a ray finds nothing away from the player. Returns the
     ## surface's node (nil for the ground) and its world-space top height.
     let pos = self.global_transform.origin
-    let feet = pos.y - foot_offset
+    let feet = pos.y - FOOT_OFFSET
     # Sample top-down so the highest surface wins (a step above the feet beats
     # the floor below). Half-voxel steps can't skip a full-height slab (a thin
     # *scaled-down* slab could slip through — rare, accepted).
     var dy = -reach_up
     while dy <= reach:
       let sample = vec3(pos.x, feet - 0.01 - dy, pos.z)
-      for unit in state.units.value:
-        if unit of Build and ?unit.node:
-          let bnode = Spatial(unit.node)
-          # Through the node's full transform, so rotated/scaled builds
-          # (turning barges) resolve correctly — model local_to is origin-only.
-          let local = bnode.global_transform.xform_inv_vector3(sample)
-          let cell = vec3(floor(local.x), floor(local.y), floor(local.z))
-          if Build(unit).solid_at(cell):
-            let top = bnode.global_transform.xform_vector3(
-              vec3(local.x, cell.y + 1.0, local.z)
-            ).y
-            return some((node: bnode, top: top))
+      for build in builds:
+        let bnode = Spatial(build.node)
+        # Through the node's full transform, so rotated/scaled builds
+        # (turning barges) resolve correctly — model local_to is origin-only.
+        let local = bnode.global_transform.xform_inv_vector3(sample)
+        let cell = vec3(floor(local.x), floor(local.y), floor(local.z))
+        if build.solid_at(cell):
+          let top = bnode.global_transform.xform_vector3(
+            vec3(local.x, cell.y + 1.0, local.z)
+          ).y
+          return some((node: bnode, top: top))
       if ?state.ground and sample.y <= 0.0:
         return some((node: Spatial(nil), top: 0.0'f32))
       dy += 0.5
 
-  proc climb_step(floor_top: float32): Option[float32] =
+  proc climb_step(builds: seq[Build], floor_top: float32): Option[float32] =
     ## The world top of a single climbable block directly in the bot's walking
     ## path: solid at shin height just ahead, with headroom above it (so walls
     ## two or more blocks tall still block). A walking bot needs this probe —
@@ -434,19 +443,17 @@ gdobj BotNode of KinematicBody:
       pos = self.global_transform.origin
       ahead = pos + dir.normalized * 0.6
       probe = vec3(ahead.x, floor_top + 0.45, ahead.z)
-    for unit in state.units.value:
-      if unit of Build and ?unit.node:
-        let
-          build = Build(unit)
-          bnode = Spatial(unit.node)
-          local = bnode.global_transform.xform_inv_vector3(probe)
-          cell = vec3(floor(local.x), floor(local.y), floor(local.z))
-        if build.solid_at(cell) and not build.solid_at(cell + vec3(0, 1, 0)):
-          let top = bnode.global_transform.xform_vector3(
-            vec3(local.x, cell.y + 1.0, local.z)
-          ).y
-          if top > floor_top + 0.05 and top <= floor_top + 1.1:
-            return some(top)
+    for build in builds:
+      let
+        bnode = Spatial(build.node)
+        local = bnode.global_transform.xform_inv_vector3(probe)
+        cell = vec3(floor(local.x), floor(local.y), floor(local.z))
+      if build.solid_at(cell) and not build.solid_at(cell + vec3(0, 1, 0)):
+        let top = bnode.global_transform.xform_vector3(
+          vec3(local.x, cell.y + 1.0, local.z)
+        ).y
+        if top > floor_top + 0.05 and top <= floor_top + 1.1:
+          return some(top)
 
   proc ride_and_fall(delta: float) =
     ## Two node-side, world-space (no reparenting) behaviours off one floor
@@ -458,6 +465,12 @@ gdobj BotNode of KinematicBody:
     ## Horizontal (walk + ride) and vertical (this) are independent; the script's
     ## turtle moves own X/Z, this owns Y. Applied after the bot's own walk.
     if LOADING_LEVEL in state.global_flags:
+      return
+    # An explicitly-adopted (nested) bot is carried by the scene graph — that's
+    # the point of adopt. This proc's math is world-space (translation would be
+    # parent-local here, and the ride would re-apply motion the engine already
+    # composed), so it must not run for nested bots.
+    if ?self.model.parent:
       return
     # Fell out of the world (genuinely bottomless): reset high instead of a
     # runaway free-fall to -inf.
@@ -474,7 +487,8 @@ gdobj BotNode of KinematicBody:
     # ledge's edge doesn't yank the bot up onto it.
     let next_fall = self.fall_velocity + state.gravity * delta
     let reach_up = if self.fall_velocity < 0: 0.0 else: 0.99
-    let floor_hit = self.find_floor(1.0 - next_fall * delta, reach_up)
+    let builds = self.scan_builds()
+    let floor_hit = self.find_floor(builds, 1.0 - next_fall * delta, reach_up)
     if floor_hit.is_none:
       # Nothing underfoot. Only fall if we've stood on something before — a bot
       # placed in mid-air (or mid level-load) should wait, not drop forever.
@@ -486,13 +500,13 @@ gdobj BotNode of KinematicBody:
         self.translation = t
       return
     self.floor_seen = true
-    var target_y = floor_hit.get.top + foot_offset
+    var target_y = floor_hit.get.top + FOOT_OFFSET
     if self.fall_velocity >= 0:
       # A single block in the walking path becomes the floor target: the bot
       # lifts onto it while its center is still behind the block's face (the
       # probe keeps seeing the step ahead), and the walk carries it across.
       # Skipped while falling, so dropping past a ledge isn't yanked sideways.
-      let step = self.climb_step(floor_hit.get.top)
+      let step = self.climb_step(builds, floor_hit.get.top)
       if step.is_some and step.get > target_y:
         target_y = step.get
     block:
@@ -525,9 +539,9 @@ gdobj BotNode of KinematicBody:
       self.floor_prev_id = id
       self.floor_prev_transform = now
     # Settle / step up onto the surface. Rising (climb, step-up) is animated at
-    # climb_speed rather than snapped; already-settled stays pinned exactly.
+    # CLIMB_SPEED rather than snapped; already-settled stays pinned exactly.
     var t = self.translation
-    t.y = min(t.y + climb_speed * delta, target_y)
+    t.y = min(t.y + CLIMB_SPEED * delta, target_y)
     self.translation = t
 
   method process(delta: float) =
