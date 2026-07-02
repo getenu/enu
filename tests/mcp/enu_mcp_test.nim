@@ -140,6 +140,16 @@ proc tool_text(response: JsonNode): string =
     quit 1
   result = content[0]{"text"}.get_str
 
+proc connect_session(s: var McpSession) =
+  ## The server serves without connecting (agents attach explicitly), so each
+  ## integration session initializes then calls the connect tool; the empty
+  ## address resolves $ENU_CONNECT_ADDRESS, which the harness exports.
+  discard s.do_initialize()
+  let text = s.do_call_tool("connect", %*{"address": ""}).tool_text
+  if not text.starts_with("connected"):
+    echo "FAIL: connect: " & text
+    quit 1
+
 # ---- Tests ----------------------------------------------------------------
 
 template test(name: string, body: untyped) =
@@ -274,7 +284,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let text = s.do_call_tool("eval", %*{"code": "42"}).tool_text
     if "42" notin text:
       echo "FAIL: expected '42' in output, got: " & text
@@ -284,7 +294,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     for i in 1 .. 3:
       let text = s.do_call_tool("eval", %*{"code": $i}).tool_text
       if $i notin text:
@@ -295,7 +305,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     for i in 1 .. 5:
       let text =
         s.do_call_tool("eval", %*{"code": "\"ping" & $i & "\""}).tool_text
@@ -307,7 +317,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     discard s.do_call_tool("eval", %*{"code": "echo \"console_marker_xyz\""})
     let text = s.do_call_tool("get_console", %*{}).tool_text
     if "console_marker_xyz" notin text:
@@ -318,7 +328,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let text = s.do_call_tool("screenshot", %*{}, timeout_ms = 20000).tool_text
     if not text.ends_with(".png"):
       echo "FAIL: expected .png path, got: " & text[0 ..< min(100, text.len)]
@@ -329,7 +339,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     discard s.do_call_tool("screenshot", %*{}, timeout_ms = 20000)
     let text =
       s.do_call_tool("eval", %*{"code": "echo after_screenshot"}).tool_text
@@ -341,7 +351,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let resp = s.do_call_tool(
       "eval",
       %*{"code": "player.position = vec3(0, 5, -30)"},
@@ -354,7 +364,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let text = s.do_call_tool(
       "set_position", %*{"x": 0.0, "y": 1.0, "z": -40.0}, timeout_ms = 20000
     ).tool_text
@@ -366,7 +376,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let text = s.do_call_tool(
       "set_position",
       %*{"x": 5.0, "y": 1.0, "z": -40.0, "rotation": 90.0},
@@ -380,7 +390,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     discard s.do_call_tool(
       "set_position", %*{"x": 0.0, "y": 1.0, "z": -35.0}, timeout_ms = 20000
     )
@@ -406,7 +416,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let positions = [(0.0, 1.0, -38.0), (3.0, 1.0, -42.0), (-3.0, 1.0, -40.0)]
     for (x, y, z) in positions:
       let text = s.do_call_tool(
@@ -420,7 +430,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     let ys = [1.0, 10.0, 20.0, 5.0, 40.0, 2.0, 30.0, 8.0, 15.0, 50.0]
     var prev_hash = ""
     for i, y in ys:
@@ -444,7 +454,7 @@ proc run_integration_tests() =
     var s = open_session()
     defer:
       s.close()
-    discard s.do_initialize()
+    s.connect_session()
     for i in 1 .. 25:
       let shot =
         s.do_call_tool("screenshot", %*{}, timeout_ms = 15000).tool_text
@@ -472,7 +482,7 @@ proc run_hang_repro() =
   var s = open_session()
   defer:
     s.close()
-  discard s.do_initialize()
+  s.connect_session()
 
   var call = 0
   while call < iterations:

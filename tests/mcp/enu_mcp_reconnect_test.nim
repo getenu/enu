@@ -113,6 +113,14 @@ template check(cond: bool, msg: string) =
     echo "FAIL: " & msg
     quit 1
 
+proc connect_session(s: var McpSession) =
+  ## The server serves without connecting (agents attach explicitly): each
+  ## session initializes then calls the connect tool; the empty address
+  ## resolves $ENU_CONNECT_ADDRESS.
+  s.do_initialize()
+  let r = s.do_call_tool("connect", %*{"address": ""})
+  check r.starts_with("connected"), "connect: " & r
+
 proc run_reconnect_tests*() =
   echo ""
   echo "Reconnect tests (requires Enu with ENU_LISTEN_ADDRESS=127.0.0.1):"
@@ -125,7 +133,7 @@ proc run_reconnect_tests*() =
     var s = open_session()
     defer:
       s.close()
-    s.do_initialize()
+    s.connect_session()
     # Send all args: nimcp requires every declared tool param in the JSON,
     # else the call errors `key not found: <param>` (its error JSON happens
     # to contain the requestId, so a bare `"1" in r1` would pass on an
@@ -152,7 +160,7 @@ proc run_reconnect_tests*() =
     var s = open_session()
     defer:
       s.close()
-    s.do_initialize()
+    s.connect_session()
     let r1 = s.do_call_tool("eval", %*{"code": "1"})
     check "1" in r1, "initial eval failed: " & r1
 
@@ -178,7 +186,7 @@ proc run_reconnect_tests*() =
   # SUBSCRIBE, this loop should run clean.
   for i in 1 .. 8:
     var s = open_session()
-    s.do_initialize()
+    s.connect_session()
     case i mod 4
     of 1:
       let r = s.do_call_tool(
