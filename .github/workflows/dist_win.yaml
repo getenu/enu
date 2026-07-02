@@ -95,6 +95,10 @@ jobs:
           artifact-configuration-slug: enu-zip
           github-artifact-id: ${{ steps.upload-unsigned-zip.outputs.artifact-id }}
           wait-for-completion: true
+          # Give the human approver a comfortable window (default is 600s / 10
+          # min). A release approval shouldn't race a short clock, especially
+          # since the tag build takes ~30 min to reach this point.
+          wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: dist-signed-zip
 
       # Extract signed exe/dll from the signed zip
@@ -136,6 +140,10 @@ jobs:
           artifact-configuration-slug: enu-installer
           github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
           wait-for-completion: true
+          # Give the human approver a comfortable window (default is 600s / 10
+          # min). A release approval shouldn't race a short clock, especially
+          # since the tag build takes ~30 min to reach this point.
+          wait-for-completion-timeout-in-seconds: 1800
           output-artifact-directory: dist-signed-installer
 
       # Upload final signed artifacts
