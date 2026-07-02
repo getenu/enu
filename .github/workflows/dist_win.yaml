@@ -17,14 +17,14 @@ jobs:
       - name: Install Nim
         run: |
           cd ${HOME}
-          C:\msys64\usr\bin\wget.exe https://nim-lang.org/download/nim-2.2.6_x64.zip
-          7z.exe x nim-2.2.6_x64.zip -y
+          C:\msys64\usr\bin\wget.exe https://nim-lang.org/download/nim-2.2.10_x64.zip
+          7z.exe x nim-2.2.10_x64.zip -y
       - name: Install build deps
         run: choco install yasm innosetup rcedit zip reshack
       - name: Install scons
         run: python -m pip install scons
       - name: Update path
-        run: echo "${HOME}/nim-2.2.6/bin;C:\msys64\mingw64\bin;C:\Program Files (x86)\Resource Hacker" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        run: echo "${HOME}/nim-2.2.10/bin;C:\msys64\mingw64\bin;C:\Program Files (x86)\Resource Hacker" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Configure git
         run: |
           git config --global core.autocrlf false
