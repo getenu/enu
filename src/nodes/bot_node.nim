@@ -6,7 +6,7 @@ import
     scene_tree, kinematic_body, material, mesh_instance, spatial, input_event,
     animation_player, resource_loader, packed_scene, spatial_material,
     text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
-    area,
+    area, ray_cast,
   ]
 import gdutils, core, models/[colors, units], ui/markdown_label
 import ./queries
@@ -34,6 +34,14 @@ gdobj BotNode of KinematicBody:
     # Bot hides its own skin during capture so it doesn't fill its own POV
     # when the camera sits near the bot's body (screenshot, screenshot_at).
     skin_hidden_during_screenshot: bool
+    # Platform transform-matching: carry the bot by the rigid motion of the build
+    # under its feet (rotation + translation) so it rides a moving/turning
+    # platform while staying a world-space body — its coordinates never change.
+    # `down_ray` finds the surface; we track its node id + world transform to
+    # apply each frame's delta. (Riding static ground is a zero-delta no-op.)
+    down_ray: RayCast
+    floor_prev_id: int64
+    floor_prev_transform: Transform
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -191,6 +199,15 @@ gdobj BotNode of KinematicBody:
 
     if self.model of Bot:
       let bot = Bot(self.model)
+
+      # Downward ray for platform-riding: finds the build directly underfoot.
+      # Mask 5 = the build/ground layers (same as the player's DownRay).
+      self.down_ray = gdnew[RayCast]()
+      self.down_ray.enabled = true
+      self.down_ray.cast_to = vec3(0, -1.95, 0)
+      self.down_ray.collision_mask = 5
+      self.add_child(self.down_ray)
+
       # Unit queries are answered only by the server. A connected client also
       # holds the synced bot (and its query_value); answering here too makes
       # two writers race on the same synced response container — seen live as
@@ -353,17 +370,44 @@ gdobj BotNode of KinematicBody:
           # back the prior frame's ortho render.
           self.screenshot_warmup_frames = 2
 
+  proc ride_platform() =
+    ## Transform-matching: carry the bot by the world-space rigid motion of the
+    ## surface under its feet, so it rides a moving/turning platform. The bot
+    ## stays a world-space body (no reparenting), so its coordinates never change
+    ## under the script. Applied after the bot's own walk, so walking and riding
+    ## compose. Detection is the down-ray; static ground gives a zero delta.
+    if self.down_ray.is_nil:
+      return
+    self.down_ray.force_raycast_update
+    let platform =
+      if self.down_ray.is_colliding: self.down_ray.get_collider as Spatial
+      else: nil
+    if platform.is_nil:
+      self.floor_prev_id = 0
+      return
+    let
+      id = platform.get_instance_id
+      now = platform.global_transform
+    # Skip a static surface: `now * now.inverse` isn't exactly identity in
+    # float32, so applying it every frame would slowly drift the bot.
+    if id == self.floor_prev_id and now != self.floor_prev_transform:
+      let delta = now * self.floor_prev_transform.affine_inverse
+      self.global_transform = delta * self.global_transform
+    self.floor_prev_id = id
+    self.floor_prev_transform = now
+
   method process(delta: float) =
     self.process_screenshot()
 
     if ?self.model:
-      if self.model.code.owner == state.worker_ctx_name:
-        self.model.transform_value.pause self.transform_zid:
-          self.model.transform = self.transform
       if self.model of Bot:
         let bot = Bot(self.model)
         if bot.velocity.length > 0:
           discard self.move_and_slide(self.model.velocity, UP)
+        self.ride_platform()
+      if self.model.code.owner == state.worker_ctx_name:
+        self.model.transform_value.pause self.transform_zid:
+          self.model.transform = self.transform
 
 var bot_scene {.threadvar.}: PackedScene
 proc init*(_: type BotNode): BotNode =

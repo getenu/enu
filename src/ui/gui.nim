@@ -153,7 +153,10 @@ gdobj GUI of Control:
         player.jump_time = nil_time
         state.toggle_flag(FLYING)
       elif player.is_on_floor():
-        player.velocity += vec3(0, jump_impulse, 0)
+        # Jump, inheriting the floor build's velocity so a jump off a moving
+        # platform carries its momentum through the arc. Zero on a static floor
+        # or the ground.
+        player.velocity += vec3(0, jump_impulse, 0) + player.floor_build_velocity
         player.jump_time = some time
       else:
         player.jump_time = some time

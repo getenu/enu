@@ -70,6 +70,13 @@ gdobj PlayerNode of KinematicBody:
     model* {.cursor.}: Player
     velocity_zid, rotation_zid: EID
     boosted = false
+    # Platform transform matching: the build we're standing on and its world
+    # transform last frame, so we ride it by that frame's rigid motion —
+    # translation plus the orbit from its rotation — while staying a world-space
+    # body. `floor_build_velocity` is kept for the jump-momentum bake.
+    floor_build_id: string
+    floor_prev_transform: Transform
+    floor_build_velocity*: Vector3
     # touch_time = MonoTime.low
     touch_position: Option[Vector2]
     delete_timer = MonoTime.high
@@ -262,6 +269,48 @@ gdobj PlayerNode of KinematicBody:
         self.get_slide_collision(i)
 
     handle_collisions(self.model, collisions)
+
+    # Platform transform matching: if we're standing on a build, ride it by its
+    # world-space rigid motion this frame — translation plus the orbit from its
+    # rotation — so we move with a moving/turning floor while staying a world-
+    # space body (position only; the body basis and camera are left alone).
+    # `floor_build_velocity` is kept so a jump inherits the platform's momentum.
+    block:
+      var floor_node: Spatial
+      var floor_id: string
+      for col in collisions:
+        if col.normal.y > 0.7:
+          let m = col.collider.model
+          if not m.is_nil and m of Build:
+            floor_node = col.collider as Spatial
+            floor_id = m.id
+            break
+      if floor_node.is_nil:
+        self.floor_build_id = ""
+        self.floor_build_velocity = vec3()
+      else:
+        let now = floor_node.global_transform
+        # Skip a static surface: `now * now.inverse` isn't exactly identity in
+        # float32, so applying it every frame would slowly drift us.
+        if floor_id == self.floor_build_id and now != self.floor_prev_transform:
+          let
+            motion = now * self.floor_prev_transform.affine_inverse
+            new_origin = motion.xform_vector3(self.translation)
+            move = new_origin - self.translation
+          self.floor_build_velocity =
+            if delta > 0: move / delta.float32 else: vec3()
+          self.translation = new_origin
+          # Turn our view with the platform's yaw, like standing on a turning
+          # barge. Added to the look, so it composes with mouse-look (applied in
+          # `process`); `process` then syncs it to `model.rotation`.
+          var look = self.camera_rig.rotation
+          look.y += motion.basis.get_euler.y
+          self.camera_rig.rotation = look
+          self.model.transform = self.transform
+        elif floor_id != self.floor_build_id:
+          self.floor_build_velocity = vec3()
+        self.floor_build_id = floor_id
+        self.floor_prev_transform = now
 
     if process_input:
       if self.is_on_floor:
