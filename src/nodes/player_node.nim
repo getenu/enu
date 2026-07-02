@@ -77,6 +77,7 @@ gdobj PlayerNode of KinematicBody:
     floor_build_id: string
     floor_prev_transform: Transform
     floor_build_velocity*: Vector3
+    floor_static_frames: int
     # touch_time = MonoTime.low
     touch_position: Option[Vector2]
     delete_timer = MonoTime.high
@@ -309,6 +310,18 @@ gdobj PlayerNode of KinematicBody:
           self.model.transform = self.transform
         elif floor_id != self.floor_build_id:
           self.floor_build_velocity = vec3()
+          self.floor_static_frames = 0
+        else:
+          # Same floor, no motion this frame. Platform transforms arrive at the
+          # worker's cadence, so a moving platform legitimately skips the odd
+          # physics frame — but a platform that has *stopped* must not leave its
+          # last-frame velocity baked into a later jump (launching the player
+          # sideways off a stationary surface). Clear after a short static run.
+          inc self.floor_static_frames
+          if self.floor_static_frames >= 10:
+            self.floor_build_velocity = vec3()
+        if now != self.floor_prev_transform:
+          self.floor_static_frames = 0
         self.floor_build_id = floor_id
         self.floor_prev_transform = now
 

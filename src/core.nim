@@ -258,6 +258,13 @@ proc world_from*(self: Vector3, unit: Unit): Vector3 =
     result = unit.transform.xform_vector3(result)
     unit = unit.parent
 
+proc local_into*(self: Vector3, unit: Unit): Vector3 =
+  ## Inverse of `world_from`: world point -> `unit`-local through each
+  ## ancestor's full transform (root's inverse applied first, `unit`'s last).
+  if unit.is_nil:
+    return self
+  unit.transform.xform_inv_vector3(self.local_into(unit.parent))
+
 proc `+=`*(self: EdValue[string], str: string) =
   self.value = self.value & str
 

@@ -507,14 +507,27 @@ proc delete(self: Unit) =
   ## Distinct from the `destroy` method, which only tears down the in-memory
   ## instance.
 
-  # Evacuate children we don't own so they outlive us: real units, the player,
-  # and instances spawned elsewhere (e.g. one adopted onto us to ride). Our own
-  # instances (`spawned_by == self.id`) stay and are torn down in the cascade
-  # when we're removed below. Done here, before removal, so it isn't re-entrant
-  # with the destroy cascade (which mutating ed mid-teardown would be).
-  for child in self.units.value:
-    if child.spawned_by != self.id:
-      child.reparent_to_root()
+  # Evacuate descendants we don't own so they outlive us: real units, the
+  # player, and instances spawned elsewhere (e.g. one adopted onto us to ride).
+  # Our own instances (`spawned_by == self.id`) stay and are torn down in the
+  # cascade when we're removed below — but the cascade is recursive, so a
+  # foreign unit adopted onto one of our instances must be evacuated too: we
+  # recurse through our own instances and evacuate the top-most foreign unit of
+  # each branch (its own subtree rides along with it). Collected first
+  # (reparenting mutates the tree), and done here, before removal, so it isn't
+  # re-entrant with the destroy cascade (which mutating ed mid-teardown would
+  # be).
+  var foreign: seq[Unit]
+  proc collect(children: seq[Unit]) =
+    for child in children:
+      if child.spawned_by != self.id:
+        foreign.add child
+      else:
+        collect(child.units.value)
+
+  collect(self.units.value)
+  for unit in foreign:
+    unit.reparent_to_root()
 
   if ?self.script_ctx and self.script_ctx.script != "" and
       file_exists(self.script_ctx.script):
@@ -543,16 +556,35 @@ proc adopt(self: Unit, unit: Unit) =
   ## down (it's a move, not a delete).
   if unit == self or unit.parent == self:
     return
+  # Adopting an ancestor would make parent links circular — every parent walk
+  # (local_to, world_from, walk_tree) would then loop forever and hang the
+  # worker.
+  var ancestor = self.parent
+  while ?ancestor:
+    if ancestor == unit:
+      logger("err", "can't adopt " & unit.id & ": it contains " & self.id)
+      return
+    ancestor = ancestor.parent
+  # Only top-level units can be adopted for now: the node reparents off the
+  # GLOBAL flag's removed-edge, and a nested unit has no GLOBAL flag to remove —
+  # the model would move but the node would stay under the old parent. `release`
+  # first. (Proper chained adoption comes with destructor-driven teardown,
+  # getenu/enu#65.)
+  if ?unit.parent:
+    logger(
+      "err",
+      "can't adopt " & unit.id & ": it's already on " & unit.parent.id &
+        "; release it first",
+    )
+    return
   unit.global_flags += TRANSFERRING
-  let old_owner = if ?unit.parent: unit.parent.units else: state.units
   self.units.add unit
-  old_owner -= unit
+  state.units -= unit
   unit.parent = self
   unit.global_flags -= GLOBAL
-  # World -> parent-local origin. Origin-only is fine for a translating platform;
-  # a rotating one needs basis composition (see docs/notes/adopt-*). `self` is
-  # GLOBAL, so its node sits at the world root and its origin is the offset.
-  unit.transform_value.origin = unit.transform.origin - self.transform.origin
+  # World -> parent-local through the platform's full transform chain, so
+  # adopting onto an already-rotated platform lands at the right local spot.
+  unit.transform_value.origin = unit.transform.origin.local_into(self)
   after_boop:
     unit.global_flags -= TRANSFERRING
 

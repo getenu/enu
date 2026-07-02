@@ -382,14 +382,19 @@ proc watch_units(
           # fetch pulls its whole ownership closure (containers + subtree); the
           # fills relay to the node ctx, whose deferred scene add completes.
           discard Ed.thread_ctx.fetch(unit.id, deep = true)
-        unit.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
-          # script_ctx is nil for a unit that never finished joining (a narrow
-          # replica's deferred join, destroyed before its fetch completed — e.g.
-          # an agent bot churned during a reload). The CLOSED this watcher gets
-          # from that destroy must not deref it.
-          if ?unit.script_ctx:
-            unit.script_ctx.timer = get_mono_time()
-        self.watch_units(unit.units, unit, body)
+        # A TRANSFERRING add is a reparent relink (adopt/release), not a new
+        # unit: its collision and child-collection watchers are already
+        # registered, and re-adding them would run every downstream join and
+        # teardown once per accumulated subscription (growing with each hop).
+        if TRANSFERRING notin unit.global_flags:
+          unit.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
+            # script_ctx is nil for a unit that never finished joining (a narrow
+            # replica's deferred join, destroyed before its fetch completed —
+            # e.g. an agent bot churned during a reload). The CLOSED this
+            # watcher gets from that destroy must not deref it.
+            if ?unit.script_ctx:
+              unit.script_ctx.timer = get_mono_time()
+          self.watch_units(unit.units, unit, body)
 
 template for_all_units(self: Worker, body: untyped) {.dirty.} =
   self.watch_units state.units,
