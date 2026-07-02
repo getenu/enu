@@ -122,12 +122,6 @@ gdobj BotNode of KinematicBody:
       ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
 
-      if self.model of Bot:
-        if SCRIPT_RUNNING.added:
-          self.set_process(true)
-        elif SCRIPT_RUNNING.removed:
-          self.set_process(false)
-
     self.model.local_flags.watch:
       if HIGHLIGHT.added:
         self.highlight()
@@ -217,9 +211,13 @@ gdobj BotNode of KinematicBody:
       if serves_queries:
         info "agent bot node setup",
           id = bot.id, has_query_value = ?bot.query_value
-      self.set_process(
-        SCRIPT_RUNNING in self.model.global_flags or serves_queries
-      )
+      # Bots always run both ticks: physics_process drives movement + riding (on
+      # the same 60Hz tick as the platform and player, so riding is smooth), and
+      # process drives the screenshot warm-up (render-tick work). Gating either on
+      # SCRIPT_RUNNING used to leave non-scripted bots asleep — the node never
+      # acted on the model — so they didn't ride or, on a flag/watch race, move.
+      self.set_process(true)
+      self.set_physics_process(true)
       # A VOXEL_VIEWER unit streams voxel terrain around itself, so screenshots
       # render even when no player is nearby. Server-side only: that's
       # where queries (and their renders) are served. (Qualified: in Nim
@@ -240,6 +238,7 @@ gdobj BotNode of KinematicBody:
     ## the player's own camera culls it while every other camera renders it,
     ## shadow and all.
     self.set_process(false)
+    self.set_physics_process(false)
     self.collision_layer = 0
     self.collision_mask = 0
     # The body isn't the only collider: bots are targeted through their
@@ -397,12 +396,19 @@ gdobj BotNode of KinematicBody:
     self.floor_prev_transform = now
 
   method process(delta: float) =
+    # Render-tick only: the screenshot warm-up counts render frames. Movement and
+    # riding moved to physics_process so they share the platform's (and player's)
+    # tick — see physics_process.
     self.process_screenshot()
 
+  method physics_process(delta: float) =
     if ?self.model:
       if self.model of Bot:
         let bot = Bot(self.model)
-        if bot.velocity.length > 0:
+        # Move only while a script is driving the bot, so it stops when the
+        # script ends. Riding is independent: a bot rides whatever it stands on
+        # whether or not it's running a script.
+        if SCRIPT_RUNNING in self.model.global_flags and bot.velocity.length > 0:
           discard self.move_and_slide(self.model.velocity, UP)
         self.ride_platform()
       if self.model.code.owner == state.worker_ctx_name:

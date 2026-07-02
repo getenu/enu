@@ -22,6 +22,13 @@ gdobj BuildNode of VoxelTerrain:
   var
     model* {.cursor.}: Build
     transform_zid: EID
+    # A model transform change is recorded here and applied in physics_process,
+    # not in the watch (which fires on the render tick), so the node moves on the
+    # same 60Hz tick as riders read it — smooth riding. Only set on a real model
+    # change, so it never overwrites a node-side edit (those sync node->model in
+    # process, with the watch paused).
+    pending_transform: Option[Transform]
+    positioned: bool # initial placement applied? (see the transform watch)
     default_view_distance: int
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
@@ -285,7 +292,14 @@ gdobj BuildNode of VoxelTerrain:
 
     self.transform_zid = self.model.transform_value.watch:
       if added:
-        self.transform = change.item
+        if self.positioned:
+          self.pending_transform = some(change.item)
+        else:
+          # Apply the initial placement immediately so the build doesn't flash at
+          # the origin for a frame; later (movement) changes defer to the physics
+          # tick for smooth riding.
+          self.transform = change.item
+          self.positioned = true
 
     self.model.sight_query_value.watch:
       if added:
@@ -295,6 +309,15 @@ gdobj BuildNode of VoxelTerrain:
         query.run(self.model)
         self.collision_layer = collision_layer
         self.model.sight_query = query
+
+  method physics_process(delta: float) =
+    # Apply a recorded model transform on the physics tick, so a rider reading us
+    # in its own physics_process samples a value that advanced on the same 60Hz
+    # tick — no render-vs-physics jitter. Cleared after applying so it can't
+    # overwrite a later node-side edit.
+    if self.pending_transform.is_some:
+      self.transform = self.pending_transform.get
+      self.pending_transform = none(Transform)
 
   method process(delta: float) =
     if ?self.model:
