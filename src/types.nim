@@ -55,14 +55,20 @@ const
   CHUNK_VOLUME* = ChunkDim * ChunkDim * ChunkDim # 4096
   ChunkSize* = vec3(16, 16, 16)
   MAX_BUILD_DIMENSION* = 65535 # VoxelBuffer.MAX_SIZE
-  EMPTY_VOXEL* = 0'u8
+  EMPTY_VOXEL* = 0'u16
+
+  # Voxel color index ranges. 0..6 are the named `Colors`; 7..63 are reserved
+  # for named-palette growth; STATIC_COLOR_BASE+ are per-Shared static RGB
+  # palette entries (env-independent).
+  STATIC_COLOR_BASE* = 64
+  MAX_STATIC_COLORS* = 4096
 
   # Delta thresholds
   MAX_CHANGES_FOR_DELTA* = 100
   MAX_DELTAS_BEFORE_SNAPSHOT* = 100
 
 type
-  PackedVoxel* = uint8
+  PackedVoxel* = uint16
 
   SnapshotData* = object
     data*: string
@@ -239,6 +245,14 @@ type
     emission_colors*: seq[godot.Color]
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
+    palette*: EdSeq[Color]
+      ## Static (non-named) voxel colors for this unit tree, in allocation
+      ## order. A packed color_index >= STATIC_COLOR_BASE indexes this seq.
+      ## Append-only; not persisted (edit JSON stores hex, load re-allocates).
+    palette_cache* {.ed_ignore.}: Table[Color, int]
+      ## Local color -> palette index cache; rebuilt when out of sync.
+      ## `ed_ignore`: per-side state — syncing it would race concurrent
+      ## lookups during body serialization.
 
   VoxelStore* = ref object
     # Local per-side render wrapper. The synced tables (`packed_chunks`,
@@ -272,8 +286,14 @@ type
     snapshots_flushed*: int
     deltas_flushed*: int
 
+  ColorIndexResolver* = proc(color_index: int): int64 {.gcsafe.}
+    ## Maps a packed color_index to the voxel library slot the engine should
+    ## render. Identity for named colors; static palette entries resolve to
+    ## runtime-registered library slots.
+
   VoxelRenderer* = ref object
     voxel_tool*: VoxelTool
+    resolver*: ColorIndexResolver
     buffer*: VoxelBuffer
     min_pos*: Vector3
     max_pos*: Vector3
@@ -330,7 +350,7 @@ type
   BlockLogEntry* =
     tuple[
       unit_id: string,
-      color: Colors,
+      color: Color,
       local_position: Vector3,
       global_position: Vector3,
       timestamp: MonoTime,

@@ -1,7 +1,7 @@
 import types, base_api, builds, vm_bridge_utils
 
 bridged_to_host:
-  proc place_block*(self: Build, position: Vector3, color: Colors)
+  proc place_block*(self: Build, position: Vector3, color: Color)
     ## Place a persistent MANUAL voxel. The block is saved to local_edits
     ## and survives reload. Intended for explicit user-style edits (eg.
     ## carving holes for windows, eval-driven edits from MCP). For

@@ -1,8 +1,21 @@
 proc get_int(a: VmArgs, i: Natural): int =
   int vm.get_int(a, i)
 
-proc get_colors(a: VmArgs, i: Natural): Colors =
-  Colors(vm.get_int(a, i))
+proc get_color(a: VmArgs, i: Natural): Color =
+  let fields = a.get_node(i).sons
+  result = Color(
+    r: fields[0].float_val.float32,
+    g: fields[1].float_val.float32,
+    b: fields[2].float_val.float32,
+    a: fields[3].float_val.float32,
+  )
+  # Snap VM float drift onto the named palette: a named color must stay
+  # exactly equal to its ACTION_COLORS entry so it packs as a named index
+  # (and environment remapping keeps applying to it later).
+  for named in ACTION_COLORS:
+    if abs(result.r - named.r) < 1e-5 and abs(result.g - named.g) < 1e-5 and
+        abs(result.b - named.b) < 1e-5 and abs(result.a - named.a) < 1e-5:
+      return named
 
 proc get_pnode(a: VmArgs, pos: int): PNode {.inline.} =
   a.get_node(pos)
@@ -54,7 +67,7 @@ proc to_result(val: float): BiggestFloat =
 proc to_result(val: SomeOrdinal or enum or bool): BiggestInt =
   BiggestInt(val)
 
-proc to_result(val: Vector3 or string or tuple): PNode =
+proc to_result(val: Vector3 or string or tuple or Color): PNode =
   val.to_node
 
 proc to_result(val: PNode): PNode =

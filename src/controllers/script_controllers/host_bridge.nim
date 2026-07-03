@@ -1,6 +1,7 @@
 import std/[os, macros, math, asyncfutures, hashes, times]
 import locks except Lock
-import pkg/godot except print
+import pkg/godot except print, Color
+import pkg/chroma
 import pkg/compiler/vm except get_int
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import pkg/compiler/ast except new_node
@@ -306,15 +307,13 @@ proc world_name(): string =
 proc level_name(): string =
   state.config.level
 
-proc color_to_lower(c: Colors): string =
-  case c
-  of ERASER: "eraser"
-  of BLUE: "blue"
-  of RED: "red"
-  of GREEN: "green"
-  of BLACK: "black"
-  of WHITE: "white"
-  of BROWN: "brown"
+proc color_to_lower(c: Color): string =
+  ## Block-log label: the name for named colors, hex for static ones.
+  let named = c.action_index
+  if named != ERASER or c == ACTION_COLORS[ERASER]:
+    to_lower_ascii($named)
+  else:
+    "#" & to_lower_ascii(c.to_html_hex)
 
 proc block_log(self: Unit): string =
   ## Recent blocks the player has placed (or erased) via the in-game block
@@ -611,11 +610,11 @@ proc scale(self: Unit): float =
   types.scale(self)
 
 
-proc color(self: Unit): Colors =
-  action_index self.color_value.value
+proc color(self: Unit): Color =
+  self.color_value.value
 
-proc `color=`(self: Unit, color: Colors) =
-  types.`color=`(self, ACTION_COLORS[color])
+proc `color=`(self: Unit, color: Color) =
+  types.`color=`(self, color)
 
 proc show(self: Unit): bool =
   VISIBLE in self.global_flags
@@ -1288,12 +1287,12 @@ proc find_voxel_overlaps(limit: int = 50): string =
       result &= "... (truncated at " & $limit & ")\n"
       return
 
-proc block_color_at(position: Vector3): Colors =
+proc block_color_at(position: Vector3): Color =
   let block_info = find_block_at(position)
   if block_info.is_some:
-    action_index(block_info.get.color)
+    block_info.get.color
   else:
-    ERASER
+    ACTION_COLORS[ERASER]
 
 proc count_draw(self: Build) =
   ## Cooperative pacing for the immediate drawing APIs. The logo APIs yield
@@ -1309,12 +1308,12 @@ proc count_draw(self: Build) =
       self.script_ctx.unyielded_draws = 0
       self.script_ctx.pause()
 
-proc draw_voxel(self: Build, position: Vector3, color: Colors) =
+proc draw_voxel(self: Build, position: Vector3, color: Color) =
   ## Paint a COMPUTED voxel. Goes through Build.draw, which only writes to
   ## local_voxels (not local_edits), so the block is regenerated when the
   ## script reloads and isn't bloating the save file. Backs place.
   self.count_draw
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (COMPUTED, color)
   self.draw(position, info)
 
 const
@@ -1380,7 +1379,7 @@ proc box_impl(
     w: int,
     h: int,
     d: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     pivot: int,
     at: Vector3,
@@ -1428,7 +1427,7 @@ proc box_impl(
   let iy_hi = u_hi.y.ceil.int
   let iz_hi = u_hi.z.ceil.int
 
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (COMPUTED, color)
   # 0.5 = half-voxel inclusion threshold. For axis-aligned cases this
   # is a no-op (voxel centres land exactly on integer coords, the
   # extra 0.5 margin doesn't add any cells). For off-axis cases it
@@ -1461,7 +1460,7 @@ proc box_impl(
 proc sphere_impl(
     self: Build,
     size: float,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -1475,7 +1474,7 @@ proc sphere_impl(
   let centre = if use_turtle: self.draw_transform.origin else: at
   let radius = size / 2.0
   let r_int = (radius + 0.5).floor.int
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (COMPUTED, color)
   for dx in -r_int .. r_int:
     for dy in -r_int .. r_int:
       for dz in -r_int .. r_int:
@@ -1491,7 +1490,7 @@ proc cylinder_impl(
     self: Build,
     size: float,
     height: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -1539,7 +1538,7 @@ proc cylinder_impl(
   let iy_hi = u_hi.y.ceil.int
   let iz_hi = u_hi.z.ceil.int
 
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (COMPUTED, color)
   for ix in ix_lo .. ix_hi:
     for iy in iy_lo .. iy_hi:
       for iz in iz_lo .. iz_hi:
@@ -1554,10 +1553,10 @@ proc cylinder_impl(
           continue
         self.draw(world, info)
 
-proc place_block(self: Build, position: Vector3, color: Colors) =
+proc place_block(self: Build, position: Vector3, color: Color) =
   ## Place a persistent MANUAL voxel. The block is saved to local_edits and
   ## survives reload. For programmatic block-placement use draw_voxel.
-  let info: VoxelInfo = (MANUAL, ACTION_COLORS[color])
+  let info: VoxelInfo = (MANUAL, color)
   self.add_voxel(position, info)
   self.voxels.set_edit(position, info)
 

@@ -15,10 +15,10 @@ bridged_to_host:
   proc draw_position*(self: Build): Vector3
   proc `draw_position=`*(self: Build, value: Vector3)
   proc has_block_at*(position: Vector3): bool
-  proc block_color_at*(position: Vector3): Colors
+  proc block_color_at*(position: Vector3): Color
   proc begin_asap*(self: Build)
   proc end_asap*(self: Build)
-  proc draw_voxel*(self: Build, position: Vector3, color: Colors)
+  proc draw_voxel*(self: Build, position: Vector3, color: Color)
     ## Paints a COMPUTED block at the given position. Re-runs of the script
     ## regenerate it, so it isn't persisted to the save file. Used by
     ## place (the box/sphere/cylinder primitives draw host-side). For
@@ -36,7 +36,7 @@ bridged_to_host:
     w: int,
     h: int,
     d: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     pivot: int,
     at: Vector3,
@@ -49,7 +49,7 @@ bridged_to_host:
   proc sphere_impl*(
     self: Build,
     size: float,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -59,7 +59,7 @@ bridged_to_host:
     self: Build,
     size: float,
     height: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -308,7 +308,7 @@ template can*(
 # ---- wall / floor --------------------------------------------------
 
 template wall*(
-    length: int, height: int = 4, color: Colors = active_unit().color
+    length: int, height: int = 4, color: Color = active_unit().color
 ) =
   ## A `length`-long, `height`-tall, 1-thick wall extending along the
   ## turtle's local forward. Leaves the turtle at the wall's last
@@ -321,7 +321,7 @@ template wall*(
     me.advance (length - 1).float
 
 template floor*(
-    length: int, width: int = length, color: Colors = active_unit().color
+    length: int, width: int = length, color: Color = active_unit().color
 ) =
   ## A `length`-deep, `width`-wide, 1-thick slab in the turtle's
   ## horizontal plane. Leaves the turtle at the slab's far edge

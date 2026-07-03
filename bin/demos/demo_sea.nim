@@ -2,10 +2,8 @@
 ## palms — as one large scaled build. Stays alive to keep the unit; ctrl-c
 ## (or kill) reaps it. Iterate by editing the params below and re-running.
 ##
-## Colors: the synced voxel format packs an ACTION_COLORS index, so only the
-## six palette colors exist — anything else packs as ERASER and draws nothing.
-## Shading is faked by hash-dithering palette colors (blue+black = depth,
-## blue/white = crests and surf, brown+white = sand, green+black = grass).
+## Colors: named palette colors stay env-remappable; every other RGB value
+## becomes a static palette entry, so shading here uses true gradients.
 ##
 ## Env overrides: SEA_SCALE, SEA_SIZE (metres), SEA_X, SEA_Z.
 import std/[math, os, strutils]
@@ -119,17 +117,35 @@ proc island_elev(x, z: float): float =
           t * 3.0
       result = max(result, e)
 
-# --- colors: the 6 palette colors, shaded by dithering -------------------------
+# --- colors: true gradients ----------------------------------------------------
+
+proc quant(v: float32): float32 =
+  ## Quantize to 1/32 steps: gradients stay visually smooth while the
+  ## distinct-color count (and so the build's static palette) stays small.
+  round(v * 32.0) / 32.0
+
+proc mix(a, b: Color, t: float): Color =
+  let t = clamp(t, 0.0, 1.0)
+  Color(
+    r: quant(a.r + (b.r - a.r) * t),
+    g: quant(a.g + (b.g - a.g) * t),
+    b: quant(a.b + (b.b - a.b) * t),
+    a: 1.0,
+  )
 
 let
-  blue = ACTION_COLORS[BLUE]
-  white = ACTION_COLORS[WHITE]
-  black = ACTION_COLORS[BLACK]
-  brown = ACTION_COLORS[BROWN]
-  green = ACTION_COLORS[GREEN]
-
-proc pick(ix, iz: int, salt: uint32, a, b: Color, b_chance: float): Color =
-  if hash01(ix, iz, salt) < b_chance: b else: a
+  deep_water = col"082f66"
+  mid_water = col"1565c0"
+  crest_water = col"3f9be8"
+  shallow_water = col"46c6b8"
+  foam = col"f2f8fc"
+  wet_sand = col"b39c6b"
+  dry_sand = col"e8d9a6"
+  low_grass = col"6fbf4e"
+  high_grass = col"3e8a30"
+  rock = col"7d6a55"
+  trunk_col = col"6b4a2e"
+  palm_col = col"2f7d32"
 
 # --- generation ----------------------------------------------------------------
 
@@ -187,10 +203,8 @@ build.buffer:
 
       var surface: Color
       if land[i]:
-        if e < 0.35:
-          surface = pick(ix, iz, 3, brown, black, 0.2) # wet sand
-        elif e < 1.0:
-          surface = pick(ix, iz, 3, brown, white, 0.3) # dry beach sparkle
+        if e < 1.0:
+          surface = mix(wet_sand, dry_sand, e / 1.0)
         else:
           var slope = 0.0
           if ix > 0 and ix < DIM - 1:
@@ -198,30 +212,29 @@ build.buffer:
           if iz > 0 and iz < DIM - 1:
             slope = max(slope, abs(elev[idx(ix, iz + 1)] - elev[idx(ix, iz - 1)]).float)
           if slope > 1.15 and e > 2.5:
-            surface = pick(ix, iz, 5, brown, black, 0.45) # rock face
+            surface = mix(rock, high_grass, 0.15)
           else:
-            # grass, textured with dark patches following the fbm
+            # grass: darker with altitude, mottled by the fbm patches
             let patch = fbm(mx / 13.0, mz / 13.0, 80, 3)
-            if patch < 0.38:
-              surface = pick(ix, iz, 6, green, black, 0.25)
-            else:
-              surface = pick(ix, iz, 6, green, black, 0.06)
+            let alt = clamp((e - 1.0) / 8.0, 0.0, 1.0)
+            surface = mix(low_grass, high_grass, alt * 0.6 + patch * 0.4)
       else:
-        # water: blue, dithered darker in troughs, white toward crests + shore
+        # water: depth-graded blues, turquoise shallows, foam at the shore
         let t = clamp((h + 1.0) / 2.0, 0.0, 1.0)
-        if t < 0.3:
-          surface = pick(ix, iz, 7, blue, black, (0.3 - t) / 0.3 * 0.5)
-        elif t > 0.62:
-          surface = pick(ix, iz, 7, blue, white, (t - 0.62) * 0.5)
-        else:
-          surface = blue
+        surface =
+          if t < 0.5:
+            mix(deep_water, mid_water, t / 0.5)
+          else:
+            mix(mid_water, crest_water, (t - 0.5) / 0.5)
+        let shallow = clamp(e + 1.0, 0.0, 1.0)
+        if shallow > 0.0:
+          surface = mix(surface, shallow_water, shallow * 0.85)
         # churned surf building toward the shoreline
         if e > -0.55:
-          let surf = clamp((e + 0.55) / 0.55, 0.0, 1.0)
-          surface = pick(ix, iz, 8, surface, white, surf * 0.6)
+          surface = mix(surface, foam, (e + 0.55) / 0.55 * 0.55)
         # shoreline foam ring
         if e > -0.18:
-          surface = white
+          surface = foam
         else:
           # whitecaps: steep crests, broken up by noise
           var grad = 0.0
@@ -231,20 +244,20 @@ build.buffer:
             grad += abs(wave[idx(ix, iz + 1)] - wave[idx(ix, iz - 1)]).float
           grad = grad / (2.0 * SCALE)
           if h > 0.32 and grad > 0.55 and fbm(mx / 3.7, mz / 3.7, 90, 3) > 0.52:
-            surface = white
+            surface = mix(surface, foam, 0.9)
           elif hash01(ix, iz, 11) > 0.9975 and h > 0.0:
-            surface = white # lone flecks
+            surface = foam # lone flecks
 
       for y in lo .. hi:
         let c =
           if y == hi:
             surface
           elif land[i]:
-            brown
+            mix(wet_sand, rock, 0.5)
           elif y == hi - 1:
-            blue
+            mid_water
           else:
-            black # unlit depths under the surface
+            deep_water # depths under the surface
         build.draw(
           vec3(float(ix - HALF), float(y), float(iz - HALF)), (COMPUTED, c)
         )
@@ -262,7 +275,7 @@ build.buffer:
           px = float(ix - HALF)
           pz = float(iz - HALF)
         for y in 1 .. tall:
-          build.draw(vec3(px, float(base + y), pz), (COMPUTED, brown))
+          build.draw(vec3(px, float(base + y), pz), (COMPUTED, trunk_col))
         let ty = float(base + tall)
         for (dx, dy, dz) in [
           (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1),
@@ -271,7 +284,7 @@ build.buffer:
         ]:
           build.draw(
             vec3(px + dx.float, ty + dy.float, pz + dz.float),
-            (COMPUTED, green),
+            (COMPUTED, palm_col),
           )
         voxels += tall + 13
         palms.inc

@@ -5,12 +5,15 @@ import core
 import models/colors
 
 type ChunkFormat* {.size: sizeof(uint8).} = enum
-  FMT_RLE = 0x00
-  FMT_SPARSE_FULL = 0x01
-  FMT_SPARSE_DELTA = 0x02
+  FMT_RLE = 0x00 # legacy 8-bit, decode-only
+  FMT_SPARSE_FULL = 0x01 # legacy 8-bit, decode-only
+  FMT_SPARSE_DELTA = 0x02 # legacy 8-bit, decode-only
   FMT_EMPTY = 0x03
+  FMT_RLE16 = 0x04
+  FMT_SPARSE_FULL16 = 0x05
+  FMT_SPARSE_DELTA16 = 0x06
 
-const CMD_REPEAT* = 241'u8
+const CMD_REPEAT* = 241'u8 # legacy 8-bit RLE escape (decoder only)
 
 proc pack_voxel*(color_index: int, kind_ord: int): PackedVoxel =
   ((color_index * 3) + kind_ord + 1).PackedVoxel
@@ -23,6 +26,77 @@ proc unpack_voxel*(
   else:
     let val = packed.int - 1
     (val div 3, val mod 3)
+
+var palette_warned {.threadvar.}: bool
+
+proc rebuild_palette_cache(shared: Shared) =
+  shared.palette_cache.clear
+  var i = 0
+  for color in shared.palette:
+    shared.palette_cache[color] = i
+    inc i
+
+proc pack_color_index*(shared: Shared, color: Color): int =
+  ## A color's packed index. Named colors keep their `Colors` ordinal — they
+  ## stay distinguishable from static RGB so environments can remap them
+  ## later. Anything else allocates a slot in the Shared's static palette.
+  let named = color.action_index
+  if named != ERASER or color == ACTION_COLORS[ERASER]:
+    return named.ord
+
+  var color = color
+  color.a = 1.0 # a non-eraser color must not pack invisibly
+  let renamed = color.action_index
+  if renamed != ERASER:
+    return renamed.ord
+
+  if shared.is_nil:
+    # bare stores (tests) have no palette; keep the legacy quantization
+    return ERASER.ord
+
+  # `<` not `!=`: nearest-color snaps add extra cache entries beyond the
+  # palette itself, and must survive until a genuinely new sync arrives.
+  if shared.palette_cache.len < shared.palette.len:
+    shared.rebuild_palette_cache
+  if color in shared.palette_cache:
+    return STATIC_COLOR_BASE + shared.palette_cache[color]
+
+  if shared.palette.len >= MAX_STATIC_COLORS:
+    var best = 0
+    var best_dist = float32.high
+    var i = 0
+    for existing in shared.palette:
+      let d = color.distance(existing)
+      if d < best_dist:
+        best_dist = d
+        best = i
+      inc i
+    if not palette_warned:
+      palette_warned = true
+      warn "static color palette full; snapping to nearest existing color"
+    # cache the snap so a repeated color costs one lookup, not a scan
+    shared.palette_cache[color] = best
+    return STATIC_COLOR_BASE + best
+
+  let idx = shared.palette.len
+  shared.palette.add color
+  shared.palette_cache[color] = idx
+  STATIC_COLOR_BASE + idx
+
+proc resolve_color*(shared: Shared, color_index: int): Color =
+  ## Reverse of `pack_color_index`: named ordinal or static palette lookup.
+  if color_index < STATIC_COLOR_BASE:
+    if color_index <= ACTION_COLORS.high.ord:
+      return ACTION_COLORS[Colors(color_index)]
+    return ACTION_COLORS[WHITE] # reserved named range we don't know yet
+  let idx = color_index - STATIC_COLOR_BASE
+  if not shared.is_nil and idx < shared.palette.len:
+    return shared.palette[idx]
+  # palette entry hasn't synced (or bare store) — visible fallback
+  ACTION_COLORS[WHITE]
+
+proc shared_of(self: VoxelStore): Shared =
+  if ?self.build: self.build.shared_value.value else: nil
 
 proc linear_position*(x, y, z: int): int {.inline.} =
   z + y * ChunkDim + x * ChunkDim * ChunkDim
@@ -92,7 +166,36 @@ proc to_bytes(s: string): seq[byte] =
   if s.len > 0:
     copyMem(addr result[0], unsafeAddr s[0], s.len)
 
-proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
+proc write_varint(s: var seq[byte], value: uint64) =
+  var buf: array[max_var_int_len, byte]
+  let len = write_vu64(buf, value)
+  for i in 0 ..< len:
+    s.add buf[i]
+
+proc read_varint(data: openArray[byte], i: var int): uint64 =
+  var buf: array[max_var_int_len, byte]
+  let available = min(max_var_int_len, data.len - i)
+  for j in 0 ..< available:
+    buf[j] = data[i + j]
+  i += read_vu64(buf, result)
+
+proc add_u16(s: var seq[byte], v: PackedVoxel) =
+  s.add byte(v and 0xff)
+  s.add byte(v shr 8)
+
+proc read_u16(data: openArray[byte], i: var int): PackedVoxel =
+  result = PackedVoxel(data[i].uint16 or (data[i + 1].uint16 shl 8))
+  i += 2
+
+proc fits_8bit(voxels: array[CHUNK_VOLUME, PackedVoxel]): bool =
+  for v in voxels:
+    if v > 255:
+      return false
+  true
+
+proc encode_rle8_data(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
+  ## Legacy FMT_RLE: 1 byte per voxel with the CMD_REPEAT escape. Only valid
+  ## when every value fits a byte; old builds can decode it.
   result = @[FMT_RLE.byte]
   var i = 0
   while i < CHUNK_VOLUME:
@@ -105,21 +208,64 @@ proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
     if run_length >= 3:
       result.add CMD_REPEAT
       result.add (run_length - 3).uint8
-      result.add current
+      result.add current.uint8
       i += run_length
     else:
       for _ in 0 ..< run_length:
         if current >= CMD_REPEAT:
           result.add CMD_REPEAT
           result.add 0'u8
-          result.add current
+          result.add current.uint8
         else:
-          result.add current
+          result.add current.uint8
         inc i
+
+proc encode_rle16_data(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
+  ## FMT_RLE16: `[tag u8][count varint][payload]` tokens — tag 1 repeats one
+  ## u16 value `count` times, tag 0 is a literal run of `count` u16 values.
+  ## No escape byte, so alternating (dithered) chunks stay ~2 B/voxel.
+  result = @[FMT_RLE16.byte]
+  var i = 0
+  while i < CHUNK_VOLUME:
+    var run = 1
+    while i + run < CHUNK_VOLUME and voxels[i + run] == voxels[i]:
+      inc run
+    if run >= 3:
+      result.add 1'u8
+      result.write_varint run.uint64
+      result.add_u16 voxels[i]
+      i += run
+    else:
+      # literal run: everything up to the start of the next >= 3 repeat
+      let start = i
+      var j = i
+      while j < CHUNK_VOLUME:
+        var r = 1
+        while j + r < CHUNK_VOLUME and voxels[j + r] == voxels[j]:
+          inc r
+        if r >= 3:
+          break
+        j += r
+      result.add 0'u8
+      result.write_varint (j - start).uint64
+      for k in start ..< j:
+        result.add_u16 voxels[k]
+      i = j
+
+proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
+  ## Chunks whose values all fit a byte (pure named colors, and the first
+  ## ~16 static palette entries) keep the legacy 1-byte format — identical
+  ## wire size to before, decodable by old builds. Wider values escalate the
+  ## chunk to FMT_RLE16.
+  if fits_8bit(voxels):
+    encode_rle8_data(voxels)
+  else:
+    encode_rle16_data(voxels)
 
 proc decode_rle_data*(
     data: openArray[byte], start: int = 1
 ): array[CHUNK_VOLUME, PackedVoxel] =
+  ## Legacy 8-bit FMT_RLE decoder (CMD_REPEAT escape).
   var out_idx = 0
   var i = start
   while i < data.len and out_idx < CHUNK_VOLUME:
@@ -137,48 +283,70 @@ proc decode_rle_data*(
       inc out_idx
       inc i
 
+proc decode_rle16_data*(
+    data: openArray[byte], start: int = 1
+): array[CHUNK_VOLUME, PackedVoxel] =
+  var out_idx = 0
+  var i = start
+  while i < data.len and out_idx < CHUNK_VOLUME:
+    let tag = data[i]
+    inc i
+    let count = read_varint(data, i).int
+    if tag == 1'u8:
+      if i + 1 >= data.len:
+        break
+      let value = read_u16(data, i)
+      for _ in 0 ..< count:
+        if out_idx < CHUNK_VOLUME:
+          result[out_idx] = value
+          inc out_idx
+    else:
+      for _ in 0 ..< count:
+        if i + 1 >= data.len or out_idx >= CHUNK_VOLUME:
+          break
+        result[out_idx] = read_u16(data, i)
+        inc out_idx
+
 proc encode_sparse_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
-  result = @[FMT_SPARSE_FULL.byte]
+  let wide = not fits_8bit(voxels)
+  result = @[if wide: FMT_SPARSE_FULL16.byte else: FMT_SPARSE_FULL.byte]
   var count = 0
   for v in voxels:
     if v != EMPTY_VOXEL:
       inc count
-
-  var buf: array[max_var_int_len, byte]
-  let len = write_vu64(buf, count.uint64)
-  for i in 0 ..< len:
-    result.add buf[i]
+  result.write_varint count.uint64
 
   for i, v in voxels:
     if v != EMPTY_VOXEL:
-      let pos_len = write_vu64(buf, i.uint64)
-      for j in 0 ..< pos_len:
-        result.add buf[j]
-      result.add v
+      result.write_varint i.uint64
+      if wide:
+        result.add_u16 v
+      else:
+        result.add v.uint8
 
 proc decode_sparse_data*(
-    data: openArray[byte], start: int = 1
+    data: openArray[byte], start: int = 1, wide = false
 ): array[CHUNK_VOLUME, PackedVoxel] =
+  ## Sparse decoder: `wide` selects u16 values (0x05/0x06) over the legacy
+  ## single-byte values (0x01/0x02).
   var i = start
-  var buf: array[max_var_int_len, byte]
-  let available = min(max_var_int_len, data.len - i)
-  for j in 0 ..< available:
-    buf[j] = data[i + j]
-  var count: uint64
-  let count_len = read_vu64(buf, count)
-  i += count_len
+  let count = read_varint(data, i).int
 
-  for _ in 0 ..< count.int:
-    let pos_available = min(max_var_int_len, data.len - i)
-    for j in 0 ..< pos_available:
-      buf[j] = data[i + j]
-    var pos: uint64
-    let pos_len = read_vu64(buf, pos)
-    i += pos_len
-    let voxel = data[i].byte.PackedVoxel
-    inc i
-    if pos < CHUNK_VOLUME.uint64:
-      result[pos.int] = voxel
+  for _ in 0 ..< count:
+    let pos = read_varint(data, i)
+    if wide:
+      if i + 1 >= data.len:
+        break
+      let voxel = read_u16(data, i)
+      if pos < CHUNK_VOLUME.uint64:
+        result[pos.int] = voxel
+    else:
+      if i >= data.len:
+        break
+      let voxel = data[i].PackedVoxel
+      inc i
+      if pos < CHUNK_VOLUME.uint64:
+        result[pos.int] = voxel
 
 proc encode_chunk*(voxels: array[CHUNK_VOLUME, PackedVoxel]): PackedChunk =
   var has_voxels = false
@@ -207,6 +375,10 @@ proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
     result = decode_rle_data(packed.data.to_bytes, 1)
   of FMT_SPARSE_FULL, FMT_SPARSE_DELTA:
     result = decode_sparse_data(packed.data.to_bytes, 1)
+  of FMT_RLE16:
+    result = decode_rle16_data(packed.data.to_bytes, 1)
+  of FMT_SPARSE_FULL16, FMT_SPARSE_DELTA16:
+    result = decode_sparse_data(packed.data.to_bytes, 1, wide = true)
   of FMT_EMPTY:
     discard
 
@@ -217,18 +389,23 @@ proc is_empty*(packed: PackedChunk): bool =
 proc encode_delta*(
     changes: openArray[tuple[pos: Vector3, voxel: PackedVoxel]]
 ): DeltaUpdate =
-  result.data = $char(FMT_SPARSE_DELTA.byte)
-  var buf: array[max_var_int_len, byte]
-  let count_len = write_vu64(buf, changes.len.uint64)
-  for i in 0 ..< count_len:
-    result.data.add char(buf[i])
+  var wide = false
+  for (_, voxel) in changes:
+    if voxel > 255:
+      wide = true
+      break
+
+  var bytes: seq[byte] =
+    @[if wide: FMT_SPARSE_DELTA16.byte else: FMT_SPARSE_DELTA.byte]
+  bytes.write_varint changes.len.uint64
 
   for (pos, voxel) in changes:
-    let linear = linear_position(pos)
-    let pos_len = write_vu64(buf, linear.uint64)
-    for j in 0 ..< pos_len:
-      result.data.add char(buf[j])
-    result.data.add char(voxel)
+    bytes.write_varint linear_position(pos).uint64
+    if wide:
+      bytes.add_u16 voxel
+    else:
+      bytes.add voxel.uint8
+  result.data = bytes.to_string
 
 proc pack_and_store_edited_voxels*(
     shared: Shared, id: string, edits: openArray[(Vector3, VoxelInfo)]
@@ -248,7 +425,7 @@ proc pack_and_store_edited_voxels*(
         chunks[chunk_id] = empty_chunk
 
       chunks[chunk_id][linear] =
-        pack_voxel(info.color.action_index.ord, info.kind.ord)
+        pack_voxel(pack_color_index(shared, info.color), info.kind.ord)
 
   for chunk_id, voxels in chunks:
     let packed = encode_chunk(voxels)
@@ -259,27 +436,30 @@ proc pack_and_store_edited_voxels*(
 proc decode_delta*(
     delta: DeltaUpdate
 ): seq[tuple[pos: Vector3, voxel: PackedVoxel]] =
-  if delta.data.len == 0 or delta.data[0].byte != FMT_SPARSE_DELTA.byte:
+  if delta.data.len == 0:
+    return @[]
+  let format = delta.data[0].byte
+  let wide = format == FMT_SPARSE_DELTA16.byte
+  if not wide and format != FMT_SPARSE_DELTA.byte:
     return @[]
 
+  let data = delta.data.to_bytes
   var i = 1
-  var buf: array[max_var_int_len, byte]
-  let available = min(max_var_int_len, delta.data.len - i)
-  for j in 0 ..< available:
-    buf[j] = delta.data[i + j].byte
-  var count: uint64
-  let count_len = read_vu64(buf, count)
-  i += count_len
+  let count = read_varint(data, i).int
 
-  for _ in 0 ..< count.int:
-    let pos_available = min(max_var_int_len, delta.data.len - i)
-    for j in 0 ..< pos_available:
-      buf[j] = delta.data[i + j].byte
-    var linear: uint64
-    let pos_len = read_vu64(buf, linear)
-    i += pos_len
-    let voxel = delta.data[i].byte.PackedVoxel
-    inc i
+  for _ in 0 ..< count:
+    let linear = read_varint(data, i)
+    let voxel =
+      if wide:
+        if i + 1 >= data.len:
+          break
+        read_u16(data, i)
+      else:
+        if i >= data.len:
+          break
+        let v = data[i].PackedVoxel
+        inc i
+        v
     result.add (from_linear(linear.int), voxel)
 
 proc init*(
@@ -331,7 +511,8 @@ proc build_chunk_state(
   if chunk_id in self.local_voxels:
     for pos, info in self.local_voxels[chunk_id]:
       let linear = chunk_to_local(chunk_id, pos)
-      result[linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
+      result[linear] =
+        pack_voxel(pack_color_index(self.shared_of, info.color), info.kind.ord)
 
 proc build_edit_state(
     self: VoxelStore, chunk_id: Vector3
@@ -340,7 +521,8 @@ proc build_edit_state(
     for local_pos, info in self.local_edits[chunk_id]:
       let linear = linear_position(local_pos)
       if linear >= 0 and linear < CHUNK_VOLUME:
-        result[linear] = pack_voxel(info.color.action_index.ord, info.kind.ord)
+        result[linear] =
+          pack_voxel(pack_color_index(self.shared_of, info.color), info.kind.ord)
 
 proc flush_chunk_snapshot(self: VoxelStore, chunk_id: Vector3) =
   let voxels = self.build_chunk_state(chunk_id)
@@ -497,7 +679,8 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
     floor_mod(position.y.int, 16).float,
     floor_mod(position.z.int, 16).float,
   )
-  let packed = pack_voxel(voxel.color.action_index.ord, voxel.kind.ord)
+  let packed =
+    pack_voxel(pack_color_index(self.shared_of, voxel.color), voxel.kind.ord)
 
   if self.ctx.metrics_label == "main" or self.immediate:
     self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
@@ -563,7 +746,8 @@ proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
     self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
   self.local_edits[chunk_id][local_pos] = info
 
-  let packed = pack_voxel(info.color.action_index.ord, info.kind.ord)
+  let packed =
+    pack_voxel(pack_color_index(self.shared_of, info.color), info.kind.ord)
 
   if self.ctx.metrics_label == "main" or self.immediate:
     self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
@@ -634,7 +818,7 @@ proc rebuild_local_edits*(self: VoxelStore) =
         if chunk_id notin self.local_edits:
           self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
         self.local_edits[chunk_id][local_pos] =
-          (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
+          (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
 
   if not ?self.edit_deltas:
     return
@@ -654,7 +838,7 @@ proc rebuild_local_edits*(self: VoxelStore) =
           if chunk_id notin self.local_edits:
             self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
           self.local_edits[chunk_id][local_pos] =
-            (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
+            (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
 
 proc apply_snapshot*(
     self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData
@@ -688,7 +872,7 @@ proc apply_snapshot*(
           chunk_id.y * 16 + pos.y,
           chunk_id.z * 16 + pos.z,
         )
-        let color = ACTION_COLORS[Colors(color_idx)]
+        let color = resolve_color(self.shared_of, color_idx)
         let kind = VoxelKind(kind_ord)
         self.local_voxels[chunk_id][world_pos] = (kind, color)
         if kind != HOLE:
@@ -758,8 +942,21 @@ iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
 proc chunk_aabb(chunk_id: Vector3): AABB {.inline.} =
   init_aabb(chunk_id * ChunkDim, vec3(ChunkDim, ChunkDim, ChunkDim))
 
+proc library_slot(
+    resolver: ColorIndexResolver, color_idx: int
+): int64 {.inline.} =
+  ## The engine voxel type id for a packed color index. Named colors are
+  ## their own library slots; static palette indices need the resolver.
+  if color_idx < STATIC_COLOR_BASE or resolver.is_nil:
+    color_idx.int64
+  else:
+    resolver(color_idx)
+
 proc render_snapshot_direct*(
-    voxel_tool: VoxelTool, chunk_id: Vector3, snapshot: SnapshotData
+    voxel_tool: VoxelTool,
+    chunk_id: Vector3,
+    snapshot: SnapshotData,
+    resolver: ColorIndexResolver = nil,
 ): int {.discardable.} =
   ## Render a chunk's snapshot into the terrain. Checks
   ## `is_area_editable` first: if the chunk's data block is fully
@@ -776,7 +973,9 @@ proc render_snapshot_direct*(
       if packed_voxel != EMPTY_VOXEL:
         let local_pos = from_linear(linear)
         let (color_idx, _) = unpack_voxel(packed_voxel)
-        voxel_tool.set_voxel(chunk_min + local_pos, color_idx.int64)
+        voxel_tool.set_voxel(
+          chunk_min + local_pos, resolver.library_slot(color_idx)
+        )
         inc result
   else:
     let buffer = gdnew[VoxelBuffer]()
@@ -788,14 +987,17 @@ proc render_snapshot_direct*(
         let local_pos = from_linear(linear)
         let (color_idx, _) = unpack_voxel(packed_voxel)
         buffer.set_voxel(
-          color_idx.int64,
+          resolver.library_slot(color_idx),
           local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
         )
         inc result
     voxel_tool.paste(chunk_min, buffer, 1, 0)
 
 proc render_delta_direct*(
-    voxel_tool: VoxelTool, chunk_id: Vector3, delta: DeltaUpdate
+    voxel_tool: VoxelTool,
+    chunk_id: Vector3,
+    delta: DeltaUpdate,
+    resolver: ColorIndexResolver = nil,
 ): int {.discardable.} =
   ## Render a delta into the terrain. Same fast/slow split as
   ## render_snapshot_direct — `set_voxel` for editable chunks, `paste`
@@ -813,7 +1015,7 @@ proc render_delta_direct*(
         voxel_tool.set_voxel(world_pos, 0)
       else:
         let (color_idx, _) = unpack_voxel(packed_voxel)
-        voxel_tool.set_voxel(world_pos, color_idx.int64)
+        voxel_tool.set_voxel(world_pos, resolver.library_slot(color_idx))
       inc result
   else:
     let buffer = gdnew[VoxelBuffer]()
@@ -829,7 +1031,7 @@ proc render_delta_direct*(
       else:
         let (color_idx, _) = unpack_voxel(packed_voxel)
         buffer.set_voxel(
-          color_idx.int64,
+          resolver.library_slot(color_idx),
           local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
         )
         inc result
@@ -849,9 +1051,13 @@ proc erase_chunk_direct*(voxel_tool: VoxelTool, chunk_id: Vector3) =
 
 const ASAP_PASTE_INTERVAL = init_duration(seconds = 2)
 
-proc init*(_: type VoxelRenderer, voxel_tool: VoxelTool): VoxelRenderer =
+proc init*(
+    _: type VoxelRenderer,
+    voxel_tool: VoxelTool,
+    resolver: ColorIndexResolver = nil,
+): VoxelRenderer =
   assert ?voxel_tool
-  VoxelRenderer(voxel_tool: voxel_tool)
+  VoxelRenderer(voxel_tool: voxel_tool, resolver: resolver)
 
 proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
   let chunk_min = chunk_id * ChunkDim
@@ -923,8 +1129,8 @@ proc buffer_snapshot*(
       let buffer_pos = world_pos - self.min_pos
       let (color_idx, _) = unpack_voxel(packed_voxel)
       self.buffer.set_voxel(
-        color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64,
-        buffer_pos.z.int64,
+        self.resolver.library_slot(color_idx), buffer_pos.x.int64,
+        buffer_pos.y.int64, buffer_pos.z.int64,
       )
       inc result
   self.dirty = true
@@ -946,8 +1152,8 @@ proc buffer_delta*(
     else:
       let (color_idx, _) = unpack_voxel(packed_voxel)
       self.buffer.set_voxel(
-        color_idx.int64, buffer_pos.x.int64, buffer_pos.y.int64,
-        buffer_pos.z.int64,
+        self.resolver.library_slot(color_idx), buffer_pos.x.int64,
+        buffer_pos.y.int64, buffer_pos.z.int64,
       )
       inc result
   self.dirty = true

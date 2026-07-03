@@ -7,20 +7,26 @@ import
     ray_cast,
   ]
 import core, models/[units, builds, colors, voxels], gdutils
-import ./queries
+import ./queries, ./voxel_library_registry
 
 const
   highlight_glow = 1.0
   default_glow = 0.0
   error_flash_time = 0.5.seconds
+  rgb_material_index = 6
+    ## material/6: the shared vertex-color material static RGB voxels render
+    ## with (materials 0..5 stay the uniform-tinted named colors).
 
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
 var hidden_shader {.threadvar.}: Shader
+var rgb_shader {.threadvar.}: Shader
+var hidden_rgb_shader {.threadvar.}: Shader
 
 gdobj BuildNode of VoxelTerrain:
   var
     model* {.cursor.}: Build
+    resolver: ColorIndexResolver
     transform_zid: EID
     # A model transform change is recorded here and applied in physics_process,
     # not in the watch (which fires on the render tick), so the node moves on the
@@ -70,8 +76,10 @@ gdobj BuildNode of VoxelTerrain:
         if ASAP_MODE in self.model.global_flags:
           painted = self.renderer.buffer_delta(chunk_id, change.item)
         elif ?self.renderer.voxel_tool:
-          painted =
-            render_delta_direct(self.renderer.voxel_tool, chunk_id, change.item)
+          painted = render_delta_direct(
+            self.renderer.voxel_tool, chunk_id, change.item, self.resolver
+          )
+        flush_registry()
         self.model.rendered_voxel_count =
           self.model.rendered_voxel_count + painted
 
@@ -102,7 +110,7 @@ gdobj BuildNode of VoxelTerrain:
           painted = self.renderer.buffer_snapshot(chunk_id, snapshot)
         elif ?self.renderer.voxel_tool:
           painted = render_snapshot_direct(
-            self.renderer.voxel_tool, chunk_id, snapshot
+            self.renderer.voxel_tool, chunk_id, snapshot, self.resolver
           )
         self.model.rendered_voxel_count =
           self.model.rendered_voxel_count + painted
@@ -116,13 +124,14 @@ gdobj BuildNode of VoxelTerrain:
               painted = painted + self.renderer.buffer_delta(chunk_id, delta)
             elif ?self.renderer.voxel_tool:
               painted = painted + render_delta_direct(
-                self.renderer.voxel_tool, chunk_id, delta
+                self.renderer.voxel_tool, chunk_id, delta, self.resolver
               )
           if painted > 0:
             self.model.rendered_voxel_count =
               self.model.rendered_voxel_count + painted
 
           self.watch_delta_seq(chunk_id, delta_seq)
+      flush_registry()
 
   method on_block_unloaded(chunk_id: Vector3) =
     if ?self.model:
@@ -135,44 +144,42 @@ gdobj BuildNode of VoxelTerrain:
         self.model.voxels.chunk_deltas.release(chunk_id)
 
   proc set_glow(glow: float) =
-    let library = self.mesher.as(VoxelMesherBlocky).library
-    for i in 0 ..< library.voxel_count.int:
-      let m = self.get_material(i).as(ShaderMaterial)
-      if ?m:
-        m.set_shader_param("emission_energy", glow.to_variant)
+    # Iterate the build's own materials, not the (dynamically growing)
+    # library — one entry per terrain material slot.
+    for m in self.model.shared.materials:
+      m.set_shader_param("emission_energy", glow.to_variant)
 
   proc set_highlight() =
-    let library = self.mesher.as(VoxelMesherBlocky).library
-    for i in 0 ..< library.voxel_count.int:
-      let m = self.get_material(i).as(ShaderMaterial)
-      if ?m:
-        if self.error_highlight_on:
-          m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
-        else:
-          m.set_shader_param(
-            "emission", self.model.shared.emission_colors[i].to_variant
-          )
+    for i, m in self.model.shared.materials:
+      if self.error_highlight_on:
+        m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
+      else:
+        m.set_shader_param(
+          "emission", self.model.shared.emission_colors[i].to_variant
+        )
 
-        if HIGHLIGHT in self.model.local_flags or
-            (
-              HIGHLIGHT_ERROR in self.model.global_flags and
-              self.error_highlight_on
-            ):
-          m.set_shader_param("emission_energy", highlight_glow.to_variant)
-        else:
-          m.set_shader_param("emission_energy", self.model.glow.to_variant)
+      if HIGHLIGHT in self.model.local_flags or
+          (
+            HIGHLIGHT_ERROR in self.model.global_flags and
+            self.error_highlight_on
+          ):
+        m.set_shader_param("emission_energy", highlight_glow.to_variant)
+      else:
+        m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
   proc set_visibility() =
     if VISIBLE in self.model.global_flags:
       self.visible = true
 
-      for material in self.model.shared.materials:
-        material.shader = shader
+      for i, material in self.model.shared.materials:
+        material.shader =
+          if i == rgb_material_index: rgb_shader else: shader
     elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
 
-      for material in self.model.shared.materials:
-        material.shader = hidden_shader
+      for i, material in self.model.shared.materials:
+        material.shader =
+          if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
     else:
       self.visible = false
 
@@ -353,8 +360,15 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.init_voxels_if_needed()
 
+    # Static RGB colors resolve through the process-global library registry;
+    # named indices pass through untouched (identity below STATIC_COLOR_BASE).
+    set_registry_library(self.mesher.as(VoxelMesherBlocky).library)
+    let model = self.model
+    self.resolver = proc(color_index: int): int64 =
+      slot_for(resolve_color(model.shared, color_index))
+
     # Create renderer for ASAP mode buffer operations
-    self.renderer = VoxelRenderer.init(self.get_voxel_tool())
+    self.renderer = VoxelRenderer.init(self.get_voxel_tool(), self.resolver)
 
     # Builds default to ASAP, so the flag is usually set before this node
     # exists — the ASAP_MODE.added watch never fires for it. Adopt the
@@ -378,4 +392,7 @@ proc init*(_: type BuildNode): BuildNode =
     build_scene = load("res://components/BuildNode.tscn") as PackedScene
     shader = load("res://shaders/terrain_voxel.shader") as Shader
     hidden_shader = load("res://shaders/terrain_voxel_hidden.shader") as Shader
+    rgb_shader = load("res://shaders/terrain_voxel_rgb.shader") as Shader
+    hidden_rgb_shader =
+      load("res://shaders/terrain_voxel_hidden_rgb.shader") as Shader
   result = build_scene.instance() as BuildNode

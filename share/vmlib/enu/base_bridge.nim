@@ -37,8 +37,8 @@ bridged_to_host:
   proc hit*(self: Unit, node: Unit): bool
   proc `velocity=`*(self: Unit, velocity: Vector3)
   proc velocity*(self: Unit): Vector3
-  proc color*(self: Unit): Colors
-  proc `color=`*(self: Unit, color: Colors)
+  proc color*(self: Unit): Color
+  proc `color=`*(self: Unit, color: Color)
   proc show*(self: Unit): bool
   proc `show=`*(self: Unit, value: bool)
   proc frame_created*(self: Unit): int

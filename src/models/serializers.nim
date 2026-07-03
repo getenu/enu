@@ -38,27 +38,6 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   else:
     self.show_tools = true
 
-proc to_json_hook(self: Color): JsonNode =
-  result =
-    if self == ACTION_COLORS[ERASER]:
-      %""
-    else:
-      for i, color in Colors.enum_fields:
-        if self == ACTION_COLORS[Colors(i)]:
-          return %color
-      %self.to_html_hex
-
-proc from_json_hook(self: var Color, json: JsonNode) =
-  let hex = json.get_str
-  if hex == "":
-    self = ACTION_COLORS[ERASER]
-  else:
-    for i, color in Colors.enum_fields:
-      if color.to_lower == hex.to_lower:
-        self = ACTION_COLORS[Colors(i)]
-        return
-    self = hex.parse_html_hex
-
 proc to_json_hook*(self: VoxelInfo): JsonNode =
   %[%self.kind.ord, self.color.to_json_hook]
 
@@ -165,12 +144,12 @@ proc `$`(self: VoxelInfo): string =
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
   \"[{$[self.voxel.x, self.voxel.y, self.voxel.z]}, [{int self.info.kind}, {self.info.color}]]"
 
-proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
+proc edits_to_string(shared: Shared): string =
   ## Serialize edit_snapshots to JSON format for backwards compatibility
   # Group edits by unit_id
   var by_unit: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
 
-  for key, packed in edit_snapshots.value:
+  for key, packed in shared.edit_snapshots.value:
     let unit_id = key.id
     let chunk_id = key.loc
 
@@ -186,7 +165,7 @@ proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
           chunk_id.y * ChunkDim + local_pos.y,
           chunk_id.z * ChunkDim + local_pos.z,
         )
-        let info = (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
+        let info = (VoxelKind(kind_ord), resolve_color(shared, color_idx))
         if unit_id notin by_unit:
           by_unit[unit_id] = @[]
         by_unit[unit_id].add((world_pos, info))
@@ -204,7 +183,7 @@ proc `$`(self: Unit): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
-  let edits = edits_to_string(self.shared.edit_snapshots)
+  let edits = edits_to_string(self.shared)
   result = \"""
 {{
   "id": "{self.id}",
