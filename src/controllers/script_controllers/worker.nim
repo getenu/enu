@@ -207,8 +207,14 @@ proc update_files*(self: Worker) =
         not file_exists(unit.script_ctx.script):
       script_clears.add(unit)
 
+  if unit_deletions.len > 0 and state.config.data_dir == "":
+    # A blank data_dir means every unit's data_file resolves relative and
+    # looks missing; deleting the whole level over that would be a massacre.
+    warn "skipping unit deletion scan: config has no data_dir"
+    unit_deletions = @[]
   for unit in unit_deletions:
-    debug "unit data file deleted on disk; removing", unit_id = unit.id
+    debug "unit data file deleted on disk; removing",
+      unit_id = unit.id, data_file = unit.data_file
     if unit.parent.is_nil:
       state.units -= unit
     else:
@@ -264,6 +270,8 @@ proc update_files*(self: Worker) =
       try:
         let json_mtime = get_last_modification_time(unit.data_file)
         if json_mtime != unit.script_ctx.last_saved_json_mtime:
+          debug "unit json changed on disk; reloading",
+            unit_id = unit.id, json_mtime
           let parent = unit.parent
           state.push_flag LOADING_SCRIPT
           if parent.is_nil:

@@ -91,7 +91,11 @@ gdobj Game of Node:
         update_thread_metrics()
         self.update_metrics_at = time + 10.seconds
 
-    if state.config.full_screen != is_window_fullscreen():
+    # Wait for the level's config (level_dir/data_dir set by load_level) before
+    # syncing window state: this is a whole-Config read-modify-write, and doing
+    # it from a pre-load copy would clobber the worker's paths (lost update).
+    if state.config.data_dir != "" and
+        state.config.full_screen != is_window_fullscreen():
       state.config_value.value:
         full_screen = not state.config.full_Screen
 
