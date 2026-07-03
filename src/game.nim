@@ -17,6 +17,12 @@ import
   core, types, gdutils, controllers, models/[serializers, units, colors, builds]
 import libs/fd_tracking
 
+# Immediate process exit that runs no atexit handlers, C++ destructors, or Nim
+# GC teardown. Used to end test-mode runs without triggering Godot's headless
+# teardown (which segfaults) or Nim's `quit` (which re-enters ed's locks while
+# we're inside a flag-change callback, aborting on a recursive mutex).
+proc c_exit(code: cint) {.importc: "_Exit", header: "<stdlib.h>".}
+
 if file_exists(".env"):
   dotenv.overload()
 
@@ -564,6 +570,18 @@ gdobj Game of Node:
             state.test_exit_code
           else:
             0
+        if TEST_MODE in state.local_flags:
+          # Headless Godot's dummy rasterizer segfaults during teardown,
+          # freeing render resources it never allocated (NULL RID frees in
+          # visual_server_raster). The tests have already finished and their
+          # exit code is known, so exit the process directly rather than
+          # letting Godot's shutdown crash and mask the result. --temp-workdir
+          # means there's nothing to persist. We're inside a flag-change
+          # callback holding ed's lock, so we can't use Nim's `quit` (its
+          # teardown re-enters the lock); c_exit terminates with no cleanup.
+          flush_file stdout
+          flush_file stderr
+          c_exit(exit_code.cint)
         self.get_tree().quit(exit_code)
 
       if NEEDS_RESTART.removed:

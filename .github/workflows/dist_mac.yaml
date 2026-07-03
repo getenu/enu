@@ -13,45 +13,53 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: Install certificates. Write dist_config.json.
-        env:
-          DIST_CONFIG: ${{ secrets.PROD_MACOS_DIST_CONFIG }}
-          CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
-          CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
-          CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
-          KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
-          NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
-          NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
-          NOTARIZATION_PWD: ${{ secrets.PROD_MACOS_NOTARIZATION_PWD }}
-          NOTARIZATION_PROFILE: ${{ secrets.PROD_MACOS_NOTARIZATION_PROFILE }}
-        run: |
-          # Adapted from https://federicoterzi.com/blog/automatic-code-signing-and-notarization-for-macos-apps-using-github-actions/
+      # TEMPORARY: signing + notarization disabled while the Apple developer
+      # account is expired. Restore the "Install certificates" step below (and
+      # remove the "Prep dist config" step) once the account is renewed. The
+      # example config sets sign=false/notarize=false, so `nim dist_package`
+      # produces an unsigned .dmg. Nothing here has been removed on purpose.
+      - name: Prep dist config (unsigned — Apple account expired)
+        run: cp dist_config.example.json dist_config.json
 
-          # Turn our base64-encoded certificate back to a regular .p12 file
-
-          echo $CERTIFICATE | base64 --decode > certificate.p12
-          echo $DIST_CONFIG | base64 --decode > dist_config.json
-
-          # We need to create a new keychain, otherwise using the certificate will prompt
-          # with a UI dialog asking for the certificate password, which we can't
-          # use in a headless CI environment
-
-          security create-keychain -p "$KEYCHAIN_PWD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
-          security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PWD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
-
-          echo "Create keychain profile"
-          xcrun notarytool store-credentials "$NOTARIZATION_PROFILE" --apple-id "$NOTARIZATION_APPLE_ID" --team-id "$NOTARIZATION_TEAM_ID" --password "$NOTARIZATION_PWD"
+      # - name: Install certificates. Write dist_config.json.
+      #   env:
+      #     DIST_CONFIG: ${{ secrets.PROD_MACOS_DIST_CONFIG }}
+      #     CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+      #     CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
+      #     CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+      #     KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
+      #     NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
+      #     NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
+      #     NOTARIZATION_PWD: ${{ secrets.PROD_MACOS_NOTARIZATION_PWD }}
+      #     NOTARIZATION_PROFILE: ${{ secrets.PROD_MACOS_NOTARIZATION_PROFILE }}
+      #   run: |
+      #     # Adapted from https://federicoterzi.com/blog/automatic-code-signing-and-notarization-for-macos-apps-using-github-actions/
+      #
+      #     # Turn our base64-encoded certificate back to a regular .p12 file
+      #
+      #     echo $CERTIFICATE | base64 --decode > certificate.p12
+      #     echo $DIST_CONFIG | base64 --decode > dist_config.json
+      #
+      #     # We need to create a new keychain, otherwise using the certificate will prompt
+      #     # with a UI dialog asking for the certificate password, which we can't
+      #     # use in a headless CI environment
+      #
+      #     security create-keychain -p "$KEYCHAIN_PWD" build.keychain
+      #     security default-keychain -s build.keychain
+      #     security unlock-keychain -p "$KEYCHAIN_PWD" build.keychain
+      #     security import certificate.p12 -k build.keychain -P "$CERTIFICATE_PWD" -T /usr/bin/codesign
+      #     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" build.keychain
+      #
+      #     echo "Create keychain profile"
+      #     xcrun notarytool store-credentials "$NOTARIZATION_PROFILE" --apple-id "$NOTARIZATION_APPLE_ID" --team-id "$NOTARIZATION_TEAM_ID" --password "$NOTARIZATION_PWD"
 
       - name: Install build deps
         run: brew install scons yasm
       - name: Install nim
         run: |
-          curl -LO https://github.com/nim-lang/nightlies/releases/download/2025-10-31-version-2-2-ab00c56904e3126ad826bb520d243513a139436a/nim-2.2.6-macosx_arm64.tar.xz
-          tar xzf nim-2.2.6-macosx_arm64.tar.xz
-          echo "$(pwd)/nim-2.2.6/bin" >> $GITHUB_PATH
+          curl -LO https://github.com/nim-lang/nightlies/releases/download/2026-04-24-version-2-2-bfeb3146d1638b39f69007a4ae5a23e23ae4e5ef/nim-2.2.10-macosx_arm64.tar.xz
+          tar xzf nim-2.2.10-macosx_arm64.tar.xz
+          echo "$(pwd)/nim-2.2.10/bin" >> $GITHUB_PATH
       - name: Save SHAs of submodules
         run: "git submodule status > .submodules.tmp"
       - name: prereq cache
