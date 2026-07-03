@@ -1,24 +1,41 @@
-# Session Handoff — Enu 0.3 course + MCP/infra work
+# Session Handoff — Enu 0.3 course
 
-Snapshot for resuming cold. For the course *design*, read
-`docs/course/{design,loops,exercise-bank}.md`; this doc is "where we are + what's
-next." (Updated 2026-07-02: all the infra this doc used to track — the reorg,
-the MCP connection model, and the whole platform-riding/adopt feature — has
-merged to `main`; the course is unblocked.)
+Snapshot for resuming cold (updated 2026-07-03, machine move). For the course
+*design*, read `docs/course/{design,loops,exercise-bank}.md`; this doc is
+"where we are + what's next."
+
+## TL;DR / quick start
+
+- `git checkout course && nim build`, then **`nim start loops`** — Loops
+  Island, the complete pilot level. Also `nim start variables` (Redrock
+  Canyon prototype) and `nim start ferry-proto` (the robot-pack ferry).
+  Bare names resolve under `share/worlds/*/<name>`; `ENU_LEVEL=<dir> nim
+  start` for arbitrary dirs (nim's CLI can't take path args).
+- **Most valuable next action: playtest Loops Island in person** — feel,
+  pacing, sign sizes, and the nim:// tap-to-loop links are the only things
+  headless verification couldn't cover.
+- Playtesting the source dir writes back into it (saves normalize JSONs;
+  solving exercises fills the student stubs). `git checkout
+  share/worlds/course/loops` resets; or copy to /tmp + ENU_LEVEL to avoid
+  write-back.
+- Agent verification loop (how everything below was verified): copy level to
+  /tmp, MCP `launch_and_connect`, write reference solutions into the student
+  stubs (hot reload ~2s), read `echo` markers via `get_console`, screenshot.
+  Full gotcha list: `exercise-bank.md` "Authoring gotchas" + the
+  `course-authoring-lessons` memory note.
 
 ## Branches & PRs
 
-- **`course`** (working branch): the 0.3 course, freshly rebased onto latest
-  `main`. Content commits: design+spec, loops pilot (WIP), exercise bank, this
-  handoff.
+- **`course`** (working branch, pushed): the 0.3 course. Everything below is
+  committed through `d8291f20`.
 - Everything previously pending is merged: the `share/` reorg + agent files +
   MCP connection model (PR #63), dep unpin + test isolation (PR #62), and
   **platform riding / bot floor-follow / explicit adopt (PR #66)** — see the
   riding section below, it changes the course's feasibility picture
   substantially. Bots also honor `start_color` now (PR #69), so course scenes
   can have colored bots.
-- **`course-old` / `course-backup`** (local only): pre-rebase history; delete
-  once happy.
+- **`course-old` / `course-backup`** (local to the desktop only): pre-rebase
+  history; delete once happy. Not needed on other machines.
 
 ## MCP server — connection model (merged)
 
