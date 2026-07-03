@@ -5,7 +5,9 @@
 ## Colors: named palette colors stay env-remappable; every other RGB value
 ## becomes a static palette entry, so shading here uses true gradients.
 ##
-## Env overrides: SEA_SCALE, SEA_SIZE (metres), SEA_X, SEA_Z.
+## Env overrides: SEA_SCALE, SEA_SIZE (metres), SEA_X, SEA_Z, and SEA_TIME
+## (seconds) — the sea is a pure function of position and time, so advancing
+## SEA_TIME renders successive frames of the same animated ocean.
 import std/[math, os, strutils]
 import client
 import core, models/[builds, units, colors]
@@ -21,6 +23,7 @@ let
   HALF = DIM div 2
   CENTER_X = env_f("SEA_X", -300.0)
   CENTER_Z = env_f("SEA_Z", -40.0)
+  TIME = env_f("SEA_TIME", 0.0) # seconds; waves travel, foam follows
 
 const
   SEA_BASE = 1.1 # mean sea surface height, metres above ground
@@ -71,18 +74,24 @@ proc fbm(x, z: float, salt: uint32, octaves = 4): float =
 # --- waves -------------------------------------------------------------------
 
 proc dir_wave(x, z, wavelength, angle_deg, phase: float): float =
+  ## A plane wave travelling along `angle_deg`, using deep-water dispersion
+  ## (c = sqrt(g * wavelength / 2pi)) so long swell outruns the chop.
   let
     a = angle_deg * PI / 180.0
     k = 2.0 * PI / wavelength
-  sin((x * cos(a) + z * sin(a)) * k + phase)
+    speed = sqrt(9.81 * wavelength / (2.0 * PI))
+  sin((x * cos(a) + z * sin(a)) * k - k * speed * TIME + phase)
 
 proc wave_height(x, z: float): float =
   ## Sea surface offset in metres, roughly [-1, 1].
-  let groups = 0.4 + 0.6 * vnoise(x / 26.0, z / 26.0, 40)
+  # groups and ripple drift with a slow "wind" so foam animates too
+  let wx = x + TIME * 1.1
+  let wz = z + TIME * 0.4
+  let groups = 0.4 + 0.6 * vnoise(wx / 26.0, wz / 26.0, 40)
   result = 0.42 * dir_wave(x, z, 43.0, 20.0, 0.0)
   result += 0.30 * dir_wave(x, z, 17.0, -35.0, 1.7)
   result += 0.20 * groups * dir_wave(x, z, 7.2, 65.0, 4.1)
-  result += 0.18 * (fbm(x / 3.1, z / 3.1, 50, 3) - 0.5)
+  result += 0.18 * (fbm(wx / 3.1, wz / 3.1, 50, 3) - 0.5)
 
 # --- islands ------------------------------------------------------------------
 
