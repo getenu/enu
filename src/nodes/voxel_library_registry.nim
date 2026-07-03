@@ -2,7 +2,7 @@
 ## gets a runtime `VoxelLibrary` entry (cube geometry, vertex-colored via the
 ## shared `material_id` 6 rgb material) deduped across every build. Main
 ## thread only — driven by the render paths in build_node.
-import std/tables
+import std/[tables, monotimes, times]
 import pkg/godot except print, Color
 import pkg/chroma
 import godotapi/[voxel_library, voxel]
@@ -22,6 +22,7 @@ var
   next_slot {.threadvar.}: int64
   dirty {.threadvar.}: bool
   slots_warned {.threadvar.}: bool
+  bake_holds {.threadvar.}: int
 
 proc register(color: Color, slot: int64) =
   debug "registering static voxel color", slot, hex = color.to_html_hex
@@ -37,13 +38,33 @@ proc register(color: Color, slot: int64) =
   voxel.collision_mask = COLLISION_MASK
   dirty = true
 
+proc hold_bakes*() =
+  ## An ASAP stream is buffering: suppress bakes process-wide so colors
+  ## registered mid-stream coalesce into the single bake at release.
+  inc bake_holds
+
+proc release_bakes*() =
+  if bake_holds > 0:
+    dec bake_holds
+
 proc flush_registry*() =
-  ## Bake pending registrations. Must happen before any mesh task consumes a
-  ## voxel id registered since the last bake — a chunk meshed against a stale
-  ## library renders those voxels as air and never remeshes.
+  ## Bake pending registrations — once per batch, not per color (bake is
+  ## O(library size); per-color baking stalls the main thread for seconds
+  ## when a build introduces hundreds of colors). Must run before any mesh
+  ## task consumes a voxel id registered since the last bake — a chunk
+  ## meshed against a stale library renders those voxels as air and never
+  ## remeshes, so callers flush at the end of every render batch and after
+  ## every ASAP paste, within the same frame as the writes.
+  if bake_holds > 0:
+    return
   if dirty and not registry_library.is_nil:
+    let start = get_mono_time()
     registry_library.bake()
     dirty = false
+    let took = (get_mono_time() - start).in_milliseconds
+    if took > 5:
+      warn "voxel library bake",
+        ms = took, entries = registry_library.voxel_count
 
 proc set_registry_library*(library: VoxelLibrary) =
   ## Adopt the (scene-shared, so process-wide) library. If a fresh library
@@ -82,6 +103,3 @@ proc slot_for*(color: Color): int64 =
   inc next_slot
   register(color, result)
   slots[color] = result
-  # Bake right away: the resolver runs while a render batch is being written,
-  # and the terrain may turn those edits into mesh tasks the same frame.
-  flush_registry()

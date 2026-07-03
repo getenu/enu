@@ -43,12 +43,14 @@ gdobj BuildNode of VoxelTerrain:
     renderer: VoxelRenderer
     paging_logged: bool
     data_logged: bool
+    holding_bakes: bool
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded"
     self.default_view_distance = self.max_view_distance.int
 
   proc prepare_materials() =
+    let start = get_mono_time()
     if self.model.shared.materials.len == 0:
       for i in 0 .. int.high:
         let m = self.get_material(i)
@@ -65,6 +67,9 @@ gdobj BuildNode of VoxelTerrain:
 
     for i, material in self.model.shared.materials:
       self.set_material(i, material)
+    let took = (get_mono_time() - start).in_milliseconds
+    if took > 5:
+      warn "prepare_materials slow", ms = took, unit = self.model.id
 
   proc watch_delta_seq(chunk_id: Vector3, delta_seq: EdSeq[DeltaUpdate]) =
     if chunk_id in self.tracked_delta_seqs:
@@ -79,13 +84,14 @@ gdobj BuildNode of VoxelTerrain:
           painted = render_delta_direct(
             self.renderer.voxel_tool, chunk_id, change.item, self.resolver
           )
-        flush_registry()
+          flush_registry()
         self.model.rendered_voxel_count =
           self.model.rendered_voxel_count + painted
 
     self.tracked_delta_seqs[chunk_id] = zid
 
   method on_block_loaded(chunk_id: Vector3) =
+    let start = get_mono_time()
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
 
@@ -132,6 +138,9 @@ gdobj BuildNode of VoxelTerrain:
 
           self.watch_delta_seq(chunk_id, delta_seq)
       flush_registry()
+      let took = (get_mono_time() - start).in_milliseconds
+      if took > 10:
+        warn "on_block_loaded slow", ms = took, unit = self.model.id
 
   method on_block_unloaded(chunk_id: Vector3) =
     if ?self.model:
@@ -216,9 +225,16 @@ gdobj BuildNode of VoxelTerrain:
 
     # Render existing packed_chunks (for clients connecting to existing builds)
     if ?self.renderer.voxel_tool:
+      let start = get_mono_time()
       for chunk_id, snapshot in self.model.voxels.packed_chunks:
         if chunk_id in self.loaded_chunks:
-          render_snapshot_direct(self.renderer.voxel_tool, chunk_id, snapshot)
+          render_snapshot_direct(
+            self.renderer.voxel_tool, chunk_id, snapshot, self.resolver
+          )
+      flush_registry()
+      let took = (get_mono_time() - start).in_milliseconds
+      if took > 10:
+        warn "initial snapshot render slow", ms = took, unit = self.model.id
 
     # Watch chunk_deltas for new chunks
     self.model.voxels.chunk_deltas.watch:
@@ -232,7 +248,10 @@ gdobj BuildNode of VoxelTerrain:
               if ASAP_MODE in self.model.global_flags:
                 self.renderer.buffer_delta(chunk_id, delta)
               elif ?self.renderer.voxel_tool:
-                render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+                render_delta_direct(
+                  self.renderer.voxel_tool, chunk_id, delta, self.resolver
+                )
+            flush_registry()
           # Watch for future deltas
           self.watch_delta_seq(chunk_id, delta_seq)
       elif removed:
@@ -248,12 +267,19 @@ gdobj BuildNode of VoxelTerrain:
 
     # Render existing chunk_deltas and set up watches
     if ?self.renderer.voxel_tool:
+      let start = get_mono_time()
       for chunk_id, delta_seq in self.model.voxels.chunk_deltas:
         if ?delta_seq:
           if chunk_id in self.loaded_chunks:
             for delta in delta_seq:
-              render_delta_direct(self.renderer.voxel_tool, chunk_id, delta)
+              render_delta_direct(
+                self.renderer.voxel_tool, chunk_id, delta, self.resolver
+              )
           self.watch_delta_seq(chunk_id, delta_seq)
+      flush_registry()
+      let took = (get_mono_time() - start).in_milliseconds
+      if took > 10:
+        warn "initial delta render slow", ms = took, unit = self.model.id
 
     self.model.global_flags.watch:
       if (
@@ -278,8 +304,21 @@ gdobj BuildNode of VoxelTerrain:
       elif change.item == ASAP_MODE:
         if added:
           self.renderer.begin_asap()
+          # Only external (EPHEMERAL) streams hold bakes: script builds cycle
+          # ASAP forever (looping rebuilds) and would wedge the refcount, and
+          # they draw named colors that need no bake anyway.
+          if EPHEMERAL in self.model.global_flags and not self.holding_bakes:
+            self.holding_bakes = true
+            hold_bakes()
         elif removed:
+          # One bake for everything the ASAP stream registered, landing with
+          # the final paste. Interim periodic pastes may briefly mesh new
+          # static colors as air; this remesh corrects them.
           self.renderer.end_asap()
+          if self.holding_bakes:
+            self.holding_bakes = false
+            release_bakes()
+          flush_registry()
 
     self.model.local_flags.watch:
       if change.item == HIGHLIGHT:
@@ -317,6 +356,12 @@ gdobj BuildNode of VoxelTerrain:
         self.collision_layer = collision_layer
         self.model.sight_query = query
 
+  method exit_tree() =
+    if self.holding_bakes:
+      self.holding_bakes = false
+      release_bakes()
+      flush_registry()
+
   method physics_process(delta: float) =
     # Apply a recorded model transform on the physics tick, so a rider reading us
     # in its own physics_process samples a value that advanced on the same 60Hz
@@ -343,7 +388,12 @@ gdobj BuildNode of VoxelTerrain:
         self.set_highlight()
 
       let is_local = self.model.code.owner == state.worker_ctx_name
+      let tick_start = get_mono_time()
       self.renderer.tick(is_local)
+      flush_registry()
+      let tick_took = (get_mono_time() - tick_start).in_milliseconds
+      if tick_took > 10:
+        warn "renderer tick slow", ms = tick_took, unit = self.model.id
 
       if is_local:
         # Terrain pipeline backlog, plus 1 while the ASAP renderer holds a
@@ -375,6 +425,9 @@ gdobj BuildNode of VoxelTerrain:
     # current state here; the watch handles later transitions.
     if ASAP_MODE in self.model.global_flags:
       self.renderer.begin_asap()
+      if EPHEMERAL in self.model.global_flags and not self.holding_bakes:
+        self.holding_bakes = true
+        hold_bakes()
 
     self.track_changes
 

@@ -194,12 +194,15 @@ build.buffer:
         h = wave[i].float
         e = elev[i].float
         hi = top[i].int
-      # fill down to the lowest neighbour so slopes have no see-through gaps
+      # fill down to the lowest neighbour (diagonals included) so slopes
+      # have no see-through gaps, even corner-to-corner
       var lo = hi
-      if ix > 0: lo = min(lo, top[idx(ix - 1, iz)].int)
-      if ix < DIM - 1: lo = min(lo, top[idx(ix + 1, iz)].int)
-      if iz > 0: lo = min(lo, top[idx(ix, iz - 1)].int)
-      if iz < DIM - 1: lo = min(lo, top[idx(ix, iz + 1)].int)
+      for dx in -1 .. 1:
+        for dz in -1 .. 1:
+          let nx = ix + dx
+          let nz = iz + dz
+          if nx >= 0 and nx < DIM and nz >= 0 and nz < DIM:
+            lo = min(lo, top[idx(nx, nz)].int)
 
       var surface: Color
       if land[i]:
