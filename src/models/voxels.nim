@@ -942,15 +942,22 @@ iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
 proc chunk_aabb(chunk_id: Vector3): AABB {.inline.} =
   init_aabb(chunk_id * ChunkDim, vec3(ChunkDim, ChunkDim, ChunkDim))
 
+type SlotCache = Table[int, int64]
+  ## Per-render-call memo: a chunk has at most a few dozen distinct colors,
+  ## but thousands of voxels — resolving each index once keeps the resolver
+  ## (palette read + registry lookup) off the per-voxel path.
+
 proc library_slot(
-    resolver: ColorIndexResolver, color_idx: int
+    resolver: ColorIndexResolver, color_idx: int, cache: var SlotCache
 ): int64 {.inline.} =
   ## The engine voxel type id for a packed color index. Named colors are
   ## their own library slots; static palette indices need the resolver.
   if color_idx < STATIC_COLOR_BASE or resolver.is_nil:
-    color_idx.int64
-  else:
-    resolver(color_idx)
+    return color_idx.int64
+  cache.with_value(color_idx, slot):
+    return slot[]
+  result = resolver(color_idx)
+  cache[color_idx] = result
 
 proc render_snapshot_direct*(
     voxel_tool: VoxelTool,
@@ -967,6 +974,7 @@ proc render_snapshot_direct*(
     return 0
   let voxels = decode_chunk(snapshot)
   let chunk_min = chunk_id * ChunkDim
+  var slot_cache: SlotCache
   if voxel_tool.is_area_editable(chunk_aabb(chunk_id)):
     for linear in 0 ..< CHUNK_VOLUME:
       let packed_voxel = voxels[linear]
@@ -974,7 +982,8 @@ proc render_snapshot_direct*(
         let local_pos = from_linear(linear)
         let (color_idx, _) = unpack_voxel(packed_voxel)
         voxel_tool.set_voxel(
-          chunk_min + local_pos, resolver.library_slot(color_idx)
+          chunk_min + local_pos,
+          resolver.library_slot(color_idx, slot_cache),
         )
         inc result
   else:
@@ -987,7 +996,7 @@ proc render_snapshot_direct*(
         let local_pos = from_linear(linear)
         let (color_idx, _) = unpack_voxel(packed_voxel)
         buffer.set_voxel(
-          resolver.library_slot(color_idx),
+          resolver.library_slot(color_idx, slot_cache),
           local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
         )
         inc result
@@ -1007,6 +1016,7 @@ proc render_delta_direct*(
     return 0
   let changes = decode_delta(delta)
   let chunk_min = chunk_id * ChunkDim
+  var slot_cache: SlotCache
   let editable = voxel_tool.is_area_editable(chunk_aabb(chunk_id))
   if editable:
     for (local_pos, packed_voxel) in changes:
@@ -1015,7 +1025,9 @@ proc render_delta_direct*(
         voxel_tool.set_voxel(world_pos, 0)
       else:
         let (color_idx, _) = unpack_voxel(packed_voxel)
-        voxel_tool.set_voxel(world_pos, resolver.library_slot(color_idx))
+        voxel_tool.set_voxel(
+          world_pos, resolver.library_slot(color_idx, slot_cache)
+        )
       inc result
   else:
     let buffer = gdnew[VoxelBuffer]()
@@ -1031,7 +1043,7 @@ proc render_delta_direct*(
       else:
         let (color_idx, _) = unpack_voxel(packed_voxel)
         buffer.set_voxel(
-          resolver.library_slot(color_idx),
+          resolver.library_slot(color_idx, slot_cache),
           local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
         )
         inc result
@@ -1120,6 +1132,7 @@ proc buffer_snapshot*(
   if snapshot.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
+  var slot_cache: SlotCache
   let voxels = decode_chunk(snapshot)
   for linear in 0 ..< CHUNK_VOLUME:
     let packed_voxel = voxels[linear]
@@ -1129,7 +1142,7 @@ proc buffer_snapshot*(
       let buffer_pos = world_pos - self.min_pos
       let (color_idx, _) = unpack_voxel(packed_voxel)
       self.buffer.set_voxel(
-        self.resolver.library_slot(color_idx), buffer_pos.x.int64,
+        self.resolver.library_slot(color_idx, slot_cache), buffer_pos.x.int64,
         buffer_pos.y.int64, buffer_pos.z.int64,
       )
       inc result
@@ -1141,6 +1154,7 @@ proc buffer_delta*(
   if delta.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
+  var slot_cache: SlotCache
   let changes = decode_delta(delta)
   for (local_pos, packed_voxel) in changes:
     let world_pos = chunk_id * ChunkDim + local_pos
@@ -1152,7 +1166,7 @@ proc buffer_delta*(
     else:
       let (color_idx, _) = unpack_voxel(packed_voxel)
       self.buffer.set_voxel(
-        self.resolver.library_slot(color_idx), buffer_pos.x.int64,
+        self.resolver.library_slot(color_idx, slot_cache), buffer_pos.x.int64,
         buffer_pos.y.int64, buffer_pos.z.int64,
       )
       inc result

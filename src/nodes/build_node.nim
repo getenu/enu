@@ -417,6 +417,17 @@ gdobj BuildNode of VoxelTerrain:
     self.resolver = proc(color_index: int): int64 =
       slot_for(resolve_color(model.shared, color_index))
 
+    # Pre-register the build's whole palette (it syncs with the unit and
+    # lists every static color the build will ever render), so a block
+    # loading into view later never mints — and bakes — a new library entry.
+    if ?self.model.shared:
+      for color in self.model.shared.palette:
+        discard slot_for(color)
+      self.model.shared.palette.watch:
+        if added:
+          discard slot_for(change.item)
+      flush_registry() # no-op while an ephemeral stream holds bakes
+
     # Create renderer for ASAP mode buffer operations
     self.renderer = VoxelRenderer.init(self.get_voxel_tool(), self.resolver)
 
