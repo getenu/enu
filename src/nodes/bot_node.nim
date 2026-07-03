@@ -395,34 +395,44 @@ gdobj BotNode of KinematicBody:
   proc find_floor(
       builds: seq[Build], reach: float, reach_up = 0.0
   ): Option[tuple[node: Spatial, top: float32]] =
-    ## The surface under the bot's feet within `reach` below them (or, with
-    ## `reach_up`, embedded up to that far above them — how a walked-into step
-    ## is climbed): build voxels or the world ground plane (y = 0). Queried
-    ## from voxel data, NOT physics colliders — those are only cooked near
-    ## viewers, so a ray finds nothing away from the player. Returns the
-    ## surface's node (nil for the ground) and its world-space top height.
+    ## The highest surface under the bot's feet within `reach` below them (or,
+    ## with `reach_up`, embedded up to that far above them — how a walked-into
+    ## step is climbed): build voxels or the world ground plane (y = 0).
+    ## Queried from voxel data, NOT physics colliders — those are only cooked
+    ## near viewers, so a ray finds nothing away from the player. The search
+    ## range is converted into each build's local cells and scanned exactly —
+    ## world-space height sampling aliases over thin (scaled-down) slabs.
+    ## Returns the surface's node (nil for the ground) and its world top.
     let pos = self.global_transform.origin
     let feet = pos.y - FOOT_OFFSET
-    # Sample top-down so the highest surface wins (a step above the feet beats
-    # the floor below). Half-voxel steps can't skip a full-height slab (a thin
-    # *scaled-down* slab could slip through — rare, accepted).
-    var dy = -reach_up
-    while dy <= reach:
-      let sample = vec3(pos.x, feet - 0.01 - dy, pos.z)
-      for build in builds:
-        let bnode = Spatial(build.node)
-        # Through the node's full transform, so rotated/scaled builds
-        # (turning barges) resolve correctly — model local_to is origin-only.
-        let local = bnode.global_transform.xform_inv_vector3(sample)
-        let cell = vec3(floor(local.x), floor(local.y), floor(local.z))
-        if build.solid_at(cell):
+    var found = false
+    var best_top: float32
+    var best_node: Spatial
+    for build in builds:
+      let
+        bnode = Spatial(build.node)
+        inv = bnode.global_transform.affine_inverse
+        hi = inv.xform_vector3(vec3(pos.x, feet + reach_up, pos.z))
+        lo = inv.xform_vector3(vec3(pos.x, feet - reach, pos.z))
+      var cy = floor(max(hi.y, lo.y))
+      let cy_end = floor(min(hi.y, lo.y))
+      while cy >= cy_end:
+        if build.solid_at(vec3(floor(hi.x), cy, floor(hi.z))):
           let top = bnode.global_transform.xform_vector3(
-            vec3(local.x, cell.y + 1.0, local.z)
+            vec3(hi.x, cy + 1.0, hi.z)
           ).y
-          return some((node: bnode, top: top))
-      if ?state.ground and sample.y <= 0.0:
-        return some((node: Spatial(nil), top: 0.0'f32))
-      dy += 0.5
+          if not found or top > best_top:
+            found = true
+            best_top = top
+            best_node = bnode
+          break # highest solid in this build's column
+        cy -= 1.0
+    if ?state.ground and feet - reach <= 0.0 and (not found or best_top < 0.0):
+      found = true
+      best_top = 0.0
+      best_node = nil
+    if found:
+      return some((node: best_node, top: best_top))
 
   proc climb_step(builds: seq[Build], floor_top: float32): Option[float32] =
     ## The world top of a single climbable block directly in the bot's walking
@@ -445,15 +455,37 @@ gdobj BotNode of KinematicBody:
       probe = vec3(ahead.x, floor_top + 0.45, ahead.z)
     for build in builds:
       let
+        inv = Spatial(build.node).global_transform.affine_inverse
         bnode = Spatial(build.node)
-        local = bnode.global_transform.xform_inv_vector3(probe)
+        local = inv.xform_vector3(probe)
         cell = vec3(floor(local.x), floor(local.y), floor(local.z))
-      if build.solid_at(cell) and not build.solid_at(cell + vec3(0, 1, 0)):
-        let top = bnode.global_transform.xform_vector3(
-          vec3(local.x, cell.y + 1.0, local.z)
+      if build.solid_at(cell):
+        # Climb to the top of the contiguous stack: on a fine-scaled build a
+        # 1m step is several cells tall (4 at scale 0.25), and the climbable
+        # rise is measured in WORLD units, not cells. Give up as soon as the
+        # stack's top exceeds the 1m-ish cap — that's a wall, not a step.
+        var top_cell = cell
+        var top = bnode.global_transform.xform_vector3(
+          vec3(local.x, top_cell.y + 1.0, local.z)
         ).y
+        while top <= floor_top + 1.1 and
+            build.solid_at(top_cell + vec3(0, 1, 0)):
+          top_cell.y += 1.0
+          top = bnode.global_transform.xform_vector3(
+            vec3(local.x, top_cell.y + 1.0, local.z)
+          ).y
         if top > floor_top + 0.05 and top <= floor_top + 1.1:
-          return some(top)
+          # Standing room above the step's top, also in world units.
+          var clear = true
+          var y = top + 0.3
+          while y < top + 1.6:
+            let c = inv.xform_vector3(vec3(probe.x, y, probe.z))
+            if build.solid_at(vec3(floor(c.x), floor(c.y), floor(c.z))):
+              clear = false
+              break
+            y += 0.3
+          if clear:
+            return some(top)
 
   proc ride_and_fall(delta: float) =
     ## Two node-side, world-space (no reparenting) behaviours off one floor
