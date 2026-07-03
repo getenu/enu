@@ -499,9 +499,24 @@ task clean, "Remove files produced by build":
 task edit, "Edit project in Godot":
   exec godot_bin() & " app/project.godot &"
 
-task start, "Run Enu":
+task start, "Run Enu. Open a level by name (nim start loops) or ENU_LEVEL=<dir>":
+  # A bare level name is looked up under share/worlds/*/<name>. (Paths can't
+  # be passed as task arguments — nim's CLI treats them as project files.)
+  # ENU_LEVEL=<dir> overrides with an explicit directory.
+  var extra = ""
+  var level_dir = get_env("ENU_LEVEL")
+  if level_dir == "":
+    for param in command_line_params()[1 ..^ 1]:
+      if not param.starts_with("-"):
+        for world in list_dirs(this_dir() / "share/worlds"):
+          if dir_exists(world / param):
+            level_dir = world / param
+  if level_dir != "":
+    if not level_dir.is_absolute:
+      level_dir = this_dir() / level_dir
+    extra = " --level-dir " & quote_shell(level_dir)
   cd "app"
-  exec godot_bin() & " --verbose scenes/game.tscn"
+  exec godot_bin() & " --verbose scenes/game.tscn" & extra
 
 task build_and_start, "Build and start":
   exec "nim build"
