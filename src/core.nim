@@ -261,9 +261,11 @@ proc world_from*(self: Vector3, unit: Unit): Vector3 =
 proc local_into*(self: Vector3, unit: Unit): Vector3 =
   ## Inverse of `world_from`: world point -> `unit`-local through each
   ## ancestor's full transform (root's inverse applied first, `unit`'s last).
+  ## affine_inverse-based — `xform_inv` assumes an orthonormal basis, and
+  ## scale lives in the basis.
   if unit.is_nil:
     return self
-  unit.transform.xform_inv_vector3(self.local_into(unit.parent))
+  unit.transform.affine_inverse.xform_vector3(self.local_into(unit.parent))
 
 proc `+=`*(self: EdValue[string], str: string) =
   self.value = self.value & str
