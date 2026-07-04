@@ -23,7 +23,10 @@ let
   HALF = DIM div 2
   CENTER_X = env_f("SEA_X", -300.0)
   CENTER_Z = env_f("SEA_Z", -40.0)
-  TIME = env_f("SEA_TIME", 0.0) # seconds; waves travel, foam follows
+  FRAMES = int(env_f("SEA_FRAMES", 0)) # >0: flipbook of N frames over LOOP
+  LOOP = env_f("SEA_LOOP", 4.0) # seconds per animation loop (flipbook mode)
+
+var sea_time = env_f("SEA_TIME", 0.0) # seconds; waves travel, foam follows
 
 const
   SEA_BASE = 1.1 # mean sea surface height, metres above ground
@@ -75,18 +78,30 @@ proc fbm(x, z: float, salt: uint32, octaves = 4): float =
 
 proc dir_wave(x, z, wavelength, angle_deg, phase: float): float =
   ## A plane wave travelling along `angle_deg`, using deep-water dispersion
-  ## (c = sqrt(g * wavelength / 2pi)) so long swell outruns the chop.
+  ## (c = sqrt(g * wavelength / 2pi)) so long swell outruns the chop. In
+  ## flipbook mode each speed is snapped a few percent so the wave completes
+  ## whole cycles in LOOP seconds — frame N-1 wraps seamlessly to frame 0.
   let
     a = angle_deg * PI / 180.0
     k = 2.0 * PI / wavelength
-    speed = sqrt(9.81 * wavelength / (2.0 * PI))
-  sin((x * cos(a) + z * sin(a)) * k - k * speed * TIME + phase)
+  var speed = sqrt(9.81 * wavelength / (2.0 * PI))
+  if FRAMES > 0:
+    let cycles = max(1.0, round(speed * LOOP / wavelength))
+    speed = cycles * wavelength / LOOP
+  sin((x * cos(a) + z * sin(a)) * k - k * speed * sea_time + phase)
 
 proc wave_height(x, z: float): float =
   ## Sea surface offset in metres, roughly [-1, 1].
-  # groups and ripple drift with a slow "wind" so foam animates too
-  let wx = x + TIME * 1.1
-  let wz = z + TIME * 0.4
+  # groups and ripple drift with a slow "wind" so foam animates too; the
+  # flipbook drifts in a small circle so the noise fields loop with LOOP
+  var wx, wz: float
+  if FRAMES > 0:
+    let phase = 2.0 * PI * sea_time / LOOP
+    wx = x + 1.5 * (cos(phase) - 1.0)
+    wz = z + 1.5 * sin(phase)
+  else:
+    wx = x + sea_time * 1.1
+    wz = z + sea_time * 0.4
   let groups = 0.4 + 0.6 * vnoise(wx / 26.0, wz / 26.0, 40)
   result = 0.42 * dir_wave(x, z, 43.0, 20.0, 0.0)
   result += 0.30 * dir_wave(x, z, 17.0, -35.0, 1.7)
@@ -161,149 +176,186 @@ let
 Enu.client.connect
 discard Enu.client.tick_until(3.seconds, Enu.client.connected)
 
-let build = Build.init(CENTER_X, 0.0, CENTER_Z, save = false)
-Enu.units.add build
-build.scale = SCALE
-Enu.client.tick
-
-echo "generating ", DIM, "x", DIM, " sea..."
-
 var
   wave = new_seq[float32](DIM * DIM) # sea surface, metres
   elev = new_seq[float32](DIM * DIM) # island elevation, metres vs sea level
   top = new_seq[int16](DIM * DIM) # column top, voxels
   land = new_seq[bool](DIM * DIM)
+  elev_ready = false
 
 template idx(ix, iz: int): int =
   ix * DIM + iz
 
-for ix in 0 ..< DIM:
-  for iz in 0 ..< DIM:
-    let
-      mx = float(ix - HALF) * SCALE
-      mz = float(iz - HALF) * SCALE
-      e = island_elev(mx, mz)
-      h = wave_height(mx, mz)
-    wave[idx(ix, iz)] = h
-    elev[idx(ix, iz)] = e
-    if e > 0.05:
-      land[idx(ix, iz)] = true
-      top[idx(ix, iz)] = int16(clamp(int(round((SEA_BASE + e) / SCALE)), 0, 120))
-    else:
-      top[idx(ix, iz)] = int16(clamp(int(round((SEA_BASE + h) / SCALE)), 0, 120))
-
-var voxels = 0
-build.buffer:
+proc fill_grids() =
+  ## Wave-dependent grids for the current `sea_time`. The island field is
+  ## time-independent and computed once.
   for ix in 0 ..< DIM:
     for iz in 0 ..< DIM:
       let
-        i = idx(ix, iz)
         mx = float(ix - HALF) * SCALE
         mz = float(iz - HALF) * SCALE
-        h = wave[i].float
-        e = elev[i].float
-        hi = top[i].int
-      # fill down to the lowest neighbour (diagonals included) so slopes
-      # have no see-through gaps, even corner-to-corner
-      var lo = hi
-      for dx in -1 .. 1:
-        for dz in -1 .. 1:
-          let nx = ix + dx
-          let nz = iz + dz
-          if nx >= 0 and nx < DIM and nz >= 0 and nz < DIM:
-            lo = min(lo, top[idx(nx, nz)].int)
-
-      var surface: Color
-      if land[i]:
-        if e < 1.0:
-          surface = mix(wet_sand, dry_sand, e / 1.0)
-        else:
-          var slope = 0.0
-          if ix > 0 and ix < DIM - 1:
-            slope = max(slope, abs(elev[idx(ix + 1, iz)] - elev[idx(ix - 1, iz)]).float)
-          if iz > 0 and iz < DIM - 1:
-            slope = max(slope, abs(elev[idx(ix, iz + 1)] - elev[idx(ix, iz - 1)]).float)
-          if slope > 1.15 and e > 2.5:
-            surface = mix(rock, high_grass, 0.15)
-          else:
-            # grass: darker with altitude, mottled by the fbm patches
-            let patch = fbm(mx / 13.0, mz / 13.0, 80, 3)
-            let alt = clamp((e - 1.0) / 8.0, 0.0, 1.0)
-            surface = mix(low_grass, high_grass, alt * 0.6 + patch * 0.4)
+      if not elev_ready:
+        let e = island_elev(mx, mz)
+        elev[idx(ix, iz)] = e
+        land[idx(ix, iz)] = e > 0.05
+      let h = wave_height(mx, mz)
+      wave[idx(ix, iz)] = h
+      if land[idx(ix, iz)]:
+        top[idx(ix, iz)] =
+          int16(clamp(int(round((SEA_BASE + elev[idx(ix, iz)]) / SCALE)), 0, 120))
       else:
-        # water: depth-graded blues, turquoise shallows, foam at the shore
-        let t = clamp((h + 1.0) / 2.0, 0.0, 1.0)
-        surface =
-          if t < 0.5:
-            mix(deep_water, mid_water, t / 0.5)
-          else:
-            mix(mid_water, crest_water, (t - 0.5) / 0.5)
-        let shallow = clamp(e + 1.0, 0.0, 1.0)
-        if shallow > 0.0:
-          surface = mix(surface, shallow_water, shallow * 0.85)
-        # churned surf building toward the shoreline
-        if e > -0.55:
-          surface = mix(surface, foam, (e + 0.55) / 0.55 * 0.55)
-        # shoreline foam ring
-        if e > -0.18:
-          surface = foam
-        else:
-          # whitecaps: steep crests, broken up by noise
-          var grad = 0.0
-          if ix > 0 and ix < DIM - 1:
-            grad += abs(wave[idx(ix + 1, iz)] - wave[idx(ix - 1, iz)]).float
-          if iz > 0 and iz < DIM - 1:
-            grad += abs(wave[idx(ix, iz + 1)] - wave[idx(ix, iz - 1)]).float
-          grad = grad / (2.0 * SCALE)
-          if h > 0.32 and grad > 0.55 and fbm(mx / 3.7, mz / 3.7, 90, 3) > 0.52:
-            surface = mix(surface, foam, 0.9)
-          elif hash01(ix, iz, 11) > 0.9975 and h > 0.0:
-            surface = foam # lone flecks
+        top[idx(ix, iz)] = int16(clamp(int(round((SEA_BASE + h) / SCALE)), 0, 120))
+  elev_ready = true
 
-      for y in lo .. hi:
-        let c =
-          if y == hi:
-            surface
-          elif land[i]:
-            mix(wet_sand, rock, 0.5)
-          elif y == hi - 1:
-            mid_water
-          else:
-            deep_water # depths under the surface
-        build.draw(
-          vec3(float(ix - HALF), float(y), float(iz - HALF)), (COMPUTED, c)
-        )
-        voxels.inc
-
-  # palms on the grass
-  var palms = 0
-  for ix in 6 ..< DIM - 6:
-    for iz in 6 ..< DIM - 6:
-      let i = idx(ix, iz)
-      if land[i] and elev[i] > 1.4 and hash01(ix, iz, 20) > 0.9985:
+proc draw_sea(build: Build): int =
+  build.buffer:
+    for ix in 0 ..< DIM:
+      for iz in 0 ..< DIM:
         let
-          base = top[i].int
-          tall = 8 + int(hash01(ix, iz, 21) * 5.0)
-          px = float(ix - HALF)
-          pz = float(iz - HALF)
-        for y in 1 .. tall:
-          build.draw(vec3(px, float(base + y), pz), (COMPUTED, trunk_col))
-        let ty = float(base + tall)
-        for (dx, dy, dz) in [
-          (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1),
-          (2, 0, 0), (-2, 0, 0), (0, 0, 2), (0, 0, -2),
-          (2, -1, 0), (-2, -1, 0), (0, -1, 2), (0, -1, -2),
-        ]:
+          i = idx(ix, iz)
+          mx = float(ix - HALF) * SCALE
+          mz = float(iz - HALF) * SCALE
+          h = wave[i].float
+          e = elev[i].float
+          hi = top[i].int
+        # fill down to the lowest neighbour (diagonals included) so slopes
+        # have no see-through gaps, even corner-to-corner
+        var lo = hi
+        for dx in -1 .. 1:
+          for dz in -1 .. 1:
+            let nx = ix + dx
+            let nz = iz + dz
+            if nx >= 0 and nx < DIM and nz >= 0 and nz < DIM:
+              lo = min(lo, top[idx(nx, nz)].int)
+
+        var surface: Color
+        if land[i]:
+          if e < 1.0:
+            surface = mix(wet_sand, dry_sand, e / 1.0)
+          else:
+            var slope = 0.0
+            if ix > 0 and ix < DIM - 1:
+              slope = max(slope, abs(elev[idx(ix + 1, iz)] - elev[idx(ix - 1, iz)]).float)
+            if iz > 0 and iz < DIM - 1:
+              slope = max(slope, abs(elev[idx(ix, iz + 1)] - elev[idx(ix, iz - 1)]).float)
+            if slope > 1.15 and e > 2.5:
+              surface = mix(rock, high_grass, 0.15)
+            else:
+              # grass: darker with altitude, mottled by the fbm patches
+              let patch = fbm(mx / 13.0, mz / 13.0, 80, 3)
+              let alt = clamp((e - 1.0) / 8.0, 0.0, 1.0)
+              surface = mix(low_grass, high_grass, alt * 0.6 + patch * 0.4)
+        else:
+          # water: depth-graded blues, turquoise shallows, foam at the shore
+          let t = clamp((h + 1.0) / 2.0, 0.0, 1.0)
+          surface =
+            if t < 0.5:
+              mix(deep_water, mid_water, t / 0.5)
+            else:
+              mix(mid_water, crest_water, (t - 0.5) / 0.5)
+          let shallow = clamp(e + 1.0, 0.0, 1.0)
+          if shallow > 0.0:
+            surface = mix(surface, shallow_water, shallow * 0.85)
+          # churned surf building toward the shoreline
+          if e > -0.55:
+            surface = mix(surface, foam, (e + 0.55) / 0.55 * 0.55)
+          # shoreline foam ring
+          if e > -0.18:
+            surface = foam
+          else:
+            # whitecaps: steep crests, broken up by noise
+            var grad = 0.0
+            if ix > 0 and ix < DIM - 1:
+              grad += abs(wave[idx(ix + 1, iz)] - wave[idx(ix - 1, iz)]).float
+            if iz > 0 and iz < DIM - 1:
+              grad += abs(wave[idx(ix, iz + 1)] - wave[idx(ix, iz - 1)]).float
+            grad = grad / (2.0 * SCALE)
+            if h > 0.32 and grad > 0.55 and fbm(mx / 3.7, mz / 3.7, 90, 3) > 0.52:
+              surface = mix(surface, foam, 0.9)
+            elif hash01(ix, iz, 11) > 0.9975 and h > 0.0:
+              surface = foam # lone flecks
+
+        for y in lo .. hi:
+          let c =
+            if y == hi:
+              surface
+            elif land[i]:
+              mix(wet_sand, rock, 0.5)
+            elif y == hi - 1:
+              mid_water
+            else:
+              deep_water # depths under the surface
           build.draw(
-            vec3(px + dx.float, ty + dy.float, pz + dz.float),
-            (COMPUTED, palm_col),
+            vec3(float(ix - HALF), float(y), float(iz - HALF)), (COMPUTED, c)
           )
-        voxels += tall + 13
-        palms.inc
+          result.inc
 
-  echo "palms: ", palms
+    # palms on the grass
+    for ix in 6 ..< DIM - 6:
+      for iz in 6 ..< DIM - 6:
+        let i = idx(ix, iz)
+        if land[i] and elev[i] > 1.4 and hash01(ix, iz, 20) > 0.9985:
+          let
+            base = top[i].int
+            tall = 8 + int(hash01(ix, iz, 21) * 5.0)
+            px = float(ix - HALF)
+            pz = float(iz - HALF)
+          for y in 1 .. tall:
+            build.draw(vec3(px, float(base + y), pz), (COMPUTED, trunk_col))
+          let ty = float(base + tall)
+          for (dx, dy, dz) in [
+            (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1),
+            (2, 0, 0), (-2, 0, 0), (0, 0, 2), (0, 0, -2),
+            (2, -1, 0), (-2, -1, 0), (0, -1, 2), (0, -1, -2),
+          ]:
+            build.draw(
+              vec3(px + dx.float, ty + dy.float, pz + dz.float),
+              (COMPUTED, palm_col),
+            )
+          result += tall + 13
 
-echo "BUILD=", build.id, " voxels=", voxels
-echo "sea is up — keeping it alive (kill me to reap it)"
-Enu.client.every(1.second):
-  discard
+proc new_sea_build(): Build =
+  result = Build.init(CENTER_X, 0.0, CENTER_Z, save = false)
+  # frames overlap exactly; colliders on all of them would stack physics
+  result.bot_collisions = FRAMES == 0
+  Enu.units.add result
+  result.scale = SCALE
+  Enu.client.tick
+
+if FRAMES == 0:
+  echo "generating ", DIM, "x", DIM, " sea..."
+  let build = new_sea_build()
+  fill_grids()
+  let voxels = draw_sea(build)
+  echo "BUILD=", build.id, " voxels=", voxels
+  echo "sea is up — keeping it alive (kill me to reap it)"
+  Enu.client.every(1.second):
+    discard
+else:
+  echo "generating ", FRAMES, " frames of ", DIM, "x", DIM, " sea..."
+  var frame_builds: seq[Build]
+  for f in 0 ..< FRAMES:
+    sea_time = LOOP * f.float / FRAMES.float
+    let b = new_sea_build()
+    if f > 0:
+      b.global_flags -= VISIBLE # only frame 0 shows during generation
+    fill_grids()
+    let voxels = draw_sea(b)
+    frame_builds.add b
+    echo "frame ", f, ": ", b.id, " voxels=", voxels
+    # pace the flood: keep ticking so each frame's chunks drain before the
+    # next burst — a sustained blast drops the session (and ephemeral units
+    # die with it)
+    discard Enu.client.tick_until(3.seconds, false)
+
+  echo "settling..."
+  discard Enu.client.tick_until(10.seconds, false)
+  let dt = init_duration(milliseconds = int(LOOP * 1000.0 / FRAMES.float))
+  echo "cycling ", FRAMES, " frames every ", dt.in_milliseconds,
+    "ms — kill me to reap the whole flipbook"
+  var cur = 0
+  Enu.client.every(dt):
+    let nxt = (cur + 1) mod FRAMES
+    frame_builds[nxt].global_flags += VISIBLE
+    frame_builds[cur].global_flags -= VISIBLE
+    cur = nxt
