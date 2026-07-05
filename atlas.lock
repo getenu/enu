@@ -15,7 +15,7 @@
     "ed.getenu.github.com": {
       "dir": "$deps/ed",
       "url": "https://github.com/getenu/ed",
-      "commit": "adcfbce054c122be63ddf303ad9b3d7b45a8c930",
+      "commit": "19650b3dfc3573372bedbb0883d6c33df7b1dc99",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
@@ -328,7 +328,7 @@
       "",
       "requires \"https://github.com/getenu/Nim#bea4c144\",",
       "  \"godot 0.8.6\",",
-      "  \"ed 0.30.4\",",
+      "  \"ed 0.30.5\",",
       "  \"nanoid >= 0.2.1\",",
       "  \"pretty\", \"cligen\", \"chroma\", \"markdown\",",
       "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#a1296ca\", \"zippy\", \"unittest2\",",
