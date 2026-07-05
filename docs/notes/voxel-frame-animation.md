@@ -68,19 +68,22 @@ The per-chunk **frame-mesh cache** is the heart of the feature:
   ocean size.
 - Temporal LOD when needed: full frames near the viewer, fewer frames
   mid-distance, static beyond.
-- No engine change needed after all: `VoxelMesher.build_mesh(buffer,
+- Meshing needs no engine change: `VoxelMesher.build_mesh(buffer,
   materials)` is scriptable (and its scratch is `thread_local`, so
   main-thread baking never races the meshing threads). Frames render as
   plain `MeshInstance` children of the terrain node whose `.mesh` pointer
-  swaps per flip; the live terrain hides under a discard shader
-  (`terrain_voxel_off.shader`) meanwhile. The instances inherit the node
-  transform, so scaled builds animate correctly — which retired M1's
-  scale-display bug. Frame meshes carry node-local material duplicates
-  (pinned to the normal shaders) so the discard swap can't hide them; glow
-  and highlight mirror onto them. Known edge: the discard swap mutates the
-  Shared's live materials, so sibling units sharing a Shared (spawner
-  clones) would blank while one displays a frame — frames are for root
-  builds in practice.
+  swaps per flip. The instances inherit the node transform, so scaled
+  builds animate correctly — which retired M1's scale-display bug.
+- Hiding the live meshes IS the one engine touch (owned fork, godot_voxel
+  `1b7f0ea`): `VoxelTerrain.set_render_blocks_visible(false)` hides every
+  render mesh of that one terrain — data, collisions and children
+  untouched, newly meshed blocks respect the flag. Per-node by
+  construction, so sibling units sharing a Shared (spawner clones) are
+  unaffected when one displays frames. A first cut used a discard shader
+  swapped onto the live materials instead; it worked but leaked to every
+  unit rendering with those Shared materials. Frame meshes bake with the
+  live material objects, so glow, highlight, god mode and env changes
+  apply to them exactly as to live meshes.
 
 Cost cutters, measured against the sea prototypes:
 

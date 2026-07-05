@@ -33,7 +33,6 @@ var shader {.threadvar.}: Shader
 var hidden_shader {.threadvar.}: Shader
 var rgb_shader {.threadvar.}: Shader
 var hidden_rgb_shader {.threadvar.}: Shader
-var off_shader {.threadvar.}: Shader
 
 gdobj BuildNode of VoxelTerrain:
   var
@@ -60,11 +59,10 @@ gdobj BuildNode of VoxelTerrain:
     next_bake_at: MonoTime
     # Frame display (M2): saved frames render as cached meshes on plain
     # MeshInstance children — no voxel writes, no remeshing per flip. The
-    # live terrain hides under a discard shader meanwhile; its data (and so
-    # collisions and queries) is never touched.
+    # live block meshes hide via set_render_blocks_visible meanwhile; the
+    # live data (and so collisions and queries) is never touched.
     frame_mesh_cache: Table[Hash, Mesh]
     frame_instances: Table[Vector3, MeshInstance]
-    frame_materials: seq[ShaderMaterial]
     frame_chunk_hash_cache: Table[int, ref Table[Vector3, Hash]]
     frames_showing: bool
     frame_bake_pending: bool
@@ -118,11 +116,9 @@ gdobj BuildNode of VoxelTerrain:
   proc set_glow(glow: float) =
     self.each_material(i, m):
       m.set_shader_param("emission_energy", glow.to_variant)
-    for m in self.frame_materials:
-      m.set_shader_param("emission_energy", glow.to_variant)
 
   proc set_highlight() =
-    template apply(i, m: untyped) =
+    self.each_material(i, m):
       if self.error_highlight_on:
         m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
       elif i < self.model.shared.emission_colors.len:
@@ -139,51 +135,29 @@ gdobj BuildNode of VoxelTerrain:
       else:
         m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
-    self.each_material(i, m):
-      apply(i, m)
-    for i, m in self.frame_materials:
-      apply(i, m)
-
   proc set_visibility() =
-    # While a frame is displayed the live terrain's materials swap to the
-    # discard shader — frame meshes carry their own material duplicates.
     if VISIBLE in self.model.global_flags:
       self.visible = true
 
       self.each_material(i, material):
         material.shader =
-          if self.frames_showing:
-            off_shader
-          elif i == rgb_material_index:
-            rgb_shader
-          else:
-            shader
+          if i == rgb_material_index: rgb_shader else: shader
     elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
 
       self.each_material(i, material):
         material.shader =
-          if self.frames_showing:
-            off_shader
-          elif i == rgb_material_index:
-            hidden_rgb_shader
-          else:
-            hidden_shader
+          if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
     else:
       self.visible = false
 
-  proc ensure_frame_materials(): Array =
-    ## Node-local duplicates of the live materials, pinned to the normal
-    ## shaders: frame meshes must keep rendering while the live materials
-    ## swap to the discard shader. Indexed by material_id — the mesher's
-    ## surface order.
-    if self.frame_materials.len == 0:
-      self.each_material(i, m):
-        let dup = m.duplicate.as(ShaderMaterial)
-        dup.shader = if i == rgb_material_index: rgb_shader else: shader
-        self.frame_materials.add dup
+  proc frame_material_array(): Array =
+    ## The node's live materials, slot-ordered for the mesher (surfaces are
+    ## indexed by material_id). Frame meshes share the live material
+    ## objects, so glow, highlight, god mode and environment changes apply
+    ## to them exactly as to the live meshes.
     result = new_array()
-    for m in self.frame_materials:
+    self.each_material(i, m):
       result.add m.to_variant
 
   proc show_frame(index: int) =
@@ -205,7 +179,7 @@ gdobj BuildNode of VoxelTerrain:
       hashes[] = frame_chunk_hashes(frame.chunks)
       self.frame_chunk_hash_cache[index] = hashes
     let hashes = self.frame_chunk_hash_cache[index]
-    let materials = self.ensure_frame_materials()
+    let materials = self.frame_material_array()
     let mesher = self.mesher.as(VoxelMesher)
     let deadline = get_mono_time() + init_duration(milliseconds = 8)
     var deferred = false
@@ -228,7 +202,7 @@ gdobj BuildNode of VoxelTerrain:
         return # stay live until this frame is fully baked
       self.frames_showing = true
       info "frames showing", unit = self.model.id, frame = index
-      self.set_visibility()
+      self.set_render_blocks_visible(false)
     for chunk_id in self.loaded_chunks:
       let key = frame_mesh_key(hashes[], chunk_id)
       if key notin self.frame_mesh_cache:
@@ -254,7 +228,7 @@ gdobj BuildNode of VoxelTerrain:
       self.frames_showing = false
       for _, inst in self.frame_instances:
         inst.visible = false
-      self.set_visibility()
+      self.set_render_blocks_visible(true)
 
   proc render_frame(index: int) =
     ## Display a saved frame (or the live state for index < 0). Frames render
@@ -661,5 +635,4 @@ proc init*(_: type BuildNode): BuildNode =
     rgb_shader = load("res://shaders/terrain_voxel_rgb.shader") as Shader
     hidden_rgb_shader =
       load("res://shaders/terrain_voxel_hidden_rgb.shader") as Shader
-    off_shader = load("res://shaders/terrain_voxel_off.shader") as Shader
   result = build_scene.instance() as BuildNode
