@@ -7,12 +7,12 @@ bin_dir = "app"
 src_dir = "src"
 
 requires "https://github.com/getenu/Nim#bea4c144",
-  "https://github.com/getenu/godot-nim 0.8.6",
-  "https://github.com/getenu/ed 0.30.3",
-  "https://github.com/getenu/nanoid.nim >= 0.2.1",
-  "https://github.com/treeform/pretty >= 0.2.0", "cligen", "chroma", "markdown",
+  "godot 0.8.6",
+  "ed 0.30.4",
+  "nanoid >= 0.2.1",
+  "pretty", "cligen", "chroma", "markdown",
   "chronicles", "dotenv", "nimibook", "metrics#a1296ca", "zippy", "unittest2",
-  "https://github.com/getenu/nph#948b933", "regex",
-  "https://github.com/getenu/nimcp 0.10.0",
-  "https://github.com/gokr/mummyx#32f0ef97",
-  "https://github.com/dsrw/nim-libbacktrace"
+  "nph#948b933", "regex",
+  "nimcp 0.10.0",
+  "mummy#32f0ef97",
+  "libbacktrace"
