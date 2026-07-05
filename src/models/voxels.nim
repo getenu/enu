@@ -1321,10 +1321,13 @@ proc tick*(self: VoxelRenderer, is_local: bool) =
   if self.asap_active and is_local:
     let now = get_mono_time()
     let elapsed = now - self.last_paste_time
-    if elapsed >= ASAP_PASTE_INTERVAL:
-      if ?self.buffer and self.dirty:
-        self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
-        self.dirty = false
+    if elapsed >= ASAP_PASTE_INTERVAL and ?self.buffer and self.dirty:
+      # The clock only advances when something pastes: an empty tick must
+      # not consume begin_asap's backdate, or the run's first content ends
+      # up waiting for end_asap — recognized a full sleep-park after the
+      # script finishes drawing — instead of pasting on arrival.
+      self.voxel_tool.paste(self.min_pos, self.buffer, 1, 0)
+      self.dirty = false
       self.last_paste_time = now
 
 proc end_asap*(self: VoxelRenderer) =
