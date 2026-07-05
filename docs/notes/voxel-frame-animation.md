@@ -141,6 +141,13 @@ programmatic animations call clear_frames() first. The 64-frame cap
    over the first loop instead of hitching. Live voxel data is never
    touched: collisions, queries and the return-to-live path all read the
    real state, and scaled builds animate (M1's scale-display bug is gone).
+   Measured: small builds swap instantly; a 120 m x 32-frame ocean (68K
+   voxels/frame, ~450 chunks) warms ~2-3 min under live playback then
+   animates at 8 fps with zero main-thread slow-tick warnings. A 250 m
+   ocean's working set (~33K meshes) exceeds the 16384-mesh cache cap, so
+   it stays on the live state (graceful) — that size needs M3's temporal
+   LOD/eviction/sheet culling. The `"frame playback"` / `"frames showing"`
+   log pair shows whether a build has swapped in yet.
 3. **M3 — storage + polish**: keyframe+delta compression, sidecar
    persistence, temporal LOD, sheet culling, UI.
 
