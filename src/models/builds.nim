@@ -154,26 +154,18 @@ template buffer*(self: Build, body: untyped) =
 proc frame_count*(self: Build): int =
   self.frames.len
 
-proc rebuild_frames(self: Build, frames: seq[FrameData]) =
-  # Positional EdSeq ops (`[]=`, indexed del) can apply out of order on
-  # replicas; rebuilding with pure adds keeps every side identical.
-  self.frames.clear
-  for frame in frames:
-    self.frames.add frame
-
 proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
   ## Snapshot the current voxels as an animation frame and return its index:
   ## appended by default, or overwriting frame `at` (replace workflow:
-  ## `load_frame(3)`, edit, `save_frame(at = 3)`).
+  ## `load_frame(3)`, edit, `save_frame(at = 3)`). Keyed table writes make
+  ## both cases a single synced op.
   if at >= 0 and at < self.frames.len:
-    var all: seq[FrameData]
-    for i in 0 ..< self.frames.len:
-      all.add(if i == at: self.voxels.pack_frame else: self.frames[i])
-    self.rebuild_frames(all)
+    self.frames[at] = self.voxels.pack_frame
     at
   else:
-    self.frames.add self.voxels.pack_frame
-    self.frames.len - 1
+    let index = self.frames.len
+    self.frames[index] = self.voxels.pack_frame
+    index
 
 proc load_frame*(self: Build, index: int) =
   ## Restore a saved frame into the live voxels for editing. Unlike
@@ -185,13 +177,13 @@ proc load_frame*(self: Build, index: int) =
     self.current_frame = -1
 
 proc delete_frame*(self: Build, index: int) =
-  ## Remove a saved frame; later frames shift down one index.
+  ## Remove a saved frame; later frames shift down one index (keys stay
+  ## dense: each higher frame rewrites down by one keyed op).
   if index >= 0 and index < self.frames.len:
-    var all: seq[FrameData]
-    for i in 0 ..< self.frames.len:
-      if i != index:
-        all.add self.frames[i]
-    self.rebuild_frames(all)
+    let last = self.frames.len - 1
+    for i in index ..< last:
+      self.frames[i] = self.frames[i + 1]
+    self.frames.del last
     if self.current_frame == index:
       self.current_frame = -1
     elif self.current_frame > index:
@@ -484,7 +476,7 @@ proc init*(
       flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
     )
     let voxels = VoxelStore.init(unit_id = id)
-    let frames = EdSeq[FrameData].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
+    let frames = EdTable[int, FrameData].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
     var self = Build(
       id: id,
       packed_chunks: packed_chunks,

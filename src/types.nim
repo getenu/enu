@@ -397,9 +397,11 @@ type
       Table[string, tuple[position: Transform, color: Color, drawing: bool]]
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
-    frames*: EdSeq[FrameData]
-      ## Saved animation frames, in order. Synced once as data; playback
-      ## only moves `current_frame`.
+    frames*: EdTable[int, FrameData]
+      ## Saved animation frames, keyed by dense 0-based index (the Build API
+      ## keeps keys contiguous). A table rather than a seq so replace is one
+      ## keyed op — ed's positional seq ops don't sync order-safely. Synced
+      ## once as data; playback only moves `current_frame`.
     current_frame_value*: EdValue[int]
       ## Displayed frame, or -1 for the live voxel state. Display-only:
       ## queries and collisions keep reading the live voxels (use
