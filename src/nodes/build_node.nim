@@ -44,6 +44,7 @@ gdobj BuildNode of VoxelTerrain:
     paging_logged: bool
     data_logged: bool
     holding_bakes: bool
+    next_frame_at: MonoTime
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded"
@@ -90,6 +91,41 @@ gdobj BuildNode of VoxelTerrain:
 
     self.tracked_delta_seqs[chunk_id] = zid
 
+  proc render_frame(index: int) =
+    ## Display a saved frame (or the live state for index < 0) across every
+    ## loaded chunk. Display-only: the model's voxel data is untouched.
+    if ASAP_MODE in self.model.global_flags or not ?self.renderer.voxel_tool:
+      return
+    let frames = self.model.frames
+    if index >= 0 and index < frames.len:
+      let frame = frames[index]
+      for chunk_id in self.loaded_chunks:
+        if chunk_id in frame.chunks:
+          render_snapshot_direct(
+            self.renderer.voxel_tool, chunk_id, frame.chunks[chunk_id],
+            self.resolver,
+          )
+        else:
+          erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
+    else:
+      # back to the live voxel state: snapshot + any deltas on top
+      for chunk_id in self.loaded_chunks:
+        if chunk_id in self.model.voxels.packed_chunks:
+          render_snapshot_direct(
+            self.renderer.voxel_tool, chunk_id,
+            self.model.voxels.packed_chunks[chunk_id], self.resolver,
+          )
+        else:
+          erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
+        if chunk_id in self.model.voxels.chunk_deltas:
+          let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
+          if ?delta_seq:
+            for delta in delta_seq:
+              render_delta_direct(
+                self.renderer.voxel_tool, chunk_id, delta, self.resolver
+              )
+    flush_registry()
+
   method on_block_loaded(chunk_id: Vector3) =
     let start = get_mono_time()
     if ?self.model:
@@ -108,6 +144,18 @@ gdobj BuildNode of VoxelTerrain:
           # One line per build: paired with "voxel data arriving" below, a
           # build that requests but never receives is visible in the logs.
           info "voxel paging", unit = self.model.id
+
+      let shown_frame = self.model.current_frame
+      if shown_frame >= 0 and shown_frame < self.model.frames.len and
+          ASAP_MODE notin self.model.global_flags:
+        let frame = self.model.frames[shown_frame]
+        if chunk_id in frame.chunks and ?self.renderer.voxel_tool:
+          render_snapshot_direct(
+            self.renderer.voxel_tool, chunk_id, frame.chunks[chunk_id],
+            self.resolver,
+          )
+          flush_registry()
+        return
 
       if chunk_id in self.model.voxels.packed_chunks:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
@@ -328,6 +376,10 @@ gdobj BuildNode of VoxelTerrain:
       if change.item == GOD:
         self.set_visibility
 
+    self.model.current_frame_value.watch:
+      if added:
+        self.render_frame(change.item)
+
     self.model.scale_value.watch:
       if added:
         # Scale lives in the model's transform.basis (set synchronously by
@@ -386,6 +438,26 @@ gdobj BuildNode of VoxelTerrain:
         self.error_highlight_on = not self.error_highlight_on
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
+
+      # Frame playback: the server is the single advancing authority; the
+      # synced current_frame drives rendering on every side.
+      if SERVER in state.local_flags and self.model.frames_fps > 0 and
+          self.model.frames.len > 1:
+        let now = get_mono_time()
+        if now >= self.next_frame_at:
+          self.next_frame_at =
+            now + init_duration(
+              milliseconds = int(1000.0 / self.model.frames_fps)
+            )
+          let last = self.model.frames.len - 1
+          var next = self.model.current_frame + 1
+          if next > last:
+            if self.model.frames_loop:
+              next = 0
+            else:
+              next = last
+              self.model.frames_fps = 0.0
+          self.model.current_frame = next
 
       let is_local = self.model.code.owner == state.worker_ctx_name
       let tick_start = get_mono_time()

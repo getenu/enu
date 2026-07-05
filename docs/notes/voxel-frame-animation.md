@@ -107,9 +107,13 @@ back into the live voxels so any frame can be re-edited and re-saved.
 
 ## Milestones
 
-1. **M1 — data frames end-to-end**: frame storage on Build (synced), save /
-   set / count / play with server-side advancement; frame switch re-renders
-   locally per side (fine for small units); client + VM APIs; tests.
+1. **M1 — data frames end-to-end** (landed 2026-07-05): frame storage on
+   Build (synced), save / set / count / play with server-side advancement;
+   frame switch re-renders locally per side (fine for small units); client +
+   VM APIs; unit + world tests. Known issue: frame *display* doesn't remesh
+   on scaled builds (data provably updates; the mesh-update scheduling drops
+   it — same scale/coordinate family as floor_at ignoring scale). Works at
+   scale 1.
 2. **M2 — frame-mesh cache**: per-(chunk, hash) cached meshes, warm-up rules,
    engine per-block mesh array; big units animate smoothly.
 3. **M3 — storage + polish**: keyframe+delta compression, sidecar

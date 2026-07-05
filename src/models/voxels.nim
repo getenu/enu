@@ -923,6 +923,36 @@ proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
       if kind != HOLE:
         inc self.block_count
 
+proc pack_frame*(self: VoxelStore): FrameData =
+  ## Snapshot the current voxel state as one animation frame — every
+  ## non-empty chunk, packed with the standard codecs.
+  for chunk_id in self.local_voxels.keys:
+    let packed = encode_chunk(self.build_chunk_state(chunk_id))
+    if not packed.is_empty:
+      result.chunks[chunk_id] = packed
+
+proc load_frame*(self: VoxelStore, frame: FrameData) =
+  ## Replace the live voxel state with a frame's contents — the authoring
+  ## path (re-edit a saved pose). Goes through the synced chunk tables, so
+  ## every side re-renders it like any other voxel change.
+  let stale = self.local_voxels.keys.to_seq
+  for chunk_id in stale:
+    if chunk_id notin frame.chunks:
+      if chunk_id in self.packed_chunks:
+        self.packed_chunks.del(chunk_id)
+      if chunk_id in self.chunk_deltas:
+        self.chunk_deltas.del(chunk_id)
+      for pos, info in self.local_voxels[chunk_id]:
+        if info.kind != HOLE:
+          dec self.block_count
+      self.local_voxels.del(chunk_id)
+  for chunk_id, packed in frame.chunks:
+    self.apply_snapshot(chunk_id, packed)
+    self.packed_chunks[chunk_id] = packed
+    if chunk_id in self.chunk_deltas:
+      self.chunk_deltas[chunk_id].clear
+  self.pending_chunks.clear
+
 proc clear*(self: VoxelStore) =
   self.local_voxels.clear
   let packed = self.packed_chunks.value

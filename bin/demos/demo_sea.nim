@@ -10,7 +10,7 @@
 ## SEA_TIME renders successive frames of the same animated ocean.
 import std/[math, os, strutils]
 import client
-import core, models/[builds, units, colors]
+import core, models/[builds, units, colors, voxels]
 
 proc env_f(name: string, default: float): float =
   let v = get_env(name)
@@ -175,6 +175,8 @@ let
 
 Enu.client.connect
 discard Enu.client.tick_until(3.seconds, Enu.client.connected)
+# connected != synced: wait for the root collection before adding units
+discard Enu.client.tick_until(10.seconds, "root_units" in Enu.client.ctx)
 
 var
   wave = new_seq[float32](DIM * DIM) # sea surface, metres
@@ -316,8 +318,6 @@ proc draw_sea(build: Build): int =
 
 proc new_sea_build(): Build =
   result = Build.init(CENTER_X, 0.0, CENTER_Z, save = false)
-  # frames overlap exactly; colliders on all of them would stack physics
-  result.bot_collisions = FRAMES == 0
   Enu.units.add result
   result.scale = SCALE
   Enu.client.tick
@@ -333,29 +333,37 @@ if FRAMES == 0:
     discard
 else:
   echo "generating ", FRAMES, " frames of ", DIM, "x", DIM, " sea..."
-  var frame_builds: seq[Build]
+  let build = new_sea_build()
   for f in 0 ..< FRAMES:
     sea_time = LOOP * f.float / FRAMES.float
-    let b = new_sea_build()
     if f > 0:
-      b.global_flags -= VISIBLE # only frame 0 shows during generation
+      build.voxels.clear()
     fill_grids()
-    let voxels = draw_sea(b)
-    frame_builds.add b
-    echo "frame ", f, ": ", b.id, " voxels=", voxels
+    let voxels = draw_sea(build)
+    let index = build.save_frame()
+    echo "frame ", index, ": ", voxels, " voxels"
     # pace the flood: keep ticking so each frame's chunks drain before the
-    # next burst — a sustained blast drops the session (and ephemeral units
-    # die with it)
-    discard Enu.client.tick_until(3.seconds, false)
+    # next burst — a sustained blast drops the session
+    discard Enu.client.tick_until(2.seconds, false)
 
   echo "settling..."
-  discard Enu.client.tick_until(10.seconds, false)
-  let dt = init_duration(milliseconds = int(LOOP * 1000.0 / FRAMES.float))
-  echo "cycling ", FRAMES, " frames every ", dt.in_milliseconds,
-    "ms — kill me to reap the whole flipbook"
-  var cur = 0
-  Enu.client.every(dt):
-    let nxt = (cur + 1) mod FRAMES
-    frame_builds[nxt].global_flags += VISIBLE
-    frame_builds[cur].global_flags -= VISIBLE
-    cur = nxt
+  discard Enu.client.tick_until(5.seconds, false)
+  if get_env("SEA_HOLD") != "":
+    # debug mode: hold frame 0 for 30s, then frame 4 — no playback
+    build.current_frame = 0
+    echo "BUILD=", build.id, " holding frame 0"
+    var flipped = false
+    var ticks = 0
+    Enu.client.every(1.second):
+      inc ticks
+      if ticks == 30 and not flipped:
+        flipped = true
+        build.current_frame = 4
+        echo "holding frame 4"
+  else:
+    let fps = FRAMES.float / LOOP
+    build.play_frames(fps = fps)
+    echo "BUILD=", build.id, " playing ", FRAMES, " frames at ", fps,
+      "fps — kill me to reap it"
+    Enu.client.every(1.second):
+      discard

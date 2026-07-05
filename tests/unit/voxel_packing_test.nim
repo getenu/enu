@@ -141,3 +141,25 @@ suite "Static color palette":
 
   test "unknown palette index resolves to visible fallback":
     check resolve_color(shared, STATIC_COLOR_BASE + 99) == ACTION_COLORS[WHITE]
+
+suite "Frame pack/load round-trip":
+  test "pack_frame captures every chunk; apply_snapshot restores it":
+    let a = VoxelStore.init(unit_id = "frame_a")
+    a.add_voxel(vec3(0, 0, 0), (COMPUTED, ACTION_COLORS[BLUE]))
+    a.add_voxel(vec3(1, 2, 3), (COMPUTED, ACTION_COLORS[RED]))
+    a.add_voxel(vec3(20, 0, -5), (MANUAL, ACTION_COLORS[GREEN])) # 2nd chunk
+    a.add_voxel(vec3(4, 4, 4), (HOLE, ACTION_COLORS[ERASER]))
+
+    let frame = a.pack_frame
+    check frame.chunks.len == 2
+
+    let b = VoxelStore.init(unit_id = "frame_b")
+    for chunk_id, packed in frame.chunks:
+      b.apply_snapshot(chunk_id, packed)
+
+    for pos in [vec3(0, 0, 0), vec3(1, 2, 3), vec3(20, 0, -5), vec3(4, 4, 4)]:
+      check pos in b
+      check b.voxel_info(pos) == a.voxel_info(pos)
+    # apply_snapshot doesn't count HOLEs as blocks (add_voxel does — a
+    # pre-existing inconsistency for fresh holes); 3 solid + 1 hole here
+    check b.block_count == 3

@@ -65,6 +65,26 @@ bridged_to_host:
     use_turtle: bool,
   )
 
+  proc save_frame*(self: Build): int
+    ## Snapshot the current voxels as the next animation frame; returns its
+    ## index. Pose, save, repeat — then play_frames.
+
+  proc load_frame*(self: Build, index: int)
+    ## Restore a saved frame into the live voxels for editing (this changes
+    ## the real state, unlike `frame=` which only changes the display).
+
+  proc `frame=`*(self: Build, index: int)
+    ## Display a saved frame (-1 = the live voxel state). Display-only.
+
+  proc frame*(self: Build): int
+
+  proc frames_len*(self: Build): int
+
+  proc play_frames*(self: Build, fps = 8.0, loop = true)
+    ## Cycle through the saved frames at `fps` (loops by default).
+
+  proc stop_frames*(self: Build)
+
   proc rendered_voxel_count_get*(self: Build): int
 
   proc pending_block_updates_get*(self: Unit): int
@@ -80,6 +100,9 @@ bridged_to_host:
 
 proc pending_block_updates*(self: Unit): int =
   pending_block_updates_get(self)
+
+template frame_count*(self: Build): int =
+  self.frames_len
 
 template asap*(body: untyped) =
   ## Execute build commands instantly without incremental updates.

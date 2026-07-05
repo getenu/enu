@@ -85,6 +85,12 @@ type
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
 
+  FrameData* = object
+    ## One animation frame: the unit's whole voxel state as packed chunks —
+    ## the same encoding the sync layer uses. Frames are data; meshes are
+    ## derived per side (see docs/notes/voxel-frame-animation.md).
+    chunks*: Table[Vector3, SnapshotData]
+
   EditKey* = tuple[id: string, loc: Vector3]
 
 type
@@ -391,6 +397,16 @@ type
       Table[string, tuple[position: Transform, color: Color, drawing: bool]]
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
+    frames*: EdSeq[FrameData]
+      ## Saved animation frames, in order. Synced once as data; playback
+      ## only moves `current_frame`.
+    current_frame_value*: EdValue[int]
+      ## Displayed frame, or -1 for the live voxel state. Display-only:
+      ## queries and collisions keep reading the live voxels (use
+      ## `load_frame` to actually restore a frame for editing).
+    frames_fps_value*: EdValue[float]
+      ## > 0 while playing; the server advances `current_frame` at this rate.
+    frames_loop_value*: EdValue[bool]
 
   Config* = object
     font_size*: int

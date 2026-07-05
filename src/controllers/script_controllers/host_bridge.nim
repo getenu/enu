@@ -1560,6 +1560,15 @@ proc place_block(self: Build, position: Vector3, color: Color) =
   self.add_voxel(position, info)
   self.voxels.set_edit(position, info)
 
+proc frames_len(self: Build): int =
+  self.frame_count
+
+proc frame(self: Build): int =
+  self.current_frame
+
+proc `frame=`(self: Build, index: int) =
+  self.current_frame = index
+
 proc save_level_now() =
   serializers.save_level(state.config.level_dir, force = true)
 
@@ -1622,7 +1631,9 @@ proc bridge_to_vm*(worker: Worker) =
     drawing, `drawing=`, initial_position, save, restore, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
-    cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get
+    cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
+    save_frame, load_frame, frame, `frame=`, frames_len, play_frames,
+    stop_frames
 
   result.bridged_from_vm "builds_private", place_block
 

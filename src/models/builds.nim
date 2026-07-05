@@ -151,6 +151,32 @@ template buffer*(self: Build, body: untyped) =
     self.voxels.flush_dirty_edits()
     self.voxels.immediate = was_immediate
 
+proc frame_count*(self: Build): int =
+  self.frames.len
+
+proc save_frame*(self: Build): int {.discardable.} =
+  ## Snapshot the current voxels as the next animation frame; returns the
+  ## new frame's index.
+  self.frames.add self.voxels.pack_frame
+  self.frames.len - 1
+
+proc load_frame*(self: Build, index: int) =
+  ## Restore a saved frame into the live voxels for editing. Unlike
+  ## `current_frame=`, this changes the real state (and syncs it).
+  if index >= 0 and index < self.frames.len:
+    self.voxels.load_frame(self.frames[index])
+    self.reset_bounds()
+
+proc play_frames*(self: Build, fps: float = 8.0, loop: bool = true) =
+  ## Start frame playback; the server advances `current_frame` at `fps`.
+  ## `current_frame=` displays a frame without touching the live voxels;
+  ## `load_frame` restores one for editing.
+  self.frames_loop = loop
+  self.frames_fps = fps
+
+proc stop_frames*(self: Build) =
+  self.frames_fps = 0.0
+
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
   self.voxels.add_voxel(position, voxel)
 
@@ -428,10 +454,15 @@ proc init*(
       flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
     )
     let voxels = VoxelStore.init(unit_id = id)
+    let frames = EdSeq[FrameData].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
     var self = Build(
       id: id,
       packed_chunks: packed_chunks,
       chunk_deltas: chunk_deltas,
+      frames: frames,
+      current_frame_value: EdValue[int].init(-1, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       voxels: voxels,
       start_transform: transform,
       draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
