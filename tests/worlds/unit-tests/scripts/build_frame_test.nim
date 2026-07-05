@@ -9,7 +9,8 @@ suite "Frame Animation":
     me.draw_voxel(vec3(1, 0, 0), red)
     check me.save_frame() == 0
     me.draw_voxel(vec3(1, 0, 0), green)
-    check me.save_frame() == 1
+    check save_frame() == 1 # bare form, discardable
+    save_frame(at = 1) # discard-free overwrite
     check me.frame_count == 2
 
   test "load_frame restores a saved pose into the live voxels":

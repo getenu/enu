@@ -17,6 +17,17 @@ const
     ## material/6: the shared vertex-color material static RGB voxels render
     ## with (materials 0..5 stay the uniform-tinted named colors).
 
+# Material iteration reads the terrain node's own slots (bounded by the
+# engine's MAX_MATERIALS = 8), never the (dynamically growing) library and
+# never shared.materials — the node's assignments are the ground truth for
+# what's rendering, whatever the Shared has been through.
+template each_material(self, i, m, body: untyped) =
+  for i in 0 .. 7:
+    let m = self.get_material(i).as(ShaderMaterial)
+    if not ?m:
+      break
+    body
+
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
 var hidden_shader {.threadvar.}: Shader
@@ -201,16 +212,14 @@ gdobj BuildNode of VoxelTerrain:
         self.model.voxels.chunk_deltas.release(chunk_id)
 
   proc set_glow(glow: float) =
-    # Iterate the build's own materials, not the (dynamically growing)
-    # library — one entry per terrain material slot.
-    for m in self.model.shared.materials:
+    self.each_material(i, m):
       m.set_shader_param("emission_energy", glow.to_variant)
 
   proc set_highlight() =
-    for i, m in self.model.shared.materials:
+    self.each_material(i, m):
       if self.error_highlight_on:
         m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
-      else:
+      elif i < self.model.shared.emission_colors.len:
         m.set_shader_param(
           "emission", self.model.shared.emission_colors[i].to_variant
         )
@@ -228,13 +237,13 @@ gdobj BuildNode of VoxelTerrain:
     if VISIBLE in self.model.global_flags:
       self.visible = true
 
-      for i, material in self.model.shared.materials:
+      self.each_material(i, material):
         material.shader =
           if i == rgb_material_index: rgb_shader else: shader
     elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
 
-      for i, material in self.model.shared.materials:
+      self.each_material(i, material):
         material.shader =
           if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
     else:

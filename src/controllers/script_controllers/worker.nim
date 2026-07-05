@@ -534,6 +534,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         unit = find_in(state.units)
         if unit.is_nil:
           return ("", "Error: unit not found: " & unit_id)
+        if unit.destroyed:
+          # a reload can briefly leave the outgoing instance findable; its
+          # Ed fields are torn down and any accessor would crash the worker
+          return ("", "Error: unit is reloading, try again: " & unit_id)
         if unit.script_ctx.is_nil or unit.script_ctx.interpreter.is_nil:
           return ("", "Error: unit has no script context: " & unit_id)
         # Clones share the proto's module — they don't have one of their

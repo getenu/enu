@@ -65,10 +65,7 @@ bridged_to_host:
     use_turtle: bool,
   )
 
-  proc save_frame*(self: Build, at: int = -1): int
-    ## Snapshot the current voxels as an animation frame and return its
-    ## index — appended by default, or overwriting frame `at`. Replace
-    ## workflow: load_frame(3), edit, save_frame(at = 3).
+  proc save_frame_impl*(self: Build, at: int): int
 
   proc delete_frame*(self: Build, index: int)
     ## Remove a saved frame; later frames shift down one index.
@@ -113,6 +110,35 @@ proc pending_block_updates*(self: Unit): int =
 
 template frame_count*(self: Build): int =
   self.frames_len
+
+proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
+  ## Snapshot the current voxels as an animation frame and return its
+  ## index — appended by default, or overwriting frame `at`. Replace
+  ## workflow: load_frame(3), edit, save_frame(at = 3). Raises past 64
+  ## frames without a clear_frames().
+  self.save_frame_impl(at)
+
+# bare forms for the active unit, matching the drawing API
+proc save_frame*(at: int = -1): int {.discardable.} =
+  Build(active_unit()).save_frame_impl(at)
+
+proc load_frame*(index: int) =
+  Build(active_unit()).load_frame(index)
+
+proc delete_frame*(index: int) =
+  Build(active_unit()).delete_frame(index)
+
+proc clear_frames*() =
+  Build(active_unit()).clear_frames()
+
+proc play_frames*(fps = 8.0, loop = true) =
+  Build(active_unit()).play_frames(fps, loop)
+
+proc stop_frames*() =
+  Build(active_unit()).stop_frames()
+
+# no bare frame_count(): it would collide with the engine's global frame
+# counter in base_bridge — use me.frame_count
 
 template asap*(body: untyped) =
   ## Execute build commands instantly without incremental updates.

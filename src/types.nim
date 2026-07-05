@@ -251,8 +251,11 @@ type
   Ground* = ref object of Model
 
   Shared* = ref object of EdRef
-    materials*: seq[ShaderMaterial]
-    emission_colors*: seq[godot.Color]
+    materials* {.ed_ignore.}: seq[ShaderMaterial]
+      ## Node-side Godot refs, shared across the unit tree's nodes.
+      ## `ed_ignore`: godot refs can't ride a body sync — a revive would
+      ## wipe them (and glow/highlight with them).
+    emission_colors* {.ed_ignore.}: seq[godot.Color]
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
     palette*: EdSeq[Color]
