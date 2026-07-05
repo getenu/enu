@@ -10,7 +10,7 @@ import
 import
   nodes/[
     player_node, aim_target, selection_area, bot_node, ground_node, build_node,
-    sign_node,
+    sign_node, turtle_overlay,
   ]
 
 Ed.bootstrap

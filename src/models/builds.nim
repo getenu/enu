@@ -203,6 +203,12 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
   if not dont_join and voxel.kind == MANUAL:
     self.maybe_join_previous_build(position, voxel)
 
+proc sync_turtle*(self: Build) =
+  # Mirror draw_transform for the render side. Called once per batch of
+  # draw_transform writes, not per voxel — see turtle_transform in types.nim.
+  if self.turtle_transform != self.draw_transform:
+    self.turtle_transform = self.draw_transform
+
 proc drop_block(self: Build) =
   if self.drawing:
     var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
@@ -321,6 +327,7 @@ method on_begin_move*(
         self.voxels_remaining_this_frame -= 1
         self.drop_block()
 
+      self.sync_turtle()
       if count.float >= steps: NEXT_TASK else: RUNNING
 
 method on_begin_turn*(
@@ -366,10 +373,12 @@ method on_begin_turn*(
     self.draw_transform_value.basis =
       self.draw_transform.basis.rotated(axis, deg_to_rad(degrees))
     self.draw_transform = self.draw_transform.orthonormalized()
+    self.sync_turtle()
 
 proc reset_state*(self: Build) =
   self.init_shared
   self.draw_transform = Transform.init
+  self.sync_turtle()
   self.transform = self.start_transform
 
 method reset*(self: Build) =
@@ -435,6 +444,8 @@ proc init*(
       voxels: voxels,
       start_transform: transform,
       draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
+      turtle_transform_value:
+        EdValue[Transform].init(Transform.init, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       start_color: color,
       drawing: true,
       bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),

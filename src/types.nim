@@ -364,6 +364,11 @@ type
     chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
     voxels*: VoxelStore
     draw_transform_value*: EdValue[Transform]
+    # draw_transform mirrored for the render side (turtle indicator). A separate
+    # field because draw_transform is written per voxel — syncing it directly
+    # would flood the context queue during ASAP draws. This one is written once
+    # per batch (see sync_turtle).
+    turtle_transform_value*: EdValue[Transform]
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
     drawing*: bool
