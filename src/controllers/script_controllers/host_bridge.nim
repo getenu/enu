@@ -741,6 +741,7 @@ proc advance(self: Build, steps: float) =
   ## animation or risking the speed-toggle render race.
   let offset = self.draw_transform.basis.xform(FORWARD) * steps
   self.draw_transform_value.origin = self.draw_transform.origin + offset
+  self.sync_turtle()
 
 proc draw_position_set(self: Build, position: Vector3) =
   if GLOBAL in self.global_flags:
@@ -748,6 +749,7 @@ proc draw_position_set(self: Build, position: Vector3) =
   else:
     self.draw_transform_value.origin =
       (position - self.position).local_to(self.parent)
+  self.sync_turtle()
 
 proc save(self: Build, name: string) =
   self.save_points[name] =
@@ -761,6 +763,7 @@ proc restore(self: Build, name: string) =
     # compiles but silently writes into the getters' temporaries.
     let (position, color, drawing) = self.save_points[name]
     self.draw_transform = position
+    self.sync_turtle()
     self.color_value.value = color
     self.drawing = drawing
 
