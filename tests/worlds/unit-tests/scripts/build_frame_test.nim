@@ -38,6 +38,32 @@ suite "Frame Animation":
     me.delete_frame(2)
     check me.frame_count == 2
 
+  test "clear_frames drops everything and stops playback":
+    me.clear_frames()
+    check me.frame_count == 0
+    check me.frame == -1
+    # rebuild two frames for the playback test below
+    me.draw_voxel(vec3(1, 0, 0), red)
+    discard me.save_frame()
+    me.draw_voxel(vec3(1, 0, 0), green)
+    discard me.save_frame()
+
+  test "save_frame raises at the frame cap":
+    while me.frame_count < 64:
+      discard me.save_frame()
+    var raised = false
+    try:
+      discard me.save_frame()
+    except CatchableError:
+      raised = true
+    check raised
+    # trim back down; playback below wants a small stack
+    me.clear_frames()
+    me.draw_voxel(vec3(1, 0, 0), red)
+    discard me.save_frame()
+    me.draw_voxel(vec3(1, 0, 0), green)
+    discard me.save_frame()
+
   test "play_frames advances the current frame":
     me.play_frames(fps = 5.0)
     var waited = 0.0

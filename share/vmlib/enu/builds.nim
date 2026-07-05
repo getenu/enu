@@ -73,6 +73,12 @@ bridged_to_host:
   proc delete_frame*(self: Build, index: int)
     ## Remove a saved frame; later frames shift down one index.
 
+  proc clear_frames*(self: Build)
+    ## Drop every saved frame and stop playback. Frames persist across
+    ## script re-runs (that's the hand-edit flow: pose, run a script that
+    ## calls save_frame, repeat) — so programmatic animations clear first.
+    ## save_frame raises after 64 frames without a clear.
+
   proc load_frame*(self: Build, index: int)
     ## Restore a saved frame into the live voxels for editing (this changes
     ## the real state, unlike `frame=` which only changes the display).

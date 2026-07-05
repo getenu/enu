@@ -62,6 +62,10 @@ const
   # palette entries (env-independent).
   STATIC_COLOR_BASE* = 64
   MAX_STATIC_COLORS* = 4096
+  MAX_FRAMES* = 64
+    ## Animation frame cap per build: frames persist across script re-runs
+    ## (clearing is explicit via clear_frames), so an unguarded save_frame
+    ## in a loop would grow forever. Call 65 raises.
 
   # Delta thresholds
   MAX_CHANGES_FOR_DELTA* = 100

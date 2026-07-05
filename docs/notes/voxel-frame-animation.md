@@ -96,14 +96,21 @@ regardless of visibility, which is exactly the flaw the real feature removes.
 
 ## API (v1: client + VM; UI later)
 
-    build.save_frame()            # snapshot current voxels as the next frame
-    build.frame = 2               # load/display a frame (also: scrub, edit base)
+    build.save_frame()            # append a frame (raises past 64 frames)
+    build.save_frame(at = 3)      # overwrite frame 3 in place
+    build.load_frame(3)           # restore frame 3 into the live voxels
+    build.frame = 2               # display-only; -1 = live state
     build.frame_count
+    build.delete_frame(3)         # later frames shift down
+    build.clear_frames()          # explicit — frames persist across script
+                                  #   re-runs (hand-edit flow: pose, run a
+                                  #   script calling save_frame, repeat)
     build.play_frames(fps = 8.0, loop = true)
     build.stop_frames()
 
-Authoring loop: pose -> save_frame -> repeat -> play. `frame =` loads a frame
-back into the live voxels so any frame can be re-edited and re-saved.
+Script reset stops playback and drops the display but keeps frames;
+programmatic animations call clear_frames() first. The 64-frame cap
+(MAX_FRAMES) keeps an unguarded save_frame loop from growing forever.
 
 ## Milestones
 

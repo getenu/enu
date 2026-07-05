@@ -163,6 +163,11 @@ proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
     self.frames[at] = self.voxels.pack_frame
     at
   else:
+    if self.frames.len >= MAX_FRAMES:
+      raise ResourceLimitError.init(
+        "frame limit reached (" & $MAX_FRAMES &
+          "): call clear_frames(), or overwrite with save_frame(at = ...)"
+      )
     let index = self.frames.len
     self.frames[index] = self.voxels.pack_frame
     index
@@ -175,6 +180,14 @@ proc load_frame*(self: Build, index: int) =
     self.voxels.load_frame(self.frames[index])
     self.reset_bounds()
     self.current_frame = -1
+
+proc clear_frames*(self: Build) =
+  ## Drop every saved frame, stop playback, and show the live state.
+  ## Scripts that build an animation programmatically call this first;
+  ## otherwise save_frame keeps appending across script re-runs.
+  self.frames_fps = 0.0
+  self.current_frame = -1
+  self.frames.clear
 
 proc delete_frame*(self: Build, index: int) =
   ## Remove a saved frame; later frames shift down one index (keys stay
@@ -432,12 +445,12 @@ method reset*(self: Build) =
   self.global_flags += VISIBLE
   self.reset_state()
 
-  # a reload is a full re-run from a clean state: stop playback, drop the
-  # displayed frame, and clear saved frames (scripts that build animations
-  # re-save them on the re-run; persisted frames are an M3 concern)
+  # a reload stops playback and drops the displayed frame, but saved frames
+  # persist — the hand-edit workflow is "pose, re-run a script that calls
+  # save_frame, repeat", so each run appends. Scripts building animations
+  # programmatically call clear_frames() first.
   self.frames_fps = 0.0
   self.current_frame = -1
-  self.frames.clear
 
   self.voxels.clear()
 
