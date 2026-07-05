@@ -101,7 +101,7 @@ gdobj BuildNode of VoxelTerrain:
       let frame = frames[index]
       for chunk_id in self.loaded_chunks:
         if chunk_id in frame.chunks:
-          render_snapshot_direct(
+          render_snapshot_replace(
             self.renderer.voxel_tool, chunk_id, frame.chunks[chunk_id],
             self.resolver,
           )
@@ -111,7 +111,7 @@ gdobj BuildNode of VoxelTerrain:
       # back to the live voxel state: snapshot + any deltas on top
       for chunk_id in self.loaded_chunks:
         if chunk_id in self.model.voxels.packed_chunks:
-          render_snapshot_direct(
+          render_snapshot_replace(
             self.renderer.voxel_tool, chunk_id,
             self.model.voxels.packed_chunks[chunk_id], self.resolver,
           )
@@ -150,7 +150,7 @@ gdobj BuildNode of VoxelTerrain:
           ASAP_MODE notin self.model.global_flags:
         let frame = self.model.frames[shown_frame]
         if chunk_id in frame.chunks and ?self.renderer.voxel_tool:
-          render_snapshot_direct(
+          render_snapshot_replace(
             self.renderer.voxel_tool, chunk_id, frame.chunks[chunk_id],
             self.resolver,
           )

@@ -1032,6 +1032,35 @@ proc render_snapshot_direct*(
         inc result
     voxel_tool.paste(chunk_min, buffer, 1, 0)
 
+proc render_snapshot_replace*(
+    voxel_tool: VoxelTool,
+    chunk_id: Vector3,
+    snapshot: SnapshotData,
+    resolver: ColorIndexResolver = nil,
+): int {.discardable.} =
+  ## Render a chunk snapshot REPLACING whatever the chunk showed before —
+  ## cells empty in the snapshot are cleared. Always paste-based, because
+  ## paste overwrites every cell; the additive fast path in
+  ## render_snapshot_direct leaves stale voxels behind (frame flips need
+  ## replacement semantics).
+  let voxels = decode_chunk(snapshot)
+  let chunk_min = chunk_id * ChunkDim
+  var slot_cache: SlotCache
+  let buffer = gdnew[VoxelBuffer]()
+  buffer.create(ChunkDim, ChunkDim, ChunkDim)
+  buffer.fill(0)
+  for linear in 0 ..< CHUNK_VOLUME:
+    let packed_voxel = voxels[linear]
+    if packed_voxel != EMPTY_VOXEL:
+      let local_pos = from_linear(linear)
+      let (color_idx, _) = unpack_voxel(packed_voxel)
+      buffer.set_voxel(
+        resolver.library_slot(color_idx, slot_cache),
+        local_pos.x.int64, local_pos.y.int64, local_pos.z.int64,
+      )
+      inc result
+  voxel_tool.paste(chunk_min, buffer, 1, 0)
+
 proc render_delta_direct*(
     voxel_tool: VoxelTool,
     chunk_id: Vector3,

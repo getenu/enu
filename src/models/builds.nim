@@ -432,6 +432,13 @@ method reset*(self: Build) =
   self.global_flags += VISIBLE
   self.reset_state()
 
+  # a reload is a full re-run from a clean state: stop playback, drop the
+  # displayed frame, and clear saved frames (scripts that build animations
+  # re-save them on the re-run; persisted frames are an M3 concern)
+  self.frames_fps = 0.0
+  self.current_frame = -1
+  self.frames.clear
+
   self.voxels.clear()
 
   self.units.clear()
