@@ -366,6 +366,15 @@ proc begin_move(
     self.pause_script()
 
 proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
+  # A bare sleep is the idle park at the end of a script beat — drawing has
+  # settled, so publish now. Without this, the flush waits out the 0.5s
+  # park for end_asap at script completion: every rerun's voxels arrived
+  # (and painted) half a second after the script finished drawing.
+  if seconds <= 0 and ?self.active_unit and self.active_unit of Build:
+    let build = Build(self.active_unit)
+    if ASAP_MODE in build.global_flags:
+      build.voxels.flush_dirty_chunks()
+      build.reset_bounds()
   var duration = 0.0
   ctx.callback = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta

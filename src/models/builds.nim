@@ -131,8 +131,10 @@ proc begin_asap*(self: Build) {.gcsafe.} =
 proc end_asap*(self: Build) {.gcsafe.} =
   if ASAP_MODE in self.global_flags:
     debug "ASAP mode END", build_id = self.id
-    self.reset_bounds()
+    # flush before bounds: reset_bounds reads the chunk tables, which only
+    # reflect this run's drawing once the dirty chunks are flushed
     self.voxels.flush_dirty_chunks()
+    self.reset_bounds()
     self.global_flags -= ASAP_MODE
 
 template buffer*(self: Build, body: untyped) =
