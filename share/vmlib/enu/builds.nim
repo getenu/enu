@@ -65,9 +65,13 @@ bridged_to_host:
     use_turtle: bool,
   )
 
-  proc save_frame*(self: Build): int
-    ## Snapshot the current voxels as the next animation frame; returns its
-    ## index. Pose, save, repeat — then play_frames.
+  proc save_frame*(self: Build, at: int = -1): int
+    ## Snapshot the current voxels as an animation frame and return its
+    ## index — appended by default, or overwriting frame `at`. Replace
+    ## workflow: load_frame(3), edit, save_frame(at = 3).
+
+  proc delete_frame*(self: Build, index: int)
+    ## Remove a saved frame; later frames shift down one index.
 
   proc load_frame*(self: Build, index: int)
     ## Restore a saved frame into the live voxels for editing (this changes

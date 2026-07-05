@@ -154,18 +154,48 @@ template buffer*(self: Build, body: untyped) =
 proc frame_count*(self: Build): int =
   self.frames.len
 
-proc save_frame*(self: Build): int {.discardable.} =
-  ## Snapshot the current voxels as the next animation frame; returns the
-  ## new frame's index.
-  self.frames.add self.voxels.pack_frame
-  self.frames.len - 1
+proc rebuild_frames(self: Build, frames: seq[FrameData]) =
+  # Positional EdSeq ops (`[]=`, indexed del) can apply out of order on
+  # replicas; rebuilding with pure adds keeps every side identical.
+  self.frames.clear
+  for frame in frames:
+    self.frames.add frame
+
+proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
+  ## Snapshot the current voxels as an animation frame and return its index:
+  ## appended by default, or overwriting frame `at` (replace workflow:
+  ## `load_frame(3)`, edit, `save_frame(at = 3)`).
+  if at >= 0 and at < self.frames.len:
+    var all: seq[FrameData]
+    for i in 0 ..< self.frames.len:
+      all.add(if i == at: self.voxels.pack_frame else: self.frames[i])
+    self.rebuild_frames(all)
+    at
+  else:
+    self.frames.add self.voxels.pack_frame
+    self.frames.len - 1
 
 proc load_frame*(self: Build, index: int) =
   ## Restore a saved frame into the live voxels for editing. Unlike
-  ## `current_frame=`, this changes the real state (and syncs it).
+  ## `current_frame=`, this changes the real state (and syncs it). Also
+  ## switches the display to the live state, so you see what you edit.
   if index >= 0 and index < self.frames.len:
     self.voxels.load_frame(self.frames[index])
     self.reset_bounds()
+    self.current_frame = -1
+
+proc delete_frame*(self: Build, index: int) =
+  ## Remove a saved frame; later frames shift down one index.
+  if index >= 0 and index < self.frames.len:
+    var all: seq[FrameData]
+    for i in 0 ..< self.frames.len:
+      if i != index:
+        all.add self.frames[i]
+    self.rebuild_frames(all)
+    if self.current_frame == index:
+      self.current_frame = -1
+    elif self.current_frame > index:
+      self.current_frame = self.current_frame - 1
 
 proc play_frames*(self: Build, fps: float = 8.0, loop: bool = true) =
   ## Start frame playback; the server advances `current_frame` at `fps`.

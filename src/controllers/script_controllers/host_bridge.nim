@@ -1632,8 +1632,8 @@ proc bridge_to_vm*(worker: Worker) =
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
     cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
-    save_frame, load_frame, frame, `frame=`, frames_len, play_frames,
-    stop_frames
+    save_frame, load_frame, delete_frame, frame, `frame=`, frames_len,
+    play_frames, stop_frames
 
   result.bridged_from_vm "builds_private", place_block
 
