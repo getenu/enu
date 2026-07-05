@@ -1620,6 +1620,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge",
     register_active, register_template_node, echo_console, new_instance,
+    pending_block_updates_get,
     exec_instance, capture_start_transform, hit, exit, global, `global=`,
     position, local_position,
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
@@ -1643,7 +1644,7 @@ proc bridge_to_vm*(worker: Worker) =
     drawing, `drawing=`, initial_position, save, restore, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
-    cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
+    cylinder_impl, advance, rendered_voxel_count_get,
     save_frame_impl, load_frame, delete_frame, clear_frames, frame,
     `frame=`, frames_len, play_frames, stop_frames
 

@@ -198,11 +198,13 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
       if added:
         case q.state
         of PENDING:
-          info "unit query received by worker, running file update",
+          # Schedule a file scan and leave the query PENDING: the worker
+          # loop scans at top level and promotes to READY after (a reload
+          # triggered here would run the script inside this ed watch
+          # callback, nested in sync processing — reruns lose their draws).
+          info "unit query received by worker, scheduling file scan",
             kind = $q.kind, id = self.id
-          worker.update_files_proc()
-          q.state = READY
-          self.query = q
+          worker.watch_files_at = MonoTime.low
         of READY:
           case q.kind
           of CONSOLE:
@@ -245,7 +247,4 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
     # fires for it. Nudge so the handler picks it up.
     let pending = self.query
     if pending.state == PENDING:
-      var q = pending
-      worker.update_files_proc()
-      q.state = READY
-      self.query = q
+      worker.watch_files_at = MonoTime.low

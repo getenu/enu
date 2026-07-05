@@ -274,12 +274,17 @@ proc loadModule*(
   # which causes "cannot evaluate at compile time" issues with some variables.
   # Force things back to emRepl.
   PCtx(i.graph.vm).mode = emRepl
+  # A failed eval elsewhere can leave the global error counter latched at or
+  # past errorMax; stopCompile() then makes processModule skip this module's
+  # body without a peep — the script "runs" as an empty module.
+  i.graph.config.errorCounter = 0
 
   ctx = preparePContext(i.graph, module, i.idgen)
 
   {.gcsafe.}:
     with_import_stack_recovery(i.graph):
-      discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
+      if not processModule(i.graph, module, i.idgen, stream, ctx, dependencies):
+        stderr.write_line "module load incomplete: " & moduleName
 
 proc node_to_str(n: PNode): string =
   case n.kind

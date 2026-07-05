@@ -146,6 +146,7 @@ proc write_script_file(unit: Unit, code: string) =
     discard
 
 proc change_code(self: Worker, unit: Unit, code: Code) =
+  info "TRACE change_code", unit = unit.id
   debug "code changing", unit = unit.id
   unit.errors.clear
   unit.global_flags -= HIGHLIGHT_ERROR
@@ -889,6 +890,18 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
       if now > worker.watch_files_at:
         worker.update_files()
+        # Agent queries hold in PENDING until a top-level file scan has run
+        # (their handler only schedules one — see bots.nim): any reload the
+        # scan triggers ran to completion above, so answers can't observe a
+        # half-reloaded unit. Promote them now; the READY write re-fires
+        # their watch, which answers the query.
+        for unit in state.units.value:
+          if unit of Bot and EPHEMERAL in unit.global_flags:
+            let bot = Bot(unit)
+            if bot.query.state == PENDING:
+              var q = bot.query
+              q.state = READY
+              bot.query = q
 
       # Track max tick time for debugging
       let tick_time = get_mono_time() - frame_start

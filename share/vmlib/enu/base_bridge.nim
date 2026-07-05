@@ -88,6 +88,14 @@ bridged_to_host:
   proc exec_instance*(self: Unit)
   proc capture_start_transform*(self: Unit)
   proc wake*(self: Unit)
+  proc pending_block_updates_get*(self: Unit): int
+    ## Unfinished voxel pipeline work (queued, in-flight, or awaiting
+    ## apply) for the unit and its descendants. 0 = every submitted edit
+    ## is meshed and visible. Lives here rather than in builds so query
+    ## evals (which run in the player's module) can reach it.
   proc create_new*(self: Unit)
   proc frame_count*(): int
   proc signal_test_complete*(exit_code: int)
+
+proc pending_block_updates*(self: Unit): int =
+  pending_block_updates_get(self)
