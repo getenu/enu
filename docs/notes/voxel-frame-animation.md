@@ -68,8 +68,19 @@ The per-chunk **frame-mesh cache** is the heart of the feature:
   ocean size.
 - Temporal LOD when needed: full frames near the viewer, fewer frames
   mid-distance, static beyond.
-- Engine touch (owned fork, `vendor/modules/voxel`): per-block mesh array +
-  displayed index on `VoxelTerrain`, instead of one mesh per block.
+- No engine change needed after all: `VoxelMesher.build_mesh(buffer,
+  materials)` is scriptable (and its scratch is `thread_local`, so
+  main-thread baking never races the meshing threads). Frames render as
+  plain `MeshInstance` children of the terrain node whose `.mesh` pointer
+  swaps per flip; the live terrain hides under a discard shader
+  (`terrain_voxel_off.shader`) meanwhile. The instances inherit the node
+  transform, so scaled builds animate correctly — which retired M1's
+  scale-display bug. Frame meshes carry node-local material duplicates
+  (pinned to the normal shaders) so the discard swap can't hide them; glow
+  and highlight mirror onto them. Known edge: the discard swap mutates the
+  Shared's live materials, so sibling units sharing a Shared (spawner
+  clones) would blank while one displays a frame — frames are for root
+  builds in practice.
 
 Cost cutters, measured against the sea prototypes:
 
@@ -121,8 +132,15 @@ programmatic animations call clear_frames() first. The 64-frame cap
    on scaled builds (data provably updates; the mesh-update scheduling drops
    it — same scale/coordinate family as floor_at ignoring scale). Works at
    scale 1.
-2. **M2 — frame-mesh cache**: per-(chunk, hash) cached meshes, warm-up rules,
-   engine per-block mesh array; big units animate smoothly.
+2. **M2 — frame-mesh cache** (landed 2026-07-05, no engine change): frames
+   display as baked meshes via `VoxelMesher.build_mesh` on MeshInstance
+   children — zero voxel writes and zero remeshing per flip. Cache keyed by
+   chunk content hash mixed with all 26 neighbors' (border culling stays
+   correct, identical chunks dedupe across frames); baking is time-boxed
+   (8 ms/tick) with `frame_bake_pending` continuation, so big builds warm
+   over the first loop instead of hitching. Live voxel data is never
+   touched: collisions, queries and the return-to-live path all read the
+   real state, and scaled builds animate (M1's scale-display bug is gone).
 3. **M3 — storage + polish**: keyframe+delta compression, sidecar
    persistence, temporal LOD, sheet culling, UI.
 

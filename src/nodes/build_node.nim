@@ -1,10 +1,10 @@
-import std/[tables, bitops, times, options, sets]
+import std/[tables, bitops, times, options, sets, hashes]
 import pkg/godot except print, Color
 import
   godotapi/[
-    node, voxel_terrain, voxel_mesher_blocky, voxel_tool, voxel_library,
-    voxel_buffer, voxel_server, shader_material, resource_loader, packed_scene,
-    ray_cast,
+    node, spatial, voxel_terrain, voxel_mesher_blocky, voxel_mesher,
+    voxel_tool, voxel_library, voxel_buffer, voxel_server, shader_material,
+    resource_loader, packed_scene, ray_cast, mesh_instance, mesh,
   ]
 import core, models/[units, builds, colors, voxels], gdutils
 import ./queries, ./voxel_library_registry
@@ -33,6 +33,7 @@ var shader {.threadvar.}: Shader
 var hidden_shader {.threadvar.}: Shader
 var rgb_shader {.threadvar.}: Shader
 var hidden_rgb_shader {.threadvar.}: Shader
+var off_shader {.threadvar.}: Shader
 
 gdobj BuildNode of VoxelTerrain:
   var
@@ -56,6 +57,18 @@ gdobj BuildNode of VoxelTerrain:
     data_logged: bool
     holding_bakes: bool
     next_frame_at: MonoTime
+    next_bake_at: MonoTime
+    # Frame display (M2): saved frames render as cached meshes on plain
+    # MeshInstance children — no voxel writes, no remeshing per flip. The
+    # live terrain hides under a discard shader meanwhile; its data (and so
+    # collisions and queries) is never touched.
+    frame_mesh_cache: Table[Hash, Mesh]
+    frame_instances: Table[Vector3, MeshInstance]
+    frame_materials: seq[ShaderMaterial]
+    frame_chunk_hash_cache: Table[int, ref Table[Vector3, Hash]]
+    frames_showing: bool
+    frame_bake_pending: bool
+    playback_logged: bool
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded"
@@ -102,40 +115,160 @@ gdobj BuildNode of VoxelTerrain:
 
     self.tracked_delta_seqs[chunk_id] = zid
 
-  proc render_frame(index: int) =
-    ## Display a saved frame (or the live state for index < 0) across every
-    ## loaded chunk. Display-only: the model's voxel data is untouched.
-    if ASAP_MODE in self.model.global_flags or not ?self.renderer.voxel_tool:
-      return
-    let frames = self.model.frames
-    if index >= 0 and index < frames.len:
-      let frame = frames[index]
-      for chunk_id in self.loaded_chunks:
-        if chunk_id in frame.chunks:
-          render_snapshot_replace(
-            self.renderer.voxel_tool, chunk_id, frame.chunks[chunk_id],
-            self.resolver,
-          )
-        else:
-          erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
+  proc set_glow(glow: float) =
+    self.each_material(i, m):
+      m.set_shader_param("emission_energy", glow.to_variant)
+    for m in self.frame_materials:
+      m.set_shader_param("emission_energy", glow.to_variant)
+
+  proc set_highlight() =
+    template apply(i, m: untyped) =
+      if self.error_highlight_on:
+        m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
+      elif i < self.model.shared.emission_colors.len:
+        m.set_shader_param(
+          "emission", self.model.shared.emission_colors[i].to_variant
+        )
+
+      if HIGHLIGHT in self.model.local_flags or
+          (
+            HIGHLIGHT_ERROR in self.model.global_flags and
+            self.error_highlight_on
+          ):
+        m.set_shader_param("emission_energy", highlight_glow.to_variant)
+      else:
+        m.set_shader_param("emission_energy", self.model.glow.to_variant)
+
+    self.each_material(i, m):
+      apply(i, m)
+    for i, m in self.frame_materials:
+      apply(i, m)
+
+  proc set_visibility() =
+    # While a frame is displayed the live terrain's materials swap to the
+    # discard shader — frame meshes carry their own material duplicates.
+    if VISIBLE in self.model.global_flags:
+      self.visible = true
+
+      self.each_material(i, material):
+        material.shader =
+          if self.frames_showing:
+            off_shader
+          elif i == rgb_material_index:
+            rgb_shader
+          else:
+            shader
+    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
+      self.visible = true
+
+      self.each_material(i, material):
+        material.shader =
+          if self.frames_showing:
+            off_shader
+          elif i == rgb_material_index:
+            hidden_rgb_shader
+          else:
+            hidden_shader
     else:
-      # back to the live voxel state: snapshot + any deltas on top
-      for chunk_id in self.loaded_chunks:
-        if chunk_id in self.model.voxels.packed_chunks:
-          render_snapshot_replace(
-            self.renderer.voxel_tool, chunk_id,
-            self.model.voxels.packed_chunks[chunk_id], self.resolver,
-          )
-        else:
-          erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
-        if chunk_id in self.model.voxels.chunk_deltas:
-          let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
-          if ?delta_seq:
-            for delta in delta_seq:
-              render_delta_direct(
-                self.renderer.voxel_tool, chunk_id, delta, self.resolver
-              )
-    flush_registry()
+      self.visible = false
+
+  proc ensure_frame_materials(): Array =
+    ## Node-local duplicates of the live materials, pinned to the normal
+    ## shaders: frame meshes must keep rendering while the live materials
+    ## swap to the discard shader. Indexed by material_id — the mesher's
+    ## surface order.
+    if self.frame_materials.len == 0:
+      self.each_material(i, m):
+        let dup = m.duplicate.as(ShaderMaterial)
+        dup.shader = if i == rgb_material_index: rgb_shader else: shader
+        self.frame_materials.add dup
+    result = new_array()
+    for m in self.frame_materials:
+      result.add m.to_variant
+
+  proc show_frame(index: int) =
+    ## Display frame `index` as baked meshes across the loaded chunks.
+    ## Warm-up rule: the live terrain keeps showing until the displayed
+    ## frame is fully baked, then the swap is atomic — a big build is never
+    ## partially invisible. Baking is time-boxed per call; the remainder
+    ## continues on later ticks/flips (frame_bake_pending). Once warm, a
+    ## flip is per-chunk mesh pointer swaps; a flip that outruns the cache
+    ## leaves those chunks on their previous frame until baked.
+    let frames = self.model.frames
+    if index < 0 or index >= frames.len:
+      return
+    flush_registry() # bake any palette entries minted since the last flush
+    let frame = frames[index]
+    if index notin self.frame_chunk_hash_cache:
+      var hashes: ref Table[Vector3, Hash]
+      new hashes
+      hashes[] = frame_chunk_hashes(frame.chunks)
+      self.frame_chunk_hash_cache[index] = hashes
+    let hashes = self.frame_chunk_hash_cache[index]
+    let materials = self.ensure_frame_materials()
+    let mesher = self.mesher.as(VoxelMesher)
+    let deadline = get_mono_time() + init_duration(milliseconds = 8)
+    var deferred = false
+    for chunk_id in self.loaded_chunks:
+      let key = frame_mesh_key(hashes[], chunk_id)
+      if key in self.frame_mesh_cache:
+        discard
+      elif get_mono_time() < deadline:
+        if self.frame_mesh_cache.len >= 16384:
+          self.frame_mesh_cache.clear()
+        self.frame_mesh_cache[key] = build_frame_mesh(
+          mesher, frame.chunks, chunk_id, self.resolver, materials
+        )
+      else:
+        deferred = true
+        break
+    self.frame_bake_pending = deferred
+    if not self.frames_showing:
+      if deferred:
+        return # stay live until this frame is fully baked
+      self.frames_showing = true
+      info "frames showing", unit = self.model.id, frame = index
+      self.set_visibility()
+    for chunk_id in self.loaded_chunks:
+      let key = frame_mesh_key(hashes[], chunk_id)
+      if key notin self.frame_mesh_cache:
+        continue # not baked yet: this chunk holds its previous frame
+      let mesh = self.frame_mesh_cache[key]
+      var inst: MeshInstance
+      if chunk_id in self.frame_instances:
+        inst = self.frame_instances[chunk_id]
+      elif ?mesh:
+        # instances exist only for chunks that have drawn a frame mesh
+        inst = gdnew[MeshInstance]()
+        inst.translation = chunk_id * ChunkDim.float
+        self.add_child(inst)
+        self.frame_instances[chunk_id] = inst
+      else:
+        continue
+      inst.mesh = mesh
+      inst.visible = ?mesh
+
+  proc hide_frames() =
+    self.frame_bake_pending = false
+    if self.frames_showing:
+      self.frames_showing = false
+      for _, inst in self.frame_instances:
+        inst.visible = false
+      self.set_visibility()
+
+  proc render_frame(index: int) =
+    ## Display a saved frame (or the live state for index < 0). Frames render
+    ## as baked, content-hash-cached meshes on MeshInstance children while
+    ## the live terrain hides under the discard shader — voxel data,
+    ## collisions and spatial queries always reflect the live state, and
+    ## returning to live is just a shader restore. The instances inherit the
+    ## node's transform, so scaled builds animate correctly.
+    if ASAP_MODE in self.model.global_flags:
+      return
+    if index >= 0 and index < self.model.frames.len:
+      self.show_frame(index)
+    else:
+      self.hide_frames()
 
   method on_block_loaded(chunk_id: Vector3) =
     let start = get_mono_time()
@@ -155,18 +288,6 @@ gdobj BuildNode of VoxelTerrain:
           # One line per build: paired with "voxel data arriving" below, a
           # build that requests but never receives is visible in the logs.
           info "voxel paging", unit = self.model.id
-
-      let shown_frame = self.model.current_frame
-      if shown_frame >= 0 and shown_frame < self.model.frames.len and
-          ASAP_MODE notin self.model.global_flags:
-        let frame = self.model.frames[shown_frame]
-        if chunk_id in frame.chunks and ?self.renderer.voxel_tool:
-          render_snapshot_replace(
-            self.renderer.voxel_tool, chunk_id, frame.chunks[chunk_id],
-            self.resolver,
-          )
-          flush_registry()
-        return
 
       if chunk_id in self.model.voxels.packed_chunks:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
@@ -197,6 +318,9 @@ gdobj BuildNode of VoxelTerrain:
 
           self.watch_delta_seq(chunk_id, delta_seq)
       flush_registry()
+      if self.frames_showing:
+        # the process tick bakes this chunk's frame mesh (budgeted)
+        self.frame_bake_pending = true
       let took = (get_mono_time() - start).in_milliseconds
       if took > 10:
         warn "on_block_loaded slow", ms = took, unit = self.model.id
@@ -210,44 +334,8 @@ gdobj BuildNode of VoxelTerrain:
         # our per-key interest upstream — never touches the authority's data.
         self.model.voxels.packed_chunks.release(chunk_id)
         self.model.voxels.chunk_deltas.release(chunk_id)
-
-  proc set_glow(glow: float) =
-    self.each_material(i, m):
-      m.set_shader_param("emission_energy", glow.to_variant)
-
-  proc set_highlight() =
-    self.each_material(i, m):
-      if self.error_highlight_on:
-        m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
-      elif i < self.model.shared.emission_colors.len:
-        m.set_shader_param(
-          "emission", self.model.shared.emission_colors[i].to_variant
-        )
-
-      if HIGHLIGHT in self.model.local_flags or
-          (
-            HIGHLIGHT_ERROR in self.model.global_flags and
-            self.error_highlight_on
-          ):
-        m.set_shader_param("emission_energy", highlight_glow.to_variant)
-      else:
-        m.set_shader_param("emission_energy", self.model.glow.to_variant)
-
-  proc set_visibility() =
-    if VISIBLE in self.model.global_flags:
-      self.visible = true
-
-      self.each_material(i, material):
-        material.shader =
-          if i == rgb_material_index: rgb_shader else: shader
-    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
-      self.visible = true
-
-      self.each_material(i, material):
-        material.shader =
-          if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
-    else:
-      self.visible = false
+      if chunk_id in self.frame_instances:
+        self.frame_instances[chunk_id].visible = false
 
   proc track_changes() =
     self.model.glow_value.watch:
@@ -389,6 +477,13 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         self.render_frame(change.item)
 
+    self.model.frames.watch:
+      if added or removed:
+        # frame content changed: content-hashed mesh keys stay valid, but
+        # the per-index hash tables don't
+        self.frame_chunk_hash_cache.clear()
+        self.render_frame(self.model.current_frame)
+
     self.model.scale_value.watch:
       if added:
         # Scale lives in the model's transform.basis (set synchronously by
@@ -450,6 +545,16 @@ gdobj BuildNode of VoxelTerrain:
 
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side.
+      if self.model.frames_fps > 0 and not self.playback_logged:
+        # One line per build: paired with "frames showing" below, a playback
+        # that never swaps in (still warming, or too big for the mesh cache)
+        # is visible in the logs.
+        self.playback_logged = true
+        info "frame playback",
+          unit = self.model.id,
+          frames = self.model.frames.len,
+          fps = self.model.frames_fps
+
       if SERVER in state.local_flags and self.model.frames_fps > 0 and
           self.model.frames.len > 1:
         let now = get_mono_time()
@@ -467,6 +572,20 @@ gdobj BuildNode of VoxelTerrain:
               next = last
               self.model.frames_fps = 0.0
           self.model.current_frame = next
+
+      # Warm-up continuation: finish baking the displayed frame's meshes,
+      # throttled so steady-state churn on a build too big for the cache
+      # stays bounded (each call costs at most the show_frame time box).
+      if self.frame_bake_pending and ASAP_MODE notin self.model.global_flags:
+        let now = get_mono_time()
+        if now >= self.next_bake_at:
+          # sprint while the live terrain still covers for us; relax once
+          # frames are showing so steady-state churn on a build too big for
+          # the cache stays bounded
+          let interval = if self.frames_showing: 50 else: 25
+          self.next_bake_at = now + init_duration(milliseconds = interval)
+          self.frame_bake_pending = false
+          self.show_frame(self.model.current_frame)
 
       let is_local = self.model.code.owner == state.worker_ctx_name
       let tick_start = get_mono_time()
@@ -531,6 +650,8 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.sight_ray = self.get_node("SightRay") as RayCast
     self.prepare_materials()
+    if self.model.current_frame >= 0:
+      self.render_frame(self.model.current_frame)
 
 proc init*(_: type BuildNode): BuildNode =
   if not ?build_scene:
@@ -540,4 +661,5 @@ proc init*(_: type BuildNode): BuildNode =
     rgb_shader = load("res://shaders/terrain_voxel_rgb.shader") as Shader
     hidden_rgb_shader =
       load("res://shaders/terrain_voxel_hidden_rgb.shader") as Shader
+    off_shader = load("res://shaders/terrain_voxel_off.shader") as Shader
   result = build_scene.instance() as BuildNode

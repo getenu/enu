@@ -399,7 +399,13 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[st
       module = iface.module
       break
 
-  assert module != nil, "no valid module selected"
+  if module == nil:
+    # Catchable (unlike an assert, which takes the worker thread — and the
+    # process — down): evals can race a unit whose module isn't registered
+    # yet, e.g. an agent bot evaluated right after creation.
+    raise newException(
+      ValueError, "no module loaded for " & moduleName & " (still loading?)"
+    )
   # If closePContext was called (for scripts that complete without VMPause,
   # e.g. players.nim), restore the context so extendModule can work.
   # closePContext also pops the proc context and owner, both of which must
