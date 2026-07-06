@@ -233,14 +233,15 @@ gdobj BuildNode of VoxelTerrain:
   proc render_frame(index: int) =
     ## Display a saved frame (or the live state for index < 0). Frames render
     ## as baked, content-hash-cached meshes on MeshInstance children while
-    ## the live terrain hides under the discard shader — voxel data,
-    ## collisions and spatial queries always reflect the live state, and
-    ## returning to live is just a shader restore. The instances inherit the
-    ## node's transform, so scaled builds animate correctly.
-    if ASAP_MODE in self.model.global_flags:
-      return
+    ## the live render meshes hide via set_render_blocks_visible — voxel
+    ## data, collisions and spatial queries always reflect the live state.
+    ## The instances inherit the node's transform, so scaled builds animate
+    ## correctly. Only SHOWING is gated on ASAP: hiding must always run —
+    ## reset turns ASAP on before it clears current_frame, and skipping the
+    ## hide there would leave every block invisible after the rerun.
     if index >= 0 and index < self.model.frames.len:
-      self.show_frame(index)
+      if ASAP_MODE notin self.model.global_flags:
+        self.show_frame(index)
     else:
       self.hide_frames()
 
@@ -407,6 +408,8 @@ gdobj BuildNode of VoxelTerrain:
       ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
       elif RESETTING.added:
+        # a rerun always starts from live display, whatever was showing
+        self.hide_frames()
         self.loaded_chunks.clear()
         self.generator = nil
         self.stream = nil
