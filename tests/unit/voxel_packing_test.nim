@@ -64,6 +64,23 @@ suite "Chunk codecs":
       [FMT_RLE16.byte, FMT_SPARSE_FULL16.byte]
     round_trip(voxels)
 
+  test "values colliding with the RLE escape byte round-trip exactly":
+    # Packed values >= CMD_REPEAT (static palette index 80+) fit a byte but
+    # collide with the legacy escape code: a short-run literal encoded as
+    # `CMD_REPEAT, 0, value` decodes as a run of 3, smearing the rest of the
+    # chunk (the sea-demo edge corruption). Such chunks must not pick FMT_RLE.
+    var voxels: array[CHUNK_VOLUME, PackedVoxel]
+    for i in 0 ..< 64:
+      # dense wave-like rows so RLE beats sparse, with escape-range values
+      # in runs shorter than 3
+      voxels[i * 3] =
+        pack_voxel(STATIC_COLOR_BASE + 16 + (i mod 4), COMPUTED.ord)
+      voxels[i * 3 + 1] = voxels[i * 3]
+    check voxels[0] >= CMD_REPEAT.PackedVoxel
+    let packed = encode_chunk(voxels)
+    check packed.data[0].byte != FMT_RLE.byte
+    round_trip(voxels)
+
   test "alternating wide values round-trip (dither pattern)":
     var voxels: array[CHUNK_VOLUME, PackedVoxel]
     for i in 0 ..< CHUNK_VOLUME:

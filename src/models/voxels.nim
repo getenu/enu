@@ -193,9 +193,18 @@ proc fits_8bit(voxels: array[CHUNK_VOLUME, PackedVoxel]): bool =
       return false
   true
 
+proc fits_rle8(voxels: array[CHUNK_VOLUME, PackedVoxel]): bool =
+  ## The legacy RLE reserves byte values from CMD_REPEAT up as escape codes,
+  ## so it can only carry values strictly below it — a literal >= CMD_REPEAT
+  ## has no encoding (the escape token always means a run of >= 3).
+  for v in voxels:
+    if v >= CMD_REPEAT:
+      return false
+  true
+
 proc encode_rle8_data(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
   ## Legacy FMT_RLE: 1 byte per voxel with the CMD_REPEAT escape. Only valid
-  ## when every value fits a byte; old builds can decode it.
+  ## when every value is below CMD_REPEAT; old builds can decode it.
   result = @[FMT_RLE.byte]
   var i = 0
   while i < CHUNK_VOLUME:
@@ -212,12 +221,7 @@ proc encode_rle8_data(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
       i += run_length
     else:
       for _ in 0 ..< run_length:
-        if current >= CMD_REPEAT:
-          result.add CMD_REPEAT
-          result.add 0'u8
-          result.add current.uint8
-        else:
-          result.add current.uint8
+        result.add current.uint8
         inc i
 
 proc encode_rle16_data(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
@@ -253,11 +257,11 @@ proc encode_rle16_data(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
       i = j
 
 proc encode_rle_data*(voxels: array[CHUNK_VOLUME, PackedVoxel]): seq[byte] =
-  ## Chunks whose values all fit a byte (pure named colors, and the first
-  ## ~16 static palette entries) keep the legacy 1-byte format — identical
-  ## wire size to before, decodable by old builds. Wider values escalate the
-  ## chunk to FMT_RLE16.
-  if fits_8bit(voxels):
+  ## Chunks whose values all fit below the escape byte (pure named colors,
+  ## and the first ~60 static palette entries) keep the legacy 1-byte format
+  ## — identical wire size to before, decodable by old builds. Wider values
+  ## escalate the chunk to FMT_RLE16.
+  if fits_rle8(voxels):
     encode_rle8_data(voxels)
   else:
     encode_rle16_data(voxels)
