@@ -67,6 +67,8 @@ gdobj BuildNode of VoxelTerrain:
     frames_showing: bool
     frame_bake_pending: bool
     playback_logged: bool
+    warm_frame = -1
+    next_warm_log: MonoTime
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded"
@@ -171,6 +173,17 @@ gdobj BuildNode of VoxelTerrain:
     let frames = self.model.frames
     if index < 0 or index >= frames.len:
       return
+    var index = index
+    if not self.frames_showing:
+      # Converge on one frame while live still covers for us, instead of
+      # chasing playback: 32 frames warming in parallel means the swap
+      # (which needs ONE fully baked) takes minutes on a big build. The
+      # first requested frame takes the whole budget, the swap lands in
+      # seconds, and the other frames wash in during playback — a chunk
+      # holds its previous mesh until its new one bakes.
+      if self.warm_frame < 0 or self.warm_frame >= frames.len:
+        self.warm_frame = index
+      index = self.warm_frame
     flush_registry() # bake any palette entries minted since the last flush
     let frame = frames[index]
     if index notin self.frame_chunk_hash_cache:
@@ -199,7 +212,16 @@ gdobj BuildNode of VoxelTerrain:
     self.frame_bake_pending = deferred
     if not self.frames_showing:
       if deferred:
+        let now = get_mono_time()
+        if now > self.next_warm_log:
+          self.next_warm_log = now + init_duration(seconds = 5)
+          info "frame warm-up",
+            unit = self.model.id,
+            frame = index,
+            meshes = self.frame_mesh_cache.len,
+            loaded = self.loaded_chunks.len
         return # stay live until this frame is fully baked
+      self.warm_frame = -1
       self.frames_showing = true
       info "frames showing", unit = self.model.id, frame = index
       self.set_render_blocks_visible(false)
@@ -224,6 +246,7 @@ gdobj BuildNode of VoxelTerrain:
 
   proc hide_frames() =
     self.frame_bake_pending = false
+    self.warm_frame = -1
     if self.frames_showing:
       self.frames_showing = false
       for _, inst in self.frame_instances:
