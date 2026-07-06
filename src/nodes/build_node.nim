@@ -651,9 +651,15 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         # Scale lives in the model's transform.basis (set synchronously by
         # `scale=`); the node picks it up via transform_value below. Here we
-        # only adjust the view distance for the new scale.
+        # adjust view distances for the new scale: max_view_distance caps
+        # the terrain's own streaming, and viewer_distance_scale extends
+        # each viewer's pairing range to cover the same WORLD distance —
+        # without it, meshes on a 0.5-scale build stop at half the world
+        # range the viewer asked for, leaving a visible ring of loaded but
+        # never-meshed blocks (and stranding stale meshes) at the fringe.
         self.max_view_distance =
           int(self.default_view_distance.float / change.item)
+        self.set_viewer_distance_scale(1.0 / change.item)
 
     self.transform_zid = self.model.transform_value.watch:
       if added:
