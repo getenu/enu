@@ -502,12 +502,25 @@ gdobj BuildNode of VoxelTerrain:
           self.data_logged = true
           info "voxel data arriving", unit = self.model.id
         if change.item.key in self.loaded_chunks:
+          # A rewrite (REMOVED+MODIFIED, e.g. voxels.clear() + redraw
+          # coalescing in one sync batch) must REPLACE the chunk: painting
+          # it additively leaves voxels the new content doesn't cover —
+          # visible as stray geometry at the edges of regenerated builds.
           if ASAP_MODE in self.model.global_flags:
-            self.renderer.buffer_snapshot(change.item.key, change.item.value)
-          elif ?self.renderer.voxel_tool:
-            render_snapshot_direct(
-              self.renderer.voxel_tool, change.item.key, change.item.value
+            self.renderer.buffer_snapshot(
+              change.item.key, change.item.value, replace = modified
             )
+          elif ?self.renderer.voxel_tool:
+            if modified:
+              render_snapshot_replace(
+                self.renderer.voxel_tool, change.item.key, change.item.value,
+                self.resolver,
+              )
+            else:
+              render_snapshot_direct(
+                self.renderer.voxel_tool, change.item.key, change.item.value,
+                self.resolver,
+              )
       elif removed and not modified:
         # Paged out (chunk paging; a rewrite is REMOVED+MODIFIED and skipped) —
         # clear it from the terrain. The data still exists on the server;

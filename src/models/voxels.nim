@@ -1186,11 +1186,29 @@ proc ensure_buffer(self: VoxelRenderer, chunk_id: Vector3) =
     self.buffer_size = new_size
 
 proc buffer_snapshot*(
-    self: VoxelRenderer, chunk_id: Vector3, snapshot: SnapshotData
+    self: VoxelRenderer,
+    chunk_id: Vector3,
+    snapshot: SnapshotData,
+    replace = false,
 ): int {.discardable.} =
+  ## Write a chunk snapshot into the ASAP buffer. With `replace`, the
+  ## chunk's whole region is zeroed first: a REWRITTEN chunk (cleared and
+  ## redrawn in one sync batch) must not inherit voxels the new content
+  ## doesn't cover — the buffer is pre-populated from the terrain, so
+  ## additive writes would resurrect them.
   if snapshot.data.len == 0:
     return
   self.ensure_buffer(chunk_id)
+  if replace:
+    let chunk_min = chunk_id * ChunkDim
+    for x in 0 ..< ChunkDim:
+      for y in 0 ..< ChunkDim:
+        for z in 0 ..< ChunkDim:
+          let buffer_pos = chunk_min + vec3(x.float, y.float, z.float) -
+            self.min_pos
+          self.buffer.set_voxel(
+            0, buffer_pos.x.int64, buffer_pos.y.int64, buffer_pos.z.int64
+          )
   var slot_cache: SlotCache
   let voxels = decode_chunk(snapshot)
   for linear in 0 ..< CHUNK_VOLUME:
