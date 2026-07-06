@@ -1,4 +1,4 @@
-import std/[tables, bitops, times, options, sets, hashes]
+import std/[tables, bitops, times, options, sets, hashes, algorithm]
 import pkg/godot except print, Color
 import
   godotapi/[
@@ -71,6 +71,10 @@ gdobj BuildNode of VoxelTerrain:
     frame_pending_capture: Table[Vector3, Hash]
     frame_applied: Table[Vector3, Hash] # frame content currently in terrain
     frame_dirty: HashSet[Vector3] # terrain data differs from live state
+    frame_mesh_lru: Table[Hash, int] # last-touched tick per cached mesh
+    frame_lru_tick: int
+    frame_pastes: int # since the last stats log
+    next_frame_stats: MonoTime
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded",
@@ -156,6 +160,37 @@ gdobj BuildNode of VoxelTerrain:
     else:
       self.visible = false
 
+  proc touch_cached(key: Hash) =
+    inc self.frame_lru_tick
+    self.frame_mesh_lru[key] = self.frame_lru_tick
+
+  proc store_cached(key: Hash, mesh: Mesh) =
+    ## Insert with LRU batch eviction — never a wholesale clear: dropping
+    ## the whole cache mid-playback restarts the mesh churn from zero (the
+    ## misses re-paste and re-mesh ~everything, every flip, forever).
+    const max_cached = 65536
+    if self.frame_mesh_cache.len >= max_cached:
+      var stamps = new_seq[int](self.frame_mesh_lru.len)
+      var i = 0
+      for _, stamp in self.frame_mesh_lru:
+        stamps[i] = stamp
+        inc i
+      stamps.sort()
+      let cutoff = stamps[stamps.len div 4] # oldest quarter goes
+      var evict: seq[Hash]
+      for k, stamp in self.frame_mesh_lru:
+        if stamp <= cutoff:
+          evict.add k
+      for k in evict:
+        self.frame_mesh_cache.del k
+        self.frame_mesh_lru.del k
+      info "frame mesh cache eviction",
+        unit = self.model.id,
+        evicted = evict.len,
+        cached = self.frame_mesh_cache.len
+    self.frame_mesh_cache[key] = mesh
+    self.touch_cached(key)
+
   proc snapshot_key(snapshot: SnapshotData): Hash =
     hash(snapshot.data)
 
@@ -175,6 +210,7 @@ gdobj BuildNode of VoxelTerrain:
     self.frame_dirty.incl chunk_id
     self.frame_applied[chunk_id] = key
     self.frame_pending_capture[chunk_id] = key
+    inc self.frame_pastes
 
   proc show_frame(index: int) =
     ## Display frame `index`. Chunks with a cached mesh swap it in directly;
@@ -206,17 +242,25 @@ gdobj BuildNode of VoxelTerrain:
       let cached = key in self.frame_mesh_cache
       if not cached:
         inc missing
+      # Backpressure: don't queue more pastes while the mesher is still
+      # chewing on the last batch — unbounded in-flight remeshes stall the
+      # pipeline and balloon memory. Skipped chunks keep showing their
+      # previous content and catch up on a later flip.
+      let can_paste = self.frame_pending_capture.len < 512
       if self.frames_showing:
         if cached:
+          self.touch_cached(key)
           let inst = self.frame_instance(chunk_id)
           inst.mesh = self.frame_mesh_cache[key]
           inst.visible = ?inst.mesh
-        elif self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
+        elif can_paste and
+            self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
           self.paste_frame_chunk(chunk_id, snapshot, key)
       else:
         # warming: the terrain itself shows the frame, so keep its data on
         # the displayed frame even for chunks that already have a cache
-        if self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
+        if can_paste and
+            self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
           self.paste_frame_chunk(chunk_id, snapshot, key)
     flush_registry()
     if not self.frames_showing:
@@ -286,11 +330,9 @@ gdobj BuildNode of VoxelTerrain:
       let m = self.get_block_mesh(chunk_id, false)
       if ?m:
         mesh = m.duplicate.as(Mesh)
-    if self.frame_mesh_cache.len >= 16384:
-      self.frame_mesh_cache.clear()
     # nil is a valid entry: an all-hole chunk meshes to nothing, and caching
     # that stops it from repasting every flip
-    self.frame_mesh_cache[key] = mesh
+    self.store_cached(key, mesh)
     if self.frames_showing:
       # held frames never re-flip, so attach on capture when this chunk is
       # part of the displayed frame
@@ -599,6 +641,17 @@ gdobj BuildNode of VoxelTerrain:
 
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side.
+      if self.frames_showing or self.frame_pending_capture.len > 0:
+        let now2 = get_mono_time()
+        if now2 > self.next_frame_stats:
+          self.next_frame_stats = now2 + init_duration(seconds = 15)
+          info "frame stats",
+            unit = self.model.id,
+            cached = self.frame_mesh_cache.len,
+            pending = self.frame_pending_capture.len,
+            pastes = self.frame_pastes
+          self.frame_pastes = 0
+
       if self.model.frames_fps > 0 and not self.playback_logged:
         # One line per build: paired with "frames showing" below, a playback
         # that never swaps in (still warming, or too big for the mesh cache)
