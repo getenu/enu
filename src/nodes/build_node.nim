@@ -68,12 +68,16 @@ gdobj BuildNode of VoxelTerrain:
     # paste-and-capture state: a cache miss pastes the frame's chunk into
     # the terrain like any other edit; the engine meshes it on its threads
     # and on_mesh_block_updated captures the mesh into frame_mesh_cache.
-    frame_pending_capture: Table[Vector3, Hash]
+    frame_pending_capture: Table[Vector3, tuple[key: Hash, at: MonoTime]]
     frame_applied: Table[Vector3, Hash] # frame content currently in terrain
     frame_dirty: HashSet[Vector3] # terrain data differs from live state
     frame_mesh_lru: Table[Hash, int] # last-touched tick per cached mesh
     frame_lru_tick: int
     frame_pastes: int # since the last stats log
+    frame_pastes_this_tick: int
+    frame_signals: int
+    frame_captures: int
+    frame_new_keys: int
     next_frame_stats: MonoTime
 
   proc init*() =
@@ -209,8 +213,9 @@ gdobj BuildNode of VoxelTerrain:
     )
     self.frame_dirty.incl chunk_id
     self.frame_applied[chunk_id] = key
-    self.frame_pending_capture[chunk_id] = key
+    self.frame_pending_capture[chunk_id] = (key, get_mono_time())
     inc self.frame_pastes
+    inc self.frame_pastes_this_tick
 
   proc show_frame(index: int) =
     ## Display frame `index`. Chunks with a cached mesh swap it in directly;
@@ -228,12 +233,24 @@ gdobj BuildNode of VoxelTerrain:
       return
     let frame = frames[index]
     flush_registry() # palette entries minted since the last flush
+    if self.frame_pending_capture.len > 0:
+      # a cancelled or dropped mesh task never signals; expire its slot so
+      # backpressure can't jam (the chunk re-pastes on a later flip)
+      let cutoff = get_mono_time() - init_duration(seconds = 5)
+      var expired: seq[Vector3]
+      for chunk_id, entry in self.frame_pending_capture:
+        if entry.at < cutoff:
+          expired.add chunk_id
+      for chunk_id in expired:
+        self.frame_pending_capture.del chunk_id
+        self.frame_applied.del chunk_id # force a re-paste
     var missing = 0
     for chunk_id in self.loaded_chunks:
       if chunk_id notin frame.chunks:
         if chunk_id in self.frame_instances:
           self.frame_instances[chunk_id].visible = false
-        if not self.frames_showing and chunk_id in self.frame_dirty:
+        if not self.frames_showing and
+            self.frame_applied.get_or_default(chunk_id, Hash(0)) != Hash(0):
           erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
           self.frame_applied.del chunk_id
         continue
@@ -242,11 +259,21 @@ gdobj BuildNode of VoxelTerrain:
       let cached = key in self.frame_mesh_cache
       if not cached:
         inc missing
-      # Backpressure: don't queue more pastes while the mesher is still
-      # chewing on the last batch — unbounded in-flight remeshes stall the
-      # pipeline and balloon memory. Skipped chunks keep showing their
-      # previous content and catch up on a later flip.
-      let can_paste = self.frame_pending_capture.len < 512
+      # Backpressure, two-dimensional: bounded in-flight captures (the
+      # engine's apply queue holds full surface arrays per entry — letting
+      # it grow eats the PoolVector pool), and bounded pastes per process
+      # tick (a paste burst stalls the main thread, which starves the
+      # time-spread apply runner, which is the death spiral). Skipped
+      # chunks keep their previous content and catch up on later flips.
+      # Never repaste a chunk that's already awaiting capture: a new paste
+      # bumps the block's mesh-request version, permanently outdating the
+      # in-flight mesh — repasting every flip means nothing ever captures.
+      # The chunk keeps showing its in-flight frame until the capture
+      # lands, then rejoins the rotation.
+      let can_paste =
+        chunk_id notin self.frame_pending_capture and
+        self.frame_pending_capture.len < 256 and
+        self.frame_pastes_this_tick < 16
       if self.frames_showing:
         if cached:
           self.touch_cached(key)
@@ -256,12 +283,15 @@ gdobj BuildNode of VoxelTerrain:
         elif can_paste and
             self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
           self.paste_frame_chunk(chunk_id, snapshot, key)
-      else:
-        # warming: the terrain itself shows the frame, so keep its data on
-        # the displayed frame even for chunks that already have a cache
-        if can_paste and
-            self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
-          self.paste_frame_chunk(chunk_id, snapshot, key)
+      elif not cached and can_paste and
+          self.frame_applied.get_or_default(chunk_id, Hash(0)) != key:
+        # Warming: paste budget goes to UNCACHED keys only. Refreshing
+        # already-cached chunks onto the displayed frame looks nicer but
+        # monopolizes the per-tick budget on the same first N chunks
+        # forever (stable iteration order) — nothing else ever pastes and
+        # the cache never converges. Chunks hold their last-pasted frame
+        # (a patchwork during warm-up) until the swap.
+        self.paste_frame_chunk(chunk_id, snapshot, key)
     flush_registry()
     if not self.frames_showing:
       if missing > 0:
@@ -316,9 +346,13 @@ gdobj BuildNode of VoxelTerrain:
     self.frame_applied.clear()
 
   method on_mesh_block_updated(chunk_id: Vector3) =
-    if not ?self.model or chunk_id notin self.frame_pending_capture:
+    if not ?self.model:
       return
-    let key = self.frame_pending_capture[chunk_id]
+    inc self.frame_signals
+    if chunk_id notin self.frame_pending_capture:
+      return
+    inc self.frame_captures
+    let key = self.frame_pending_capture[chunk_id].key
     self.frame_pending_capture.del chunk_id
     var mesh: Mesh
     if self.frames_showing:
@@ -330,6 +364,8 @@ gdobj BuildNode of VoxelTerrain:
       let m = self.get_block_mesh(chunk_id, false)
       if ?m:
         mesh = m.duplicate.as(Mesh)
+    if key notin self.frame_mesh_cache:
+      inc self.frame_new_keys
     # nil is a valid entry: an all-hole chunk meshes to nothing, and caching
     # that stops it from repasting every flip
     self.store_cached(key, mesh)
@@ -431,6 +467,8 @@ gdobj BuildNode of VoxelTerrain:
         self.model.voxels.chunk_deltas.release(chunk_id)
       if chunk_id in self.frame_instances:
         self.frame_instances[chunk_id].visible = false
+      self.frame_pending_capture.del chunk_id
+      self.frame_applied.del chunk_id
 
   proc track_changes() =
     self.model.glow_value.watch:
@@ -641,6 +679,8 @@ gdobj BuildNode of VoxelTerrain:
 
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side.
+      self.frame_pastes_this_tick = 0
+
       if self.frames_showing or self.frame_pending_capture.len > 0:
         let now2 = get_mono_time()
         if now2 > self.next_frame_stats:
@@ -649,8 +689,14 @@ gdobj BuildNode of VoxelTerrain:
             unit = self.model.id,
             cached = self.frame_mesh_cache.len,
             pending = self.frame_pending_capture.len,
-            pastes = self.frame_pastes
+            pastes = self.frame_pastes,
+            signals = self.frame_signals,
+            captures = self.frame_captures,
+            new_keys = self.frame_new_keys
           self.frame_pastes = 0
+          self.frame_signals = 0
+          self.frame_captures = 0
+          self.frame_new_keys = 0
 
       if self.model.frames_fps > 0 and not self.playback_logged:
         # One line per build: paired with "frames showing" below, a playback
