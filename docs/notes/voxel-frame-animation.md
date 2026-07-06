@@ -58,41 +58,42 @@ The per-chunk **frame-mesh cache** is the heart of the feature:
   sea's island/beach chunks are identical across all 32 frames and collapse
   to one mesh; a wiggling ear caches ~2 meshes for the ear chunk and 1 for
   everything else.
-- On tick, a chunk displaying frame n: cache hit -> visibility swap
-  (microseconds); miss -> build + cache. A chunk entering view shows a static
-  frame until its meshes warm (build one frame-mesh per tick; after one loop
-  it joins the animation). Eviction rides block paging, so memory is bounded
-  by loaded chunks x distinct frame meshes — view-distance-bounded, not
-  world-size-bounded. Fog ends at 200 m and the shader discards at 230, so a
-  500x500 ocean's live zone is a ~150-200 m disc per viewer regardless of
-  ocean size.
+- Keys are shell-aware: the mesher culls border faces (and bakes AO)
+  against neighboring blocks, so the key hashes the chunk's 16³ content
+  plus a 1-voxel shell gathered from its frame neighbors (the padded 18³
+  region). Identical keys then imply identical meshes; central-only keys
+  reuse meshes with wrong borders. Memory is bounded by loaded chunks x
+  distinct frame meshes — view-distance-bounded, not world-size-bounded.
+  Fog ends at 200 m and the shader discards at 230, so a 500x500 ocean's
+  live zone is a ~150-200 m disc per viewer regardless of ocean size.
 - Temporal LOD when needed: full frames near the viewer, fewer frames
   mid-distance, static beyond.
-- Meshing happens on demand through the engine (godot_voxel `ba32795`):
-  a cache miss pastes the frame's chunk into the terrain like any other
-  edit, the engine meshes it on its worker threads, and the
-  `mesh_block_updated` capture stores the mesh (`get_block_mesh` with
-  take detaches it so in-place mesh reuse can't mutate it). Nothing is
+- The terrain itself is the display. Applying a frame writes each changed
+  chunk's voxel data like any other edit (`set_block_voxel_data`, one
+  memcpy-scale call per chunk): a chunk whose content key has a cached
+  mesh gets the data silently (no remesh scheduled) plus the mesh set
+  directly (`set_block_mesh`); a miss writes normally and the engine
+  meshes it on its worker threads like any other edit. Nothing is
   precalculated — each (chunk, content) pair meshes at most once, at
-  native meshing speed; a main-thread time-sliced baker was tried first
-  and took minutes on sea-sized builds. Until a frame is fully cached
-  the terrain itself displays the pasted frames (playback is visible
-  from the first flip); then the display swaps to `MeshInstance`
-  children whose `.mesh` pointer swaps per flip. The instances inherit
-  the node transform, so scaled builds animate correctly — which retired
-  M1's scale-display bug. Trade-off: while a capture is pending, that
-  chunk's terrain data temporarily holds frame content (collision and
-  queries there included). Steady-state playback touches no voxel data.
-- Hiding the live meshes IS the one engine touch (owned fork, godot_voxel
-  `1b7f0ea`): `VoxelTerrain.set_render_blocks_visible(false)` hides every
-  render mesh of that one terrain — data, collisions and children
-  untouched, newly meshed blocks respect the flag. Per-node by
-  construction, so sibling units sharing a Shared (spawner clones) are
-  unaffected when one displays frames. A first cut used a discard shader
-  swapped onto the live materials instead; it worked but leaked to every
-  unit rendering with those Shared materials. Frame meshes bake with the
+  native meshing speed. Since data always holds the displayed frame,
+  collision and spatial queries match what's on screen, and scaled builds
+  animate correctly (the terrain inherits the node transform).
+- Playback blocks until the displayed frame is fully meshed: it advances
+  only when the frame has no outstanding misses and the terrain's mesh
+  pipeline has drained. At that instant every missed block's mesh was
+  provably built from the current frame's data, so harvesting them into
+  the cache cannot misattribute — no version gating, no capture races,
+  and warm-up converges deterministically in one loop (a 120 m x 32-frame
+  sea warms in ~25 s under playback, then runs at rate with zero mesh
+  work). The engine never rebuilds a shared mesh in place: a block's
+  ArrayMesh is only reused when nothing else holds a reference, so cached
+  meshes can't be mutated by later remeshes. Frame meshes bake with the
   live material objects, so glow, highlight, god mode and env changes
-  apply to them exactly as to live meshes.
+  apply to them exactly as to live meshes. (Earlier iterations — a
+  main-thread time-sliced baker, then an async paste-and-capture pipeline
+  displaying via hidden live meshes and MeshInstance children — never
+  converged under playback: at 8 fps most chunks can't mesh inside one
+  frame interval, and flipping early orphans the in-flight meshes.)
 
 Cost cutters, measured against the sea prototypes:
 
@@ -144,22 +145,16 @@ programmatic animations call clear_frames() first. The 64-frame cap
    on scaled builds (data provably updates; the mesh-update scheduling drops
    it — same scale/coordinate family as floor_at ignoring scale). Works at
    scale 1.
-2. **M2 — frame-mesh cache** (landed 2026-07-05, no engine change): frames
-   display as baked meshes via `VoxelMesher.build_mesh` on MeshInstance
-   children — zero voxel writes and zero remeshing per flip. Cache keyed by
-   chunk content hash mixed with all 26 neighbors' (border culling stays
-   correct, identical chunks dedupe across frames); baking is time-boxed
-   (8 ms/tick) with `frame_bake_pending` continuation, so big builds warm
-   over the first loop instead of hitching. Live voxel data is never
-   touched: collisions, queries and the return-to-live path all read the
-   real state, and scaled builds animate (M1's scale-display bug is gone).
-   Measured: small builds swap instantly; a 120 m x 32-frame ocean (68K
-   voxels/frame, ~450 chunks) warms ~2-3 min under live playback then
-   animates at 8 fps with zero main-thread slow-tick warnings. A 250 m
-   ocean's working set (~33K meshes) exceeds the 16384-mesh cache cap, so
-   it stays on the live state (graceful) — that size needs M3's temporal
-   LOD/eviction/sheet culling. The `"frame playback"` / `"frames showing"`
-   log pair shows whether a build has swapped in yet.
+2. **M2 — frame-mesh cache** (final architecture 2026-07-06): blocking
+   apply-and-harvest, described under Rendering above. Engine additions
+   (owned fork): `set_block_voxel_data` (full-block data write, optional
+   remesh), `set_block_mesh` (direct mesh assignment), refcount-guarded
+   in-place ArrayMesh reuse. Measured: a 120 m x 32-frame ocean (68K
+   voxels/frame, ~275 loaded chunks) warms in ~25 s under playback, then
+   animates at 8 fps with `missing=0, harvests=0` in the frame stats,
+   zero slow-tick warnings, and ~1.4 GB RSS (5,643 cached meshes). The
+   `"frame warm-up"` / `"frame stats"` log lines show warm-up progress
+   and steady state.
 3. **M3 — storage + polish**: keyframe+delta compression, sidecar
    persistence, temporal LOD, sheet culling, UI.
 

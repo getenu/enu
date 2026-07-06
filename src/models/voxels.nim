@@ -1,4 +1,4 @@
-import std/[varints, options, math, tables, monotimes, times, sequtils]
+import std/[varints, options, math, tables, monotimes, times, sequtils, hashes]
 import pkg/godot except print, Color
 import godotapi/[voxel_buffer, voxel_tool]
 import core
@@ -992,6 +992,57 @@ proc library_slot(
     return slot[]
   result = resolver(color_idx)
   cache[color_idx] = result
+
+proc fill_chunk_type_bytes*(
+    bytes: PoolByteArray,
+    snapshot: SnapshotData,
+    resolver: ColorIndexResolver = nil,
+): int {.discardable.} =
+  ## Resolved engine voxel type ids for a chunk snapshot, as u16 LE values
+  ## in `linear_position` order — the payload VoxelTerrain.set_block_voxel_data
+  ## expects. `bytes` must be pre-sized to CHUNK_VOLUME * 2. Returns the
+  ## non-empty voxel count. An empty snapshot fills zeroes (chunk erase).
+  assert bytes.len == CHUNK_VOLUME * 2
+  let voxels = decode_chunk(snapshot)
+  var slot_cache: SlotCache
+  var ids: array[CHUNK_VOLUME, uint16]
+  for linear in 0 ..< CHUNK_VOLUME:
+    let packed_voxel = voxels[linear]
+    if packed_voxel != EMPTY_VOXEL:
+      let (color_idx, _) = unpack_voxel(packed_voxel)
+      ids[linear] = uint16(resolver.library_slot(color_idx, slot_cache))
+      inc result
+  for i, b in bytes.mpairs:
+    let v = ids[i shr 1]
+    b = if (i and 1) == 0: uint8(v and 0xff) else: uint8(v shr 8)
+
+proc frame_chunk_keys*(frame: FrameData): Table[Vector3, Hash] =
+  ## Content keys for a frame's chunks, shell-aware: the mesher culls border
+  ## faces (and bakes occlusion) against neighboring blocks, so a chunk's
+  ## mesh is a function of its own 16³ content PLUS a 1-voxel shell from its
+  ## neighbors. Keying on the padded 18³ region makes identical keys imply
+  ## identical meshes; central-only keys would reuse meshes with wrong
+  ## borders when a neighbor differs between frames.
+  var decoded: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
+  for chunk_id, snapshot in frame.chunks:
+    decoded[chunk_id] = decode_chunk(snapshot)
+  for chunk_id in frame.chunks.keys:
+    var h: Hash = 0
+    for x in -1 .. ChunkDim:
+      for y in -1 .. ChunkDim:
+        for z in -1 .. ChunkDim:
+          var v = EMPTY_VOXEL
+          if x >= 0 and x < ChunkDim and y >= 0 and y < ChunkDim and z >= 0 and
+              z < ChunkDim:
+            v = decoded[chunk_id][linear_position(x, y, z)]
+          else:
+            let world =
+              chunk_id * ChunkDim + vec3(x.float, y.float, z.float)
+            let owner = chunk_id_for_pos(world)
+            decoded.with_value(owner, arr):
+              v = arr[][linear_position(world)]
+          h = h !& v.int
+    result[chunk_id] = !$h
 
 proc render_snapshot_direct*(
     voxel_tool: VoxelTool,
