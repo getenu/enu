@@ -522,10 +522,11 @@ gdobj BuildNode of VoxelTerrain:
                 self.resolver,
               )
       elif removed and not modified:
-        # Paged out (chunk paging; a rewrite is REMOVED+MODIFIED and skipped) —
-        # clear it from the terrain. The data still exists on the server;
-        # moving back re-requests and re-renders.
+        # Paged out or cleared (a rewrite is REMOVED+MODIFIED and skipped) —
+        # clear it from the terrain, and from the ASAP buffer's terrain
+        # copy so the next paste can't resurrect it.
         if change.item.key in self.loaded_chunks and ?self.renderer.voxel_tool:
+          self.renderer.buffer_erase(change.item.key)
           erase_chunk_direct(self.renderer.voxel_tool, change.item.key)
 
     # Render existing packed_chunks (for clients connecting to existing builds)
@@ -568,6 +569,7 @@ gdobj BuildNode of VoxelTerrain:
             chunk_id in self.loaded_chunks and ?self.renderer.voxel_tool:
           # Paged out a delta-only chunk (never snapshotted): the packed_chunks
           # REMOVED won't fire for it, so erase here.
+          self.renderer.buffer_erase(chunk_id)
           erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
 
     # Render existing chunk_deltas and set up watches

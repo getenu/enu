@@ -1266,6 +1266,24 @@ proc begin_asap*(self: VoxelRenderer) =
   # sustained drawing batches at ASAP_PASTE_INTERVAL.
   self.last_paste_time = get_mono_time() - ASAP_PASTE_INTERVAL
 
+proc buffer_erase*(self: VoxelRenderer, chunk_id: Vector3) =
+  ## Zero a cleared chunk's region in the ASAP buffer. The buffer is
+  ## pre-populated from the terrain when created, so without this a chunk
+  ## cleared mid-stream gets its old content resurrected by the next paste.
+  if not ?self.buffer:
+    return
+  let chunk_min = chunk_id * ChunkDim
+  for x in 0 ..< ChunkDim:
+    for y in 0 ..< ChunkDim:
+      for z in 0 ..< ChunkDim:
+        let pos = chunk_min + vec3(x.float, y.float, z.float) - self.min_pos
+        if pos.x < 0 or pos.y < 0 or pos.z < 0 or
+            pos.x >= self.buffer_size.x or pos.y >= self.buffer_size.y or
+            pos.z >= self.buffer_size.z:
+          continue
+        self.buffer.set_voxel(0, pos.x.int64, pos.y.int64, pos.z.int64)
+  self.dirty = true
+
 proc tick*(self: VoxelRenderer, is_local: bool) =
   ## Periodic paste for local ASAP mode only (visual progress feedback).
   ## Remote ASAP buffers without periodic paste - final paste via end_asap().
