@@ -1,6 +1,6 @@
-import std/[varints, options, math, tables, monotimes, times, sequtils, hashes]
+import std/[varints, options, math, tables, monotimes, times, sequtils]
 import pkg/godot except print, Color
-import godotapi/[voxel_buffer, voxel_tool, voxel_mesher, mesh]
+import godotapi/[voxel_buffer, voxel_tool]
 import core
 import models/colors
 
@@ -1119,73 +1119,6 @@ proc erase_chunk_direct*(voxel_tool: VoxelTool, chunk_id: Vector3) =
   buffer.create(ChunkDim, ChunkDim, ChunkDim)
   buffer.fill(0)
   voxel_tool.paste(chunk_min, buffer, 1, 0)
-
-# Frame meshes: a displayed animation frame renders as baked meshes instead
-# of voxel writes. Each chunk of the frame fills a padded VoxelBuffer
-# (neighbor borders included, so face culling at chunk seams matches the
-# terrain's own meshing) and runs through the terrain's mesher — its scratch
-# state is thread_local, so main-thread baking never races the meshing
-# threads. Content-hash keys dedupe identical chunks across frames.
-
-proc frame_chunk_hashes*(
-    chunks: Table[Vector3, SnapshotData]
-): Table[Vector3, Hash] =
-  for chunk_id, snapshot in chunks:
-    result[chunk_id] = hash(snapshot.data)
-
-proc frame_mesh_key*(hashes: Table[Vector3, Hash], chunk_id: Vector3): Hash =
-  ## Cache key for one chunk's baked mesh: mixes the chunk's content hash
-  ## with all 26 neighbors' — any neighbor change can flip a border face.
-  var h: Hash = 0
-  for dz in -1 .. 1:
-    for dy in -1 .. 1:
-      for dx in -1 .. 1:
-        let neighbor = chunk_id + vec3(dx.float, dy.float, dz.float)
-        h = h !& hashes.get_or_default(neighbor, Hash(-1))
-  result = !$h
-
-proc build_frame_mesh*(
-    mesher: VoxelMesher,
-    chunks: Table[Vector3, SnapshotData],
-    chunk_id: Vector3,
-    resolver: ColorIndexResolver,
-    materials: Array,
-): Mesh =
-  ## Bake one chunk of a frame into a standalone Mesh (nil if empty).
-  ## `materials` is indexed by material_id, so pass the full slot-ordered
-  ## material list.
-  let pad_min = mesher.get_minimum_padding.int
-  let size = ChunkDim + pad_min + mesher.get_maximum_padding.int
-  let buffer = gdnew[VoxelBuffer]()
-  buffer.create(size, size, size)
-  buffer.fill(0)
-  let chunk_min = chunk_id * ChunkDim
-  var decoded: Table[Vector3, ref array[CHUNK_VOLUME, PackedVoxel]]
-  var slot_cache: SlotCache
-  for pz in 0 ..< size:
-    for py in 0 ..< size:
-      for px in 0 ..< size:
-        let pos =
-          chunk_min +
-          vec3(float(px - pad_min), float(py - pad_min), float(pz - pad_min))
-        let owner = chunk_id_for_pos(pos)
-        if owner notin chunks:
-          continue
-        var voxels = decoded.get_or_default(owner)
-        if voxels.is_nil:
-          new voxels
-          voxels[] = decode_chunk(chunks[owner])
-          decoded[owner] = voxels
-        let packed = voxels[chunk_to_local(owner, pos)]
-        if packed != EMPTY_VOXEL:
-          let (color_idx, _) = unpack_voxel(packed)
-          buffer.set_voxel(
-            resolver.library_slot(color_idx, slot_cache),
-            px.int64,
-            py.int64,
-            pz.int64,
-          )
-  result = mesher.build_mesh(buffer, materials)
 
 const ASAP_PASTE_INTERVAL = init_duration(seconds = 2)
 
