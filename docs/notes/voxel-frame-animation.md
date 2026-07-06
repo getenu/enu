@@ -68,12 +68,21 @@ The per-chunk **frame-mesh cache** is the heart of the feature:
   ocean size.
 - Temporal LOD when needed: full frames near the viewer, fewer frames
   mid-distance, static beyond.
-- Meshing needs no engine change: `VoxelMesher.build_mesh(buffer,
-  materials)` is scriptable (and its scratch is `thread_local`, so
-  main-thread baking never races the meshing threads). Frames render as
-  plain `MeshInstance` children of the terrain node whose `.mesh` pointer
-  swaps per flip. The instances inherit the node transform, so scaled
-  builds animate correctly — which retired M1's scale-display bug.
+- Meshing happens on demand through the engine (godot_voxel `ba32795`):
+  a cache miss pastes the frame's chunk into the terrain like any other
+  edit, the engine meshes it on its worker threads, and the
+  `mesh_block_updated` capture stores the mesh (`get_block_mesh` with
+  take detaches it so in-place mesh reuse can't mutate it). Nothing is
+  precalculated — each (chunk, content) pair meshes at most once, at
+  native meshing speed; a main-thread time-sliced baker was tried first
+  and took minutes on sea-sized builds. Until a frame is fully cached
+  the terrain itself displays the pasted frames (playback is visible
+  from the first flip); then the display swaps to `MeshInstance`
+  children whose `.mesh` pointer swaps per flip. The instances inherit
+  the node transform, so scaled builds animate correctly — which retired
+  M1's scale-display bug. Trade-off: while a capture is pending, that
+  chunk's terrain data temporarily holds frame content (collision and
+  queries there included). Steady-state playback touches no voxel data.
 - Hiding the live meshes IS the one engine touch (owned fork, godot_voxel
   `1b7f0ea`): `VoxelTerrain.set_render_blocks_visible(false)` hides every
   render mesh of that one terrain — data, collisions and children
