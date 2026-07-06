@@ -68,7 +68,8 @@ gdobj BuildNode of VoxelTerrain:
     # paste-and-capture state: a cache miss pastes the frame's chunk into
     # the terrain like any other edit; the engine meshes it on its threads
     # and on_mesh_block_updated captures the mesh into frame_mesh_cache.
-    frame_pending_capture: Table[Vector3, tuple[key: Hash, at: MonoTime]]
+    frame_pending_capture:
+      Table[Vector3, tuple[key: Hash, at: MonoTime, min_version: int]]
     frame_applied: Table[Vector3, Hash] # frame content currently in terrain
     frame_dirty: HashSet[Vector3] # terrain data differs from live state
     frame_mesh_lru: Table[Hash, int] # last-touched tick per cached mesh
@@ -213,7 +214,15 @@ gdobj BuildNode of VoxelTerrain:
     )
     self.frame_dirty.incl chunk_id
     self.frame_applied[chunk_id] = key
-    self.frame_pending_capture[chunk_id] = (key, get_mono_time())
+    # Sample the block's request version at paste time: only a mesh built
+    # by a LATER request is guaranteed to include this paste. Earlier
+    # requests may still be in flight (neighbor border-remeshes constantly
+    # re-mesh this block) and their meshes hold the pre-paste content —
+    # capturing one of those under this key desynchronizes the chunk
+    # permanently.
+    self.frame_pending_capture[chunk_id] = (
+      key, get_mono_time(), self.get_block_mesh_request_version(chunk_id).int
+    )
     inc self.frame_pastes
     inc self.frame_pastes_this_tick
 
@@ -345,14 +354,19 @@ gdobj BuildNode of VoxelTerrain:
     self.frame_dirty.clear()
     self.frame_applied.clear()
 
-  method on_mesh_block_updated(chunk_id: Vector3) =
+  method on_mesh_block_updated(chunk_id: Vector3, version: int) =
     if not ?self.model:
       return
     inc self.frame_signals
     if chunk_id notin self.frame_pending_capture:
       return
+    let entry = self.frame_pending_capture[chunk_id]
+    if version <= entry.min_version:
+      # built by a request sent before our paste: pre-paste content. Our
+      # paste forces a later request, so a valid capture is still coming.
+      return
     inc self.frame_captures
-    let key = self.frame_pending_capture[chunk_id].key
+    let key = entry.key
     self.frame_pending_capture.del chunk_id
     var mesh: Mesh
     if self.frames_showing:
