@@ -201,6 +201,11 @@ proc read_i32(s: string, i: var int): int =
   i += 4
   int(cast[int32](u))
 
+{.push checks: off.}
+# Per-voxel hot loops: dev builds ship without -d:release, and runtime
+# checks cost 5-15x here (a 250m sea's frame keys measured 400ms with
+# checks, ~25ms without). The decoders carry manual bounds guards.
+
 proc fits_8bit(voxels: array[CHUNK_VOLUME, PackedVoxel]): bool =
   for v in voxels:
     if v > 255:
@@ -366,6 +371,8 @@ proc decode_sparse_data*(
       if pos < CHUNK_VOLUME.uint64:
         result[pos.int] = voxel
 
+{.pop.}
+
 proc encode_chunk*(voxels: array[CHUNK_VOLUME, PackedVoxel]): PackedChunk =
   var has_voxels = false
   for v in voxels:
@@ -383,6 +390,7 @@ proc encode_chunk*(voxels: array[CHUNK_VOLUME, PackedVoxel]): PackedChunk =
   else:
     PackedChunk(data: sparse.to_string)
 
+{.push checks: off.}
 proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
   if packed.data.len == 0:
     return
@@ -399,6 +407,8 @@ proc decode_chunk*(packed: PackedChunk): array[CHUNK_VOLUME, PackedVoxel] =
     result = decode_sparse_data(packed.data.to_bytes, 1, wide = true)
   of FMT_EMPTY:
     discard
+
+{.pop.}
 
 proc is_empty*(packed: PackedChunk): bool =
   packed.data.len == 0 or
@@ -1152,6 +1162,7 @@ proc library_slot(
   result = resolver(color_idx)
   cache[color_idx] = result
 
+{.push checks: off.}
 proc fill_chunk_type_bytes*(
     bytes: PoolByteArray,
     snapshot: SnapshotData,
@@ -1175,33 +1186,89 @@ proc fill_chunk_type_bytes*(
     let v = ids[i shr 1]
     b = if (i and 1) == 0: uint8(v and 0xff) else: uint8(v shr 8)
 
-proc frame_chunk_keys*(frame: FrameData): Table[Vector3, Hash] =
-  ## Content keys for a frame's chunks, shell-aware: the mesher culls border
-  ## faces (and bakes occlusion) against neighboring blocks, so a chunk's
-  ## mesh is a function of its own 16³ content PLUS a 1-voxel shell from its
-  ## neighbors. Keying on the padded 18³ region makes identical keys imply
-  ## identical meshes; central-only keys would reuse meshes with wrong
-  ## borders when a neighbor differs between frames.
-  var decoded: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
-  for chunk_id, snapshot in frame.chunks:
-    decoded[chunk_id] = decode_chunk(snapshot)
-  for chunk_id in frame.chunks.keys:
-    var h: Hash = 0
-    for x in -1 .. ChunkDim:
-      for y in -1 .. ChunkDim:
-        for z in -1 .. ChunkDim:
-          var v = EMPTY_VOXEL
-          if x >= 0 and x < ChunkDim and y >= 0 and y < ChunkDim and z >= 0 and
-              z < ChunkDim:
-            v = decoded[chunk_id][linear_position(x, y, z)]
+type DecodedChunks* = Table[Vector3, ref array[CHUNK_VOLUME, PackedVoxel]]
+  ## Lazily decoded chunks of one frame — the working set for shell-aware
+  ## key computation. Callers memoize per frame index and decode on demand
+  ## (decode_into), so key work can be spread under a time budget.
+
+proc decode_into*(
+    decoded: var DecodedChunks, frame: FrameData, chunk_id: Vector3
+) =
+  ## Ensure `chunk_id` is decoded (nil entry = chunk absent from the frame,
+  ## cached so the lookup doesn't repeat).
+  if chunk_id in decoded:
+    return
+  if chunk_id in frame.chunks:
+    var arr = new(array[CHUNK_VOLUME, PackedVoxel])
+    arr[] = decode_chunk(frame.chunks[chunk_id])
+    decoded[chunk_id] = arr
+  else:
+    decoded[chunk_id] = nil
+
+proc chunk_frame_key*(
+    decoded: var DecodedChunks, frame: FrameData, chunk_id: Vector3
+): Hash =
+  ## Shell-aware content key for one chunk of a frame: the mesher culls
+  ## border faces (and bakes occlusion) against neighboring blocks, so a
+  ## chunk's mesh is a function of its own 16³ content PLUS a 1-voxel shell
+  ## from its neighbors — the key hashes the padded 18³ region. Identical
+  ## keys then imply identical meshes; central-only keys would reuse meshes
+  ## with wrong borders when a neighbor differs between frames.
+  ##
+  ## Hot: runs on the main thread inside the frame-apply budget. The inner
+  ## loop stays free of table lookups — neighbor arrays resolve once.
+  var neighbors: array[27, ref array[CHUNK_VOLUME, PackedVoxel]]
+  for dx in 0 .. 2:
+    for dy in 0 .. 2:
+      for dz in 0 .. 2:
+        let key = vec3(
+          chunk_id.x + float(dx - 1),
+          chunk_id.y + float(dy - 1),
+          chunk_id.z + float(dz - 1),
+        )
+        decoded.decode_into(frame, key)
+        neighbors[dx * 9 + dy * 3 + dz] = decoded[key]
+
+  # per-axis padded coordinate -> (neighbor offset 0..2, local coordinate)
+  var axis_chunk {.global.}: array[ChunkDim + 2, int]
+  var axis_local {.global.}: array[ChunkDim + 2, int]
+  once:
+    for i in 0 ..< ChunkDim + 2:
+      let c = i - 1
+      if c < 0:
+        axis_chunk[i] = 0
+        axis_local[i] = ChunkDim - 1
+      elif c >= ChunkDim:
+        axis_chunk[i] = 2
+        axis_local[i] = 0
+      else:
+        axis_chunk[i] = 1
+        axis_local[i] = c
+
+  var h: Hash = 0
+  for xi in 0 ..< ChunkDim + 2:
+    let cx = axis_chunk[xi] * 9
+    let lx = axis_local[xi] * ChunkDim * ChunkDim
+    for yi in 0 ..< ChunkDim + 2:
+      let cy = axis_chunk[yi] * 3
+      let ly = axis_local[yi] * ChunkDim
+      for zi in 0 ..< ChunkDim + 2:
+        let arr = neighbors[cx + cy + axis_chunk[zi]]
+        let v =
+          if arr.is_nil:
+            EMPTY_VOXEL
           else:
-            let world =
-              chunk_id * ChunkDim + vec3(x.float, y.float, z.float)
-            let owner = chunk_id_for_pos(world)
-            decoded.with_value(owner, arr):
-              v = arr[][linear_position(world)]
-          h = h !& v.int
-    result[chunk_id] = !$h
+            arr[lx + ly + axis_local[zi]]
+        h = h !& v.int
+  !$h
+
+proc frame_chunk_keys*(frame: FrameData): Table[Vector3, Hash] =
+  ## Whole-frame convenience (tests): every chunk's shell-aware key.
+  var decoded: DecodedChunks
+  for chunk_id in frame.chunks.keys:
+    result[chunk_id] = chunk_frame_key(decoded, frame, chunk_id)
+
+{.pop.}
 
 proc render_snapshot_direct*(
     voxel_tool: VoxelTool,

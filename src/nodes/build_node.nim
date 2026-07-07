@@ -75,6 +75,15 @@ gdobj BuildNode of VoxelTerrain:
     frame_mesh_cache: Table[Hash, Mesh]
     frame_display: Table[Vector3, Hash] # content key shown per chunk
     frame_missing: Table[Vector3, Hash] # misses awaiting harvest
+    frame_queue: Table[Vector3, int] # chunk -> frame index to apply
+    frame_decoded: Table[int, DecodedChunks]
+      ## lazily decoded chunks per frame index — the working set for
+      ## per-chunk key computation inside the drain budget. Pruned each
+      ## flip to the indexes still being applied.
+      ## chunk applies pending for the displayed frame. show_frame only
+      ## decides; drain_frame_queue does the writes under a per-tick time
+      ## budget, so a 250m flip can't stall the game thread (the blocking
+      ## playback gate simply waits for the queue to empty).
     frame_keys: Table[int, Table[Vector3, Hash]] # per frame, lazily built
     frame_bytes: PoolByteArray # reusable set_block_voxel_data payload
     frame_dirty: HashSet[Vector3] # terrain data differs from live state
@@ -200,10 +209,26 @@ gdobj BuildNode of VoxelTerrain:
     self.frame_mesh_cache[key] = mesh
     self.touch_cached(key)
 
-  proc keys_for_frame(index: int): lent Table[Vector3, Hash] =
-    if index notin self.frame_keys:
-      self.frame_keys[index] = frame_chunk_keys(self.model.frames[index])
-    self.frame_keys[index]
+  proc cached_key(index: int, chunk_id: Vector3): Option[Hash] =
+    ## The chunk's key if it's been computed already — show_frame's cheap
+    ## steady-state skip check. Never computes.
+    if index in self.frame_keys and chunk_id in self.frame_keys[index]:
+      some(self.frame_keys[index][chunk_id])
+    else:
+      none(Hash)
+
+  proc key_for(index: int, chunk_id: Vector3): Hash =
+    ## The chunk's shell-aware content key, computed on first use inside
+    ## the drain budget (decode + hash of the padded region) and memoized.
+    if index in self.frame_keys and chunk_id in self.frame_keys[index]:
+      return self.frame_keys[index][chunk_id]
+    result = chunk_frame_key(
+      self.frame_decoded.mget_or_put(index, DecodedChunks()),
+      self.model.frames[index],
+      chunk_id,
+    )
+    self.frame_keys.mget_or_put(index, Table[Vector3, Hash]())[chunk_id] =
+      result
 
   proc write_frame_chunk(
       chunk_id: Vector3, snapshot: SnapshotData, remesh: bool
@@ -211,6 +236,49 @@ gdobj BuildNode of VoxelTerrain:
     fill_chunk_type_bytes(self.frame_bytes, snapshot, self.resolver)
     discard self.set_block_voxel_data(chunk_id, self.frame_bytes, remesh)
     self.frame_dirty.incl chunk_id
+
+  proc drain_frame_queue() =
+    ## Apply queued frame chunks under a time budget. Big flips spread over
+    ## several process ticks instead of stalling the game thread; playback
+    ## can't advance until the queue and the miss set drain, so pacing is
+    ## free — the animation just holds the frame a little longer.
+    if self.frame_queue.len == 0 or not ?self.renderer.voxel_tool:
+      return
+    const BUDGET_MS = 8
+    let start = get_mono_time()
+    let frames = self.model.frames
+    flush_registry()
+    var done: seq[Vector3]
+    for chunk_id, chunk_index in self.frame_queue:
+      if chunk_index >= frames.len:
+        done.add chunk_id
+        continue
+      let target = self.key_for(chunk_index, chunk_id)
+      if chunk_id notin self.frame_display or
+          self.frame_display[chunk_id] != target:
+        let frame = frames[chunk_index]
+        self.frame_missing.del chunk_id
+        if chunk_id notin frame.chunks:
+          self.write_frame_chunk(chunk_id, SnapshotData(), remesh = false)
+          self.set_block_mesh(chunk_id, nil)
+        elif target in self.frame_mesh_cache:
+          self.touch_cached(target)
+          self.write_frame_chunk(
+            chunk_id, frame.chunks[chunk_id], remesh = false
+          )
+          self.set_block_mesh(chunk_id, self.frame_mesh_cache[target])
+        else:
+          self.write_frame_chunk(
+            chunk_id, frame.chunks[chunk_id], remesh = true
+          )
+          self.frame_missing[chunk_id] = target
+        self.frame_display[chunk_id] = target
+      done.add chunk_id
+      if (get_mono_time() - start).in_milliseconds >= BUDGET_MS:
+        break
+    for chunk_id in done:
+      self.frame_queue.del chunk_id
+    flush_registry()
 
   proc viewer_positions(): seq[Vector3] =
     ## Paired viewers' positions in terrain-local voxel coordinates —
@@ -259,32 +327,31 @@ gdobj BuildNode of VoxelTerrain:
     let frames = self.model.frames
     if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
       return
-    flush_registry() # palette entries minted since the last flush
-    const EMPTY_CHUNK_KEY = Hash(0)
+    let flip_start = get_mono_time()
     let viewers = self.viewer_positions()
+    var active: HashSet[int]
+    active.incl index
     for chunk_id in self.loaded_chunks:
       let chunk_index =
         self.effective_frame(chunk_id, index, frames.len, viewers)
-      let target = self.keys_for_frame(chunk_index).get_or_default(
-        chunk_id, EMPTY_CHUNK_KEY
-      )
-      if chunk_id in self.frame_display and
-          self.frame_display[chunk_id] == target:
-        continue
-      let frame = frames[chunk_index]
-      self.frame_missing.del chunk_id
-      if chunk_id notin frame.chunks:
-        self.write_frame_chunk(chunk_id, SnapshotData(), remesh = false)
-        self.set_block_mesh(chunk_id, nil)
-      elif target in self.frame_mesh_cache:
-        self.touch_cached(target)
-        self.write_frame_chunk(chunk_id, frame.chunks[chunk_id], remesh = false)
-        self.set_block_mesh(chunk_id, self.frame_mesh_cache[target])
+      active.incl chunk_index
+      let known = self.cached_key(chunk_index, chunk_id)
+      if known.is_some and chunk_id in self.frame_display and
+          self.frame_display[chunk_id] == known.get:
+        self.frame_queue.del chunk_id
       else:
-        self.write_frame_chunk(chunk_id, frame.chunks[chunk_id], remesh = true)
-        self.frame_missing[chunk_id] = target
-      self.frame_display[chunk_id] = target
-    flush_registry()
+        self.frame_queue[chunk_id] = chunk_index
+    for cached_index in self.frame_decoded.keys.to_seq:
+      if cached_index notin active:
+        self.frame_decoded.del cached_index
+    let flip_took = (get_mono_time() - flip_start).in_milliseconds
+    if flip_took > 100:
+      info "frame flip slow",
+        unit = self.model.id,
+        frame = index,
+        ms = flip_took,
+        queued = self.frame_queue.len
+    self.drain_frame_queue()
 
   proc harvest_frame_meshes() =
     ## Collect meshes for the displayed frame's misses. Only runs when the
@@ -315,6 +382,8 @@ gdobj BuildNode of VoxelTerrain:
   proc hide_frames() =
     self.frame_missing.clear()
     self.frame_display.clear()
+    self.frame_queue.clear()
+    self.frame_decoded.clear()
     if self.frame_dirty.len > 0 and ?self.renderer.voxel_tool:
       # restore the live voxel state wherever frame content was written
       for chunk_id in self.frame_dirty:
@@ -429,6 +498,7 @@ gdobj BuildNode of VoxelTerrain:
         self.model.voxels.chunk_deltas.release(chunk_id)
       self.frame_display.del chunk_id
       self.frame_missing.del chunk_id
+      self.frame_queue.del chunk_id
       self.frame_dirty.excl chunk_id
 
   proc track_changes() =
@@ -594,6 +664,7 @@ gdobj BuildNode of VoxelTerrain:
         # frame content changed; the mesh cache stays valid (keys are
         # content hashes) but per-frame key tables must recompute
         self.frame_keys.clear()
+        self.frame_decoded.clear()
         self.frame_display.clear()
         self.render_frame(self.model.current_frame)
 
@@ -669,7 +740,8 @@ gdobj BuildNode of VoxelTerrain:
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side. Each side
       # harvests its own miss set once its mesh pipeline drains.
-      if self.frame_missing.len > 0:
+      self.drain_frame_queue()
+      if self.frame_missing.len > 0 and self.frame_queue.len == 0:
         self.harvest_frame_meshes()
 
       if self.model.current_frame >= 0:
@@ -699,7 +771,8 @@ gdobj BuildNode of VoxelTerrain:
       # chunks can't mesh inside one frame interval, and flipping early
       # orphans the in-flight meshes — the warm-up would never converge.
       if SERVER in state.local_flags and self.model.frames_fps > 0 and
-          self.model.frames.len > 1 and self.frame_missing.len == 0:
+          self.model.frames.len > 1 and self.frame_missing.len == 0 and
+          self.frame_queue.len == 0:
         let now = get_mono_time()
         if now >= self.next_frame_at:
           self.next_frame_at =
