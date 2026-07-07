@@ -3,7 +3,7 @@
 ## constructor calls with position parameter.
 
 import std/[tables]
-import types, base_api, base_bridge
+import types, core, base_bridge
 
 var test_unit = Unit()
 test_unit.query_results = initTable[string, seq[Unit]]()

@@ -245,8 +245,8 @@ proc group_overloads_by_comment*(overloads: seq[Symbol]): seq[OverloadGroup] =
   var current_group = OverloadGroup(description: "", codes: @[], modules: @[])
 
   for ovl in overloads:
-    if ovl.description.len > 0:
-      # This overload has a comment - start a new group
+    if ovl.description.len > 0 and ovl.description != current_group.description:
+      # This overload has a different comment - start a new group
       if current_group.codes.len > 0:
         # Save the previous group first
         groups.add(current_group)
@@ -256,7 +256,7 @@ proc group_overloads_by_comment*(overloads: seq[Symbol]): seq[OverloadGroup] =
         modules: @[ovl.module]
       )
     else:
-      # No comment - add to current group
+      # No comment (or the same one) - add to current group
       current_group.codes.add(ovl.code)
       current_group.modules.add(ovl.module)
 

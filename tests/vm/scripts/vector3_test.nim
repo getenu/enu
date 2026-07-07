@@ -1,5 +1,5 @@
 # Test Vector3 operations
-import types
+import types, vectors
 
 # Test vector creation
 let v1 = vec3(1.0, 2.0, 3.0)

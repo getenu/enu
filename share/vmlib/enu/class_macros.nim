@@ -1,6 +1,5 @@
 import std/[macros, strutils, sequtils, os]
-import types
-import base_api, macro_helpers, base_bridge_private
+import core, macro_helpers, base_bridge_private
 
 template with_line_info(node, source: NimNode): NimNode =
   let n = node

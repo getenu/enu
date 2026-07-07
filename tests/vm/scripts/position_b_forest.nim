@@ -3,7 +3,7 @@
 ## potentially corrupting the caller's register allocation.
 
 import std/[tables]
-import types, base_api, base_bridge, position_a_tree
+import types, core, base_bridge, position_a_tree
 
 var test_unit = Unit()
 test_unit.query_results = initTable[string, seq[Unit]]()

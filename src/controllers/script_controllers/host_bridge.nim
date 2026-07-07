@@ -11,7 +11,7 @@ import godotapi/[spatial, ray_cast]
 import
   core, models/[states, bots, builds, units, colors, signs, serializers, voxels]
 import libs/[interpreters, eval]
-import shared/errors
+import enu/shared/errors
 
 import ./[vars, scripting]
 include ./host_bridge_utils

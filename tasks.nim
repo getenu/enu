@@ -691,6 +691,7 @@ task dist, "Build distribution":
 
 proc generate_api_json() =
   # jsondoc JSON consumed by the API reference pages in docs/book/api
+  rm_dir "docs/book/api/json"
   let modules = [
     ("ed", "deps/ed/src/ed/types.nim"),
     ("ed/zens", "deps/ed/src/ed/zens/initializers.nim"),
@@ -698,8 +699,9 @@ proc generate_api_json() =
     ("ed/zens", "deps/ed/src/ed/zens/contexts.nim"),
     ("ed/zens", "deps/ed/src/ed/zens/validations.nim"),
     ("enu", "share/vmlib/enu/types.nim"),
+    ("enu", "share/vmlib/enu/vectors.nim"),
     ("enu", "share/vmlib/enu/base_bridge.nim"),
-    ("enu", "share/vmlib/enu/base_api.nim"),
+    ("enu", "share/vmlib/enu/core.nim"),
     ("enu", "share/vmlib/enu/builds.nim"),
     ("enu", "share/vmlib/enu/bots.nim"),
     ("enu", "share/vmlib/enu/players.nim"),

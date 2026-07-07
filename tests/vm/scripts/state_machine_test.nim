@@ -2,7 +2,7 @@
 import std/tables
 import testing
 import state_machine
-import base_api
+import core
 import base_bridge
 import types
 
