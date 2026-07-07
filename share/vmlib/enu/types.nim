@@ -9,6 +9,15 @@ const ASAP* = 0.0  ## Magic value for speed to enable ASAP mode
 type
   Vector3* = tuple[x, y, z: float]
 
+  Basis* = tuple[x, y, z: Vector3]
+
+  Transform* = tuple[basis: Basis, origin: Vector3]
+
+  Pen* = tuple[position: Transform, color: Color, drawing: bool]
+    ## A build's drawing context — turtle pose, color, pen-down state.
+    ## `var spot = pen` captures it; `pen = spot` returns there. A plain
+    ## tuple for now; it will grow into an object.
+
   WorldBox* = tuple[min, max: Vector3]
 
   Directions* = enum

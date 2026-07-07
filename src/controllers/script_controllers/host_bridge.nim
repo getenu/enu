@@ -757,20 +757,15 @@ proc draw_position_set(self: Build, position: Vector3) =
     self.draw_transform_value.origin =
       (position - self.position).local_to(self.parent)
 
-proc save(self: Build, name: string) =
-  self.save_points[name] =
-    (self.draw_transform, self.color_value.value, self.drawing)
+proc pen(self: Build): Pen =
+  (self.draw_transform, self.color_value.value, self.drawing)
 
-proc restore(self: Build, name: string) =
-  # A missing name is a no-op, not a crash: scripts can restore() before
-  # their first save(), and a reload can clear the table mid-run.
-  if name in self.save_points:
-    # Assign each part explicitly: tuple unpacking onto accessor calls
-    # compiles but silently writes into the getters' temporaries.
-    let (position, color, drawing) = self.save_points[name]
-    self.draw_transform = position
-    self.color_value.value = color
-    self.drawing = drawing
+proc pen_set(self: Build, value: Pen) =
+  # Assign each part explicitly: tuple unpacking onto accessor calls
+  # compiles but silently writes into the getters' temporaries.
+  self.draw_transform = value.position
+  self.color_value.value = value.color
+  self.drawing = value.drawing
 
 # Player binding
 
@@ -1573,7 +1568,13 @@ proc frames_len(self: Build): int =
   self.frame_count
 
 proc save_frame_impl(self: Build, at: int): int =
-  self.save_frame(at)
+  self.save(at)
+
+proc play_impl(self: Build, fps: float, loop: bool) =
+  self.play(fps, loop)
+
+proc stop_impl(self: Build) =
+  self.stop()
 
 proc frame(self: Build): int =
   self.current_frame
@@ -1641,12 +1642,12 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "bots", play
 
   result.bridged_from_vm "builds",
-    drawing, `drawing=`, initial_position, save, restore, draw_position,
+    drawing, `drawing=`, initial_position, pen, pen_set, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
     cylinder_impl, advance, rendered_voxel_count_get,
     save_frame_impl, load_frame, delete_frame, clear_frames, frame,
-    `frame=`, frames_len, play_frames, stop_frames
+    `frame=`, frames_len, play_impl, stop_impl
 
   result.bridged_from_vm "builds_private", place_block
 

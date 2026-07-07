@@ -10,8 +10,10 @@ bridged_to_host:
   proc drawing*(self: Build): bool
   proc `drawing=`*(self: Build, drawing: bool)
   proc initial_position(self: Build): Vector3
-  proc save*(self: Build, name = "default")
-  proc restore*(self: Build, name = "default")
+  proc pen*(self: Build): Pen
+    ## The drawing context — turtle pose, color, pen-down state. Capture
+    ## with `var spot = pen`, return with `pen = spot`.
+  proc `pen=`*(self: Build, value: Pen)
   proc draw_position*(self: Build): Vector3
   proc `draw_position=`*(self: Build, value: Vector3)
   proc has_block_at*(position: Vector3): bool
@@ -73,8 +75,8 @@ bridged_to_host:
   proc clear_frames*(self: Build)
     ## Drop every saved frame and stop playback. Frames persist across
     ## script re-runs (that's the hand-edit flow: pose, run a script that
-    ## calls save_frame, repeat) — so programmatic animations clear first.
-    ## save_frame raises after 64 frames without a clear.
+    ## calls save, repeat) — so programmatic animations clear first.
+    ## save raises after 64 frames without a clear.
 
   proc load_frame*(self: Build, index: int)
     ## Restore a saved frame into the live voxels for editing (this changes
@@ -87,10 +89,9 @@ bridged_to_host:
 
   proc frames_len*(self: Build): int
 
-  proc play_frames*(self: Build, fps = 8.0, loop = true)
-    ## Cycle through the saved frames at `fps` (loops by default).
+  proc play_impl*(self: Build, fps: float, loop: bool)
 
-  proc stop_frames*(self: Build)
+  proc stop_impl*(self: Build)
 
   proc rendered_voxel_count_get*(self: Build): int
 
@@ -103,15 +104,23 @@ bridged_to_host:
 template frame_count*(self: Build): int =
   self.frames_len
 
-proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
+proc save*(self: Build, at: int = -1): int {.discardable.} =
   ## Snapshot the current voxels as an animation frame and return its
   ## index — appended by default, or overwriting frame `at`. Replace
-  ## workflow: load_frame(3), edit, save_frame(at = 3). Raises past 64
+  ## workflow: load_frame(3), edit, save(at = 3). Raises past 64
   ## frames without a clear_frames().
   self.save_frame_impl(at)
 
+proc play*(self: Build, fps = 8.0, loop = true) =
+  ## Cycle through the saved frames at `fps` (loops by default).
+  self.play_impl(fps, loop)
+
+proc stop*(self: Build) =
+  ## Stop frame playback; the display stays on the current frame.
+  self.stop_impl()
+
 # bare forms for the active unit, matching the drawing API
-proc save_frame*(at: int = -1): int {.discardable.} =
+proc save*(at: int = -1): int {.discardable.} =
   Build(active_unit()).save_frame_impl(at)
 
 proc load_frame*(index: int) =
@@ -123,11 +132,11 @@ proc delete_frame*(index: int) =
 proc clear_frames*() =
   Build(active_unit()).clear_frames()
 
-proc play_frames*(fps = 8.0, loop = true) =
-  Build(active_unit()).play_frames(fps, loop)
+proc play*(fps = 8.0, loop = true) =
+  Build(active_unit()).play_impl(fps, loop)
 
-proc stop_frames*() =
-  Build(active_unit()).stop_frames()
+proc stop*() =
+  Build(active_unit()).stop_impl()
 
 # no bare frame_count(): it would collide with the engine's global frame
 # counter in base_bridge — use me.frame_count

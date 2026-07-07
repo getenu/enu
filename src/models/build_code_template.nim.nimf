@@ -13,6 +13,6 @@ ${imports}
 {.experimental: "overloadable_enums".}
 
 load_enu_script r"${file_name}", Build, drawing,
-  draw_position
+  draw_position, pen, frame
 
 exit()

@@ -340,7 +340,7 @@ else:
       build.voxels.clear()
     fill_grids()
     let voxels = draw_sea(build)
-    let index = build.save_frame()
+    let index = build.save()
     echo "frame ", index, ": ", voxels, " voxels"
     # pace the flood: keep ticking so each frame's chunks drain before the
     # next burst — a sustained blast drops the session
@@ -362,7 +362,7 @@ else:
         echo "holding frame 4"
   else:
     let fps = FRAMES.float / LOOP
-    build.play_frames(fps = fps)
+    build.play(fps = fps)
     echo "BUILD=", build.id, " playing ", FRAMES, " frames at ", fps,
       "fps — kill me to reap it"
     Enu.client.every(1.second):

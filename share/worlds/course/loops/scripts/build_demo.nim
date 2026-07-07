@@ -4,7 +4,7 @@
 lock = true
 
 forever:
-  save()
+  let start = pen
   speed = 6
   12.times:
     color = cycle(red, white)
@@ -12,13 +12,13 @@ forever:
     turn 60
     up 1
   sleep 6
-  restore()
+  pen = start
   speed = 0
   color = eraser
   12.times:
     forward 3
     turn 60
     up 1
-  restore()
+  pen = start
   color = red
   sleep 2

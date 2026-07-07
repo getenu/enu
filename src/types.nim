@@ -64,7 +64,7 @@ const
   MAX_STATIC_COLORS* = 4096
   MAX_FRAMES* = 64
     ## Animation frame cap per build: frames persist across script re-runs
-    ## (clearing is explicit via clear_frames), so an unguarded save_frame
+    ## (clearing is explicit via clear_frames), so an unguarded save
     ## in a loop would grow forever. Call 65 raises.
 
   # Delta thresholds
@@ -88,6 +88,11 @@ type
     COMPUTED
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
+
+  Pen* = tuple[position: Transform, color: Color, drawing: bool]
+    ## A build's drawing context — turtle pose, color, pen-down state.
+    ## Scripts capture and restore it through the `pen` accessor. A plain
+    ## tuple for now; it will grow into an object.
 
   FrameData* = object
     ## One animation frame: the unit's whole voxel state as packed chunks —
@@ -400,8 +405,6 @@ type
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
     drawing*: bool
-    save_points*:
-      Table[string, tuple[position: Transform, color: Color, drawing: bool]]
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
     frames*: EdTable[int, FrameData]

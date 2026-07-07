@@ -23,7 +23,7 @@ Frames are *data*; meshes are *cache*. Never the reverse:
   frame later, diffing.
 
 Frames snapshot the merged `local_voxels` state, so script draws, external
-draws, and MANUAL hand edits all compose before `save_frame`.
+draws, and MANUAL hand edits all compose before `save`.
 
 ## Storage
 
@@ -120,21 +120,21 @@ regardless of visibility, which is exactly the flaw the real feature removes.
 
 ## API (v1: client + VM; UI later)
 
-    build.save_frame()            # append a frame (raises past 64 frames)
-    build.save_frame(at = 3)      # overwrite frame 3 in place
+    build.save()                  # append a frame (raises past 64 frames)
+    build.save(at = 3)            # overwrite frame 3 in place
     build.load_frame(3)           # restore frame 3 into the live voxels
     build.frame = 2               # display-only; -1 = live state
     build.frame_count
     build.delete_frame(3)         # later frames shift down
     build.clear_frames()          # explicit — frames persist across script
                                   #   re-runs (hand-edit flow: pose, run a
-                                  #   script calling save_frame, repeat)
-    build.play_frames(fps = 8.0, loop = true)
-    build.stop_frames()
+                                  #   script calling save, repeat)
+    build.play(fps = 8.0, loop = true)
+    build.stop()
 
 Script reset stops playback and drops the display but keeps frames;
 programmatic animations call clear_frames() first. The 64-frame cap
-(MAX_FRAMES) keeps an unguarded save_frame loop from growing forever.
+(MAX_FRAMES) keeps an unguarded save loop from growing forever.
 
 ## Milestones
 

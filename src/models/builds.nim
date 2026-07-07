@@ -156,10 +156,10 @@ template buffer*(self: Build, body: untyped) =
 proc frame_count*(self: Build): int =
   self.frames.len
 
-proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
+proc save*(self: Build, at: int = -1): int {.discardable.} =
   ## Snapshot the current voxels as an animation frame and return its index:
   ## appended by default, or overwriting frame `at` (replace workflow:
-  ## `load_frame(3)`, edit, `save_frame(at = 3)`). Keyed table writes make
+  ## `load_frame(3)`, edit, `save(at = 3)`). Keyed table writes make
   ## both cases a single synced op.
   if at >= 0 and at < self.frames.len:
     self.frames[at] = self.voxels.pack_frame
@@ -168,7 +168,7 @@ proc save_frame*(self: Build, at: int = -1): int {.discardable.} =
     if self.frames.len >= MAX_FRAMES:
       raise ResourceLimitError.init(
         "frame limit reached (" & $MAX_FRAMES &
-          "): call clear_frames(), or overwrite with save_frame(at = ...)"
+          "): call clear_frames(), or overwrite with save(at = ...)"
       )
     let index = self.frames.len
     self.frames[index] = self.voxels.pack_frame
@@ -186,7 +186,7 @@ proc load_frame*(self: Build, index: int) =
 proc clear_frames*(self: Build) =
   ## Drop every saved frame, stop playback, and show the live state.
   ## Scripts that build an animation programmatically call this first;
-  ## otherwise save_frame keeps appending across script re-runs.
+  ## otherwise save keeps appending across script re-runs.
   self.frames_fps = 0.0
   self.current_frame = -1
   self.frames.clear
@@ -204,14 +204,14 @@ proc delete_frame*(self: Build, index: int) =
     elif self.current_frame > index:
       self.current_frame = self.current_frame - 1
 
-proc play_frames*(self: Build, fps: float = 8.0, loop: bool = true) =
+proc play*(self: Build, fps: float = 8.0, loop: bool = true) =
   ## Start frame playback; the server advances `current_frame` at `fps`.
   ## `current_frame=` displays a frame without touching the live voxels;
   ## `load_frame` restores one for editing.
   self.frames_loop = loop
   self.frames_fps = fps
 
-proc stop_frames*(self: Build) =
+proc stop*(self: Build) =
   self.frames_fps = 0.0
 
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
@@ -449,7 +449,7 @@ method reset*(self: Build) =
 
   # a reload stops playback and drops the displayed frame, but saved frames
   # persist — the hand-edit workflow is "pose, re-run a script that calls
-  # save_frame, repeat", so each run appends. Scripts building animations
+  # save, repeat", so each run appends. Scripts building animations
   # programmatically call clear_frames() first.
   self.frames_fps = 0.0
   self.current_frame = -1
