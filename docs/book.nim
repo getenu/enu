@@ -14,6 +14,7 @@ var book = init_book_with_toc:
     entry "Built-in Commands", "coding/commands"
     entry "Shorthand Commands", "coding/shorthand"
     entry "Random Numbers", "coding/random_numbers"
+    entry "API Reference", "api/enu_api"
 
   section "Command Loops", "command_loops":
     entry "Writing Commands", "command_loops/commands"

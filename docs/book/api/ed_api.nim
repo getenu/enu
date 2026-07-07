@@ -5,13 +5,14 @@ import nimib, nimibook
 import ../../enuib
 import ../../api_docs
 
-# Load JSON documentation files at compile time
+# Load JSON documentation files at compile time.
+# Generated from deps/ed by the `docs` task (generate_api_json in tasks.nim).
 const
-  types_json = static_read("../../../../model_citizen/docs/json/ed/types.json")
-  initializers_json = static_read("../../../../model_citizen/docs/json/ed/zens/initializers.json")
-  operations_json = static_read("../../../../model_citizen/docs/json/ed/zens/operations.json")
-  contexts_json = static_read("../../../../model_citizen/docs/json/ed/zens/contexts.json")
-  validations_json = static_read("../../../../model_citizen/docs/json/ed/zens/validations.json")
+  types_json = static_read("json/ed/types.json")
+  initializers_json = static_read("json/ed/zens/initializers.json")
+  operations_json = static_read("json/ed/zens/operations.json")
+  contexts_json = static_read("json/ed/zens/contexts.json")
+  validations_json = static_read("json/ed/zens/validations.json")
 
 # Configure modules with their JSON content
 const modules: seq[ModuleConfig] = @[

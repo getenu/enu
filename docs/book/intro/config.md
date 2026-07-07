@@ -64,7 +64,7 @@ a few configurable options:
 ```json
 {
   "font_size": 38,
-  "dock_icon_size": 193.75,
+  "toolbar_size": 193.75,
   "world": "tutorial",
   "level": "tutorial-1",
   "show_stats": true,

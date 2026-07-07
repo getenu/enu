@@ -29,14 +29,14 @@ move enemy
 up 5
 ```
 
-It's also possible to call commands directly against a unit instance, but they
-will always use `move` mode, regardless
-of which mode is in use:
+It's also possible to call commands directly against a unit instance. They use
+whichever `move`/`build` mode is currently active, but don't change the current
+target:
 
 ```nim
 build enemy
-up 5 # build 5 blocks up
-enemy.up 5 # move up 5
+up 5 # enemy builds 5 blocks up
+me.up 5 # me builds 5 blocks up. enemy is still the build target.
 ```
 
 ## `forward` / `back` / `up` / `down` / `left` / `right`
@@ -82,15 +82,12 @@ if player.far(25):
 
 ## `hit`
 
-If a unit is touching another unit, return the vector of the contact. Defaults
-to testing against `me`. For example:
+Returns `true` if a unit is touching another unit. Defaults to testing against
+`me`. For example:
 
 ```nim
 if player.hit:
   echo "I'm touching the player"
-
-if player.hit == UP:
-  echo "The player is on top of me"
 
 if player.hit(enemy1):
   echo "The player hit enemy1"
@@ -125,7 +122,8 @@ forever:
 
 ## `start_position`
 
-The starting position of a unit. Missing currently, but will be in in 0.2.
+Gets or sets the starting position of a unit. Setting it updates the unit's
+spawn position, which persists across reloads.
 
 ## `speed` / `speed=`
 
@@ -141,7 +139,7 @@ Switching between build and move mode doesn't impact the speed, except in the
 case of switching to move mode from build mode with a speed of 0. `speed = 0` is
 extremely common for build mode, but makes things appear broken in move mode, as
 nothing will actually move, so switching to move mode with a speed of 0 will
-automatically reset the speed to 5.
+automatically reset the speed to 1.
 
 ## `scale` / `scale=`
 
@@ -164,7 +162,7 @@ By default, new `Build` units are `global = false` and new `Bot` units are
 
 ## `rotation`
 
-Gets the rotation of a unit as a Vector3.
+Gets the rotation of a unit, in degrees.
 
 ## `velocity` / `velocity=`
 
@@ -190,17 +188,17 @@ enable saving/restoring multiple points.
 
 Instantly return unit to start position and resets rotation and scale.
 
-## `home`
+## `go_home`
 
 Moves a unit to its start position via a `forward`, `left`, `down` sequence with
 appropriate values. Can fail if there are obstructions along the way. Compare
 `position` to `start_position` after running to test for success.
 
 ## `sleep`
-`sleep(seconds = -1.0)`
+`sleep(seconds = 0.0)`
 
 Do nothing for the specified number of seconds. If no argument is provided, or
-the argument is < 0, this will wait for 0.5 seconds or until unit is
+the argument is 0 or less, this will wait for 0.5 seconds or until the unit is
 interrupted, which will end the `sleep` prematurely. This allows the following:
 
 ```nim

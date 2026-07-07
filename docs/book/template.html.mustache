@@ -46,6 +46,14 @@
   <!-- Highlight.js Stylesheets - I could use nimib native highlight but let's keep it for styling... -->
   <link rel="stylesheet" href="{{ path_to_root }}assets/css/highlight.css">
 
+  <!-- API reference pages (and the Ed readme, which shares the API sidebar) -->
+  {{#is_api_docs}}
+    <link rel="stylesheet" href="{{ path_to_root }}assets/css/api.css">
+  {{/is_api_docs}}
+  {{#is_readme}}
+    <link rel="stylesheet" href="{{ path_to_root }}assets/css/api.css">
+  {{/is_readme}}
+
   <!-- Custom theme stylesheets - why the "../"? -->
   {{#additional_css}}
     <link rel="stylesheet" href="../{{ path_to_root }}{{ . }}">
@@ -244,7 +252,7 @@
         {{#is_api_docs}}
         <!-- API Reference Section -->
         <section id="api-reference">
-          <h1>Ed API Reference</h1>
+          <h1>{{ api_title }}</h1>
 
           {{#api.hasConstants}}
           <section id="constants">
@@ -326,6 +334,25 @@
             </article>
             {{/api.types}}
           </section>
+
+          {{#api.freeProcModules}}
+          <section id="{{ anchor }}" class="module-section">
+            <h3><a href="#{{ anchor }}"><code>{{ name }}</code></a></h3>
+            {{#procs}}
+            <div class="operation" id="{{ anchor }}">
+              <h5><a href="#{{ anchor }}">{{ name }}</a></h5>
+              {{#groups}}
+              <div class="overload-group">
+                {{#hasDescription}}
+                <p class="description">{{{ description }}}</p>
+                {{/hasDescription}}
+                <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
+              </div>
+              {{/groups}}
+            </div>
+            {{/procs}}
+          </section>
+          {{/api.freeProcModules}}
         </section>
         {{/is_api_docs}}
 
@@ -541,6 +568,91 @@
       }, 0);
 
       // Sidebar Logic
+      // 0. Persist expanded/collapsed state of sections and types
+      const storageKey = 'api-nav-state:' + location.pathname;
+      let navState = {};
+      try {
+        navState = JSON.parse(localStorage.getItem(storageKey)) || {};
+      } catch (e) {}
+
+      const saveNavState = () => {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(navState));
+        } catch (e) {}
+      };
+
+      // Collapsible sections (Constants, Enums, modules): the header gets the
+      // same [+]/[-] control as the Types header, and toggles the visibility
+      // of the section's items.
+      const sectionOpeners = {};
+      document.querySelectorAll('.api-nav-header[data-section]').forEach(header => {
+        const section = header.dataset.section;
+        const key = 'section:' + section;
+        const items = document.querySelectorAll('[data-section-item="' + section + '"]');
+        const label = header.textContent.trim();
+        let open = key in navState ? navState[key] : true;
+
+        const render = () => {
+          header.innerHTML = label + ' <span style="float:right; font-family: monospace;">' + (open ? '[-]' : '[+]') + '</span>';
+          items.forEach(li => {
+            li.style.display = open ? '' : 'none';
+          });
+        };
+
+        const setOpen = value => {
+          if (open !== value) {
+            open = value;
+            navState[key] = open;
+            saveNavState();
+            render();
+          }
+        };
+
+        render();
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', () => setOpen(!open));
+        sectionOpeners[section] = () => setOpen(true);
+      });
+
+      // Persist per-type expanded/collapsed state
+      document.querySelectorAll('.api-type-details').forEach(d => {
+        const key = 'type:' + (d.dataset.type || '');
+        if (key in navState) {
+          d.open = navState[key];
+        }
+        d.addEventListener('toggle', () => {
+          navState[key] = d.open;
+          saveNavState();
+        });
+      });
+
+      // If the URL points at a symbol, open its sidebar section and make
+      // sure the link is visible.
+      const revealHash = () => {
+        if (!location.hash) {
+          return;
+        }
+        const links = document.querySelectorAll('.api-nav-content a');
+        for (const link of links) {
+          const href = link.getAttribute('href') || '';
+          if (href === location.hash || href.endsWith(location.hash)) {
+            const item = link.closest('[data-section-item]');
+            if (item && sectionOpeners[item.dataset.sectionItem]) {
+              sectionOpeners[item.dataset.sectionItem]();
+            }
+            let details = link.closest('details');
+            while (details) {
+              details.open = true;
+              details = details.parentElement.closest('details');
+            }
+            link.scrollIntoView({block: 'center'});
+            break;
+          }
+        }
+      };
+      revealHash();
+      window.addEventListener('hashchange', revealHash);
+
       // 1. "TYPES" Header Toggle
       const headers = document.querySelectorAll('.api-nav-header');
       let typesHeader = null;

@@ -6,7 +6,7 @@
 
 ## Potato Zombies: Helping a 6 year old build a 3D game with Enu and Nim
 
-Initially presented at [FOSDOM 2022](https://fosdem.org/2022/schedule/event/nim_potatozombies).
+Initially presented at [FOSDEM 2022](https://fosdem.org/2022/schedule/event/nim_potatozombies).
 
 <iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/UqLy-4rP69I?si=Bk2Z6n6PoNbx7wkb" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 

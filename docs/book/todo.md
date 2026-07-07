@@ -21,11 +21,6 @@ Enu needs a proper inventory, menus, and a way to move objects.
 
 Write games, and add features to support them.
 
-### Forward Arrow
-
-Show an arrow pointing forward from the current draw point, so it 
-will always be clear which way `forward` goes.
-
 ### Pivot point
 
 Currently it isn't possible to change the pivot point for a unit, and the 
@@ -41,8 +36,8 @@ A REPL could be used to experiment, run commands, and change settings.
 
 ### Additional Platforms and App Stores
 
-Shortly after 0.2 Enu will be made available on the Mac App Store and Steam. iOS
-and iPadOS will likely be next, with Android and VR platforms following later.
+Enu will be made available on the Mac App Store and Steam. iOS and iPadOS will
+likely be next, with Android and VR platforms following later.
 
 ### Graphics
 
