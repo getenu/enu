@@ -148,6 +148,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
         warn "frame sidecar file unreadable; dropping later frames",
           unit = self.id, frame = i, error = e.msg
         break
+    self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
     info "frames sidecar loaded",
       unit = self.id,
       loaded = loaded,
