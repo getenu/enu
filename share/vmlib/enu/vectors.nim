@@ -1,3 +1,6 @@
+## Math for positions and directions: `Vector3` arithmetic, distances,
+## and the `WorldBox` helpers.
+
 import std/math
 import types
 

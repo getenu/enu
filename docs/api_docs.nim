@@ -29,6 +29,7 @@ type
     enums*: seq[Symbol]
     types*: Table[string, TypeDoc]  # Type name -> TypeDoc
     free_procs*: seq[Symbol]  # Procs that don't operate on an exported type
+    module_descriptions*: Table[string, string]  # Module name -> doc comment
 
   ModuleConfig* = tuple[name: string, json: string]
 
@@ -122,6 +123,10 @@ proc collect_symbols*(
       continue
 
     let doc = parse_json(json_content)
+    let module_description =
+      doc.get_or_default("moduleDescription").get_str.strip
+    if module_description.len > 0:
+      result.module_descriptions[module_name] = module_description
     if "entries" notin doc:
       continue
 
@@ -268,16 +273,29 @@ proc group_overloads_by_comment*(overloads: seq[Symbol]): seq[OverloadGroup] =
 
 # Mustache context generation - returns JsonNode for direct use with Mustache
 
-proc to_symbol_json*(sym: Symbol, suffix: string = ""): JsonNode =
+proc source_url*(sym: Symbol, source_template: string): string =
+  ## Expand a source link template like
+  ## "https://github.com/getenu/enu/blob/main/share/vmlib/$module.nim#L$line"
+  if source_template.len == 0 or sym.module.len == 0:
+    ""
+  else:
+    source_template.replace("$module", sym.module).replace("$line", $sym.line)
+
+proc to_symbol_json*(
+    sym: Symbol, suffix: string = "", source_template = ""
+): JsonNode =
+  let url = sym.source_url(source_template)
   result = %*{
     "name": sym.name.to_display_name,
     "anchor": generate_anchor(sym.name, suffix),
     "description": sym.description,
     "code": highlight_code(sym.code),
-    "module": sym.module
+    "module": sym.module,
+    "hasSourceUrl": url.len > 0,
+    "sourceUrl": url
   }
 
-proc to_api_json*(data: DocData): JsonNode =
+proc to_api_json*(data: DocData, source_template = ""): JsonNode =
   ## Convert DocData to JSON for Mustache template
   result = %*{
     "hasConstants": data.constants.len > 0,
@@ -291,11 +309,11 @@ proc to_api_json*(data: DocData): JsonNode =
 
   # Constants
   for sym in data.constants:
-    result["constants"].add(sym.to_symbol_json("const"))
+    result["constants"].add(sym.to_symbol_json("const", source_template))
 
   # Enums
   for sym in data.enums:
-    result["enums"].add(sym.to_symbol_json("enum"))
+    result["enums"].add(sym.to_symbol_json("enum", source_template))
 
   # Free procs - group by module, then by name, then by doc comments
   if data.free_procs.len > 0:
@@ -310,9 +328,24 @@ proc to_api_json*(data: DocData): JsonNode =
     module_names.sort()
 
     for module_name in module_names:
+      let full_module = procs_by_module[module_name][0].module
+      let description = data.module_descriptions.get_or_default(full_module)
+      let url =
+        if source_template.len == 0:
+          ""
+        else:
+          source_template
+            .replace("#L$line", "")
+            .replace("$line", "")
+            .replace("$module", full_module)
       var mc = %*{
         "name": module_name,
         "anchor": generate_anchor(module_name, "module"),
+        "module": full_module,
+        "hasDescription": description.len > 0,
+        "description": description,
+        "hasSourceUrl": url.len > 0,
+        "sourceUrl": url,
         "procs": new_j_array()
       }
 
@@ -364,6 +397,8 @@ proc to_api_json*(data: DocData): JsonNode =
       "description": "",
       "code": "",
       "module": "",
+      "hasSourceUrl": false,
+      "sourceUrl": "",
       "hasStaticProcs": td.static_procs.len > 0,
       "staticProcs": new_j_array(),
       "hasProcs": td.procs.len > 0,
@@ -373,9 +408,12 @@ proc to_api_json*(data: DocData): JsonNode =
     }
 
     if td.has_type:
+      let url = td.type_symbol.source_url(source_template)
       tc["description"] = %td.type_symbol.description
       tc["code"] = %highlight_code(td.type_symbol.code)
       tc["module"] = %td.type_symbol.module
+      tc["hasSourceUrl"] = %(url.len > 0)
+      tc["sourceUrl"] = %url
 
     # Static procs - group by display name, then by doc comments
     if td.static_procs.len > 0:

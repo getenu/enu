@@ -1,3 +1,5 @@
+## Signs and speech: `say` something, and control how the sign looks.
+
 import system except echo
 import std/[strutils, math, wrapnils, options]
 import core, vm_bridge_utils, base_bridge_private

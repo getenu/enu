@@ -1,5 +1,5 @@
-## Simple testing framework for Enu VM tests
-## Follows unittest API but works in NimScript/VM mode
+## A little testing framework, for checking that your creations do what
+## you think they do: `suite`, `test` and `check`.
 
 import std/strutils
 import base_bridge

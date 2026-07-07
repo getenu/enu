@@ -1,3 +1,6 @@
+## Command loops and states: `loop`, and the `->` and `==>` rules that
+## switch between behaviors.
+
 import std/[macros, strformat, strutils, sequtils, tables]
 import core, macro_helpers
 
