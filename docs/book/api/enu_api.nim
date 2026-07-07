@@ -2,9 +2,15 @@
 ## Generates the API documentation page for the Enu scripting API
 ## (share/vmlib/enu).
 
+import std/[strutils, osproc]
 import nimib, nimibook
 import ../../enuib
 import ../../api_docs
+
+# Pin source links to the commit the docs were built from. Resolved when
+# the page runs (during the docs build) so it can't go stale in the
+# compile cache.
+let enu_commit = exec_process("git rev-parse HEAD").strip
 
 # Load JSON documentation files at compile time.
 # Generated from share/vmlib/enu by the `docs` task (generate_api_json in
@@ -40,7 +46,8 @@ nb_init(theme = use_enu_api_docs)
 
 let data = collect_symbols(modules, include_free_procs = true)
 nb.context["api"] = data.to_api_json(
-  "https://github.com/getenu/enu/blob/main/share/vmlib/$module.nim#L$line"
+  "https://github.com/getenu/enu/blob/" & enu_commit &
+    "/share/vmlib/$module.nim#L$line"
 )
 
 nb_save
