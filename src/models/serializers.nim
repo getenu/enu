@@ -161,7 +161,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
       if self.frames_fps == 0 and "current" in meta:
         # not playing: restore the displayed frame. This is how scriptless
         # frame units (e.g. a persisted sea) come back visible at all —
-        # their voxels are COMPUTED, so only frames survive the reload.
+        # their voxels are TRANSIENT, so only frames survive the reload.
         let current = meta["current"].get_int
         if current >= 0 and current < loaded:
           self.current_frame = current

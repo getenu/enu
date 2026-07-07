@@ -16,7 +16,7 @@ suite "Voxel Packing":
     check color_index == 0 # ERASER
 
   test "pack_voxel for normal block":
-    # kind 1 (MANUAL), color 1 (BLUE)
+    # kind 1 (PERSISTED), color 1 (BLUE)
     let packed = pack_voxel(1, 1)
     check packed > 1
 
@@ -28,18 +28,18 @@ suite "Voxel Packing":
     check EMPTY_VOXEL == 0
 
   test "static color indices round-trip":
-    let packed = pack_voxel(STATIC_COLOR_BASE + 100, COMPUTED.ord)
+    let packed = pack_voxel(STATIC_COLOR_BASE + 100, TRANSIENT.ord)
     let (color_index, kind_ord) = unpack_voxel(packed)
     check color_index == STATIC_COLOR_BASE + 100
-    check kind_ord == COMPUTED.ord
+    check kind_ord == TRANSIENT.ord
 
   test "max color index fits uint16":
     let max_index = (65535 - 1) div 3
-    let packed = pack_voxel(max_index, COMPUTED.ord)
+    let packed = pack_voxel(max_index, TRANSIENT.ord)
     check packed == 65535
     let (color_index, kind_ord) = unpack_voxel(packed)
     check color_index == max_index
-    check kind_ord == COMPUTED.ord
+    check kind_ord == TRANSIENT.ord
 
 suite "Chunk codecs":
   proc round_trip(voxels: array[CHUNK_VOLUME, PackedVoxel]) =
@@ -57,8 +57,8 @@ suite "Chunk codecs":
 
   test "wide values escalate the chunk to 16-bit formats":
     var voxels: array[CHUNK_VOLUME, PackedVoxel]
-    voxels[0] = pack_voxel(STATIC_COLOR_BASE + 500, COMPUTED.ord) # > 255
-    voxels[1] = pack_voxel(1, COMPUTED.ord)
+    voxels[0] = pack_voxel(STATIC_COLOR_BASE + 500, TRANSIENT.ord) # > 255
+    voxels[1] = pack_voxel(1, TRANSIENT.ord)
     let packed = encode_chunk(voxels)
     check packed.data[0].byte in
       [FMT_RLE16.byte, FMT_SPARSE_FULL16.byte]
@@ -74,7 +74,7 @@ suite "Chunk codecs":
       # dense wave-like rows so RLE beats sparse, with escape-range values
       # in runs shorter than 3
       voxels[i * 3] =
-        pack_voxel(STATIC_COLOR_BASE + 16 + (i mod 4), COMPUTED.ord)
+        pack_voxel(STATIC_COLOR_BASE + 16 + (i mod 4), TRANSIENT.ord)
       voxels[i * 3 + 1] = voxels[i * 3]
     check voxels[0] >= CMD_REPEAT.PackedVoxel
     let packed = encode_chunk(voxels)
@@ -85,14 +85,14 @@ suite "Chunk codecs":
     var voxels: array[CHUNK_VOLUME, PackedVoxel]
     for i in 0 ..< CHUNK_VOLUME:
       voxels[i] = pack_voxel(
-        STATIC_COLOR_BASE + 200 + (i mod 2) * 300, COMPUTED.ord
+        STATIC_COLOR_BASE + 200 + (i mod 2) * 300, TRANSIENT.ord
       )
     round_trip(voxels)
 
   test "solid wide chunk round-trips via RLE16":
     var voxels: array[CHUNK_VOLUME, PackedVoxel]
     for i in 0 ..< CHUNK_VOLUME:
-      voxels[i] = pack_voxel(STATIC_COLOR_BASE + 1000, MANUAL.ord)
+      voxels[i] = pack_voxel(STATIC_COLOR_BASE + 1000, PERSISTED.ord)
     let packed = encode_chunk(voxels)
     check packed.data[0].byte == FMT_RLE16.byte
     round_trip(voxels)
@@ -110,7 +110,7 @@ suite "Chunk codecs":
 
   test "delta round-trips, narrow and wide":
     let narrow = @[
-      (pos: vec3(1, 2, 3), voxel: pack_voxel(2, COMPUTED.ord)),
+      (pos: vec3(1, 2, 3), voxel: pack_voxel(2, TRANSIENT.ord)),
       (pos: vec3(4, 5, 6), voxel: EMPTY_VOXEL),
     ]
     let narrow_delta = encode_delta(narrow)
@@ -119,7 +119,7 @@ suite "Chunk codecs":
 
     let wide = @[
       (pos: vec3(1, 2, 3), voxel: pack_voxel(STATIC_COLOR_BASE + 999, 2)),
-      (pos: vec3(7, 8, 9), voxel: pack_voxel(1, MANUAL.ord)),
+      (pos: vec3(7, 8, 9), voxel: pack_voxel(1, PERSISTED.ord)),
     ]
     let wide_delta = encode_delta(wide)
     check wide_delta.data[0].byte == FMT_SPARSE_DELTA16.byte
@@ -169,12 +169,12 @@ suite "Frame sidecar files":
           let h = if cx == 2: 4 else: 2 + ((x + z + t + cx) mod 4)
           for y in 0 ..< h:
             voxels[linear_position(x, y, z)] =
-              pack_voxel(int(BLUE) + ((x + y + z) mod 3), COMPUTED.ord)
+              pack_voxel(int(BLUE) + ((x + y + z) mod 3), TRANSIENT.ord)
       result.chunks[vec3(cx.float, 0, 0)] = encode_chunk(voxels)
     if t mod 2 == 0:
       # a chunk that comes and goes, to exercise tombstones
       var voxels: array[CHUNK_VOLUME, PackedVoxel]
-      voxels[0] = pack_voxel(int(RED), MANUAL.ord)
+      voxels[0] = pack_voxel(int(RED), PERSISTED.ord)
       result.chunks[vec3(0, 1, 0)] = encode_chunk(voxels)
 
   test "keyframe and delta files reconstruct every frame exactly":
@@ -213,9 +213,9 @@ suite "Frame sidecar files":
 suite "Frame pack/load round-trip":
   test "pack_frame captures every chunk; apply_snapshot restores it":
     let a = VoxelStore.init(unit_id = "frame_a")
-    a.add_voxel(vec3(0, 0, 0), (COMPUTED, ACTION_COLORS[BLUE]))
-    a.add_voxel(vec3(1, 2, 3), (COMPUTED, ACTION_COLORS[RED]))
-    a.add_voxel(vec3(20, 0, -5), (MANUAL, ACTION_COLORS[GREEN])) # 2nd chunk
+    a.add_voxel(vec3(0, 0, 0), (TRANSIENT, ACTION_COLORS[BLUE]))
+    a.add_voxel(vec3(1, 2, 3), (TRANSIENT, ACTION_COLORS[RED]))
+    a.add_voxel(vec3(20, 0, -5), (PERSISTED, ACTION_COLORS[GREEN])) # 2nd chunk
     a.add_voxel(vec3(4, 4, 4), (HOLE, ACTION_COLORS[ERASER]))
 
     let frame = a.pack_frame

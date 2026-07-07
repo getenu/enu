@@ -1313,11 +1313,11 @@ proc count_draw(self: Build) =
       self.script_ctx.pause()
 
 proc draw_voxel(self: Build, position: Vector3, color: Color) =
-  ## Paint a COMPUTED voxel. Goes through Build.draw, which only writes to
+  ## Paint a TRANSIENT voxel. Goes through Build.draw, which only writes to
   ## local_voxels (not local_edits), so the block is regenerated when the
   ## script reloads and isn't bloating the save file. Backs place.
   self.count_draw
-  let info: VoxelInfo = (COMPUTED, color)
+  let info: VoxelInfo = (TRANSIENT, color)
   self.draw(position, info)
 
 const
@@ -1431,7 +1431,7 @@ proc box_impl(
   let iy_hi = u_hi.y.ceil.int
   let iz_hi = u_hi.z.ceil.int
 
-  let info: VoxelInfo = (COMPUTED, color)
+  let info: VoxelInfo = (TRANSIENT, color)
   # 0.5 = half-voxel inclusion threshold. For axis-aligned cases this
   # is a no-op (voxel centres land exactly on integer coords, the
   # extra 0.5 margin doesn't add any cells). For off-axis cases it
@@ -1478,7 +1478,7 @@ proc sphere_impl(
   let centre = if use_turtle: self.draw_transform.origin else: at
   let radius = size / 2.0
   let r_int = (radius + 0.5).floor.int
-  let info: VoxelInfo = (COMPUTED, color)
+  let info: VoxelInfo = (TRANSIENT, color)
   for dx in -r_int .. r_int:
     for dy in -r_int .. r_int:
       for dz in -r_int .. r_int:
@@ -1542,7 +1542,7 @@ proc cylinder_impl(
   let iy_hi = u_hi.y.ceil.int
   let iz_hi = u_hi.z.ceil.int
 
-  let info: VoxelInfo = (COMPUTED, color)
+  let info: VoxelInfo = (TRANSIENT, color)
   for ix in ix_lo .. ix_hi:
     for iy in iy_lo .. iy_hi:
       for iz in iz_lo .. iz_hi:
@@ -1558,9 +1558,9 @@ proc cylinder_impl(
         self.draw(world, info)
 
 proc place_block(self: Build, position: Vector3, color: Color) =
-  ## Place a persistent MANUAL voxel. The block is saved to local_edits and
+  ## Place a persistent PERSISTED voxel. The block is saved to local_edits and
   ## survives reload. For programmatic block-placement use draw_voxel.
-  let info: VoxelInfo = (MANUAL, color)
+  let info: VoxelInfo = (PERSISTED, color)
   self.add_voxel(position, info)
   self.voxels.set_edit(position, info)
   self.global_flags += DIRTY # hand-style edit: persist on the next save

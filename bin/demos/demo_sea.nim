@@ -25,6 +25,11 @@ let
   CENTER_Z = env_f("SEA_Z", -40.0)
   FRAMES = int(env_f("SEA_FRAMES", 0)) # >0: flipbook of N frames over LOOP
   SAVE = get_env("SEA_SAVE") == "1" # persist with the level (else ephemeral)
+  # A static sea is external content with no script to regenerate it, so its
+  # voxels are PERSISTED (they save via the edits sidecar and reload as real,
+  # queryable state). Animated poses are TRANSIENT by nature — each one is
+  # captured into a frame immediately, and frames are the persistence.
+  KIND = if FRAMES == 0: PERSISTED else: TRANSIENT
   LOOP = env_f("SEA_LOOP", 4.0) # seconds per animation loop (flipbook mode)
 
 var sea_time = env_f("SEA_TIME", 0.0) # seconds; waves travel, foam follows
@@ -289,7 +294,7 @@ proc draw_sea(build: Build): int =
             else:
               deep_water # depths under the surface
           build.draw(
-            vec3(float(ix - HALF), float(y), float(iz - HALF)), (COMPUTED, c)
+            vec3(float(ix - HALF), float(y), float(iz - HALF)), (KIND, c)
           )
           result.inc
 
@@ -304,7 +309,7 @@ proc draw_sea(build: Build): int =
             px = float(ix - HALF)
             pz = float(iz - HALF)
           for y in 1 .. tall:
-            build.draw(vec3(px, float(base + y), pz), (COMPUTED, trunk_col))
+            build.draw(vec3(px, float(base + y), pz), (KIND, trunk_col))
           let ty = float(base + tall)
           for (dx, dy, dz) in [
             (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1),
@@ -313,7 +318,7 @@ proc draw_sea(build: Build): int =
           ]:
             build.draw(
               vec3(px + dx.float, ty + dy.float, pz + dz.float),
-              (COMPUTED, palm_col),
+              (KIND, palm_col),
             )
           result += tall + 13
 
@@ -332,10 +337,7 @@ if FRAMES == 0:
   let voxels = draw_sea(build)
   echo "BUILD=", build.id, " voxels=", voxels
   if SAVE:
-    # a static sea has no script to regenerate its COMPUTED voxels, so
-    # persist the state as a single displayed frame
-    build.current_frame = 0
-    discard build.save() # save() marks DIRTY, so set the display first
+    # PERSISTED voxels ride the edits sidecar with the rest of the unit
     echo "sea saved with the level — safe to exit (re-running adds a NEW sea)"
   else:
     echo "sea is up — keeping it alive (kill me to reap it)"

@@ -21,11 +21,11 @@ bridged_to_host:
   proc begin_asap*(self: Build)
   proc end_asap*(self: Build)
   proc draw_voxel*(self: Build, position: Vector3, color: Color)
-    ## Paints a COMPUTED block at the given position. Re-runs of the script
+    ## Paints a TRANSIENT block at the given position. Re-runs of the script
     ## regenerate it, so it isn't persisted to the save file. Used by
     ## place (the box/sphere/cylinder primitives draw host-side). For
     ## persistent placement (eg. user edits via eval, holes for windows) use
-    ## place_block from builds_private, which marks the voxel MANUAL.
+    ## place_block from builds_private, which marks the voxel PERSISTED.
 
   proc save_level_now*()
     ## Triggers an immediate level save. Used for testing persistence.

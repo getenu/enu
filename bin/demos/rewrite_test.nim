@@ -15,7 +15,7 @@ build.buffer:
     for y in 0 ..< 12:
       for z in 0 ..< 12:
         build.draw(
-          vec3(x.float, y.float, z.float), (COMPUTED, ACTION_COLORS[RED])
+          vec3(x.float, y.float, z.float), (TRANSIENT, ACTION_COLORS[RED])
         )
 discard Enu.client.tick_until(3.seconds, false)
 
@@ -25,7 +25,7 @@ build.buffer:
     for y in 0 ..< 3:
       for z in 0 ..< 3:
         build.draw(
-          vec3(x.float, y.float, z.float), (COMPUTED, ACTION_COLORS[BLUE])
+          vec3(x.float, y.float, z.float), (TRANSIENT, ACTION_COLORS[BLUE])
         )
 discard Enu.client.tick_until(3.seconds, false)
 echo "REWRITTEN - only a small blue cube should remain"

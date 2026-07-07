@@ -148,7 +148,7 @@ proc end_asap*(self: Build) {.gcsafe.} =
 template buffer*(self: Build, body: untyped) =
   ## Batch many draws into a single flush. `draw` normally syncs each voxel,
   ## which is costly for large procedural builds; inside `buffer:` the draws
-  ## accumulate locally (ASAP mode) and flush once — chunks and MANUAL edits —
+  ## accumulate locally (ASAP mode) and flush once — chunks and PERSISTED edits —
   ## when the block exits (even on exception). Suspends `immediate` for the
   ## duration so the draws actually batch, then restores it.
   let was_immediate = self.voxels.immediate
@@ -236,7 +236,7 @@ proc del_voxel(self: Build, position: Vector3) =
 
 proc restore_edits*(self: Build) =
   self.voxels.for_all_edits:
-    assert info.kind in {MANUAL, HOLE}
+    assert info.kind in {PERSISTED, HOLE}
     if info.kind != HOLE:
       self.add_voxel(pos, info)
     else:
@@ -247,7 +247,7 @@ proc restore_edits*(self: Build) =
         self.voxels.del_voxel(pos)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
-  if voxel.kind == COMPUTED:
+  if voxel.kind == TRANSIENT:
     if self.voxels.has_edit(position):
       var edit = self.voxels.get_edit(position)
       if edit.kind == HOLE:
@@ -255,7 +255,7 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
         edit.color = voxel.color
         self.voxels.set_edit(position, edit)
         return
-      elif edit.kind == MANUAL and edit.color == voxel.color:
+      elif edit.kind == PERSISTED and edit.color == voxel.color:
         self.voxels.del_edit(position)
     elif ?self.clone_of and Build(self.clone_of).voxels.has_edit(position) and
         Build(self.clone_of).voxels.get_edit(position).kind == HOLE:
@@ -274,16 +274,16 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
       else:
         self.del_voxel(position)
 
-  if position == vec3(0, 0, 0) and voxel.kind != COMPUTED:
+  if position == vec3(0, 0, 0) and voxel.kind != TRANSIENT:
     self.start_color = voxel.color
 
-  if not dont_join and voxel.kind == MANUAL:
+  if not dont_join and voxel.kind == PERSISTED:
     self.maybe_join_previous_build(position, voxel)
 
 proc drop_block(self: Build) =
   if self.drawing:
     var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
-    self.draw(p, (COMPUTED, self.color))
+    self.draw(p, (TRANSIENT, self.color))
 
 proc has_visible_voxels(self: Build): bool =
   for pos, info in self.voxels.all_voxels:
@@ -343,7 +343,7 @@ proc fire(self: Build) =
     let point = (self.target_point + (self.target_normal * 0.5)).floor
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
-    self.draw(point, (MANUAL, state.selected_color))
+    self.draw(point, (PERSISTED, state.selected_color))
     self.log_block_placement(point, state.selected_color)
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
@@ -484,7 +484,7 @@ method reset*(self: Build) =
   self.units.clear()
   self.global_flags -= RESETTING
   self.restore_edits
-  self.draw(vec3(), (COMPUTED, self.start_color))
+  self.draw(vec3(), (TRANSIENT, self.start_color))
 
 method ensure_visible*(self: Build) =
   if self.units.len == 0 and not self.has_visible_voxels:
@@ -493,7 +493,7 @@ method ensure_visible*(self: Build) =
         ACTION_COLORS[BLUE]
       else:
         self.start_color
-    self.draw(vec3(), (COMPUTED, color))
+    self.draw(vec3(), (TRANSIENT, color))
 
 method destroy*(self: Build) =
   self.destroy_impl
@@ -596,7 +596,7 @@ proc fire_beside(self: Build) =
     else:
       state.units.find_first(point.surrounding)
   if ?add_to:
-    add_to.draw(point.local_to(add_to), (MANUAL, state.selected_color))
+    add_to.draw(point.local_to(add_to), (PERSISTED, state.selected_color))
     add_to.log_block_placement(point.local_to(add_to), state.selected_color)
   else:
     add_to = Build.init(
@@ -696,7 +696,7 @@ method worker_thread_joined*(self: Build, worker: Worker) =
       self.code.nim.strip == "" and
       not (?self.script_ctx and self.script_ctx.script != "" and
         file_exists(self.script_ctx.script)):
-    self.draw(vec3(), (COMPUTED, self.start_color))
+    self.draw(vec3(), (TRANSIENT, self.start_color))
     self.end_asap()
 
 method main_thread_joined*(self: Build) =
@@ -798,12 +798,12 @@ when is_main_module:
 
   var b = Build.init
 
-  b.draw vec3(1, 1, 1), (COMPUTED, Color())
+  b.draw vec3(1, 1, 1), (TRANSIENT, Color())
   assert vec3(1, 1, 1) in b.voxels
-  b.draw vec3(17, 17, 17), (COMPUTED, Color())
+  b.draw vec3(17, 17, 17), (TRANSIENT, Color())
   assert vec3(17, 17, 17) in b.voxels
   var c = Build.init(transform = Transform(origin: vec3(5, 5, 5)))
   c.parent = b
 
-  c.draw vec3(14, 14, 14), (MANUAL, Color())
+  c.draw vec3(14, 14, 14), (PERSISTED, Color())
   c.local_flags += HOVER

@@ -83,9 +83,10 @@ type
   PackedChunk* = SnapshotData # Legacy alias
 
   VoxelKind* = enum
+    ## Ordinals are persisted (JSON edits) and on the wire — keep positions.
     HOLE
-    MANUAL
-    COMPUTED
+    PERSISTED ## hand-style edits; saved with the unit and restored on load
+    TRANSIENT ## dropped on script restart — the script regenerates them
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
 

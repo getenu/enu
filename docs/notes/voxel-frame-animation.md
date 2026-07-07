@@ -23,7 +23,7 @@ Frames are *data*; meshes are *cache*. Never the reverse:
   frame later, diffing.
 
 Frames snapshot the merged `local_voxels` state, so script draws, external
-draws, and MANUAL hand edits all compose before `save`.
+draws, and PERSISTED hand edits all compose before `save`.
 
 ## Storage
 

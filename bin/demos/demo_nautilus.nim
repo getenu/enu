@@ -10,7 +10,7 @@ const
   b = 0.10
   tube_ratio = 0.22
   line_density = 0
-  block_kind = COMPUTED
+  block_kind = TRANSIENT
 let
   body_color = col"000000"
   line_colors = [col"fc0e0b", col"0067ff", col"14f707", col"d9eed8"]

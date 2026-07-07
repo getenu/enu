@@ -764,7 +764,7 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   else:
     self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
 
-  if voxel.kind == MANUAL:
+  if voxel.kind == PERSISTED:
     {.cast(gcsafe).}:
       self.set_edit(position, voxel)
 
