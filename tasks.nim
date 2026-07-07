@@ -689,23 +689,50 @@ task dist, "Build distribution":
   dist_prereqs_task()
   dist_package_task()
 
+proc generate_api_json() =
+  # jsondoc JSON consumed by the API reference pages in docs/book/api
+  let modules = [
+    ("ed", "deps/ed/src/ed/types.nim"),
+    ("ed/zens", "deps/ed/src/ed/zens/initializers.nim"),
+    ("ed/zens", "deps/ed/src/ed/zens/operations.nim"),
+    ("ed/zens", "deps/ed/src/ed/zens/contexts.nim"),
+    ("ed/zens", "deps/ed/src/ed/zens/validations.nim"),
+    ("enu", "share/vmlib/enu/types.nim"),
+    ("enu", "share/vmlib/enu/base_bridge.nim"),
+    ("enu", "share/vmlib/enu/base_api.nim"),
+    ("enu", "share/vmlib/enu/builds.nim"),
+    ("enu", "share/vmlib/enu/bots.nim"),
+    ("enu", "share/vmlib/enu/players.nim"),
+    ("enu", "share/vmlib/enu/signs.nim"),
+    ("enu", "share/vmlib/enu/state_machine.nim"),
+    ("enu", "share/vmlib/enu/worlds.nim"),
+    ("enu", "share/vmlib/enu/testing.nim"),
+  ]
+  for (out_sub, module) in modules:
+    let out_dir = "docs/book/api/json/" & out_sub
+    mk_dir out_dir
+    exec &"nim --hints:off --warnings:off jsondoc --outdir:{out_dir} {module}"
+
 task docs, "Build docs":
   exec "rm -rf dist/docs"
+  generate_api_json()
   with_dir "docs":
     exec "nim r book.nim init"
     exec "nim r book.nim build"
     exec "nim r ed.nim build"
   exec "cp -r docs/book/assets dist/docs"
-  exec "cp -r docs/assets/* dist/docs/assets/"
   exec "cp media/*.{png,webp} dist/docs/assets"
   exec "rm -rf dist/docs/assets/fonts"
   exec "mkdir -p dist/docs/assets/fonts"
   exec "cp -r fonts/jost dist/docs/assets/fonts/"
   exec "cp -r fonts/ibm dist/docs/assets/fonts/"
-  # Copy Ed docs to /ed/ for https://getenu.com/ed
+  # Copy Ed docs to /ed/ for https://getenu.com/ed. Keep the original file
+  # names too, since the baked-in sidebar links use them.
   exec "mkdir -p dist/docs/ed"
   exec "cp dist/docs/api/ed_readme.html dist/docs/ed/index.html"
+  exec "cp dist/docs/api/ed_readme.html dist/docs/ed/ed_readme.html"
   exec "cp dist/docs/api/ed_api.html dist/docs/ed/api.html"
+  exec "cp dist/docs/api/ed_api.html dist/docs/ed/ed_api.html"
 
 task export_docs, "Build docs and copy them to ../enu-site/docs":
   docs_task()

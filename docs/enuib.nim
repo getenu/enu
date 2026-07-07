@@ -9,6 +9,7 @@ export api_docs
 
 const document* = hl_html static_read("./book/template.html.mustache")
 const ed_toc* = hl_html static_read("./book/templates/ed_toc.html.mustache")
+const enu_toc* = hl_html static_read("./book/templates/enu_toc.html.mustache")
 const use_api_document = false
 
 proc use_enu*(doc: var NbDoc) =
@@ -60,11 +61,19 @@ proc use_enu*(doc: var NbDoc) =
   doc.context["title"] = this_entry.title & " - " & book.title
 
 proc use_api_docs*(doc: var NbDoc) =
-  ## Theme for API documentation pages
+  ## Theme for Ed API documentation pages
   ## Uses the unified template but overrides the TOC with the API sidebar
   use_enu(doc)
   doc.partials["toc"] = ed_toc
   doc.context["is_api_docs"] = true
+  doc.context["api_title"] = "Ed API Reference"
+
+proc use_enu_api_docs*(doc: var NbDoc) =
+  ## Theme for the Enu scripting API reference page
+  use_enu(doc)
+  doc.partials["toc"] = enu_toc
+  doc.context["is_api_docs"] = true
+  doc.context["api_title"] = "Enu API Reference"
 
 proc use_ed_readme*(doc: var NbDoc) =
   ## Theme for Ed README page

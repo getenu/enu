@@ -48,7 +48,7 @@ friendly robots. Tools `2` - `7` are the `blue`, `red`, `green`, `black`,
 `Bots` are NPCs in Enu, and can be programmed to explore, change their
 appearance, or offer information.
 
-They can be placed with the `left` mouse button or the `R1` gamepad trigger.
+They can be placed with the `left` mouse button or the `L2` gamepad trigger.
 
 ## Coding Enu
 
@@ -59,7 +59,7 @@ language that's useful for a wide variety of tasks. Almost everything in Enu
 can be coded with Nim.
 
 With the `Code` tool selected, you can code anything you've created by clicking
-on it with the `left` mouse button, or `R1` on the controller
+on it with the `left` mouse button, or `L2` on the controller
 
 ## Coding Bots
 

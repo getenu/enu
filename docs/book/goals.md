@@ -1,7 +1,7 @@
 # Goals
 
 Enu is meant for anyone who wants to explore, experiment, or make games, but
-particular care has been taken to make it usable by children  However, rather
+particular care has been taken to make it usable by children. However, rather
 than bypassing the keyboard with a Scratch-like visual programming language,
 Enu attempts to reduce and simplify the keystrokes required for a text-based
 language, while (hopefully) preserving most of the flexibility text-based code

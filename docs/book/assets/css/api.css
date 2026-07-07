@@ -21,6 +21,12 @@
   margin: 0;
 }
 
+/* Section headers fill the sidebar row so the [+]/[-] marker right-aligns */
+.sidebar .chapter-item > .api-nav-header {
+  flex: 1;
+  margin-right: 20px;
+}
+
 /* Type items with details/summary for collapsing operations */
 .api-type-details {
   margin: 0;

@@ -28,6 +28,7 @@ type
     constants*: seq[Symbol]
     enums*: seq[Symbol]
     types*: Table[string, TypeDoc]  # Type name -> TypeDoc
+    free_procs*: seq[Symbol]  # Procs that don't operate on an exported type
 
   ModuleConfig* = tuple[name: string, json: string]
 
@@ -94,7 +95,9 @@ proc parse_symbol*(entry: JsonNode, module: string): Symbol =
   result.module = module
   result.is_static = is_static_method(entry)
 
-proc collect_symbols*(modules: seq[ModuleConfig]): DocData =
+proc collect_symbols*(
+    modules: seq[ModuleConfig], include_free_procs = false
+): DocData =
   ## Collect symbols from pre-loaded JSON module data
   result.types = init_table[string, TypeDoc]()
   var seen_names = init_hash_set[string]()
@@ -126,7 +129,8 @@ proc collect_symbols*(modules: seq[ModuleConfig]): DocData =
       let name = entry["name"].get_str
       let entry_type = entry["type"].get_str
 
-      if name.starts_with("_") or name.contains("gensym"):
+      if name.starts_with("_") or name.contains("gensym") or
+          name.ends_with("_impl"):
         continue
 
       # Include code signature to distinguish overloads
@@ -161,6 +165,8 @@ proc collect_symbols*(modules: seq[ModuleConfig]): DocData =
             result.types[op_type].static_procs.add(symbol)
           else:
             result.types[op_type].procs.add(symbol)
+        elif include_free_procs:
+          result.free_procs.add(symbol)
       else:
         discard
 
@@ -218,7 +224,8 @@ proc generate_anchor*(name: string, suffix: string = ""): string =
   base.to_lower_ascii.multi_replace([
     ("[", ""), ("]", ""), ("=", "eq"), (",", "_"), (" ", "_"),
     ("(", ""), (")", ""), ("*", ""), ("+", "plus"), ("-", ""),
-    ("&", "amp"), ("?", "q"), ("$", "dollar"), ("`", ""), (".", "_")
+    ("&", "amp"), ("?", "q"), ("$", "dollar"), ("`", ""), (".", "_"),
+    ("<", "lt"), (">", "gt")
   ])
 
 type
@@ -277,6 +284,8 @@ proc to_api_json*(data: DocData): JsonNode =
     "constants": new_j_array(),
     "hasEnums": data.enums.len > 0,
     "enums": new_j_array(),
+    "hasFreeProcs": data.free_procs.len > 0,
+    "freeProcModules": new_j_array(),
     "types": new_j_array()
   }
 
@@ -287,6 +296,59 @@ proc to_api_json*(data: DocData): JsonNode =
   # Enums
   for sym in data.enums:
     result["enums"].add(sym.to_symbol_json("enum"))
+
+  # Free procs - group by module, then by name, then by doc comments
+  if data.free_procs.len > 0:
+    var procs_by_module = init_table[string, seq[Symbol]]()
+    for p in data.free_procs:
+      let module = p.module.split('/')[^1]
+      if module notin procs_by_module:
+        procs_by_module[module] = @[]
+      procs_by_module[module].add(p)
+
+    var module_names = to_seq(procs_by_module.keys)
+    module_names.sort()
+
+    for module_name in module_names:
+      var mc = %*{
+        "name": module_name,
+        "anchor": generate_anchor(module_name, "module"),
+        "procs": new_j_array()
+      }
+
+      var procs_by_name = init_table[string, seq[Symbol]]()
+      for p in procs_by_module[module_name]:
+        if p.name notin procs_by_name:
+          procs_by_name[p.name] = @[]
+        procs_by_name[p.name].add(p)
+
+      var proc_names = to_seq(procs_by_name.keys)
+      proc_names.sort()
+
+      for proc_name in proc_names:
+        let overloads = procs_by_name[proc_name]
+        let proc_anchor =
+          generate_anchor(proc_name.decode_html_entities, module_name)
+        let groups = group_overloads_by_comment(overloads)
+
+        var pc = %*{
+          "name": proc_name.to_display_name,
+          "anchor": proc_anchor,
+          "module": module_name,
+          "groups": new_j_array()
+        }
+
+        for group in groups:
+          let combined_code = join_code_blocks(group.codes)
+          pc["groups"].add(%*{
+            "description": group.description,
+            "hasDescription": group.description.len > 0,
+            "code": combined_code
+          })
+
+        mc["procs"].add(pc)
+
+      result["freeProcModules"].add(mc)
 
   # Types - sorted by name
   var type_names = to_seq(data.types.keys)

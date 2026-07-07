@@ -27,6 +27,7 @@ app/enu.lib
 generated/
 app/export_presets.cfg
 docs/build
+docs/book/api/json/
 dist/
 share/vmlib/stdlib
 dist_config.json

@@ -8,15 +8,16 @@ will be fixed in a future release.
 # Build and Run
 
 ```console
-$ nimble prereqs
-$ nimble build
-$ nimble import_assets
-$ nimble start
+$ atlas install && atlas rep
+$ nim prereqs
+$ nim build
+$ nim import_assets
+$ nim start
 ```
 
 ## Notes
 
 Enu requires a custom Godot version, which lives in `vendor/godot`. This will 
-be fetched and built as part of `nimble prereqs`.
+be fetched and built as part of `nim prereqs`.
 
 See [Compiling Godot](https://docs.godotengine.org/en/3.5/development/compiling/index.html).

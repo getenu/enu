@@ -6,15 +6,16 @@ import ../../enuib
 import ../../api_docs
 
 # Load README at compile time
-const readme_md = static_read("../../../../model_citizen/README.md")
+const readme_md = static_read("../../../deps/ed/README.md")
 
-# Load JSON documentation files for sidebar
+# Load JSON documentation files for sidebar.
+# Generated from deps/ed by the `docs` task (generate_api_json in tasks.nim).
 const
-  types_json = static_read("../../../../model_citizen/docs/json/ed/types.json")
-  initializers_json = static_read("../../../../model_citizen/docs/json/ed/zens/initializers.json")
-  operations_json = static_read("../../../../model_citizen/docs/json/ed/zens/operations.json")
-  contexts_json = static_read("../../../../model_citizen/docs/json/ed/zens/contexts.json")
-  validations_json = static_read("../../../../model_citizen/docs/json/ed/zens/validations.json")
+  types_json = static_read("json/ed/types.json")
+  initializers_json = static_read("json/ed/zens/initializers.json")
+  operations_json = static_read("json/ed/zens/operations.json")
+  contexts_json = static_read("json/ed/zens/contexts.json")
+  validations_json = static_read("json/ed/zens/validations.json")
 
 const modules: seq[ModuleConfig] = @[
   ("ed/types", types_json),
