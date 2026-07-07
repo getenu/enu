@@ -21,6 +21,15 @@
   margin: 0;
 }
 
+/* Inline code in doc comments */
+.description tt.docutils {
+  color: #96CBFE;
+}
+
+.description tt.docutils span {
+  color: inherit;
+}
+
 /* Section headers fill the sidebar row so the [+]/[-] marker right-aligns */
 .sidebar .chapter-item > .api-nav-header {
   flex: 1;
