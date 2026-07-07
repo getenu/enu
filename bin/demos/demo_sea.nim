@@ -24,6 +24,7 @@ let
   CENTER_X = env_f("SEA_X", -300.0)
   CENTER_Z = env_f("SEA_Z", -40.0)
   FRAMES = int(env_f("SEA_FRAMES", 0)) # >0: flipbook of N frames over LOOP
+  SAVE = get_env("SEA_SAVE") == "1" # persist with the level (else ephemeral)
   LOOP = env_f("SEA_LOOP", 4.0) # seconds per animation loop (flipbook mode)
 
 var sea_time = env_f("SEA_TIME", 0.0) # seconds; waves travel, foam follows
@@ -317,7 +318,7 @@ proc draw_sea(build: Build): int =
           result += tall + 13
 
 proc new_sea_build(): Build =
-  result = Build.init(CENTER_X, 0.0, CENTER_Z, save = false)
+  result = Build.init(CENTER_X, 0.0, CENTER_Z, save = SAVE)
   Enu.units.add result
   result.scale = SCALE
   # the sea's underside is never visible; SEA_CULL=0 keeps it for A/B tests
@@ -330,7 +331,14 @@ if FRAMES == 0:
   fill_grids()
   let voxels = draw_sea(build)
   echo "BUILD=", build.id, " voxels=", voxels
-  echo "sea is up — keeping it alive (kill me to reap it)"
+  if SAVE:
+    # a static sea has no script to regenerate its COMPUTED voxels, so
+    # persist the state as a single displayed frame
+    build.current_frame = 0
+    discard build.save() # save() marks DIRTY, so set the display first
+    echo "sea saved with the level — safe to exit (re-running adds a NEW sea)"
+  else:
+    echo "sea is up — keeping it alive (kill me to reap it)"
   Enu.client.every(1.second):
     discard
 else:
@@ -365,6 +373,8 @@ else:
   else:
     let fps = FRAMES.float / LOOP
     build.play(fps = fps)
+    if SAVE:
+      echo "sea saved with the level — playback resumes on reload"
     echo "BUILD=", build.id, " playing ", FRAMES, " frames at ", fps,
       "fps — kill me to reap it"
     Enu.client.every(1.second):

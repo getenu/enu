@@ -148,10 +148,23 @@ proc from_json_hook(self: var Build, json: JsonNode) =
         warn "frame sidecar file unreadable; dropping later frames",
           unit = self.id, frame = i, error = e.msg
         break
-    if loaded > 1:
+    info "frames sidecar loaded",
+      unit = self.id,
+      loaded = loaded,
+      fps = meta["fps"].get_float,
+      current = meta{"current"}.get_int(-1)
+    if loaded > 0:
       self.frames_loop = meta["loop"].get_bool
-      # fps > 0 resumes playback exactly where the level left off
-      self.frames_fps = meta["fps"].get_float
+      if loaded > 1:
+        # fps > 0 resumes playback exactly where the level left off
+        self.frames_fps = meta["fps"].get_float
+      if self.frames_fps == 0 and "current" in meta:
+        # not playing: restore the displayed frame. This is how scriptless
+        # frame units (e.g. a persisted sea) come back visible at all —
+        # their voxels are COMPUTED, so only frames survive the reload.
+        let current = meta["current"].get_int
+        if current >= 0 and current < loaded:
+          self.current_frame = current
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared unit serializer), but tolerate
@@ -279,6 +292,7 @@ proc extras_json(self: Unit): string =
     "count": {build.frames.len},
     "fps": {build.frames_fps},
     "loop": {build.frames_loop},
+    "current": {build.current_frame},
     "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:

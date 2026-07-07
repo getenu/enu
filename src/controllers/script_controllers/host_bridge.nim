@@ -1589,6 +1589,7 @@ proc frame(self: Build): int =
 
 proc `frame=`(self: Build, index: int) =
   self.current_frame = index
+  self.global_flags += DIRTY # the displayed frame persists
 
 proc save_level_now() =
   serializers.save_level(state.config.level_dir, force = true)

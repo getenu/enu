@@ -471,9 +471,13 @@ method reset*(self: Build) =
   # a reload stops playback and drops the displayed frame, but saved frames
   # persist — the hand-edit workflow is "pose, re-run a script that calls
   # save, repeat", so each run appends. Scripts building animations
-  # programmatically call clear_frames() first.
-  self.frames_fps = 0.0
-  self.current_frame = -1
+  # programmatically call clear_frames() first. A build with NO script has
+  # no rerun to re-establish playback or display — its persisted frame
+  # state is all it has (e.g. a saved sea), so leave it untouched.
+  if ?self.script_ctx and self.script_ctx.script != "" and
+      file_exists(self.script_ctx.script):
+    self.frames_fps = 0.0
+    self.current_frame = -1
 
   self.voxels.clear()
 
