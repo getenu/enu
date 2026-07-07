@@ -1,5 +1,9 @@
 # Built-in Commands
 
+This page covers the commands for moving, turning, and reading the world.
+Commands for drawing whole shapes at once — `box`, `ball`, `can`, `wall`,
+`floor` — have their own page: [Drawing Shapes](shapes.html).
+
 ## `move` / `build`
 
 When dealing with a `Build` unit, commands can do different things depending on
@@ -58,6 +62,28 @@ Turn a unit. Can be passed:
   direction. 90 degrees by default. Ex. `turn left`, or `turn up, 180`.
 - a unit to turn towards. Ex. `turn player`.
 - a negative unit to turn away from. Ex. `turn -player`.
+
+## `lean`
+
+Like `turn`, but it tips the unit (or drawing turtle) forward, back, left, or
+right instead of spinning it flat. Leaning lets the drawing turtle climb walls
+and loop over the top of things.
+
+```nim
+lean forward     # tip forward 90 degrees
+lean right, 45   # tip right, 45 degrees
+```
+
+## `say`
+
+Show a message on a sign above a unit. Call it again to change the message, or
+`say ""` to put the sign away. The text is markdown, so `**bold**` and lists
+work.
+
+```nim
+say "Hello!"
+say "Careful — dragons ahead."
+```
 
 ## `near` / `far`
 

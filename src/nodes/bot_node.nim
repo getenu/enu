@@ -298,6 +298,8 @@ gdobj BotNode of KinematicBody:
             ("enu_screenshot_" & $state.screenshot_counter & ".png")
           discard img.save_png(path)
           info "screenshot captured", path
+          if not q.screenshot_with_ui:
+            Viewport(state.screenshot_viewport).size = vec2(640, 360)
           self.screenshot_warmup_frames = -1
           if self.skin_hidden_during_screenshot:
             self.skin.visible = true
@@ -319,6 +321,10 @@ gdobj BotNode of KinematicBody:
             let main_vp = self.get_tree().root
             if not main_vp.is_nil:
               vp.world = main_vp.find_world()
+            # Render captures at full resolution. The viewport is restored
+            # to its small idle size after the capture, since it redraws
+            # every frame.
+            vp.size = vec2(1920, 1080)
             let cam = Camera(state.screenshot_camera)
             if q.screenshot_top_down:
               # Orthographic camera high above the target looking straight
