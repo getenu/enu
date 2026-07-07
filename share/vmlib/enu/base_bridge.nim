@@ -1,3 +1,7 @@
+## Properties and queries that every unit has, like `position`, `speed`,
+## `color` and `scale`. These commands cross over into the Enu engine
+## itself.
+
 import types, vm_bridge_utils
 
 # NOTE: overridden by ScriptController. Only for tests.

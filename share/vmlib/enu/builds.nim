@@ -1,4 +1,7 @@
 import std/[strutils, math]
+## Commands for building with blocks: shapes like `box`, `ball`, `wall`
+## and `floor`, plus turtle controls like `drawing` and `save`/`restore`.
+
 import core, vm_bridge_utils
 
 type BoxPivot* = enum

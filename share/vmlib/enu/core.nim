@@ -1,3 +1,6 @@
+## The heart of the Enu API: moving, turning, building, random numbers,
+## timers, and the other everyday commands that every script can use.
+
 import system except echo
 import
   std/[

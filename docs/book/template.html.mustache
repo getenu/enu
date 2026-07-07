@@ -264,7 +264,7 @@
               <p class="description">{{{ description }}}</p>
               {{/description}}
               <pre class="code-block constant-block"><code class="language-nim">{{{ code }}}</code></pre>
-              <p class="source">Source: <code>{{ module }}</code></p>
+              <p class="source">Source: {{#hasSourceUrl}}<a href="{{ sourceUrl }}"><code>{{ module }}</code></a>{{/hasSourceUrl}}{{^hasSourceUrl}}<code>{{ module }}</code>{{/hasSourceUrl}}</p>
             </article>
             {{/api.constants}}
           </section>
@@ -280,7 +280,7 @@
               <p class="description">{{{ description }}}</p>
               {{/description}}
               <pre class="code-block enum-block"><code class="language-nim">{{{ code }}}</code></pre>
-              <p class="source">Source: <code>{{ module }}</code></p>
+              <p class="source">Source: {{#hasSourceUrl}}<a href="{{ sourceUrl }}"><code>{{ module }}</code></a>{{/hasSourceUrl}}{{^hasSourceUrl}}<code>{{ module }}</code>{{/hasSourceUrl}}</p>
             </article>
             {{/api.enums}}
           </section>
@@ -297,7 +297,7 @@
               <p class="description">{{{ description }}}</p>
               {{/description}}
               <pre class="code-block"><code class="language-nim">{{{ code }}}</code></pre>
-              <p class="source">Source: <code>{{ module }}</code></p>
+              <p class="source">Source: {{#hasSourceUrl}}<a href="{{ sourceUrl }}"><code>{{ module }}</code></a>{{/hasSourceUrl}}{{^hasSourceUrl}}<code>{{ module }}</code>{{/hasSourceUrl}}</p>
               {{/hasType}}
 
               {{#hasStaticProcs}}
@@ -338,6 +338,12 @@
           {{#api.freeProcModules}}
           <section id="{{ anchor }}" class="module-section">
             <h3><a href="#{{ anchor }}"><code>{{ name }}</code></a></h3>
+            {{#hasDescription}}
+            <p class="description">{{{ description }}}</p>
+            {{/hasDescription}}
+            {{#hasSourceUrl}}
+            <p class="source">Source: <a href="{{ sourceUrl }}"><code>{{ module }}</code></a></p>
+            {{/hasSourceUrl}}
             {{#procs}}
             <div class="operation" id="{{ anchor }}">
               <h5><a href="#{{ anchor }}">{{ name }}</a></h5>
@@ -590,7 +596,8 @@
         const key = 'section:' + section;
         const items = document.querySelectorAll('[data-section-item="' + section + '"]');
         const label = header.textContent.trim();
-        let open = key in navState ? navState[key] : true;
+        const defaultOpen = !('collapsed' in header.dataset);
+        let open = key in navState ? navState[key] : defaultOpen;
 
         const render = () => {
           header.innerHTML = label + ' <span style="float:right; font-family: monospace;">' + (open ? '[-]' : '[+]') + '</span>';

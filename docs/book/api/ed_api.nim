@@ -28,7 +28,9 @@ nb_init(theme = use_api_docs)
 
 # Collect symbols and convert to JSON for Mustache
 let data = collect_symbols(modules)
-let api_json = data.to_api_json()
+let api_json = data.to_api_json(
+  "https://github.com/getenu/ed/blob/main/src/$module.nim#L$line"
+)
 
 # Set API context for template
 nb.context["api"] = api_json

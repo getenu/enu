@@ -39,6 +39,8 @@ const modules: seq[ModuleConfig] = @[
 nb_init(theme = use_enu_api_docs)
 
 let data = collect_symbols(modules, include_free_procs = true)
-nb.context["api"] = data.to_api_json()
+nb.context["api"] = data.to_api_json(
+  "https://github.com/getenu/enu/blob/main/share/vmlib/$module.nim#L$line"
+)
 
 nb_save

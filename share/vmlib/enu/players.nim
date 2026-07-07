@@ -1,3 +1,6 @@
+## Commands for the people playing: their tools, whether they're flying
+## or playing, and what they have open.
+
 import core, vm_bridge_utils, builds_private
 
 bridged_to_host:
