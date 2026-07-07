@@ -235,6 +235,12 @@ proc draw_sea(build: Build): int =
             let nz = iz + dz
             if nx >= 0 and nx < DIM and nz >= 0 and nz < DIM:
               lo = min(lo, top[idx(nx, nz)].int)
+        if not land[i]:
+          # one always-solid layer: wave troughs reach ground level, so
+          # filling water to y=0 guarantees neighbors on different
+          # animation frames (temporal LOD bands, mid-flip) can never
+          # expose the floor through a seam
+          lo = min(lo, 0)
 
         var surface: Color
         if land[i]:

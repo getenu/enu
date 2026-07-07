@@ -76,6 +76,10 @@ gdobj BuildNode of VoxelTerrain:
     frame_display: Table[Vector3, Hash] # content key shown per chunk
     frame_missing: Table[Vector3, Hash] # misses awaiting harvest
     frame_queue: Table[Vector3, int] # chunk -> frame index to apply
+    frame_commit: Table[Vector3, Mesh]
+      ## prepared mesh swaps, held until the whole flip is ready. Data
+      ## writes and key work drain incrementally, but the visible change
+      ## is one atomic pass — chunks never flip at different times.
     frame_decoded: Table[int, DecodedChunks]
       ## lazily decoded chunks per frame index — the working set for
       ## per-chunk key computation inside the drain budget. Pruned each
@@ -260,13 +264,13 @@ gdobj BuildNode of VoxelTerrain:
         self.frame_missing.del chunk_id
         if chunk_id notin frame.chunks:
           self.write_frame_chunk(chunk_id, SnapshotData(), remesh = false)
-          self.set_block_mesh(chunk_id, nil)
+          self.frame_commit[chunk_id] = nil
         elif target in self.frame_mesh_cache:
           self.touch_cached(target)
           self.write_frame_chunk(
             chunk_id, frame.chunks[chunk_id], remesh = false
           )
-          self.set_block_mesh(chunk_id, self.frame_mesh_cache[target])
+          self.frame_commit[chunk_id] = self.frame_mesh_cache[target]
         else:
           self.write_frame_chunk(
             chunk_id, frame.chunks[chunk_id], remesh = true
@@ -379,10 +383,23 @@ gdobj BuildNode of VoxelTerrain:
       inc self.frame_harvests
     self.frame_missing.clear()
 
+  proc commit_frame_meshes() =
+    ## The visible half of a flip: swap every prepared mesh in one pass
+    ## once the whole frame is ready (queue drained, misses harvested).
+    ## Swaps are pointer assignments — a few ms even for thousands — so
+    ## atomicity costs nothing next to the time-sliced preparation.
+    if self.frame_commit.len == 0 or self.frame_queue.len > 0 or
+        self.frame_missing.len > 0:
+      return
+    for chunk_id, mesh in self.frame_commit:
+      self.set_block_mesh(chunk_id, mesh)
+    self.frame_commit.clear()
+
   proc hide_frames() =
     self.frame_missing.clear()
     self.frame_display.clear()
     self.frame_queue.clear()
+    self.frame_commit.clear()
     self.frame_decoded.clear()
     if self.frame_dirty.len > 0 and ?self.renderer.voxel_tool:
       # restore the live voxel state wherever frame content was written
@@ -499,6 +516,7 @@ gdobj BuildNode of VoxelTerrain:
       self.frame_display.del chunk_id
       self.frame_missing.del chunk_id
       self.frame_queue.del chunk_id
+      self.frame_commit.del chunk_id
       self.frame_dirty.excl chunk_id
 
   proc track_changes() =
@@ -743,6 +761,7 @@ gdobj BuildNode of VoxelTerrain:
       self.drain_frame_queue()
       if self.frame_missing.len > 0 and self.frame_queue.len == 0:
         self.harvest_frame_meshes()
+      self.commit_frame_meshes()
 
       if self.model.current_frame >= 0:
         let now2 = get_mono_time()
