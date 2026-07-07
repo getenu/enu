@@ -104,7 +104,17 @@ proc from_json_hook(self: var Build, json: JsonNode) =
       self.shared.pack_and_store_edited_voxels(self.id, all_voxels)
   else:
     # New edits format
-    if "edits" in json:
+    if "edits_file" in json:
+      # big-build sidecar: packed chunks stored directly (palette already
+      # restored above, so the indices inside resolve)
+      let path = self.data_dir / json["edits_file"].json_to(string)
+      if file_exists(path):
+        for unit_id, chunks in decode_edits_file(read_file(path)):
+          for chunk_id, snapshot in chunks:
+            self.shared.edit_snapshots[(unit_id, chunk_id)] = snapshot
+      else:
+        warn "edits sidecar missing", unit = self.id, path = path
+    elif "edits" in json:
       for id, edits in json["edits"]:
         var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
         for edit in edits:
@@ -157,7 +167,19 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
     color = color,
   )
 
-  if not load_chunks and "edits" in json:
+  if "palette" in json:
+    for entry in json["palette"]:
+      discard pack_color_index(self.shared, entry.json_to(Color))
+
+  if not load_chunks and "edits_file" in json:
+    let path = self.data_dir / json["edits_file"].json_to(string)
+    if file_exists(path):
+      for unit_id, chunks in decode_edits_file(read_file(path)):
+        for chunk_id, snapshot in chunks:
+          self.shared.edit_snapshots[(unit_id, chunk_id)] = snapshot
+    else:
+      warn "edits sidecar missing", unit = self.id, path = path
+  elif not load_chunks and "edits" in json:
     for id, edits in json["edits"]:
       var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
       for edit in edits:
@@ -266,11 +288,42 @@ proc extras_json(self: Unit): string =
     result.add \""",
   "palette": [{entries.join(", ")}]"""
 
+proc edited_voxel_count(shared: Shared): int =
+  for _, packed in shared.edit_snapshots.value:
+    let decoded = decode_chunk(packed)
+    for linear in 0 ..< CHUNK_VOLUME:
+      if decoded[linear] != EMPTY_VOXEL:
+        inc result
+
+proc save_edits_sidecar(self: Unit): bool =
+  ## Big builds persist their hand edits as packed chunks in
+  ## data/<id>/edits.bin instead of the per-voxel JSON list (~30-40x
+  ## smaller before compression). Returns whether the sidecar was written
+  ## — the JSON then records "edits_file" instead of inline edits.
+  if edited_voxel_count(self.shared) <= EDITS_SIDECAR_THRESHOLD:
+    let stale = self.data_dir / "edits.bin"
+    if file_exists(stale):
+      remove_file stale
+    return false
+  var edits: Table[string, Table[Vector3, SnapshotData]]
+  for key, packed in self.shared.edit_snapshots.value:
+    edits.mget_or_put(key.id, Table[Vector3, SnapshotData]())[key.loc] = packed
+  create_dir self.data_dir
+  write_file_if_changed(self.data_dir / "edits.bin", encode_edits_file(edits))
+  true
+
 proc `$`(self: Unit): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
-  let edits = edits_to_string(self.shared)
+  let edits_section =
+    if self.save_edits_sidecar():
+      "\"edits_file\": \"edits.bin\""
+    else:
+      let edits = edits_to_string(self.shared)
+      \""""edits": {{
+{edits.indent(4)}
+  }}"""
   result = \"""
 {{
   "id": "{self.id}",
@@ -281,9 +334,7 @@ proc `$`(self: Unit): string =
     "origin": {$[origin.x, origin.y, origin.z]}
   }},
   "start_color": {self.start_color},
-  "edits": {{
-{edits.indent(4)}
-  }}{self.extras_json}
+  {edits_section}{self.extras_json}
 }}
     """
 

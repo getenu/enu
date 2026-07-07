@@ -1563,6 +1563,7 @@ proc place_block(self: Build, position: Vector3, color: Color) =
   let info: VoxelInfo = (MANUAL, color)
   self.add_voxel(position, info)
   self.voxels.set_edit(position, info)
+  self.global_flags += DIRTY # hand-style edit: persist on the next save
 
 proc frames_len(self: Build): int =
   self.frame_count

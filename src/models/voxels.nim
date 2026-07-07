@@ -187,6 +187,20 @@ proc read_u16(data: openArray[byte], i: var int): PackedVoxel =
   result = PackedVoxel(data[i].uint16 or (data[i + 1].uint16 shl 8))
   i += 2
 
+proc add_i32(s: var string, v: int) =
+  let u = cast[uint32](int32(v))
+  s.add char(u and 0xff)
+  s.add char((u shr 8) and 0xff)
+  s.add char((u shr 16) and 0xff)
+  s.add char((u shr 24) and 0xff)
+
+proc read_i32(s: string, i: var int): int =
+  let u =
+    uint32(s[i].byte) or (uint32(s[i + 1].byte) shl 8) or
+    (uint32(s[i + 2].byte) shl 16) or (uint32(s[i + 3].byte) shl 24)
+  i += 4
+  int(cast[int32](u))
+
 proc fits_8bit(voxels: array[CHUNK_VOLUME, PackedVoxel]): bool =
   for v in voxels:
     if v > 255:
@@ -410,6 +424,56 @@ proc encode_delta*(
     else:
       bytes.add voxel.uint8
   result.data = bytes.to_string
+
+const
+  EDITS_FILE_VERSION* = 1'u8
+  EDITS_SIDECAR_THRESHOLD* = 1000
+    ## Units with more edited voxels than this persist their edits as a
+    ## packed-chunk sidecar (data/<id>/edits.bin, ~30-40x smaller) instead
+    ## of the per-voxel JSON list (~50KB at the threshold). Small builds
+    ## keep the readable, diffable JSON.
+
+proc encode_edits_file*(
+    edits: Table[string, Table[Vector3, SnapshotData]]
+): string =
+  ## A unit tree's hand edits as packed chunks, keyed by unit id — the
+  ## same content the JSON "edits" object carries, minus the per-voxel
+  ## expansion. Static colors reference the palette saved in the unit JSON.
+  result.add char(EDITS_FILE_VERSION)
+  result.add_i32 edits.len
+  for unit_id, chunks in edits:
+    result.add_i32 unit_id.len
+    result.add unit_id
+    result.add_i32 chunks.len
+    for chunk_id, snapshot in chunks:
+      result.add_i32 chunk_id.x.int
+      result.add_i32 chunk_id.y.int
+      result.add_i32 chunk_id.z.int
+      result.add_i32 snapshot.data.len
+      result.add snapshot.data
+
+proc decode_edits_file*(
+    data: string
+): Table[string, Table[Vector3, SnapshotData]] =
+  if data.len < 5 or data[0].uint8 != EDITS_FILE_VERSION:
+    raise ValueError.init("unsupported edits file")
+  var i = 1
+  let unit_count = read_i32(data, i)
+  for _ in 0 ..< unit_count:
+    let id_len = read_i32(data, i)
+    let unit_id = data[i ..< i + id_len]
+    i += id_len
+    let chunk_count = read_i32(data, i)
+    var chunks: Table[Vector3, SnapshotData]
+    for _ in 0 ..< chunk_count:
+      let x = read_i32(data, i)
+      let y = read_i32(data, i)
+      let z = read_i32(data, i)
+      let len = read_i32(data, i)
+      chunks[vec3(x.float, y.float, z.float)] =
+        SnapshotData(data: data[i ..< i + len])
+      i += len
+    result[unit_id] = chunks
 
 proc pack_and_store_edited_voxels*(
     shared: Shared, id: string, edits: openArray[(Vector3, VoxelInfo)]
@@ -938,20 +1002,6 @@ type FrameEntryKind {.size: sizeof(uint8).} = enum
   ENTRY_SNAPSHOT
   ENTRY_DELTA
   ENTRY_REMOVED
-
-proc add_i32(s: var string, v: int) =
-  let u = cast[uint32](int32(v))
-  s.add char(u and 0xff)
-  s.add char((u shr 8) and 0xff)
-  s.add char((u shr 16) and 0xff)
-  s.add char((u shr 24) and 0xff)
-
-proc read_i32(s: string, i: var int): int =
-  let u =
-    uint32(s[i].byte) or (uint32(s[i + 1].byte) shl 8) or
-    (uint32(s[i + 2].byte) shl 16) or (uint32(s[i + 3].byte) shl 24)
-  i += 4
-  int(cast[int32](u))
 
 proc encode_frame_file*(
     frame: FrameData, prev: Option[FrameData]
