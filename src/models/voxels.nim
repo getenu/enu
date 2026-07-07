@@ -927,6 +927,115 @@ proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
       if kind != HOLE:
         inc self.block_count
 
+const
+  FRAME_FILE_VERSION* = 1'u8
+  FRAME_KEYFRAME_INTERVAL* = 8
+    ## Every Kth sidecar frame file is a full snapshot; the rest are
+    ## per-chunk deltas against the previous frame (5-10x smaller on the
+    ## animated-sea workload).
+
+type FrameEntryKind {.size: sizeof(uint8).} = enum
+  ENTRY_SNAPSHOT
+  ENTRY_DELTA
+  ENTRY_REMOVED
+
+proc add_i32(s: var string, v: int) =
+  let u = cast[uint32](int32(v))
+  s.add char(u and 0xff)
+  s.add char((u shr 8) and 0xff)
+  s.add char((u shr 16) and 0xff)
+  s.add char((u shr 24) and 0xff)
+
+proc read_i32(s: string, i: var int): int =
+  let u =
+    uint32(s[i].byte) or (uint32(s[i + 1].byte) shl 8) or
+    (uint32(s[i + 2].byte) shl 16) or (uint32(s[i + 3].byte) shl 24)
+  i += 4
+  int(cast[int32](u))
+
+proc encode_frame_file*(
+    frame: FrameData, prev: Option[FrameData]
+): string =
+  ## One animation frame as a persistence sidecar file. With no `prev` the
+  ## file is a keyframe (every chunk, full snapshots); otherwise each chunk
+  ## is stored as nothing (unchanged), a sparse delta, or a snapshot —
+  ## whichever is smaller — plus tombstones for chunks the frame dropped.
+  result.add char(FRAME_FILE_VERSION)
+  result.add char(if prev.is_some: 1'u8 else: 0'u8)
+  var entries: seq[tuple[chunk_id: Vector3, kind: FrameEntryKind, data: string]]
+  if prev.is_none:
+    for chunk_id, snapshot in frame.chunks:
+      entries.add (chunk_id, ENTRY_SNAPSHOT, snapshot.data)
+  else:
+    let prev = prev.get
+    for chunk_id, snapshot in frame.chunks:
+      if chunk_id in prev.chunks:
+        if prev.chunks[chunk_id].data == snapshot.data:
+          continue
+        let before = decode_chunk(prev.chunks[chunk_id])
+        let after = decode_chunk(snapshot)
+        var changes: seq[tuple[pos: Vector3, voxel: PackedVoxel]]
+        for linear in 0 ..< CHUNK_VOLUME:
+          if before[linear] != after[linear]:
+            changes.add (from_linear(linear), after[linear])
+        let delta = encode_delta(changes)
+        if delta.data.len < snapshot.data.len:
+          entries.add (chunk_id, ENTRY_DELTA, delta.data)
+        else:
+          entries.add (chunk_id, ENTRY_SNAPSHOT, snapshot.data)
+      else:
+        entries.add (chunk_id, ENTRY_SNAPSHOT, snapshot.data)
+    for chunk_id in prev.chunks.keys:
+      if chunk_id notin frame.chunks:
+        entries.add (chunk_id, ENTRY_REMOVED, "")
+  result.add_i32 entries.len
+  for (chunk_id, kind, data) in entries:
+    result.add_i32 chunk_id.x.int
+    result.add_i32 chunk_id.y.int
+    result.add_i32 chunk_id.z.int
+    result.add char(kind.uint8)
+    result.add_i32 data.len
+    result.add data
+
+proc decode_frame_file*(
+    data: string, prev: Option[FrameData]
+): FrameData =
+  ## Inverse of encode_frame_file. A delta file starts from `prev` and
+  ## applies its entries; a keyframe stands alone.
+  if data.len < 6 or data[0].uint8 != FRAME_FILE_VERSION:
+    raise ValueError.init("unsupported frame file")
+  let is_delta = data[1].byte == 1
+  if is_delta:
+    if prev.is_none:
+      raise ValueError.init("delta frame file without a previous frame")
+    result.chunks = prev.get.chunks
+  var i = 2
+  let count = read_i32(data, i)
+  for _ in 0 ..< count:
+    let x = read_i32(data, i)
+    let y = read_i32(data, i)
+    let z = read_i32(data, i)
+    let chunk_id = vec3(x.float, y.float, z.float)
+    let kind = FrameEntryKind(data[i].uint8)
+    inc i
+    let len = read_i32(data, i)
+    let payload = data[i ..< i + len]
+    i += len
+    case kind
+    of ENTRY_SNAPSHOT:
+      result.chunks[chunk_id] = SnapshotData(data: payload)
+    of ENTRY_DELTA:
+      var voxels =
+        if chunk_id in result.chunks:
+          decode_chunk(result.chunks[chunk_id])
+        else:
+          default(array[CHUNK_VOLUME, PackedVoxel])
+      for (pos, voxel) in decode_delta(DeltaUpdate(data: payload)):
+        voxels[linear_position(pos)] = voxel
+      result.chunks[chunk_id] = encode_chunk(voxels)
+    of ENTRY_REMOVED:
+      result.chunks.del(chunk_id)
+
 proc pack_frame*(self: VoxelStore): FrameData =
   ## Snapshot the current voxel state as one animation frame — every
   ## non-empty chunk, packed with the standard codecs.

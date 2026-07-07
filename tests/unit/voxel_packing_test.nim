@@ -159,6 +159,57 @@ suite "Static color palette":
   test "unknown palette index resolves to visible fallback":
     check resolve_color(shared, STATIC_COLOR_BASE + 99) == ACTION_COLORS[WHITE]
 
+suite "Frame sidecar files":
+  proc wave_frame(t: int): FrameData =
+    # a few chunks of varying content, one chunk static across frames
+    for cx in 0 .. 2:
+      var voxels: array[CHUNK_VOLUME, PackedVoxel]
+      for x in 0 ..< 16:
+        for z in 0 ..< 16:
+          let h = if cx == 2: 4 else: 2 + ((x + z + t + cx) mod 4)
+          for y in 0 ..< h:
+            voxels[linear_position(x, y, z)] =
+              pack_voxel(int(BLUE) + ((x + y + z) mod 3), COMPUTED.ord)
+      result.chunks[vec3(cx.float, 0, 0)] = encode_chunk(voxels)
+    if t mod 2 == 0:
+      # a chunk that comes and goes, to exercise tombstones
+      var voxels: array[CHUNK_VOLUME, PackedVoxel]
+      voxels[0] = pack_voxel(int(RED), MANUAL.ord)
+      result.chunks[vec3(0, 1, 0)] = encode_chunk(voxels)
+
+  test "keyframe and delta files reconstruct every frame exactly":
+    var frames: seq[FrameData]
+    for t in 0 ..< 6:
+      frames.add wave_frame(t)
+    var files: seq[string]
+    for i, frame in frames:
+      let prev =
+        if i mod FRAME_KEYFRAME_INTERVAL == 0 or i == 0:
+          none(FrameData)
+        else:
+          some(frames[i - 1])
+      files.add encode_frame_file(frame, prev)
+    var restored: seq[FrameData]
+    for i, data in files:
+      let prev =
+        if i == 0 or files[i][1].byte == 0:
+          none(FrameData)
+        else:
+          some(restored[i - 1])
+      restored.add decode_frame_file(data, prev)
+    for i in 0 ..< frames.len:
+      check restored[i].chunks.len == frames[i].chunks.len
+      for chunk_id, snapshot in frames[i].chunks:
+        check decode_chunk(restored[i].chunks[chunk_id]) ==
+          decode_chunk(snapshot)
+
+  test "unchanged chunks cost nothing in delta files":
+    let a = wave_frame(0)
+    let b = wave_frame(2) # same static chunk, same tombstone chunk
+    let delta_file = encode_frame_file(b, some(a))
+    let keyframe = encode_frame_file(b, none(FrameData))
+    check delta_file.len < keyframe.len
+
 suite "Frame pack/load round-trip":
   test "pack_frame captures every chunk; apply_snapshot restores it":
     let a = VoxelStore.init(unit_id = "frame_a")

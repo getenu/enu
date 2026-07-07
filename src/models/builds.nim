@@ -169,6 +169,7 @@ proc save*(self: Build, at: int = -1): int {.discardable.} =
   ## appended by default, or overwriting frame `at` (replace workflow:
   ## `load_frame(3)`, edit, `save(at = 3)`). Keyed table writes make
   ## both cases a single synced op.
+  self.global_flags += DIRTY
   if at >= 0 and at < self.frames.len:
     self.frames[at] = self.voxels.pack_frame
     at
@@ -186,6 +187,7 @@ proc load_frame*(self: Build, index: int) =
   ## Restore a saved frame into the live voxels for editing. Unlike
   ## `current_frame=`, this changes the real state (and syncs it). Also
   ## switches the display to the live state, so you see what you edit.
+  self.global_flags += DIRTY
   if index >= 0 and index < self.frames.len:
     self.voxels.load_frame(self.frames[index])
     self.reset_bounds()
@@ -195,6 +197,7 @@ proc clear_frames*(self: Build) =
   ## Drop every saved frame, stop playback, and show the live state.
   ## Scripts that build an animation programmatically call this first;
   ## otherwise save keeps appending across script re-runs.
+  self.global_flags += DIRTY
   self.frames_fps = 0.0
   self.current_frame = -1
   self.frames.clear
@@ -202,6 +205,7 @@ proc clear_frames*(self: Build) =
 proc delete_frame*(self: Build, index: int) =
   ## Remove a saved frame; later frames shift down one index (keys stay
   ## dense: each higher frame rewrites down by one keyed op).
+  self.global_flags += DIRTY
   if index >= 0 and index < self.frames.len:
     let last = self.frames.len - 1
     for i in index ..< last:
@@ -216,10 +220,12 @@ proc play*(self: Build, fps: float = 8.0, loop: bool = true) =
   ## Start frame playback; the server advances `current_frame` at `fps`.
   ## `current_frame=` displays a frame without touching the live voxels;
   ## `load_frame` restores one for editing.
+  self.global_flags += DIRTY
   self.frames_loop = loop
   self.frames_fps = fps
 
 proc stop*(self: Build) =
+  self.global_flags += DIRTY
   self.frames_fps = 0.0
 
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =

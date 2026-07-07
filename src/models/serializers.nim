@@ -83,6 +83,13 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     color = color,
   )
 
+  if "palette" in json:
+    # Restore the static palette in saved order BEFORE anything packs a
+    # color: frame files (and future binary edits) reference palette
+    # indices, so the sequence must match the one they were written with.
+    for entry in json["palette"]:
+      discard pack_color_index(self.shared, entry.json_to(Color))
+
   if load_chunks:
     # Old chunks format - group by chunk and load with EditKey
     # This is a bit inefficient as it creates a big list, but safe for migration
@@ -109,6 +116,32 @@ proc from_json_hook(self: var Build, json: JsonNode) =
           self.shared.pack_and_store_edited_voxels(id, current_chunk_edits)
 
     self.voxels.rebuild_local_edits()
+
+  if "frames" in json:
+    let meta = json["frames"]
+    let dir = self.data_dir / "frames"
+    let count = meta["count"].get_int
+    var prev = none(FrameData)
+    var loaded = 0
+    for i in 0 ..< count:
+      let path = dir / \"{i:03}.bin"
+      if not file_exists(path):
+        warn "frame sidecar file missing; dropping later frames",
+          unit = self.id, frame = i
+        break
+      try:
+        let frame = decode_frame_file(read_file(path), prev)
+        self.frames[i] = frame
+        prev = some(frame)
+        inc loaded
+      except ValueError as e:
+        warn "frame sidecar file unreadable; dropping later frames",
+          unit = self.id, frame = i, error = e.msg
+        break
+    if loaded > 1:
+      self.frames_loop = meta["loop"].get_bool
+      # fps > 0 resumes playback exactly where the level left off
+      self.frames_fps = meta["fps"].get_float
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared unit serializer), but tolerate
@@ -179,6 +212,60 @@ proc edits_to_string(shared: Shared): string =
         \"\"{unit_id}\": [\n{elements}\n]"
   result = edits.join(",\n")
 
+proc save_frames(self: Build) =
+  ## Frame animation sidecar: data/<id>/frames/NNN.bin, keyframes every
+  ## FRAME_KEYFRAME_INTERVAL frames and per-chunk deltas between. The unit
+  ## JSON carries the metadata (count, fps, loop) and the static palette
+  ## the packed values reference.
+  let dir = self.data_dir / "frames"
+  if self.frames.len == 0:
+    if dir_exists(dir):
+      remove_dir(dir)
+    return
+  create_dir dir
+  var prev = none(FrameData)
+  for i in 0 ..< self.frames.len:
+    let frame = self.frames[i]
+    let key = i mod FRAME_KEYFRAME_INTERVAL == 0
+    let data = encode_frame_file(
+      frame,
+      if key: none(FrameData) else: prev
+    )
+    write_file_if_changed(dir / \"{i:03}.bin", data)
+    prev = some(frame)
+  for kind, path in walk_dir(dir):
+    if kind == pcFile and path.ends_with(".bin"):
+      let name = path.extract_filename
+      var stale = true
+      try:
+        let idx = parse_int(name[0 ..^ 5])
+        stale = idx < 0 or idx >= self.frames.len
+      except ValueError:
+        discard
+      if stale:
+        remove_file path
+
+proc extras_json(self: Unit): string =
+  ## Optional trailing sections for the unit JSON: frame-animation metadata
+  ## and the static color palette (frame files reference palette indices,
+  ## so the palette must restore in the same order on load).
+  if self of Build and Build(self).frames.len > 0:
+    let build = Build(self)
+    result.add \""",
+  "frames": {{
+    "version": {FRAME_FILE_VERSION},
+    "count": {build.frames.len},
+    "fps": {build.frames_fps},
+    "loop": {build.frames_loop},
+    "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
+  }}"""
+  if ?self.shared and self.shared.palette.len > 0:
+    let entries = collect:
+      for color in self.shared.palette:
+        $color
+    result.add \""",
+  "palette": [{entries.join(", ")}]"""
+
 proc `$`(self: Unit): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
@@ -196,7 +283,7 @@ proc `$`(self: Unit): string =
   "start_color": {self.start_color},
   "edits": {{
 {edits.indent(4)}
-  }}
+  }}{self.extras_json}
 }}
     """
 
@@ -216,6 +303,8 @@ proc save*(unit: Unit) =
     # watching the same level dir.
     create_dir unit.data_dir
     write_file_if_changed(unit.data_file, data)
+    if unit of Build:
+      Build(unit).save_frames()
 
     for unit in unit.units:
       unit.save
