@@ -1,9 +1,17 @@
 ## Ed API Reference
 ## Generates API documentation page for Ed reactive data framework.
 
+import std/[strutils, osproc]
 import nimib, nimibook
 import ../../enuib
 import ../../api_docs
+
+# Pin source links to the Ed commit the docs were built from. Resolved
+# when the page runs (during the docs build) so it can't go stale in the
+# compile cache.
+let ed_commit = exec_process(
+    "git -C \"$(git rev-parse --show-toplevel)/deps/ed\" rev-parse HEAD"
+  ).strip
 
 # Load JSON documentation files at compile time.
 # Generated from deps/ed by the `docs` task (generate_api_json in tasks.nim).
@@ -29,7 +37,7 @@ nb_init(theme = use_api_docs)
 # Collect symbols and convert to JSON for Mustache
 let data = collect_symbols(modules)
 let api_json = data.to_api_json(
-  "https://github.com/getenu/ed/blob/main/src/$module.nim#L$line"
+  "https://github.com/getenu/ed/blob/" & ed_commit & "/src/$module.nim#L$line"
 )
 
 # Set API context for template

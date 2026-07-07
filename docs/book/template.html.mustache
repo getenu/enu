@@ -617,7 +617,17 @@
 
         render();
         header.style.cursor = 'pointer';
-        header.addEventListener('click', () => setOpen(!open));
+        header.addEventListener('click', () => {
+          setOpen(!open);
+          // Module headers also navigate to their section in the content
+          if (header.dataset.anchor) {
+            const target = document.getElementById(header.dataset.anchor);
+            if (target) {
+              target.scrollIntoView();
+              history.replaceState(null, '', '#' + header.dataset.anchor);
+            }
+          }
+        });
         sectionOpeners[section] = () => setOpen(true);
       });
 
