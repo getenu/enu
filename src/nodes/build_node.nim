@@ -12,6 +12,14 @@ import ./queries, ./voxel_library_registry
 const
   highlight_glow = 1.0
   default_glow = 0.0
+  # Temporal LOD for frame playback, in world metres from the nearest
+  # viewer: full frame rate inside NEAR, every MID_STEPth frame out to
+  # MID, a static frame beyond. Distant waves are a few pixels tall, so
+  # quantizing them is visually free — and it bounds the mesh cache by
+  # the near disc instead of the whole loaded area (the 250m+ seas).
+  frame_lod_near = 96.0
+  frame_lod_mid = 160.0
+  frame_lod_mid_step = 4
   error_flash_time = 0.5.seconds
   rgb_material_index = 6
     ## material/6: the shared vertex-color material static RGB voxels render
@@ -204,6 +212,42 @@ gdobj BuildNode of VoxelTerrain:
     discard self.set_block_voxel_data(chunk_id, self.frame_bytes, remesh)
     self.frame_dirty.incl chunk_id
 
+  proc viewer_positions(): seq[Vector3] =
+    ## Paired viewers' positions in terrain-local voxel coordinates —
+    ## players and agent bots alike, straight from the engine's pairing
+    ## state (get_debug_paired_viewers appends a bounds entry; entries
+    ## without a local_position key are skipped).
+    let viewers = self.get_debug_paired_viewers()
+    for i in 0 ..< viewers.len:
+      let entry = viewers[i].as_dictionary
+      let pos = entry["local_position"]
+      if pos.get_type == VariantType.Vector3:
+        result.add pos.as_vector3
+
+  proc effective_frame(
+      chunk_id: Vector3, index, count: int, viewers: seq[Vector3]
+  ): int =
+    ## The frame this chunk should display: `index` near a viewer, a
+    ## quantized index mid-distance, frame 0 beyond. Quantized indices are
+    ## just other content keys, so the cache, miss set and blocking
+    ## playback need no special cases — distant chunks simply flip less.
+    if count <= 1 or viewers.len == 0:
+      return index
+    let centre = chunk_id * ChunkDim.float + vec3(8, 8, 8)
+    var nearest = float.high
+    for viewer in viewers:
+      let d = (viewer - centre).length
+      if d < nearest:
+        nearest = d
+    let scale = max(self.model.scale, 0.001)
+    let dist = nearest * scale # local voxels -> world metres
+    if dist <= frame_lod_near:
+      index
+    elif dist <= frame_lod_mid:
+      index - index mod frame_lod_mid_step
+    else:
+      0
+
   proc show_frame(index: int) =
     ## Display frame `index` by writing its content into the terrain. Chunks
     ## whose content key has a cached mesh get the data silently (no remesh)
@@ -215,16 +259,19 @@ gdobj BuildNode of VoxelTerrain:
     let frames = self.model.frames
     if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
       return
-    let frame = frames[index]
     flush_registry() # palette entries minted since the last flush
     const EMPTY_CHUNK_KEY = Hash(0)
+    let viewers = self.viewer_positions()
     for chunk_id in self.loaded_chunks:
-      let target = self.keys_for_frame(index).get_or_default(
+      let chunk_index =
+        self.effective_frame(chunk_id, index, frames.len, viewers)
+      let target = self.keys_for_frame(chunk_index).get_or_default(
         chunk_id, EMPTY_CHUNK_KEY
       )
       if chunk_id in self.frame_display and
           self.frame_display[chunk_id] == target:
         continue
+      let frame = frames[chunk_index]
       self.frame_missing.del chunk_id
       if chunk_id notin frame.chunks:
         self.write_frame_chunk(chunk_id, SnapshotData(), remesh = false)

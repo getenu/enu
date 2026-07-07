@@ -66,8 +66,13 @@ The per-chunk **frame-mesh cache** is the heart of the feature:
   distinct frame meshes — view-distance-bounded, not world-size-bounded.
   Fog ends at 200 m and the shader discards at 230, so a 500x500 ocean's
   live zone is a ~150-200 m disc per viewer regardless of ocean size.
-- Temporal LOD when needed: full frames near the viewer, fewer frames
-  mid-distance, static beyond.
+- Temporal LOD (landed with M3): each chunk displays an *effective*
+  frame by distance to the nearest paired viewer — full rate inside 96 m,
+  every 4th frame to 160 m, a static frame beyond. Quantized frames are
+  just other content keys, so the cache, miss set and blocking playback
+  need no special cases; distant chunks simply flip less and collapse to
+  far fewer unique meshes. Bounds the mesh cache by the near disc rather
+  than the whole loaded area.
 - The terrain itself is the display. Applying a frame writes each changed
   chunk's voxel data like any other edit (`set_block_voxel_data`, one
   memcpy-scale call per chunk): a chunk whose content key has a cached
@@ -155,8 +160,16 @@ programmatic animations call clear_frames() first. The 64-frame cap
    zero slow-tick warnings, and ~1.4 GB RSS (5,643 cached meshes). The
    `"frame warm-up"` / `"frame stats"` log lines show warm-up progress
    and steady state.
-3. **M3 — storage + polish**: keyframe+delta compression, sidecar
-   persistence, temporal LOD, sheet culling, UI.
+3. **M3 — storage + polish** (landed 2026-07-06 except UI): sidecar
+   persistence (`data/<id>/frames/NNN.bin`, keyframes every 8 frames +
+   per-chunk sparse deltas; fps > 0 at save resumes playback on load; the
+   unit JSON carries count/fps/loop and the static palette in allocation
+   order), the same sidecar idea for big non-animated builds
+   (`data/<id>/edits.bin` past 1000 edited voxels), sheet culling
+   (`cull_down_faces` on Build — skips downward faces at mesh time), and
+   temporal LOD (above). UI is post-0.3; scripts and clients are the
+   interface (`save`/`play`/`stop`/`frame`, renamed from the
+   `save_frame`-era verbs).
 
 ## Prototype numbers (2026-07-03/04, M2-sizing evidence)
 
