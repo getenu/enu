@@ -98,5 +98,9 @@ turn right
 
 ## Next Steps
 
-[Full controls](../intro/controls.html) for Enu can be found elsewhere in the
-docs, along with a quick overview of using Nim to [code Enu](../coding.html).
+Ready to build something? The [Build a House](tutorial2.html) tutorial walks
+through making a house you can walk into, one command at a time.
+
+You can also read the [full controls](../intro/controls.html), tweak Enu's
+[settings](../intro/settings.html), or get a quick overview of using Nim to
+[code Enu](../coding.html).

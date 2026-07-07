@@ -81,3 +81,18 @@ Move forward 10 times, cycling through colors:
 ```
 
 ![Color Cycle Example](../assets/cycle_example.png)
+
+Draw a whole shape at once. A hollow box with a hole erased for a door is an
+instant house:
+
+```nim
+color = white
+box 9, 6, 9, fill = false
+box 2, 3, 1, at = vec3(4, 0, 0), color = eraser
+```
+
+![House Example](../assets/shape_house.png)
+
+See [Drawing Shapes](../coding/shapes.html) for `box`, `ball`, `can`, `wall`,
+and `floor`, or follow the [Build a House](tutorial2.html) tutorial to make one
+step by step.

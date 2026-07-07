@@ -1,5 +1,9 @@
 # Config
 
+Most of these can be changed right inside Enu from the [Settings](settings.html)
+panel — this page is for editing them by hand, or for the few options the panel
+doesn't cover.
+
 The Enu data directory lives in `~/Library/Application Support/enu` on Mac,
 `%AppData%\enu` on Windows, and `~/.local/share/enu` on Linux. `config.json` has
 a few configurable options:
@@ -14,6 +18,9 @@ a few configurable options:
 - `level`: The level to load. Change this to create a new level, or load an
   existing one. By default, this will be `world` plus `-` and a number. Set to
   `tutorial-1` by default.
+
+- `environment`: The scenery and lighting, like `default` or `space`. `default`
+  by default.
 
 - `show_stats`: Show FPS and other stats. `false` by default.
 
