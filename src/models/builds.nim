@@ -680,6 +680,20 @@ method worker_thread_joined*(self: Build, worker: Worker) =
   proc_call worker_thread_joined(Unit(self), worker)
   self.init_shared()
   self.init_voxels_if_needed()
+
+  if SERVER in state.local_flags:
+    # Edits stream in from external clients AFTER the draws that marked the
+    # unit DIRTY — an autosave can run mid-stream, write a partial sidecar
+    # and clear the flag, and nothing re-marks it for the late arrivals
+    # (visible as a truncated build after reload). Re-mark on every synced
+    # edit so the next autosave completes the file; write_file_if_changed
+    # keeps the repeated saves cheap.
+    self.shared.edit_snapshots.watch:
+      if (added or removed) and change.item.key.id == self.id:
+        self.global_flags += DIRTY
+    self.shared.edit_deltas.watch:
+      if (added or removed) and change.item.key.id == self.id:
+        self.global_flags += DIRTY
   # Only clients need to apply packed chunks received from server
   if SERVER notin state.local_flags:
     self.setup_packed_chunk_watches()

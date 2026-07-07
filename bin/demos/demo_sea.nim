@@ -337,8 +337,11 @@ if FRAMES == 0:
   let voxels = draw_sea(build)
   echo "BUILD=", build.id, " voxels=", voxels
   if SAVE:
-    # PERSISTED voxels ride the edits sidecar with the rest of the unit
-    echo "sea saved with the level — safe to exit (re-running adds a NEW sea)"
+    # PERSISTED voxels ride the edits sidecar with the rest of the unit.
+    # Edits keep streaming to the server after drawing finishes — keep
+    # this process alive until the sea is fully visible in Enu before
+    # exiting (re-running adds a NEW sea).
+    echo "sea saved with the level — exit once it's fully visible in Enu"
   else:
     echo "sea is up — keeping it alive (kill me to reap it)"
   Enu.client.every(1.second):
