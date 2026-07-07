@@ -1565,6 +1565,13 @@ proc place_block(self: Build, position: Vector3, color: Color) =
   self.voxels.set_edit(position, info)
   self.global_flags += DIRTY # hand-style edit: persist on the next save
 
+proc sealed_frames(self: Build): bool =
+  self.sealed_frames
+
+proc sealed_frames_set(self: Build, value: bool) =
+  self.sealed_frames = value
+  self.global_flags += DIRTY
+
 proc cull_down_faces(self: Build): bool =
   self.cull_down_faces
 
@@ -1657,7 +1664,7 @@ proc bridge_to_vm*(worker: Worker) =
     cylinder_impl, advance, rendered_voxel_count_get,
     save_frame_impl, load_frame, delete_frame, clear_frames, frame,
     `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
-    cull_down_faces_set
+    cull_down_faces_set, sealed_frames, sealed_frames_set
 
   result.bridged_from_vm "builds_private", place_block
 

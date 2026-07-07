@@ -73,32 +73,41 @@ The per-chunk **frame-mesh cache** is the heart of the feature:
   need no special cases; distant chunks simply flip less and collapse to
   far fewer unique meshes. Bounds the mesh cache by the near disc rather
   than the whole loaded area.
-- The terrain itself is the display. Applying a frame writes each changed
-  chunk's voxel data like any other edit (`set_block_voxel_data`, one
-  memcpy-scale call per chunk): a chunk whose content key has a cached
-  mesh gets the data silently (no remesh scheduled) plus the mesh set
-  directly (`set_block_mesh`); a miss writes normally and the engine
-  meshes it on its worker threads like any other edit. Nothing is
-  precalculated — each (chunk, content) pair meshes at most once, at
-  native meshing speed. Since data always holds the displayed frame,
-  collision and spatial queries match what's on screen, and scaled builds
+- The terrain itself is the display. A flip writes each changed chunk's
+  voxel data (`set_block_voxel_data`, no remesh) and, for cached content
+  keys, stages the mesh; the visible change is one atomic commit pass per
+  flip (mesh pointer swaps — microseconds each), prepared ahead during
+  the previous interval so cadence stays exact. Data holds the displayed
+  frame, so collision and queries match the screen, and scaled builds
   animate correctly (the terrain inherits the node transform).
-- Playback blocks until the displayed frame is fully meshed: it advances
-  only when the frame has no outstanding misses and the terrain's mesh
-  pipeline has drained. At that instant every missed block's mesh was
-  provably built from the current frame's data, so harvesting them into
-  the cache cannot misattribute — no version gating, no capture races,
-  and warm-up converges deterministically in one loop (a 120 m x 32-frame
-  sea warms in ~25 s under playback, then runs at rate with zero mesh
-  work). The engine never rebuilds a shared mesh in place: a block's
-  ArrayMesh is only reused when nothing else holds a reference, so cached
-  meshes can't be mutated by later remeshes. Frame meshes bake with the
-  live material objects, so glow, highlight, god mode and env changes
-  apply to them exactly as to live meshes. (Earlier iterations — a
-  main-thread time-sliced baker, then an async paste-and-capture pipeline
-  displaying via hidden live meshes and MeshInstance children — never
-  converged under playback: at 8 fps most chunks can't mesh inside one
-  frame interval, and flipping early orphans the in-flight meshes.)
+- Misses bake FROM DATA, not from the world: the receiver assembles the
+  padded 18³ buffer itself — the chunk's frame bytes plus a shell from
+  its neighbors' frame bytes — and submits it to the engine's worker pool
+  (`request_frame_mesh`); the result returns via `frame_mesh_baked`
+  tagged with the content key it was built for. Bakes are pure functions
+  of the submitted bytes, so nothing can be misattributed or poisoned,
+  no matter what any neighbor currently displays.
+- Playback is free-running: it never waits for meshing. A chunk whose
+  target isn't cached keeps its previous mesh (stale, never a hole — the
+  generator keeps one always-solid layer) and joins in sync on the flip
+  after its bake lands. Movement and newly loaded chunks therefore never
+  slow the animation. Warm-up converges at worker throughput; each
+  (chunk, content) pair bakes at most once.
+- `sealed_frames` (per unit, on by default): bake with an air shell, so
+  every chunk mesh carries its own boundary skin — any mix of displayed
+  frames is visually closed, and keys collapse to the chunk's own bytes
+  (better dedup: the 250 m sea needs ~6 K meshes instead of ~15 K).
+  Costs ~a third more (invisible, backface-culled) border quads and
+  neighbor-aware AO at chunk edges. Off: real-shell bakes, shell-aware
+  keys, fewer quads and exact AO, but chunks displaying different frames
+  (temporal LOD bands, catch-up) can show transient seams.
+- Frame meshes bake with the live material objects, so glow, highlight,
+  god mode and env changes apply to them exactly as to live meshes.
+  (Earlier iterations — a main-thread baker, an async paste-and-capture
+  pipeline, then blocking apply-and-harvest — all coupled bake
+  correctness to live terrain state; every gating scheme they needed,
+  version gates, pipeline drains, cleanliness checks, was a symptom of
+  that coupling. Baking from data removed the class.)
 
 Cost cutters, measured against the sea prototypes:
 

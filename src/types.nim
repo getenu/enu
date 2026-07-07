@@ -420,6 +420,15 @@ type
     frames_fps_value*: EdValue[float]
       ## > 0 while playing; the server advances `current_frame` at this rate.
     frames_loop_value*: EdValue[bool]
+    sealed_frames_value*: EdValue[bool]
+      ## Bake frame meshes self-contained: chunk borders treated as open,
+      ## so every chunk mesh carries its own boundary skin and any mix of
+      ## displayed frames is visually closed — no seams, ever, at the cost
+      ## of ~a third more (invisible, backface-culled) border quads and no
+      ## neighbor-aware ambient occlusion at chunk edges. Off: meshes bake
+      ## against the frame's real neighbor content — fewer quads, exact AO,
+      ## but chunks displaying different frames (temporal LOD bands,
+      ## catch-up after movement) can show transient seams.
     cull_down_faces_value*: EdValue[bool]
       ## Sheet hint: skip downward faces when meshing. An ocean slab's
       ## underside is never visible but costs ~a third of its geometry.

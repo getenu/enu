@@ -1262,6 +1262,75 @@ proc chunk_frame_key*(
         h = h !& v.int
   !$h
 
+proc fill_padded_chunk_bytes*(
+    bytes: PoolByteArray,
+    decoded: var DecodedChunks,
+    frame: FrameData,
+    chunk_id: Vector3,
+    resolver: ColorIndexResolver = nil,
+    sealed = false,
+) =
+  ## The payload for VoxelTerrain.request_frame_mesh: the chunk's resolved
+  ## engine type ids PLUS its 1-voxel shell, u16 LE in x-major order over
+  ## the padded (ChunkDim+2)³ region. Sealed builds get an air shell —
+  ## border faces always bake, so any mix of displayed frames is closed.
+  ## Unsealed builds get the real neighbor shell from the same frame's
+  ## data: the bake is a pure function of frame data, valid regardless of
+  ## what any neighbor currently displays.
+  const PADDED = ChunkDim + 2
+  assert bytes.len == PADDED * PADDED * PADDED * 2
+  var neighbors: array[27, ref array[CHUNK_VOLUME, PackedVoxel]]
+  if sealed:
+    decoded.decode_into(frame, chunk_id)
+    neighbors[13] = decoded[chunk_id] # 1*9 + 1*3 + 1
+  else:
+    for dx in 0 .. 2:
+      for dy in 0 .. 2:
+        for dz in 0 .. 2:
+          let key = vec3(
+            chunk_id.x + float(dx - 1),
+            chunk_id.y + float(dy - 1),
+            chunk_id.z + float(dz - 1),
+          )
+          decoded.decode_into(frame, key)
+          neighbors[dx * 9 + dy * 3 + dz] = decoded[key]
+
+  var axis_chunk {.global.}: array[PADDED, int]
+  var axis_local {.global.}: array[PADDED, int]
+  once:
+    for i in 0 ..< PADDED:
+      let c = i - 1
+      if c < 0:
+        axis_chunk[i] = 0
+        axis_local[i] = ChunkDim - 1
+      elif c >= ChunkDim:
+        axis_chunk[i] = 2
+        axis_local[i] = 0
+      else:
+        axis_chunk[i] = 1
+        axis_local[i] = c
+
+  var slot_cache: SlotCache
+  var ids: array[PADDED * PADDED * PADDED, uint16]
+  var i = 0
+  for xi in 0 ..< PADDED:
+    let cx = axis_chunk[xi] * 9
+    let lx = axis_local[xi] * ChunkDim * ChunkDim
+    for yi in 0 ..< PADDED:
+      let cy = axis_chunk[yi] * 3
+      let ly = axis_local[yi] * ChunkDim
+      for zi in 0 ..< PADDED:
+        let arr = neighbors[cx + cy + axis_chunk[zi]]
+        if not arr.is_nil:
+          let packed_voxel = arr[lx + ly + axis_local[zi]]
+          if packed_voxel != EMPTY_VOXEL:
+            let (color_idx, _) = unpack_voxel(packed_voxel)
+            ids[i] = uint16(resolver.library_slot(color_idx, slot_cache))
+        inc i
+  for bi, b in bytes.mpairs:
+    let v = ids[bi shr 1]
+    b = if (bi and 1) == 0: uint8(v and 0xff) else: uint8(v shr 8)
+
 proc frame_chunk_keys*(frame: FrameData): Table[Vector3, Hash] =
   ## Whole-frame convenience (tests): every chunk's shell-aware key.
   var decoded: DecodedChunks

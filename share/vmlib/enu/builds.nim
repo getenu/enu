@@ -93,6 +93,13 @@ bridged_to_host:
 
   proc stop_impl*(self: Build)
 
+  proc sealed_frames*(self: Build): bool
+    ## Frame meshes bake self-contained (no cross-chunk face culling):
+    ## chunks on different animation frames can never show seams. On by
+    ## default; turn off for fewer quads and exact border lighting when
+    ## the whole animation stays in lockstep.
+  proc `sealed_frames=`*(self: Build, value: bool)
+
   proc cull_down_faces*(self: Build): bool
     ## Sheet hint: skip downward faces when meshing — an ocean slab's
     ## underside is never visible but costs ~a third of its geometry.

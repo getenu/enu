@@ -74,12 +74,24 @@ gdobj BuildNode of VoxelTerrain:
     # can't misattribute.
     frame_mesh_cache: Table[Hash, Mesh]
     frame_display: Table[Vector3, Hash] # content key shown per chunk
-    frame_missing: Table[Vector3, Hash] # misses awaiting harvest
+    frame_missing: Table[Vector3, tuple[key: Hash, at: MonoTime]]
+      ## in-flight bakes: chunk -> the content key the bake was requested
+      ## for, and when. Bakes are pure functions of the padded bytes we
+      ## submit (request_frame_mesh), so the returned mesh IS the key's
+      ## content — no attribution gating. A chunk in here keeps its
+      ## previous mesh (stale, never a hole — the solid layer) and is
+      ## skipped by the drain until its bake lands or times out; everything
+      ## else keeps animating.
     frame_queue: Table[Vector3, int] # chunk -> frame index to apply
     frame_commit: Table[Vector3, Mesh]
       ## prepared mesh swaps, held until the whole flip is ready. Data
       ## writes and key work drain incrementally, but the visible change
       ## is one atomic pass — chunks never flip at different times.
+    frame_padded_bytes: PoolByteArray # request_frame_mesh payload scratch
+    frame_commit_index: int
+      ## which flip the commit table was prepared for. Prepare-ahead
+      ## builds the NEXT flip during the current interval; the commit
+      ## waits until current_frame catches up, so cadence stays exact.
     frame_decoded: Table[int, DecodedChunks]
       ## lazily decoded chunks per frame index — the working set for
       ## per-chunk key computation inside the drain budget. Pruned each
@@ -100,7 +112,8 @@ gdobj BuildNode of VoxelTerrain:
     next_warm_log: MonoTime
 
   proc init*() =
-    self.bind_signals self, "block_loaded", "block_unloaded"
+    self.bind_signals self, "block_loaded", "block_unloaded",
+      "frame_mesh_baked"
     self.default_view_distance = self.max_view_distance.int
 
   proc prepare_materials() =
@@ -222,15 +235,24 @@ gdobj BuildNode of VoxelTerrain:
       none(Hash)
 
   proc key_for(index: int, chunk_id: Vector3): Hash =
-    ## The chunk's shell-aware content key, computed on first use inside
-    ## the drain budget (decode + hash of the padded region) and memoized.
+    ## The chunk's content key, computed on first use inside the drain
+    ## budget and memoized. Sealed builds key on the chunk's own bytes
+    ## (borders always bake); unsealed builds key shell-aware, since the
+    ## mesh borders depend on the frame's neighbor content.
     if index in self.frame_keys and chunk_id in self.frame_keys[index]:
       return self.frame_keys[index][chunk_id]
-    result = chunk_frame_key(
-      self.frame_decoded.mget_or_put(index, DecodedChunks()),
-      self.model.frames[index],
-      chunk_id,
-    )
+    if self.model.sealed_frames:
+      result =
+        if chunk_id in self.model.frames[index].chunks:
+          hash(self.model.frames[index].chunks[chunk_id].data)
+        else:
+          Hash(0)
+    else:
+      result = chunk_frame_key(
+        self.frame_decoded.mget_or_put(index, DecodedChunks()),
+        self.model.frames[index],
+        chunk_id,
+      )
     self.frame_keys.mget_or_put(index, Table[Vector3, Hash]())[chunk_id] =
       result
 
@@ -254,7 +276,9 @@ gdobj BuildNode of VoxelTerrain:
     flush_registry()
     var done: seq[Vector3]
     for chunk_id, chunk_index in self.frame_queue:
-      if chunk_index >= frames.len:
+      if chunk_index >= frames.len or chunk_id in self.frame_missing:
+        # a bake is already in flight for this chunk — let it land or
+        # time out before writing newer content over it
         done.add chunk_id
         continue
       let target = self.key_for(chunk_index, chunk_id)
@@ -265,18 +289,31 @@ gdobj BuildNode of VoxelTerrain:
         if chunk_id notin frame.chunks:
           self.write_frame_chunk(chunk_id, SnapshotData(), remesh = false)
           self.frame_commit[chunk_id] = nil
+          self.frame_display[chunk_id] = target
         elif target in self.frame_mesh_cache:
           self.touch_cached(target)
           self.write_frame_chunk(
             chunk_id, frame.chunks[chunk_id], remesh = false
           )
           self.frame_commit[chunk_id] = self.frame_mesh_cache[target]
+          self.frame_display[chunk_id] = target
         else:
-          self.write_frame_chunk(
-            chunk_id, frame.chunks[chunk_id], remesh = true
+          # bake from data: the padded payload carries the frame's own
+          # neighbor shell (or air when sealed), so the bake is valid no
+          # matter what any neighbor currently displays. No terrain write —
+          # the chunk keeps its previous mesh and data until it joins.
+          fill_padded_chunk_bytes(
+            self.frame_padded_bytes,
+            self.frame_decoded.mget_or_put(chunk_index, DecodedChunks()),
+            frame,
+            chunk_id,
+            self.resolver,
+            sealed = self.model.sealed_frames,
           )
-          self.frame_missing[chunk_id] = target
-        self.frame_display[chunk_id] = target
+          self.request_frame_mesh(
+            chunk_id, self.frame_padded_bytes, target.int64
+          )
+          self.frame_missing[chunk_id] = (target, get_mono_time())
       done.add chunk_id
       if (get_mono_time() - start).in_milliseconds >= BUDGET_MS:
         break
@@ -332,6 +369,14 @@ gdobj BuildNode of VoxelTerrain:
     if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
       return
     let flip_start = get_mono_time()
+    if index == 0 and self.frame_commit_index != 0:
+      # one line per animation loop: steady timestamps prove playback is
+      # free-running (never gated on meshing)
+      info "frame loop",
+        unit = self.model.id,
+        cached = self.frame_mesh_cache.len,
+        missing = self.frame_missing.len
+    self.frame_commit_index = index
     let viewers = self.viewer_positions()
     var active: HashSet[int]
     active.incl index
@@ -357,49 +402,51 @@ gdobj BuildNode of VoxelTerrain:
         queued = self.frame_queue.len
     self.drain_frame_queue()
 
-  proc harvest_frame_meshes() =
-    ## Collect meshes for the displayed frame's misses. Only runs when the
-    ## terrain's whole mesh pipeline is drained: at that point every missed
-    ## block's mesh was built from the data currently in the terrain — the
-    ## displayed frame — so key/mesh attribution is exact by construction.
-    ## (A shared mesh is never rebuilt in place: the engine only reuses a
-    ## block's ArrayMesh when nothing else holds a reference to it.)
-    if int(self.get_pending_block_updates()) > 0 or self.renderer.dirty:
-      let now = get_mono_time()
-      if now > self.next_warm_log:
-        self.next_warm_log = now + init_duration(seconds = 5)
-        info "frame warm-up",
-          unit = self.model.id,
-          frame = self.model.current_frame,
-          missing = self.frame_missing.len,
-          cached = self.frame_mesh_cache.len
+  method on_frame_mesh_baked(chunk_id: Vector3, tag: int, mesh: Mesh) =
+    ## A bake landed. It's a pure function of the padded bytes we submitted
+    ## under this tag, so the mesh IS the tagged key's content — cache it
+    ## unconditionally; the chunk joins the animation on its next flip.
+    ## (nil is a valid mesh: an all-hole chunk bakes to nothing.)
+    if not ?self.model or chunk_id notin self.frame_missing:
       return
-    for chunk_id, key in self.frame_missing:
-      # nil is a valid mesh: an all-hole chunk meshes to nothing, and
-      # caching that stops it from re-missing every loop
-      if key notin self.frame_mesh_cache:
-        inc self.frame_new_keys
-      self.store_cached(key, self.get_block_mesh(chunk_id, false))
-      inc self.frame_harvests
-    self.frame_missing.clear()
+    let entry = self.frame_missing[chunk_id]
+    if Hash(tag) != entry.key:
+      return # superseded request (the chunk re-targeted); newer is coming
+    if entry.key notin self.frame_mesh_cache:
+      inc self.frame_new_keys
+    self.store_cached(entry.key, mesh)
+    inc self.frame_harvests
+    self.frame_missing.del chunk_id
 
   proc commit_frame_meshes() =
     ## The visible half of a flip: swap every prepared mesh in one pass
-    ## once the whole frame is ready (queue drained, misses harvested).
-    ## Swaps are pointer assignments — a few ms even for thousands — so
-    ## atomicity costs nothing next to the time-sliced preparation.
+    ## once the flip's queue has drained AND the displayed frame index has
+    ## caught up to what was prepared (prepare-ahead builds the next flip
+    ## during the current interval). Swaps are pointer assignments — a few
+    ## ms even for thousands — so atomicity costs nothing. In-flight bakes
+    ## don't hold the commit: their chunks stay stale until they land.
     if self.frame_commit.len == 0 or self.frame_queue.len > 0 or
-        self.frame_missing.len > 0:
+        self.frame_commit_index != self.model.current_frame:
       return
     for chunk_id, mesh in self.frame_commit:
       self.set_block_mesh(chunk_id, mesh)
     self.frame_commit.clear()
+    # prepare the NEXT flip now: its keys and data writes spread over the
+    # rest of the interval, so the flip itself is just the swap pass above
+    if self.model.frames_fps > 0 and self.model.frames.len > 1:
+      let current = self.model.current_frame
+      var predicted = current + 1
+      if predicted >= self.model.frames.len:
+        predicted = if self.model.frames_loop: 0 else: current
+      if predicted != current:
+        self.show_frame(predicted)
 
   proc hide_frames() =
     self.frame_missing.clear()
     self.frame_display.clear()
     self.frame_queue.clear()
     self.frame_commit.clear()
+
     self.frame_decoded.clear()
     if self.frame_dirty.len > 0 and ?self.renderer.voxel_tool:
       # restore the live voxel state wherever frame content was written
@@ -758,9 +805,17 @@ gdobj BuildNode of VoxelTerrain:
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side. Each side
       # harvests its own miss set once its mesh pipeline drains.
+      if self.frame_missing.len > 0:
+        # a cancelled/dropped bake never signals; expire it so the chunk
+        # re-queues on the next flip instead of staying stale forever
+        let cutoff = get_mono_time() - init_duration(seconds = 5)
+        var expired: seq[Vector3]
+        for chunk_id, entry in self.frame_missing:
+          if entry.at < cutoff:
+            expired.add chunk_id
+        for chunk_id in expired:
+          self.frame_missing.del chunk_id
       self.drain_frame_queue()
-      if self.frame_missing.len > 0 and self.frame_queue.len == 0:
-        self.harvest_frame_meshes()
       self.commit_frame_meshes()
 
       if self.model.current_frame >= 0:
@@ -789,15 +844,20 @@ gdobj BuildNode of VoxelTerrain:
       # Advance only when the displayed frame is fully meshed: at 8fps most
       # chunks can't mesh inside one frame interval, and flipping early
       # orphans the in-flight meshes — the warm-up would never converge.
+      # free-running: chunks that aren't ready stay stale until their bake
+      # lands — playback never waits for meshing
       if SERVER in state.local_flags and self.model.frames_fps > 0 and
-          self.model.frames.len > 1 and self.frame_missing.len == 0 and
-          self.frame_queue.len == 0:
+          self.model.frames.len > 1:
         let now = get_mono_time()
         if now >= self.next_frame_at:
-          self.next_frame_at =
-            now + init_duration(
-              milliseconds = int(1000.0 / self.model.frames_fps)
-            )
+          # absolute schedule: adding the interval to the previous deadline
+          # (not to `now`) keeps the loop period exact instead of accruing
+          # per-flip processing latency (~4% drift measured at 8fps)
+          let interval =
+            init_duration(milliseconds = int(1000.0 / self.model.frames_fps))
+          self.next_frame_at = self.next_frame_at + interval
+          if self.next_frame_at < now:
+            self.next_frame_at = now + interval
           let last = self.model.frames.len - 1
           var next = self.model.current_frame + 1
           if next > last:
@@ -854,6 +914,10 @@ gdobj BuildNode of VoxelTerrain:
 
     self.frame_bytes = new_pool_byte_array()
     self.frame_bytes.set_len(CHUNK_VOLUME * 2)
+    self.frame_padded_bytes = new_pool_byte_array()
+    self.frame_padded_bytes.set_len(
+      (ChunkDim + 2) * (ChunkDim + 2) * (ChunkDim + 2) * 2
+    )
 
     # Builds default to ASAP, so the flag is usually set before this node
     # exists — the ASAP_MODE.added watch never fires for it. Adopt the

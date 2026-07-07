@@ -540,6 +540,8 @@ proc init*(
       current_frame_value: EdValue[int].init(-1, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      sealed_frames_value:
+        EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       cull_down_faces_value:
         EdValue[bool].init(false, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       voxels: voxels,
