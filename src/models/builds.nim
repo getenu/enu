@@ -27,6 +27,7 @@ var
   draw_normal = vec3()
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
+proc fire_beside(self: Build) {.gcsafe.}
 proc init_voxels_if_needed*(self: Build) {.gcsafe.}
 
 # =============================================================================
@@ -50,6 +51,10 @@ proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
 proc find_first*(units: EdSeq[Unit], positions: open_array[Vector3]): Build =
   for unit in units:
     if unit of Build:
+      if LOCK in unit.find_root.global_flags:
+        # locked units behave like the ground: placements next to them
+        # start (or extend) a separate unit, never join the locked one
+        continue
       let unit = Build(unit)
       let offset = vec3().global_from(unit)
       for position in positions:
@@ -88,6 +93,9 @@ proc maybe_join_previous_build(
     let root = previous_build.find_root
     if root of Build:
       partner = Build(root)
+
+    if LOCK in partner.global_flags:
+      return
 
     if partner != self:
       for position in position.global_from(self).surrounding:
@@ -294,6 +302,8 @@ proc log_block_placement(self: Build, local: Vector3, color: Color) =
     state.player.block_log_entries.del 0
 
 proc remove(self: Build) =
+  if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
+    return
   if state.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
@@ -316,7 +326,12 @@ proc fire(self: Build) =
   # Full transform, not global_from: on a rotated platform the origin-only sum
   # drops the rotation, so the dropped bot lands blocks from the aim target.
   let global_point = self.target_point.world_from(self)
+  let locked =
+    LOCK in self.find_root.global_flags and GOD notin state.local_flags
   if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+    if locked:
+      self.fire_beside()
+      return
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point = (self.target_point + (self.target_normal * 0.5)).floor
@@ -328,7 +343,7 @@ proc fire(self: Build) =
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
     state.units += Bot.init(transform = transform)
-  elif state.tool == CODE_MODE:
+  elif state.tool == CODE_MODE and not locked:
     let root = self.find_root
     state.open_unit = root
 
@@ -552,6 +567,36 @@ proc init*(_: type Build, x, y, z: float, save = false): Build =
   result.end_asap()
   result.voxels.immediate = true
 
+proc fire_beside(self: Build) =
+  ## Ground-style placement for locked builds: the clicked face's outside
+  ## cell goes to an adjacent unlocked build (find_first skips locked
+  ## trees), or starts a new unit — the locked build itself never changes.
+  state.skip_block_paint = true
+  draw_normal = self.target_normal
+  let local_cell = (self.target_point + (self.target_normal * 0.5)).floor
+  skip_point = self.target_point + self.target_normal
+  last_point = self.target_point
+  let point = local_cell.world_from(self).round
+  let now = get_mono_time()
+  var add_to =
+    if ?current_build and (now - last_placement_time).in_milliseconds <= 500:
+      current_build
+    else:
+      state.units.find_first(point.surrounding)
+  if ?add_to:
+    add_to.draw(point.local_to(add_to), (MANUAL, state.selected_color))
+    add_to.log_block_placement(point.local_to(add_to), state.selected_color)
+  else:
+    add_to = Build.init(
+      transform = Transform.init(origin = point),
+      global = true,
+      color = state.selected_color,
+    )
+    # A placed build has no script; render its voxels directly instead of
+    # waiting out the ASAP paste batching (see Ground.fire).
+    add_to.end_asap()
+    state.units += add_to
+
 proc init_voxels_if_needed*(self: Build) =
   ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
   ## ride the closure, so it's nil after a cross-thread sync). The synced tables
@@ -650,7 +695,9 @@ method main_thread_joined*(self: Build) =
   self.local_flags.watch:
     if HOVER.added and state.tool == CODE_MODE:
       if PLAYING notin state.local_flags and
-          TOUCH_CONTROLS notin state.local_flags:
+          TOUCH_CONTROLS notin state.local_flags and (
+            LOCK notin self.find_root.global_flags or GOD in state.local_flags
+          ):
         let root = self.find_root(true)
         root.walk_tree proc(unit: Unit) =
           unit.local_flags += HIGHLIGHT
