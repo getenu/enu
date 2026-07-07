@@ -627,9 +627,19 @@
       });
 
       // If the URL points at a symbol, open its sidebar section and make
-      // sure the link is visible.
+      // sure the link is visible. Clicks inside the sidebar suppress this —
+      // the user is already looking at the link, and reveal would fight
+      // their expand/collapse.
+      let suppressReveal = false;
+      document.querySelector('.sidebar').addEventListener('click', e => {
+        if (e.target.closest('a')) {
+          suppressReveal = true;
+          setTimeout(() => { suppressReveal = false; }, 100);
+        }
+      });
+
       const revealHash = () => {
-        if (!location.hash) {
+        if (suppressReveal || !location.hash) {
           return;
         }
         const links = document.querySelectorAll('.api-nav-content a');
@@ -645,7 +655,14 @@
               details.open = true;
               details = details.parentElement.closest('details');
             }
-            link.scrollIntoView({block: 'center'});
+            // Only scroll the sidebar if the link isn't already in view
+            const box = document.querySelector('.sidebar-scrollbox') ||
+              document.querySelector('.sidebar');
+            const b = box.getBoundingClientRect();
+            const r = link.getBoundingClientRect();
+            if (r.height === 0 || r.top < b.top || r.bottom > b.bottom) {
+              link.scrollIntoView({block: 'center'});
+            }
             break;
           }
         }
@@ -693,28 +710,15 @@
       }
 
       // 2. Type Item Click Logic
+      // Navigation scrolls the content (default link behavior), and the
+      // type always expands/collapses in the sidebar — no guessing.
       const typeLinks = document.querySelectorAll('.api-type-details > summary > a');
       typeLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-          // Allow default navigation (scrolling) to happen first
-          // But we need to detect if it actually moved
-          const startScroll = window.scrollY;
-
-          // Let the browser handle the jump
+        link.addEventListener('click', function() {
+          const details = this.closest('details');
+          const wasOpen = details.open;
           setTimeout(() => {
-            const endScroll = window.scrollY;
-            const details = this.closest('details');
-            const userScrolled = Math.abs(endScroll - startScroll) > 5;
-
-            if (!details.open) {
-              // Collapsed -> Expand (always)
-              details.open = true;
-            } else {
-              // Expanded -> Collapse ONLY if we didn't scroll
-              if (!userScrolled) {
-                details.open = false;
-              }
-            }
+            details.open = !wasOpen;
           }, 0);
         });
       });
