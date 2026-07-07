@@ -93,6 +93,12 @@ bridged_to_host:
 
   proc stop_impl*(self: Build)
 
+  proc cull_down_faces*(self: Build): bool
+    ## Sheet hint: skip downward faces when meshing — an ocean slab's
+    ## underside is never visible but costs ~a third of its geometry.
+    ## Set it before drawing or playing frames.
+  proc `cull_down_faces=`*(self: Build, value: bool)
+
   proc rendered_voxel_count_get*(self: Build): int
 
   proc advance*(self: Build, steps: float)

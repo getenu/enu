@@ -419,6 +419,10 @@ type
     frames_fps_value*: EdValue[float]
       ## > 0 while playing; the server advances `current_frame` at this rate.
     frames_loop_value*: EdValue[bool]
+    cull_down_faces_value*: EdValue[bool]
+      ## Sheet hint: skip downward faces when meshing. An ocean slab's
+      ## underside is never visible but costs ~a third of its geometry.
+      ## Set it before drawing/playing — cached frame meshes don't rebake.
 
   Config* = object
     font_size*: int

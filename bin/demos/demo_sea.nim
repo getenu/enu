@@ -320,6 +320,8 @@ proc new_sea_build(): Build =
   result = Build.init(CENTER_X, 0.0, CENTER_Z, save = false)
   Enu.units.add result
   result.scale = SCALE
+  # the sea's underside is never visible; SEA_CULL=0 keeps it for A/B tests
+  result.cull_down_faces = get_env("SEA_CULL", "1") == "1"
   Enu.client.tick
 
 if FRAMES == 0:

@@ -550,6 +550,10 @@ gdobj BuildNode of VoxelTerrain:
         self.frame_display.clear()
         self.render_frame(self.model.current_frame)
 
+    self.model.cull_down_faces_value.watch:
+      if added:
+        self.set_cull_down_faces(change.item)
+
     self.model.scale_value.watch:
       if added:
         # Scale lives in the model's transform.basis (set synchronously by
@@ -728,6 +732,9 @@ gdobj BuildNode of VoxelTerrain:
       var layer = 0
       layer.set_bits(2)
       self.collision_layer = layer
+
+    if self.model.cull_down_faces:
+      self.set_cull_down_faces(true)
 
     self.model.sight_ray = self.get_node("SightRay") as RayCast
     self.prepare_materials()
