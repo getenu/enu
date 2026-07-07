@@ -1,6 +1,6 @@
 # Test custom testing framework in VM
 import testing
-import types
+import types, vectors
 
 suite "Vector3 with testing framework":
   test "vector creation":

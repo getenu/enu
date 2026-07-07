@@ -2,7 +2,7 @@
 import std/[tables, macros]
 import testing
 import types
-import base_api
+import core
 import base_bridge
 import macro_helpers
 

@@ -580,11 +580,11 @@ proc run_state_initializers*(worker: Worker) =
   # register_state_init. Must run after every interpreter rebuild before any
   # unit script executes — unit scripts reference `player` at top level.
   let init_proc =
-    worker.interpreter.select_routine("initialize_state", "base_api")
+    worker.interpreter.select_routine("initialize_state", "core")
 
   assert not init_proc.is_nil,
-    "initialize_state routine not found in base_api module. " &
-      "Ensure base_api defines and exports initialize_state()."
+    "initialize_state routine not found in core module. " &
+      "Ensure core defines and exports initialize_state()."
 
   # Set player as active unit so VM hooks work correctly during initialization
   assert worker.active_unit.is_nil, "active_unit should be nil at this point"

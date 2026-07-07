@@ -1,5 +1,5 @@
 import std/[strutils, math]
-import types, base_api, vm_bridge_utils
+import core, vm_bridge_utils
 
 type BoxPivot* = enum
   corner
@@ -8,14 +8,29 @@ type BoxPivot* = enum
 
 bridged_to_host:
   proc drawing*(self: Build): bool
+    ## Whether the turtle draws blocks as it moves. `drawing = false`
+    ## lets you sneak the turtle somewhere without leaving a trail.
+
   proc `drawing=`*(self: Build, drawing: bool)
   proc initial_position(self: Build): Vector3
   proc save*(self: Build, name = "default")
+    ## Remember the turtle's position, direction, color and drawing
+    ## state, so `restore` can jump back later. Give it a name to keep
+    ## more than one: `save "doorway"`.
+
   proc restore*(self: Build, name = "default")
+    ## Jump the turtle back to a spot remembered with `save`.
+
   proc draw_position*(self: Build): Vector3
+    ## Where the turtle is. Assign a position (or a unit) to teleport
+    ## the turtle there and keep drawing.
+
   proc `draw_position=`*(self: Build, value: Vector3)
   proc has_block_at*(position: Vector3): bool
+    ## `true` if this build has a block at that spot.
+
   proc block_color_at*(position: Vector3): Colors
+    ## The color of the block at that spot.
   proc begin_asap*(self: Build)
   proc end_asap*(self: Build)
   proc draw_voxel*(self: Build, position: Vector3, color: Colors)
@@ -79,10 +94,13 @@ bridged_to_host:
     ## to leave the turtle at the far end of the shape.
 
 proc pending_block_updates*(self: Unit): int =
+  ## How many block changes are still being worked on. `0` means
+  ## everything you've drawn is actually on screen.
   pending_block_updates_get(self)
 
 template asap*(body: untyped) =
-  ## Execute build commands instantly without incremental updates.
+  ## Draw everything inside the block instantly, instead of block by
+  ## block. Like `speed = ASAP`, but it puts the speed back afterward.
   let self = Build(active_unit())
   let prev_speed = self.speed
   self.speed = ASAP
@@ -95,6 +113,8 @@ proc `draw_position=`*(self: Build, unit: Unit) =
   self.draw_position = unit.position
 
 proc go_home*(self: Build) =
+  ## Head back to the start position by going forward, left, and down
+  ## the right amounts. Also resets rotation, scale and glow.
   self.rotation = 0
   self.scale = 1
   self.glow = 0
@@ -103,17 +123,18 @@ proc go_home*(self: Build) =
   self.down self.position.y - self.start_position.y, 2
 
 proc fill_square*(self: Build, length = 1) =
+  ## Draw a filled square, `length` blocks on a side.
   for l in 0 .. length:
     for i in 0 .. 3:
       self.forward(length - l, 2)
       self.right(1, 2)
 
 proc place*(self: Build, x, y, z: int, color = self.color) =
-  ## Place a single block at local integer coordinates.
+  ## Put a single block at exact coordinates, without moving the
+  ## turtle. `place 3, 0, 5, red`.
   self.draw_voxel((x.float, y.float, z.float), color)
 
 template place*(x, y, z: int, color = active_unit().color) =
-  ## Place a single block at local integer coords in a build script.
   Build(active_unit()).place(x, y, z, color)
 
 # === Turtle-aware shape primitives ==================================
@@ -138,7 +159,11 @@ proc box*(
     fill = true,
     pivot: BoxPivot = corner,
 ) =
-  ## At the turtle's current transform.
+  ## Draw a box. `box 5, 3, 8` makes one 5 wide, 3 tall and 8 deep,
+  ## starting where the turtle is and facing the way it faces. Or draw
+  ## it somewhere else with `at = vec3(...)`, or between two corners
+  ## with `box corner1, corner2`. `fill = false` makes it hollow, like
+  ## a room.
   self.box_impl(
     width, height, depth, color, fill, ord(pivot), vec3(0, 0, 0), 0.0, true
   )
@@ -152,14 +177,14 @@ proc box*(
     fill = true,
     pivot: BoxPivot = corner,
 ) =
-  ## At an explicit unit-local coord. Optional yaw rotation.
+  # At an explicit unit-local coord. Optional yaw rotation.
   self.box_impl(
     width, height, depth, color, fill, ord(pivot), at, rotation, false
   )
 
 proc box*(self: Build, at, to: Vector3, color = self.color, fill = true) =
-  ## Axis-aligned corner-to-corner, inclusive of both corners. Corner
-  ## order doesn't matter (min/max normalised).
+  # Axis-aligned corner-to-corner, inclusive of both corners. Corner
+  # order doesn't matter (min/max normalised).
   let lo = vec3(min(at.x, to.x), min(at.y, to.y), min(at.z, to.z))
   let hi = vec3(max(at.x, to.x), max(at.y, to.y), max(at.z, to.z))
   let w = int(hi.x - lo.x) + 1
@@ -201,6 +226,9 @@ template box*(at, to: Vector3, color = active_unit().color, fill = true) =
 # Int and float sizes both accepted.
 
 proc sphere*(self: Build, size: float, color = self.color, fill = true) =
+  ## Draw a sphere, `size` blocks across, centred on the turtle. Draw
+  ## it somewhere else with `at = vec3(...)`. `ball` means the same
+  ## thing and is more fun to say.
   self.sphere_impl(size, color, fill, vec3(0, 0, 0), true)
 
 proc sphere*(
@@ -230,6 +258,7 @@ template sphere*(
 # args as `sphere`; color defaults to the current turtle color.
 
 template ball*(size: int | float, color = active_unit().color, fill = true) =
+  ## A sphere, but friendlier. Same as `sphere`.
   Build(active_unit()).sphere(size, color, fill)
 
 template ball*(
@@ -245,6 +274,9 @@ template ball*(
 proc cylinder*(
     self: Build, size: float, height: int, color = self.color, fill = true
 ) =
+  ## Draw a cylinder, `size` blocks across and `height` blocks tall,
+  ## standing on the turtle's spot. Draw it somewhere else with
+  ## `at = vec3(...)`. `can` means the same thing.
   self.cylinder_impl(size, height, color, fill, vec3(0, 0, 0), true)
 
 proc cylinder*(
@@ -294,6 +326,7 @@ template cylinder*(
 template can*(
     size: int | float, height: int, color = active_unit().color, fill = true
 ) =
+  ## A cylinder, but friendlier. Same as `cylinder`.
   Build(active_unit()).cylinder(size, height, color, fill)
 
 template can*(
@@ -310,11 +343,10 @@ template can*(
 template wall*(
     length: int, height: int = 4, color: Colors = active_unit().color
 ) =
-  ## A `length`-long, `height`-tall, 1-thick wall extending along the
-  ## turtle's local forward. Leaves the turtle at the wall's last
-  ## voxel (advance length - 1), so `wall N; turn right; wall M`
-  ## traces a closed N×M corner — the two walls share the corner
-  ## voxel instead of leaving a 1-cell gap.
+  ## Draw a wall, `length` blocks long and `height` tall (4 unless you
+  ## say), heading the way the turtle faces. The turtle ends up at the
+  ## far end, so `wall 10; turn right; wall 10` makes a perfect corner.
+  ## Four of those and you've got yourself a fort.
   let me = Build(active_unit())
   me.box(1, height, length, color)
   if length > 1:
@@ -323,9 +355,9 @@ template wall*(
 template floor*(
     length: int, width: int = length, color: Colors = active_unit().color
 ) =
-  ## A `length`-deep, `width`-wide, 1-thick slab in the turtle's
-  ## horizontal plane. Leaves the turtle at the slab's far edge
-  ## (advance length - 1), matching `wall`.
+  ## Draw a flat slab, `length` deep and `width` wide (square unless
+  ## you say). Like `wall`, the turtle ends up at the far edge, ready
+  ## for whatever you're building next.
   let me = Build(active_unit())
   me.box(width, 1, length, color)
   if length > 1:

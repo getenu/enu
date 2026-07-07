@@ -4,40 +4,55 @@ import
     strformat, math, importutils, strutils, options, sets, sequtils, algorithm
   ]
 import random as rnd except rand
-import types, state_machine, base_bridge, base_bridge_private
+import types, vectors, base_bridge, base_bridge_private
 
-export base_bridge
+export types, vectors, base_bridge
 export strutils
-export Timestamp, Duration
+
+proc init*[T: Exception](
+    kind: type[T], message: string, parent: ref Exception = nil
+): ref Exception =
+  ## Make an error you can `raise`. For example,
+  ## `raise ValueError.init("that's not going to work")`.
+  (ref kind)(msg: message, parent: parent)
 
 proc now*(): Timestamp =
-  ## Returns the current time as a Timestamp.
-  ## Use with subtraction to measure elapsed time:
+  ## The time right now. Subtract two of these to see how much time
+  ## passed:
   ##   let start = now()
-  ##   # ... do work ...
-  ##   let elapsed = now() - start
-  ##   echo "Took ", elapsed
-  init_timestamp(now_seconds())
+  ##   # ... do something slow ...
+  ##   echo "Took ", now() - start
+  Timestamp.init(now_seconds())
 
 var state_init_callbacks: seq[proc()] = @[]
 
 proc register_state_init*(callback: proc()) =
+  ## Used by Enu while a level loads. You won't need this in a script.
   state_init_callbacks.add(callback)
 
 proc initialize_state*() =
+  ## Used by Enu while a level loads. You won't need this in a script.
   for callback in state_init_callbacks:
     callback()
 
 proc echo*(args: varargs[string, `$`]) =
+  ## Print something to the console. The best way to spy on what your
+  ## script is up to: `echo "score is ", score`.
   echo_console(args.join)
 
 proc quit*(code = 0, msg = "") =
+  ## Stop the script.
   exit(code, msg)
 
 proc `position=`*(self: Unit, position: Vector3) =
+  ## Teleport the unit. No walking, no animation — it's just there now.
+  ## You can also assign another unit to teleport to wherever it is:
+  ## `me.position = player.position`, or just `me.position = player`.
   self.position_set(position)
 
 proc apply_position*(self: Unit, position: Vector3) =
+  ## Teleport the unit, unless the position is unset. Used by Enu
+  ## internally.
   if position.x != float.high:
     self.position = position
 
@@ -45,34 +60,41 @@ proc `position=`*(self: Unit, unit: Unit) =
   self.position_set(unit.position)
 
 proc `start_position=`*(self: Unit, position: Vector3) =
-  ## Update the unit's spawn position. Persists across reload (unlike `position=`,
-  ## which only moves the live transform).
+  ## Change where the unit starts. Unlike `position=`, this is
+  ## remembered when the level reloads.
   self.start_position_set(position)
 
 proc delete*(self: Unit) =
-  ## Remove the unit from the level and delete its on-disk script + data
-  ## directory. Distinct from `destroy`, which only tears down the in-memory
-  ## instance. Cannot be undone.
+  ## Remove the unit from the level, along with its script and saved
+  ## data. There's no undo, so be really sure.
   base_bridge_private.delete(self)
 
 proc keep_alive*() =
-  ## Reset the per-script execution timeout. For long-running non-yielding
-  ## loops that need more than the default ~2s budget. Call periodically.
+  ## Enu stops scripts that grind away for ~2 seconds without pausing,
+  ## in case they're stuck. If your loop really does need that long,
+  ## call this now and then to say "not stuck, just busy!"
   base_bridge_private.keep_alive()
 
 proc go*(self: Unit, position: Unit | Vector3) =
+  ## Teleport the unit to a position, or to another unit. The same as
+  ## setting `position=`.
   self.position = position
 
 proc `seed=`*(self: Unit, seed: int) =
+  ## Random numbers in Enu follow a secret recipe called a seed. Give
+  ## two units the same seed and they'll roll the same "random" numbers
+  ## in the same order. By default every unit gets a different seed.
   private_access Unit
   self.rng = init_rand(seed)
   self.seed = seed
 
 proc seed*(self: Unit): int =
+  ## The unit's random seed. See `seed=`.
   private_access Unit
   self.seed
 
 proc bounce*(me: Player, power = 1.0) =
+  ## Launch the player into the air. More power, more air.
   me.velocity = me.velocity + UP * power * 30
 
 template wait(body: untyped) =
@@ -84,9 +106,17 @@ template wait(body: untyped) =
     self.yield_script()
 
 proc sleep*(seconds = 0.0) =
+  ## Do nothing for this many seconds. With no argument (or 0), naps
+  ## for up to half a second, but wakes up early if something bumps
+  ## into the unit — perfect for a loop that mostly waits around.
   wait sleep_impl(seconds)
 
 proc forward*(self: Unit, steps: float, move_mode: int) =
+  ## Go forward this many blocks (1 if you don't say). In `build` mode
+  ## the turtle draws blocks as it goes; in `move` mode the whole unit
+  ## moves. You can also pass a spot like `home`: `forward home` goes
+  ## forward until you're even with it, and `forward home + 2` goes 2
+  ## blocks past.
   wait self.begin_move(FORWARD, steps, move_mode)
 
 template forward*(self: Unit, steps = 1.0) =
@@ -94,6 +124,7 @@ template forward*(self: Unit, steps = 1.0) =
   wait self.begin_move(FORWARD, steps, move_mode)
 
 proc back*(self: Unit, steps: float, move_mode: int) =
+  ## Like `forward`, but backward.
   wait self.begin_move(BACK, steps, move_mode)
 
 template back*(self: Unit, steps = 1.0) =
@@ -101,6 +132,8 @@ template back*(self: Unit, steps = 1.0) =
   wait self.begin_move(BACK, steps, move_mode)
 
 proc left*(self: Unit, steps: float, move_mode: int) =
+  ## Go left this many blocks (1 if you don't say). Slides sideways —
+  ## no turning.
   wait self.begin_move(LEFT, steps, move_mode)
 
 template left*(self: Unit, steps = 1.0) =
@@ -108,6 +141,8 @@ template left*(self: Unit, steps = 1.0) =
   wait self.begin_move(LEFT, steps, move_mode)
 
 proc right*(self: Unit, steps: float, move_mode: int) =
+  ## Go right this many blocks (1 if you don't say). Slides sideways —
+  ## no turning.
   wait self.begin_move(RIGHT, steps, move_mode)
 
 template right*(self: Unit, steps = 1.0) =
@@ -115,6 +150,7 @@ template right*(self: Unit, steps = 1.0) =
   wait self.begin_move(RIGHT, steps, move_mode)
 
 proc up*(self: Unit, steps: float, move_mode: int) =
+  ## Go up this many blocks (1 if you don't say).
   wait self.begin_move(UP, steps, move_mode)
 
 template up*(self: Unit, steps = 1.0) =
@@ -122,6 +158,7 @@ template up*(self: Unit, steps = 1.0) =
   wait self.begin_move(UP, steps, move_mode)
 
 proc down*(self: Unit, steps: float, move_mode: int) =
+  ## Go down this many blocks (1 if you don't say).
   wait self.begin_move(DOWN, steps, move_mode)
 
 template down*(self: Unit, steps = 1.0) =
@@ -129,64 +166,89 @@ template down*(self: Unit, steps = 1.0) =
   wait self.begin_move(DOWN, steps, move_mode)
 
 template l*(self: Unit, steps = 1.0) =
+  ## Shorthand for `left`.
   self.left(steps)
 
 template r*(self: Unit, steps = 1.0) =
+  ## Shorthand for `right`.
   self.right(steps)
 
 template u*(self: Unit, steps = 1.0) =
+  ## Shorthand for `up`.
   self.up(steps)
 
 template d*(self: Unit, steps = 1.0) =
+  ## Shorthand for `down`.
   self.down(steps)
 
 template f*(self: Unit, steps = 1.0) =
+  ## Shorthand for `forward`.
   self.forward(steps)
 
 template b*(self: Unit, steps = 1.0) =
+  ## Shorthand for `back`.
   self.back(steps)
 
 template forward*(steps = 1.0) =
+  ## Go forward this many blocks (1 if you don't say). In `build` mode
+  ## the turtle draws blocks as it goes; in `move` mode the whole unit
+  ## moves. `f` is the short version.
   enu_target.forward(steps)
 
 template back*(steps = 1.0) =
+  ## Like `forward`, but backward. `b` for short.
   enu_target.back(steps)
 
 template left*(steps = 1.0) =
+  ## Go left this many blocks (1 if you don't say). Slides sideways —
+  ## no turning. `l` for short.
   enu_target.left(steps)
 
 template right*(steps = 1.0) =
+  ## Go right this many blocks (1 if you don't say). Slides sideways —
+  ## no turning. `r` for short.
   enu_target.right(steps)
 
 template up*(steps = 1.0) =
+  ## Go up this many blocks (1 if you don't say). `u` for short.
   enu_target.up(steps)
 
 template down*(steps = 1.0) =
+  ## Go down this many blocks (1 if you don't say). `d` for short.
   enu_target.down(steps)
 
 template l*(steps = 1.0) =
+  ## Shorthand for `left`.
   enu_target.left(steps)
 
 template r*(steps = 1.0) =
+  ## Shorthand for `right`.
   enu_target.right(steps)
 
 template u*(steps = 1.0) =
+  ## Shorthand for `up`.
   enu_target.up(steps)
 
 template d*(steps = 1.0) =
+  ## Shorthand for `down`.
   enu_target.down(steps)
 
 template f*(steps = 1.0) =
+  ## Shorthand for `forward`.
   enu_target.forward(steps)
 
 template b*(steps = 1.0) =
+  ## Shorthand for `back`.
   enu_target.back(steps)
 
 template see*(target: Unit, less_than = 100.0): bool =
+  ## `true` if this unit can see the target: nothing solid in the way,
+  ## and it's closer than `less_than` (100 blocks unless you say
+  ## otherwise). `sees` works too, so `if me.sees player:` reads nicely.
   enu_target.see(target, less_than)
 
-## alias of `see`
 template sees*(target: Unit, less_than = 100.0): bool =
+  ## Alias of `see`.
   enu_target.see(target, less_than)
 
 proc sees*(self: Unit, target: Unit, less_than = 100.0): bool =
@@ -271,9 +333,13 @@ type NegativeNode = ref object
   node: Unit
 
 proc `-`*(node: Unit): NegativeNode =
+  ## A minus sign in front of a unit means "away from it".
+  ## `turn -player` turns your back on the player. Rude, but allowed.
   NegativeNode(node: node)
 
 proc angle_to*(self: Unit, position: Vector3): float =
+  ## How many degrees this unit would have to turn to face a position
+  ## (or another unit).
   let
     p1 = self.position
     d = (p1 - position).normalized()
@@ -295,6 +361,13 @@ proc vec3(direction: Directions): Vector3 =
     of Directions.down, Directions.d: DOWN
 
 proc turn*(self: Unit, direction: Directions, degrees = 90.0, move_mode: int) =
+  ## Turn the unit (or the drawing turtle). You can turn:
+  ## - a direction: `turn left`, or `turn left, 45` for 45 degrees
+  ## - a number of degrees: `turn 90` (positive turns right,
+  ##   negative turns left)
+  ## - toward something: `turn player`
+  ## - away from something: `turn -player`
+  ## `t` is the short version.
   let dir = vec3(direction)
   if dir in [BACK, FORWARD]:
     raise IndexDefect.init("You can't turn forward or back")
@@ -314,10 +387,18 @@ template turn*(self: Unit, direction: Directions, degrees = 90.0) =
   wait turn(self, direction, degrees, move_mode)
 
 template turn*(direction: Directions, degrees = 90.0) =
+  ## Turn the unit (or the drawing turtle). You can turn:
+  ## - a direction: `turn left`, or `turn left, 45` for 45 degrees
+  ## - a number of degrees: `turn 90` (positive turns right,
+  ##   negative turns left)
+  ## - toward something: `turn player`
+  ## - away from something: `turn -player`
+  ## `t` is the short version.
   mixin wait
   wait enu_target.turn(direction, degrees, move_mode)
 
 template t*(direction: Directions, degrees = 90.0) =
+  ## Shorthand for `turn`.
   turn direction, degrees
 
 template turn*(degrees: float) =
@@ -335,6 +416,9 @@ template t*(self: Unit, degrees: float) =
   turn self, degrees
 
 proc lean*(self: Unit, direction: Directions, degrees = 90.0, move_mode: int) =
+  ## Tip the unit (or the drawing turtle) forward, back, left or
+  ## right. Like `turn`, but instead of spinning like a top, you tilt —
+  ## which lets the turtle draw up and down walls or loop-the-loops.
   let dir = vec3(direction)
   if dir in [UP, DOWN]:
     raise IndexDefect.init("You can't lean up or down")
@@ -353,6 +437,9 @@ template lean*(self: Unit, direction: Directions, degrees = 90.0) =
   wait lean(self, direction, degrees, move_mode)
 
 template lean*(direction: Directions, degrees = 90.0) =
+  ## Tip the unit (or the drawing turtle) forward, back, left or
+  ## right. Like `turn`, but instead of spinning like a top, you tilt —
+  ## which lets the turtle draw up and down walls or loop-the-loops.
   mixin wait
   wait enu_target.lean(direction, degrees, move_mode)
 
@@ -365,6 +452,10 @@ template lean*(self: Unit, degrees: float) =
   wait self.lean(degrees, move_mode)
 
 template move*[T: Unit](new_enu_target: T) =
+  ## Switch to move mode: commands like `forward` and `turn` now move
+  ## the unit around instead of drawing blocks. `move me` moves this
+  ## unit; `move enemy` steers a different one. (If the speed was 0,
+  ## it's bumped to 1 so you can actually see something happen.)
   when enu_target is Build:
     enu_target.end_asap()
   enu_target = new_enu_target
@@ -373,6 +464,10 @@ template move*[T: Unit](new_enu_target: T) =
     enu_target.speed = 1
 
 template build*(new_enu_target: Unit) =
+  ## Switch to build mode: commands like `forward` and `turn` steer
+  ## the drawing turtle, leaving a trail of blocks. This is the normal
+  ## mode for a Build, so you mostly need it to switch back after
+  ## `move`, or to aim commands at a different unit: `build enemy`.
   when enu_target is Build:
     enu_target.end_asap()
   enu_target = new_enu_target
@@ -442,14 +537,16 @@ template t*(enu_target: NegativeNode) =
   turn(enu_target)
 
 proc distance*(position: Vector3): float =
+  ## How far away something is from this unit, in blocks.
+  ## `player.distance` or `distance vec3(10, 0, 10)`.
   position.distance_to(active_unit().position)
 
 proc distance*(node: Unit): float =
   node.position.distance
 
 proc find_by_id*(id: string): Unit =
-  ## Recursively search every unit in the world for one with this id.
-  ## Returns nil if not found.
+  ## Search every unit in the world for the one with this id. Returns
+  ## `nil` if there's no such unit.
   for u in all_units():
     if u.id == id:
       return u
@@ -478,9 +575,13 @@ proc units_near*(x, y, z: float, radius = 30.0): string =
   lines.join("\n")
 
 proc near*(node: Unit | Vector3, less_than = 5.0): bool =
+  ## `true` if something is closer than `less_than` blocks (5 unless
+  ## you say otherwise). `if player.near:` or `if player.near(20):`.
   result = node.distance < less_than
 
 proc far*(node: Unit | Vector3, greater_than = 100.0): bool =
+  ## `true` if something is farther than `greater_than` blocks
+  ## (100 unless you say otherwise).
   result = node.distance > greater_than
 
 proc over*(node: Unit): bool =
@@ -490,12 +591,17 @@ proc under*(node: Unit): bool =
   result = active_unit().position.z < node.position.z
 
 proc height*(self: Vector3): float =
+  ## How high up something is. The same as `position.y`.
   self.y
 
 proc height*(self: Unit): float =
   self.position.y
 
 template go_home*() =
+  ## Head back to the start position by going forward, left, and down
+  ## the right amounts. Something solid can block the trip, so if it
+  ## really matters, compare `position` to `start_position` afterward
+  ## to check you made it.
   enu_target.go_home
 
 import macros, tables
@@ -511,6 +617,9 @@ proc rng(): var Rand =
   unit.rng
 
 proc rand*[T: int | float](range: Slice[T]): T =
+  ## A random number from a range: `rand(1..6)` rolls a die. Mostly
+  ## you don't even need to call this — passing a range where a number
+  ## goes does it automatically, like `forward 2..10`.
   rnd.rand rng(),
     if range.a > range.b:
       range.b .. range.a
@@ -530,6 +639,9 @@ converter float_slice_to_float*(range: Slice[float]): float =
   rand(range)
 
 proc fuzzed*(self, range: float): float =
+  ## A copy of a number or position, nudged by a random amount up to
+  ## `range`. `position.fuzzed(0.5)` is great for jitters, shivers and
+  ## nervous-looking bots.
   result =
     if range > 0:
       self + (rand(0.0 .. range) - (range / 2.0))
@@ -546,6 +658,10 @@ proc fuzzed*(self: Vector3, x, y, z: float): Vector3 =
   self.fuzzed(vec3(x, y, z))
 
 template times*(count: int, body: untyped): untyped =
+  ## Do something over and over. `4.times: forward 5; turn right`
+  ## draws a square. Inside the block, `first` and `last` tell you if
+  ## this is the first or last time through. Want a counter? Ask for
+  ## one: `8.times(side):` counts `side` up from 0 to 7.
   for x in 0 ..< count:
     let first {.inject.} = (x == 0)
     let last {.inject.} = (x == count - 1)
@@ -558,15 +674,21 @@ template times*(count: int, name: untyped, body: untyped): untyped =
     body
 
 template x*(count: int, body: untyped): untyped =
+  ## Shorthand for `times`. `5.x: forward 2`.
   times(count, body)
 
 macro dump*(x: typed): untyped =
+  ## Print an expression and its value. `dump score` prints
+  ## `score = 10`. Saves you typing the name twice while debugging.
   let s = x.toStrLit
   let r = quote:
     echo(`s` & " = " & $`x`)
   return r
 
 template cycle*[T](args: varargs[T]): T =
+  ## Each time it's called, hand back the next value in the list,
+  ## looping around forever: red, green, blue, red, green, blue...
+  ## `color = cycle(red, green, blue)`.
   var
     positions {.global.}: Table[(string, int, int), int]
     key = instantiation_info()
@@ -579,22 +701,32 @@ template cycle*[T](args: varargs[T]): T =
   args[positions[key]]
 
 proc random*[T](args: varargs[T]): T =
+  ## Pick one of the choices at random.
+  ## `color = random(red, green, blue)`.
   let i = rnd.rand(rng(), 0 .. (args.len - 1))
   args[i]
 
 proc contains*(max, chance: int): bool =
+  ## Roll the dice: `1 in 10` is true 1 time out of 10. Use it for
+  ## things that should only happen sometimes:
+  ## `if 1 in 100: echo "jackpot!"`.
   var r = rnd.rand(rng(), 1 .. max)
   result = r <= chance
 
 template forever*(body) =
+  ## Do something forever. The same as `while true`, but friendlier.
+  ## `o` is the short version (it looks like a loop, see?).
   while true:
     body
 
 template o*(body) =
+  ## Shorthand for `forever`.
   while true:
     body
 
 proc `+`*(self: PositionOffset, offset: float): PositionOffset =
+  ## Add or subtract extra distance from a spot like `home`.
+  ## `forward home + 2` stops 2 blocks past home.
   result = self
   result.offset += offset
 
@@ -603,6 +735,8 @@ proc `-`*(self: PositionOffset, offset: float): PositionOffset =
   result.offset -= offset
 
 proc go*(unit: Unit) =
+  ## Travel to another unit: turn to face it, head forward until you
+  ## arrive, then drop down to its height.
   # save position and height in case unit moves
   var position = unit.position
   var height = unit.height
@@ -611,12 +745,17 @@ proc go*(unit: Unit) =
   active_unit().down(active_unit().height - height, 2)
 
 proc even*(self: int): bool =
+  ## `true` for even numbers. `if frame.even:` does something every
+  ## other time.
   self mod 2 == 0
 
 proc odd*(self: int): bool =
+  ## `true` for odd numbers.
   not self.even
 
 template `\`*(s: string): string =
+  ## Put values inside text: `\"score: {score}"` becomes
+  ## `"score: 10"`. Anything in curly braces gets filled in.
   var f = fmt(s)
   f.remove_prefix("\n")
   f.remove_suffix(' ')
@@ -628,6 +767,9 @@ proc init*[T](_: type Query, results: open_array[T]): Query[seq[T]] =
   result.truthy = results.len > 0
 
 template `?`*[T: ref](self: T): Query[T] =
+  ## "Is this something?" `?player.open_sign` is `true` if the player
+  ## has a sign open, `false` if there's nothing there. Works on most
+  ## things: empty text, empty lists and zero all count as "nothing".
   Query[T](truthy: not self.is_nil)
 
 template `?`*[T: object](self: T): Query[T] =
@@ -661,6 +803,8 @@ converter to_bool*(src: Query): bool =
   src.truthy
 
 proc `or`*[T: not bool](a, b: T): T =
+  ## Pick the first value that's "something". `name or "mystery guest"`
+  ## gives you `name`, unless it's empty.
   if ?a:
     result = a
   else:
@@ -671,9 +815,13 @@ proc first_key*[K, V](self: Table[K, V]): K =
     return key
 
 template reset*(clear = false) =
+  ## Send the unit back to its start position, rotation and scale.
+  ## With `clear = true`, a Build also forgets its drawn blocks.
   enu_target.reset(clear)
 
 proc loop_finished*() =
+  ## Called by Enu at the end of each trip through a command loop.
+  ## You won't need this in a script.
   let unit = active_unit()
   if ?unit.query_results:
     let key = unit.query_results.first_key
@@ -702,6 +850,9 @@ iterator items*[T](self: Query[seq[T]]): T =
     yield item
 
 proc all*(_: type Bot): Query[seq[Bot]] =
+  ## Every unit of a kind in the world: `Bot.all`, `Build.all`,
+  ## `Player.all`, `Sign.all` or `Unit.all`. Loop over them with
+  ## `for bot in Bot.all:`.
   Query.init all_bots()
 
 proc all*(T: type Build): Query[seq[Build]] =
@@ -723,17 +874,24 @@ proc `[]`*[T: Unit](self: Query[seq[T]], index: int): T =
   self.result[index]
 
 proc first*[T: Unit](_: type T): T =
+  ## The first unit of a kind: `Player.first` is the first player,
+  ## `Bot.first` the first bot. `nil` if there aren't any.
   for player in T.all.result:
     return player
 
 proc added*(_: type Player): Query[seq[Player]] =
+  ## Players who joined since the last time you asked. Useful in a
+  ## loop to greet newcomers.
   Query.init added_units().filter_it(it of Player).map_it(Player(it))
 
 proc hit*(_: type Player): Query[seq[Player]] =
+  ## The players currently touching this unit, if any.
+  ## `if Player.hit as toucher:` grabs one to work with.
   let rr = active_unit().current_colliders("Player").map_it(Player(it))
   result = Query.init rr
 
 proc hit*(unit: Unit): bool =
+  ## `true` if this unit is touching another unit. `if player.hit:`.
   active_unit().hit(unit)
 
 proc `in`*(unit: Unit): bool =
@@ -743,6 +901,9 @@ proc register_type[T: Unit](unit: T) =
   register_template_node(unit, $T)
 
 template `as`*[T](q: Query[seq[T]], name: untyped): bool =
+  ## Grab a result from a query and give it a name, right inside an
+  ## `if`: `if Player.hit as toucher: toucher.bounce`. Only works
+  ## inside a command loop.
   if loop_context.is_nil:
     raise
       ObjectConversionDefect.init("`as` can only be used inside an action loop")

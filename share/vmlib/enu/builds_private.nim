@@ -1,4 +1,4 @@
-import types, base_api, builds, vm_bridge_utils
+import core, builds, vm_bridge_utils
 
 bridged_to_host:
   proc place_block*(self: Build, position: Vector3, color: Colors)

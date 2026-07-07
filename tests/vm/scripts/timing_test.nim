@@ -1,6 +1,6 @@
 # Test Timestamp and Duration types
 import types
-import base_api
+import core
 
 # Test now() returns a Timestamp
 let t1 = now()

@@ -1,5 +1,5 @@
 import std/[macros, strformat, strutils, sequtils, tables]
-import types, macro_helpers, base_api
+import core, macro_helpers
 
 proc current_loop(value: Loop = nil): Loop =
   var loop {.global.}: Loop
@@ -107,6 +107,14 @@ template loop_body(body: untyped) =
       looping = ctx.advance(frame)
 
 macro loop*(body: untyped) =
+  ## A command loop — the heart of a unit's behavior. The body runs
+  ## over and over (about twice a second), switching between states
+  ## with `->` rules:
+  ##
+  ##   loop:
+  ##     nil -> wander
+  ##     if player.near:
+  ##       wander -> hide
   discard current_loop(Loop())
   result = new_stmt_list()
   let body =
@@ -242,9 +250,16 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
         raise (ref Halt)()
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
+  ## Like `->`, but impatient: switches states right away instead of
+  ## waiting for the current state to finish what it's doing.
   result = transition(from_state, to_state, body, ident"true")
 
 macro `->`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
+  ## A state change rule for `loop`. `wander -> hide` means "if we're
+  ## wandering, start hiding". `nil` is the state you begin in, `any`
+  ## matches every state, `others` matches every state except the one
+  ## you're switching to, and `(a, b) -> c` matches either. Add a
+  ## `do:` block to run something once at the moment of the switch.
   result = transition(from_state, to_state, body, ident"false")
 
 when is_main_module:

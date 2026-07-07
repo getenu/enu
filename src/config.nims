@@ -77,7 +77,10 @@ else:
 
 switch("path", this_dir())
 switch("path", this_dir() & "/../generated")
-switch("path", this_dir() & "/../share/vmlib/enu")
+# The parent dir (not vmlib/enu itself), so vmlib modules don't shadow
+# src modules with the same name (core, types, ...). Import them with an
+# enu/ prefix, e.g. `import enu/shared/errors`.
+switch("path", this_dir() & "/../share/vmlib")
 
 when with_dir(this_dir(), system.file_exists("user_config.nims")):
   include "user_config.nims"

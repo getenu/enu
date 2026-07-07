@@ -14,11 +14,13 @@ var
   failure_msg: string
 
 template suite*(name: string, body: untyped) =
+  ## A group of related tests: `suite "gravity": ...`.
   current_suite = name
   echo "Suite: ", name
   body
 
 template test*(name: string, body: untyped) =
+  ## One test with a name. Put `check`s inside.
   inc total_tests
   test_failed = false
   failure_msg = ""
@@ -32,19 +34,24 @@ template test*(name: string, body: untyped) =
     echo "  [OK] ", name
 
 template check*(cond: untyped) =
+  ## Check that something is true. If it isn't, the test fails and
+  ## tells you what went wrong.
   if not test_failed:
     if not cond:
       test_failed = true
       failure_msg = ast_to_str(cond) & " was false"
 
 template require*(cond: untyped) =
+  ## The same as `check`.
   check(cond)
 
 proc test_summary*() =
+  ## Print how many tests passed and failed. Call it at the end.
   echo ""
   echo "=== Summary ==="
   echo total_tests, " tests run: ", passed_tests, " passed, ", failed_tests, " failed"
   signal_test_complete(failed_tests)
 
 proc tests_failed*(): bool =
+  ## `true` if any test has failed so far.
   failed_tests > 0

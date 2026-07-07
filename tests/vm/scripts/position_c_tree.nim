@@ -5,7 +5,7 @@
 ##   if not is_instance: quit()
 
 import std/[tables]
-import types, state_machine, base_api, base_bridge, builds
+import types, state_machine, core, base_bridge, builds
 
 var test_unit = Unit()
 test_unit.query_results = initTable[string, seq[Unit]]()
@@ -96,7 +96,7 @@ proc run_script*(
   # script body:
   if not is_instance:
     enu_target.show = false
-    base_api.quit()
+    core.quit()
   sleep 0.0
 
 run_script(me, false)

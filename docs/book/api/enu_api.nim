@@ -11,8 +11,9 @@ import ../../api_docs
 # tasks.nim).
 const
   types_json = static_read("json/enu/types.json")
+  vectors_json = static_read("json/enu/vectors.json")
   base_bridge_json = static_read("json/enu/base_bridge.json")
-  base_api_json = static_read("json/enu/base_api.json")
+  core_json = static_read("json/enu/core.json")
   builds_json = static_read("json/enu/builds.json")
   bots_json = static_read("json/enu/bots.json")
   players_json = static_read("json/enu/players.json")
@@ -23,8 +24,9 @@ const
 
 const modules: seq[ModuleConfig] = @[
   ("enu/types", types_json),
+  ("enu/vectors", vectors_json),
   ("enu/base_bridge", base_bridge_json),
-  ("enu/base_api", base_api_json),
+  ("enu/core", core_json),
   ("enu/builds", builds_json),
   ("enu/bots", bots_json),
   ("enu/players", players_json),

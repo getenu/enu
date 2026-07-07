@@ -1,4 +1,4 @@
-import types, base_api, bots
+import core, bots
 
 proc play*(animation_name: string) =
   Bot(active_unit()).play(animation_name)
