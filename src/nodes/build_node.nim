@@ -358,13 +358,12 @@ gdobj BuildNode of VoxelTerrain:
       0
 
   proc show_frame(index: int) =
-    ## Display frame `index` by writing its content into the terrain. Chunks
-    ## whose content key has a cached mesh get the data silently (no remesh)
-    ## plus the mesh directly; misses write normally and the engine meshes
-    ## them like any other edit. Misses are recorded in `frame_missing` and
-    ## harvested into the cache once the mesh pipeline drains (see process);
-    ## playback holds the frame until then, so nothing is ever captured that
-    ## wasn't built from this frame's data.
+    ## Queue the chunk work for frame `index`. Each loaded chunk picks an
+    ## effective frame by distance (temporal LOD), then either matches what
+    ## it already displays (skip) or joins the drain queue. The drain writes
+    ## data and stages cached meshes; a miss bakes from data (see
+    ## `drain_frame_queue`) and the chunk keeps its previous mesh until the
+    ## bake lands — playback never blocks on meshing.
     let frames = self.model.frames
     if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
       return
