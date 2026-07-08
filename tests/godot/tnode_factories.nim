@@ -11,14 +11,14 @@ when is_main_module:
     state.nodes.data = gdnew[Node]()
     var factory = NodeFactory.init(state)
     let u = Bot.init(Node)
-    state.units += u
+    state.things += u
     let u2 = Build.init(Node)
-    u.units += u2
+    u.things += u2
     let u3 = Bot.init(Node)
     let u4 = Bot.init(Node)
-    u2.units += u3
-    u2.units += u4
-    u2.units -= u4
+    u2.things += u3
+    u2.things += u4
+    u2.things -= u4
     u3.flags += Targeted
 
   tests()

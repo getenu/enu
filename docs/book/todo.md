@@ -23,7 +23,7 @@ Write games, and add features to support them.
 
 ### Pivot point
 
-Currently it isn't possible to change the pivot point for a unit, and the 
+Currently it isn't possible to change the pivot point for a thing, and the 
 default point isn't properly centered for most builds, making it difficult to 
 rotate builds nicely. Enu 0.3 will use the draw point for the pivot point, 
 allowing it to be moved, and will shift everything over 0.5m, allowing most 
@@ -41,4 +41,4 @@ likely be next, with Android and VR platforms following later.
 
 ### Graphics
 
-Enu's graphics can be slow, especially when using lots of units.
+Enu's graphics can be slow, especially when using lots of things.

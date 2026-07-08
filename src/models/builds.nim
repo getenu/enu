@@ -4,14 +4,14 @@ import
     strutils, os,
   ]
 import godotapi/spatial
-import core, models/[states, bots, colors, units, voxels]
+import core, models/[states, bots, colors, things, voxels]
 
 # Re-export from voxels
 export
   encode_chunk, decode_chunk, encode_delta, decode_delta, pack_voxel,
   unpack_voxel, linear_position, from_linear, is_empty, flush_dirty_chunks,
   flush_dirty_edits, chunk_id_for_pos
-export units
+export things
 
 include "build_code_template.nim.nimf"
 
@@ -47,18 +47,18 @@ proc voxel_info*(self: Build, position: Vector3): VoxelInfo =
 proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
   self.voxels.find_voxel(position)
 
-proc find_first*(units: EdSeq[Unit], positions: open_array[Vector3]): Build =
-  for unit in units:
-    if unit of Build:
-      let unit = Build(unit)
-      let offset = vec3().global_from(unit)
+proc find_first*(things: EdSeq[Thing], positions: open_array[Vector3]): Build =
+  for thing in things:
+    if thing of Build:
+      let thing = Build(thing)
+      let offset = vec3().global_from(thing)
       for position in positions:
         var loc = position - offset
-        if loc in unit:
-          var info = unit.voxels.voxel_info(loc)
+        if loc in thing:
+          var info = thing.voxels.voxel_info(loc)
           if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
-            return unit
-      let first = unit.units.find_first(positions)
+            return thing
+      let first = thing.things.find_first(positions)
       if ?first:
         return first
 
@@ -70,9 +70,9 @@ proc add_build(self, source: Build) =
     self.draw(position, info)
 
   if source.parent.is_nil:
-    state.units -= source
+    state.things -= source
   else:
-    source.parent.units -= source
+    source.parent.things -= source
   dont_join = false
 
 proc maybe_join_previous_build(
@@ -226,7 +226,7 @@ proc log_block_placement(self: Build, local: Vector3, color: Colors) =
   if state.player.is_nil:
     return
   let entry: BlockLogEntry = (
-    unit_id: self.id,
+    thing_id: self.id,
     color: color,
     local_position: local,
     global_position: local.world_from(self),
@@ -249,11 +249,11 @@ proc remove(self: Build) =
     self.draw(point, (HOLE, ACTION_COLORS[ERASER]))
     self.log_block_placement(point, ERASER)
 
-    if self.units.len == 0 and not self.has_visible_voxels:
+    if self.things.len == 0 and not self.has_visible_voxels:
       if self.parent.is_nil:
-        state.units -= self
+        state.things -= self
       else:
-        self.parent.units -= self
+        self.parent.things -= self
 
 proc fire(self: Build) =
   # Full transform, not global_from: on a rotated platform the origin-only sum
@@ -270,10 +270,10 @@ proc fire(self: Build) =
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
-    state.units += Bot.init(transform = transform)
+    state.things += Bot.init(transform = transform)
   elif state.tool == CODE_MODE:
     let root = self.find_root
-    state.open_unit = root
+    state.open_thing = root
 
 proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
@@ -395,13 +395,13 @@ method reset*(self: Build) =
 
   self.voxels.clear()
 
-  self.units.clear()
+  self.things.clear()
   self.global_flags -= RESETTING
   self.restore_edits
   self.draw(vec3(), (COMPUTED, self.start_color))
 
 method ensure_visible*(self: Build) =
-  if self.units.len == 0 and not self.has_visible_voxels:
+  if self.things.len == 0 and not self.has_visible_voxels:
     let color =
       if self.start_color == ACTION_COLORS[ERASER]:
         ACTION_COLORS[BLUE]
@@ -417,13 +417,13 @@ proc init*(
     id = "build_" & generate_id(),
     transform = Transform.init,
     color = default_color,
-    clone_of: Unit = nil,
+    clone_of: Thing = nil,
     global = true,
     bot_collisions = true,
-    parent: Unit = nil,
+    parent: Thing = nil,
 ): Build =
   # Everything built here is owned by this build's id (containers stamp owner_id
-  # = id, riding their CREATE), so destroy_owned(id) tears it all down. init_unit,
+  # = id, riding their CREATE), so destroy_owned(id) tears it all down. init_thing,
   # called within, inherits the scope through the threadvar.
   id.own:
     # The synced voxel tables: real Build Ed fields, generated ids (no derived
@@ -436,7 +436,7 @@ proc init*(
     let chunk_deltas = EdTable[Vector3, EdSeq[DeltaUpdate]].init(
       flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
     )
-    let voxels = VoxelStore.init(unit_id = id)
+    let voxels = VoxelStore.init(thing_id = id)
     var self = Build(
       id: id,
       packed_chunks: packed_chunks,
@@ -455,9 +455,9 @@ proc init*(
     )
 
     voxels.build = self # back-ref for live table reads (set once self exists)
-    self.init_unit
+    self.init_thing
 
-    # Set up edit references after init_unit creates Shared
+    # Set up edit references after init_thing creates Shared
     self.voxels.edit_snapshots = self.shared.edit_snapshots
     self.voxels.edit_deltas = self.shared.edit_deltas
     self.voxels.rebuild_local_edits()
@@ -496,15 +496,15 @@ proc init_voxels_if_needed*(self: Build) =
   self.init_shared()
   if not ?self.shared:
     # Narrow replica whose `shared` (inherited from the parent on a parented
-    # unit, or our own synced singleton) hasn't filled yet. sync_ready keeps
+    # thing, or our own synced singleton) hasn't filled yet. sync_ready keeps
     # the join deferred until it's ready, so reaching here means a join slipped
     # past that gate — bail rather than deref nil. A later join pass heals it.
-    notice "init_voxels_if_needed: shared not ready, deferring", unit = self.id
+    notice "init_voxels_if_needed: shared not ready, deferring", thing = self.id
     return
   if not ?self.voxels:
     self.voxels = VoxelStore.init(
       ctx = Ed.thread_ctx,
-      unit_id = self.id,
+      thing_id = self.id,
       build = self,
       edit_snapshots = self.shared.edit_snapshots,
       edit_deltas = self.shared.edit_deltas,
@@ -556,7 +556,7 @@ proc setup_packed_chunk_watches(self: Build) =
         self.voxels.unload_chunk(change.item.key)
 
 method worker_thread_joined*(self: Build, worker: Worker) =
-  proc_call worker_thread_joined(Unit(self), worker)
+  proc_call worker_thread_joined(Thing(self), worker)
   self.init_shared()
   self.init_voxels_if_needed()
   # Only clients need to apply packed chunks received from server
@@ -579,7 +579,7 @@ method worker_thread_joined*(self: Build, worker: Worker) =
     self.end_asap()
 
 method main_thread_joined*(self: Build) =
-  proc_call main_thread_joined(Unit(self))
+  proc_call main_thread_joined(Thing(self))
   self.init_voxels_if_needed()
   self.setup_packed_chunk_watches()
 
@@ -588,12 +588,12 @@ method main_thread_joined*(self: Build) =
       if PLAYING notin state.local_flags and
           TOUCH_CONTROLS notin state.local_flags:
         let root = self.find_root(true)
-        root.walk_tree proc(unit: Unit) =
-          unit.local_flags += HIGHLIGHT
+        root.walk_tree proc(thing: Thing) =
+          thing.local_flags += HIGHLIGHT
     elif HOVER.removed:
       let root = self.find_root(true)
-      root.walk_tree proc(unit: Unit) =
-        unit.local_flags -= HIGHLIGHT
+      root.walk_tree proc(thing: Thing) =
+        thing.local_flags -= HIGHLIGHT
     if TARGET_MOVED.touched:
       let length = (
         self.target_point * self.target_normal - last_point * self.target_normal
@@ -602,7 +602,7 @@ method main_thread_joined*(self: Build) =
       if state.skip_block_paint:
         state.skip_block_paint = false
       elif (
-        state.draw_unit_id == self.id and self.target_normal == draw_normal and
+        state.draw_thing_id == self.id and self.target_normal == draw_normal and
         length <= 5 and self.target_point != skip_point and
         state.tool != PLACE_BOT
       ):
@@ -620,13 +620,13 @@ method main_thread_joined*(self: Build) =
   state.local_flags.watch:
     if HOVER in self.local_flags and VIEWPORT_FOCUSED in state.local_flags:
       if PRIMARY_DOWN.added:
-        state.draw_unit_id = self.id
+        state.draw_thing_id = self.id
         self.fire
       elif SECONDARY_DOWN.added:
-        state.draw_unit_id = self.id
+        state.draw_thing_id = self.id
         self.remove
     if PRIMARY_DOWN.removed or SECONDARY_DOWN.removed:
-      state.draw_unit_id = ""
+      state.draw_thing_id = ""
       last_point = vec3()
     if PLAYING.added:
       self.local_flags -= HIGHLIGHT
@@ -637,13 +637,13 @@ method main_thread_joined*(self: Build) =
 method on_collision*(self: Build, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)
 
-method off_collision*(self: Unit, partner: Model) =
+method off_collision*(self: Thing, partner: Model) =
   if self.collisions.valid:
     for collision in self.collisions.value.dup:
       if collision.id == partner.id:
         self.collisions -= collision
 
-method clone*(self: Build, clone_to: Unit, id: string): Unit =
+method clone*(self: Build, clone_to: Thing, id: string): Thing =
   var transform = clone_to.transform
   var global = true
   if clone_to of Build:

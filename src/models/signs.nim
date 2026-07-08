@@ -1,11 +1,11 @@
 import godotapi/spatial
-import core, states, bots, builds, models/[colors, units]
+import core, states, bots, builds, models/[colors, things]
 
 proc init*(
     _: type Sign,
     message: string,
     more = "",
-    owner: Unit,
+    owner: Thing,
     transform = Transform.init,
     width = 1.0,
     height = 1.0,
@@ -30,11 +30,11 @@ proc init*(
       text_only: text_only,
       parent: owner,
     )
-    self.init_unit
+    self.init_thing
     result = self
 
 method main_thread_joined*(self: Sign) =
-  proc_call main_thread_joined(Unit(self))
+  proc_call main_thread_joined(Thing(self))
 
   state.local_flags.watch:
     if PRIMARY_DOWN.added and HOVER in self.local_flags:

@@ -33,7 +33,7 @@ gdobj AimTarget of Sprite3D:
       else:
         nil
 
-    let unit = ?.collider.model
+    let thing = ?.collider.model
     if ?self.target_model:
       # :(
       if ?self.target_model.global_flags and
@@ -43,20 +43,20 @@ gdobj AimTarget of Sprite3D:
           self.target_model.local_flags.destroyed:
         self.target_model = nil
 
-    if unit != self.target_model:
+    if thing != self.target_model:
       if self.target_model != nil:
         self.target_model.local_flags -= HOVER
         state.pop_flag BLOCK_TARGET_VISIBLE
-      self.target_model = unit
+      self.target_model = thing
       # :(
       if not (
-        unit == nil or (unit of Sign and Sign(unit).more == "") or (
-          GOD notin state.local_flags and (unit of Bot or unit of Build) and
-          LOCK in Unit(unit).find_root.global_flags
+        thing == nil or (thing of Sign and Sign(thing).more == "") or (
+          GOD notin state.local_flags and (thing of Bot or thing of Build) and
+          LOCK in Thing(thing).find_root.global_flags
         )
       ):
-        unit.local_flags += HOVER
-        if unit of Build or unit of Ground:
+        thing.local_flags += HOVER
+        if thing of Build or thing of Ground:
           state.push_flag BLOCK_TARGET_VISIBLE
 
     if collider != nil:
@@ -87,15 +87,15 @@ gdobj AimTarget of Sprite3D:
       let align_normal = self.transform.origin + global_normal
       self.look_at(align_normal, self.transform.basis.x)
 
-      if ?unit:
-        if (unit.target_point, unit.target_normal) != (
+      if ?thing:
+        if (thing.target_point, thing.target_normal) != (
           local_point, local_normal
         ):
-          unit.target_point = local_point
-          unit.target_normal = local_normal
-          unit.local_flags.touch TARGET_MOVED
+          thing.target_point = local_point
+          thing.target_normal = local_normal
+          thing.local_flags.touch TARGET_MOVED
         else:
-          unit.local_flags -= TARGET_MOVED
+          thing.local_flags -= TARGET_MOVED
     else:
       state.skip_block_paint = false
 

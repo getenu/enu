@@ -14,7 +14,7 @@ import
 
 import ui/virtual_joystick
 import
-  core, types, gdutils, controllers, models/[serializers, units, colors, builds]
+  core, types, gdutils, controllers, models/[serializers, things, colors, builds]
 import libs/fd_tracking
 
 # Immediate process exit that runs no atexit handlers, C++ destructors, or Nim
@@ -82,7 +82,7 @@ gdobj Game of Node:
       # A scene reload (the NEEDS_RESTART worker-restart path) instantiates a
       # fresh Game whose init replaces the global `state`; this superseded
       # node can still get a frame or two before teardown. It must not touch
-      # the shared state — its node_controller's pending units would
+      # the shared state — its node_controller's pending things would
       # add_to_scene against the new instance's half-initialized nodes
       # (state.nodes.data is nil until the new ready() runs): a nil-parent
       # SIGSEGV observed when a client self-restarted mid-join.
@@ -105,23 +105,23 @@ gdobj Game of Node:
       let fps = get_monitor(TIME_FPS)
 
       let vram = get_monitor(RENDER_VIDEO_MEM_USED)
-      var unit_count = 0
+      var thing_count = 0
       # Loaded chunk entries across all builds — the number voxel paging
       # actually moves (chunk values live inside their tables, so the object
       # count doesn't reflect page-in/out).
       var chunk_count = 0
-      state.units.value.walk_tree proc(unit: Unit) =
-        inc unit_count
-        if unit of Build and ?Build(unit).voxels:
-          chunk_count += Build(unit).voxels.packed_chunks.len
-          chunk_count += Build(unit).voxels.chunk_deltas.len
+      state.things.value.walk_tree proc(thing: Thing) =
+        inc thing_count
+        if thing of Build and ?Build(thing).voxels:
+          chunk_count += Build(thing).voxels.packed_chunks.len
+          chunk_count += Build(thing).voxels.chunk_deltas.len
 
       self.stats.text =
         \"""
         FPS: {fps}
         scale_factor: {state.scale_factor}
         vram: {vram}
-        units: {unit_count}
+        things: {thing_count}
         ed objects: {Ed.thread_ctx.len}
         chunks: {chunk_count}
         ed mem: {state.ed_mem div 1024} KiB
@@ -133,7 +133,7 @@ gdobj Game of Node:
       # here is how reload/sync leaks surface (see docs/notes on the reload
       # leaks) — keep it greppable.
       if state.frame_count mod 300 == 0:
-        info "main stats", ed_objects = Ed.thread_ctx.len, units = unit_count,
+        info "main stats", ed_objects = Ed.thread_ctx.len, things = thing_count,
           chunks = chunk_count
     state.voxel_tasks =
       parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
@@ -774,12 +774,12 @@ gdobj Game of Node:
     if url.starts_with("nim://"):
       assert ?state.open_sign
       state.open_sign.owner.eval = url[6 ..^ 1]
-    elif url.starts_with("unit://"):
+    elif url.starts_with("thing://"):
       let id = url[7 ..^ 1]
-      for unit in state.units:
-        if unit.id == id:
-          state.open_unit = unit
+      for thing in state.things:
+        if thing.id == id:
+          state.open_thing = thing
           return
-      logger("err", \"Unable to open unit {id}")
+      logger("err", \"Unable to open thing {id}")
     elif shell_open(url) != godotcoretypes.Error.OK:
       logger("err", \"Unable to open url {url}")

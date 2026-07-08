@@ -15,8 +15,8 @@ suite "Serialization":
     # Save the level to disk
     save_level_now()
 
-    # Reload the unit from disk (clears in-memory, reloads from persisted state)
-    me.reload_unit()
+    # Reload the thing from disk (clears in-memory, reloads from persisted state)
+    me.reload_thing()
 
     # Verify the block persisted
     check has_block_at(test_pos)

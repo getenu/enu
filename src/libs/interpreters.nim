@@ -35,7 +35,7 @@ proc rebase_call_depth(self: ScriptCtx, tos: PStackFrame) =
   # dec'd on every call, inc'd on every return, error at 0. Every yielded
   # script parks its stack mid-call and holds its decrements, so the budget
   # tracks the sum of all parked stacks (and leaks permanently when a parked
-  # context is discarded by a reload or error). With enough animated units
+  # context is discarded by a reload or error). With enough animated things
   # the counter drains and every script in the level fails at once with
   # "maximum call depth for the VM exceeded". Rebase it to this stack's real
   # depth at each VM entry so the limit applies per script.

@@ -1,7 +1,7 @@
 import std/[math, sugar, monotimes, os]
 import godotapi/spatial
-import core, models/[states, units, colors]
-export units
+import core, models/[states, things, colors]
+export things
 include "bot_code_template.nim.nimf"
 
 method code_template*(self: Bot, imports: string): string =
@@ -64,9 +64,9 @@ method on_begin_turn*(
       DONE
 
 proc bot_at*(state: GameState, position: Vector3): Bot =
-  for unit in state.units:
-    if unit of Bot and unit.transform.origin == position:
-      return Bot(unit)
+  for thing in state.things:
+    if thing of Bot and thing.transform.origin == position:
+      return Bot(thing)
 
 proc reset_state*(self: Bot) =
   self.transform = self.start_transform
@@ -78,7 +78,7 @@ method reset*(self: Bot) =
   self.animation_value.touch "auto"
   self.global_flags += VISIBLE
   self.velocity = vec3()
-  self.units.clear()
+  self.things.clear()
 
 method destroy*(self: Bot) =
   self.destroy_impl
@@ -89,7 +89,7 @@ proc init*(
     transform = Transform.init,
     clone_of: Bot = nil,
     global = true,
-    parent: Unit = nil,
+    parent: Thing = nil,
     color = ACTION_COLORS[BLACK],
 ): Bot =
   ## The level-bot initializer enu uses internally (placed, loaded, cloned):
@@ -106,8 +106,8 @@ proc init*(
       parent: parent,
     )
 
-    self.init_unit
-    self.speed = 1.0 # bots walk by default (init_unit defaults speed to 0/ASAP)
+    self.init_thing
+    self.speed = 1.0 # bots walk by default (init_thing defaults speed to 0/ASAP)
 
     if global:
       self.global_flags += GLOBAL
@@ -128,7 +128,7 @@ proc init*(
   if not save:
     result.global_flags += EPHEMERAL
 
-method clone*(self: Bot, clone_to: Unit, id: string): Unit =
+method clone*(self: Bot, clone_to: Thing, id: string): Thing =
   var transform = clone_to.transform
   result = Bot.init(
     id = id,
@@ -138,10 +138,10 @@ method clone*(self: Bot, clone_to: Unit, id: string): Unit =
     color = self.start_color,
   )
 
-method on_collision*(self: Unit, partner: Model, normal: Vector3) =
+method on_collision*(self: Thing, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)
 
-method off_collision*(self: Unit, partner: Model) =
+method off_collision*(self: Thing, partner: Model) =
   for collision in self.collisions.dup:
     if collision.id == partner.id:
       self.collisions -= collision
@@ -152,44 +152,44 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
       zid,
       changes = change.changes,
       item = change.item,
-      unit = self.id,
+      thing = self.id,
       ed_id = self.local_flags.id
 
     if HOVER in self.local_flags:
       if PRIMARY_DOWN.added and state.tool == CODE_MODE:
         let root = self.find_root(true)
-        state.open_unit = root
+        state.open_thing = root
       if SECONDARY_DOWN.added and state.tool == PLACE_BOT:
         # :(
-        for unit in self.units:
-          if unit of Sign:
-            var sign = Sign(unit)
+        for thing in self.things:
+          if thing of Sign:
+            var sign = Sign(thing)
             if sign.owner == self:
               sign.owner = nil
 
         if self.parent.is_nil:
-          state.units -= self
+          state.things -= self
         else:
-          self.parent.units -= self
+          self.parent.things -= self
 
   self.local_flags.watch:
     debug "self flag changed",
       zid,
       changes = change.changes,
       item = change.item,
-      unit = self.id,
+      thing = self.id,
       ed_id = self.local_flags.id
 
     if HOVER.added:
       state.push_flag RETICLE_VISIBLE
       if state.tool in {CODE_MODE, PLACE_BOT}:
         let root = self.find_root(true)
-        root.walk_tree proc(unit: Unit) =
-          unit.local_flags += HIGHLIGHT
+        root.walk_tree proc(thing: Thing) =
+          thing.local_flags += HIGHLIGHT
     elif HOVER.removed:
       let root = self.find_root(true)
-      root.walk_tree proc(unit: Unit) =
-        unit.local_flags -= HIGHLIGHT
+      root.walk_tree proc(thing: Thing) =
+        thing.local_flags -= HIGHLIGHT
       state.pop_flag RETICLE_VISIBLE
 
   if EPHEMERAL in self.global_flags and SERVER in state.local_flags:
@@ -198,7 +198,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
       if added:
         case q.state
         of PENDING:
-          info "unit query received by worker, running file update",
+          info "thing query received by worker, running file update",
             kind = $q.kind, id = self.id
           worker.update_files_proc()
           q.state = READY
@@ -216,7 +216,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             self.query = q
           of EVAL:
             let (res, err) =
-              worker.eval_proc(q.code, q.top_level, q.unit_id)
+              worker.eval_proc(q.code, q.top_level, q.thing_id)
             q.result = res
             q.error = err
             q.state = DONE
@@ -232,7 +232,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             q.state = DONE
             self.query = q
           of SCREENSHOT:
-            # Needs the renderer; answered by the unit's node on the main
+            # Needs the renderer; answered by the thing's node on the main
             # thread (see bot_node.nim).
             discard
           of BLANK:

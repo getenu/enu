@@ -9,7 +9,7 @@ import pkg/metrics
 
 import godotapi/[spatial, ray_cast]
 import
-  core, models/[states, bots, builds, units, colors, signs, serializers, voxels]
+  core, models/[states, bots, builds, things, colors, signs, serializers, voxels]
 import libs/[interpreters, eval]
 import enu/shared/errors
 
@@ -28,21 +28,21 @@ proc get_last_error(self: Worker): ErrorData =
   result = self.last_exception.from_exception
   self.last_exception = nil
 
-proc map_unit(self: Worker, unit: Unit, pnode: PNode) =
-  debug "mapping pnode ", hash = pnode.hash, unit = unit.id
-  self.unit_map[pnode] = unit
-  self.node_map[unit] = pnode
+proc map_thing(self: Worker, thing: Thing, pnode: PNode) =
+  debug "mapping pnode ", hash = pnode.hash, thing = thing.id
+  self.thing_map[pnode] = thing
+  self.node_map[thing] = pnode
 
-proc unmap_unit*(self: Worker, unit: Unit) =
-  if unit in self.node_map:
-    debug "unmapping node ", hash = self.node_map[unit].hash, unit = unit.id
-    self.unit_map.del self.node_map[unit]
-    self.node_map.del unit
+proc unmap_thing*(self: Worker, thing: Thing) =
+  if thing in self.node_map:
+    debug "unmapping node ", hash = self.node_map[thing].hash, thing = thing.id
+    self.thing_map.del self.node_map[thing]
+    self.node_map.del thing
 
 proc write_stack_trace(self: Worker) =
   private_access ScriptCtx
 
-  let ctx = self.active_unit.script_ctx
+  let ctx = self.active_thing.script_ctx
   {.gcsafe.}:
     msg_writeln(
       ctx.ctx.config, "stack trace: (most recent call last)", {msg_no_unit_sep}
@@ -50,42 +50,42 @@ proc write_stack_trace(self: Worker) =
 
     stack_trace_aux(ctx.ctx, ctx.tos, ctx.pc)
 
-proc get_unit(self: Worker, a: VmArgs, pos: int): Unit {.gcsafe.} =
+proc get_thing(self: Worker, a: VmArgs, pos: int): Thing {.gcsafe.} =
   let pnode = a.get_node(pos)
   if pnode.kind != nkNilLit:
     {.gcsafe.}:
-      result = self.unit_map[pnode]
+      result = self.thing_map[pnode]
 
 proc get_bot(self: Worker, a: VmArgs, pos: int): Bot =
-  let unit = self.get_unit(a, pos)
-  assert not unit.is_nil and unit of Bot
-  Bot(unit)
+  let thing = self.get_thing(a, pos)
+  assert not thing.is_nil and thing of Bot
+  Bot(thing)
 
 proc get_build(self: Worker, a: VmArgs, pos: int): Build =
-  let unit = self.get_unit(a, pos)
-  assert not unit.is_nil and unit of Build
-  Build(unit)
+  let thing = self.get_thing(a, pos)
+  assert not thing.is_nil and thing of Build
+  Build(thing)
 
 proc get_sign(self: Worker, a: VmArgs, pos: int): Sign =
   let pnode = a.get_node(pos)
   if pnode.kind != nkNilLit:
-    let unit = self.get_unit(a, pos)
-    assert not unit.is_nil and unit of Sign
-    result = Sign(unit)
+    let thing = self.get_thing(a, pos)
+    assert not thing.is_nil and thing of Sign
+    result = Sign(thing)
 
-proc to_node(self: Worker, unit: Unit): PNode =
-  if ?unit:
-    if unit notin self.node_map:
-      fail \"unit `{unit.id}` not in node_map"
-    self.node_map[unit]
+proc to_node(self: Worker, thing: Thing): PNode =
+  if ?thing:
+    if thing notin self.node_map:
+      fail \"thing `{thing.id}` not in node_map"
+    self.node_map[thing]
   else:
     ast.new_node(nkNilLit)
 
-proc to_node[T: Unit](self: Worker, units: seq[T]): PNode =
+proc to_node[T: Thing](self: Worker, things: seq[T]): PNode =
   var node = ast.new_node(nkBracketExpr)
-  for unit in units:
-    if ?unit:
-      node.add self.to_node(unit)
+  for thing in things:
+    if ?thing:
+      node.add self.to_node(thing)
     else:
       node.add ast.new_node(nk_nil_lit)
   result = node
@@ -107,46 +107,46 @@ proc register_template_node(self: Worker, pnode: PNode, name: string) =
   self.template_node_map[name] = pnode
 
 proc register_active(self: Worker, pnode: PNode) =
-  assert not self.active_unit.is_nil
-  self.map_unit(self.active_unit, pnode)
+  assert not self.active_thing.is_nil
+  self.map_thing(self.active_thing, pnode)
 
-proc new_instance(self: Worker, src: Unit, dest: PNode) =
+proc new_instance(self: Worker, src: Thing, dest: PNode) =
   let id =
-    src.id & "_" & self.active_unit.id & "_instance_" &
-    $(self.active_unit.units.len + 1)
+    src.id & "_" & self.active_thing.id & "_instance_" &
+    $(self.active_thing.things.len + 1)
 
-  var clone = src.clone(self.active_unit, id)
+  var clone = src.clone(self.active_thing, id)
   assert not clone.is_nil
-  clone.spawned_by = self.active_unit.id
+  clone.spawned_by = self.active_thing.id
   clone.script_ctx = ScriptCtx.init(
     owner = clone, clone_of = src, interpreter = self.interpreter
   )
 
-  self.map_unit(clone, dest)
+  self.map_thing(clone, dest)
 
-  debug "adding to active unit",
-    unit = clone.id, active_unit = self.active_unit.id
+  debug "adding to active thing",
+    thing = clone.id, active_thing = self.active_thing.id
 
-  self.active_unit.units.add(clone)
+  self.active_thing.things.add(clone)
 
-proc exec_instance(self: Worker, unit: Unit) =
-  let active = self.active_unit
-  let ctx = unit.script_ctx
-  self.active_unit = unit
+proc exec_instance(self: Worker, thing: Thing) =
+  let active = self.active_thing
+  let ctx = thing.script_ctx
+  self.active_thing = thing
   defer:
-    self.active_unit = active
+    self.active_thing = active
   ctx.fuel = script_fuel
-  ctx.running = ctx.call_proc("run_script", self.node_map[unit], true).paused
+  ctx.running = ctx.call_proc("run_script", self.node_map[thing], true).paused
 
-proc active_unit(self: Worker): Unit =
-  self.active_unit
+proc active_thing(self: Worker): Thing =
+  self.active_thing
 
-proc wake(self: Unit) =
+proc wake(self: Thing) =
   self.script_ctx.timer = get_mono_time()
 
 proc pause_script(self: Worker) =
-  self.active_unit.global_flags -= SCRIPT_INITIALIZING
-  self.active_unit.script_ctx.pause()
+  self.active_thing.global_flags -= SCRIPT_INITIALIZING
+  self.active_thing.script_ctx.pause()
 
 proc keep_alive(ctx: ScriptCtx) =
   ## Refill the script's instruction budget. For long non-yielding loops
@@ -155,8 +155,8 @@ proc keep_alive(ctx: ScriptCtx) =
   ## budget runs out.
   ctx.fuel = script_fuel
 
-proc yield_script(self: Worker, unit: Unit) =
-  let ctx = unit.script_ctx
+proc yield_script(self: Worker, thing: Thing) =
+  let ctx = thing.script_ctx
   ctx.callback = ctx.saved_callback
   ctx.saved_callback = nil
   self.pause_script()
@@ -166,9 +166,9 @@ proc exit(self: Worker, ctx: ScriptCtx, exit_code: int) =
   self.pause_script()
   ctx.running = false
 
-proc to_unit_id*(requested_name: string): string =
+proc to_thing_id*(requested_name: string): string =
   ## Convert a user-facing prototype name (CamelCase or any-case) into
-  ## the on-disk unit id `build_<snake_case>`. `Tree` -> `build_tree`,
+  ## the on-disk thing id `build_<snake_case>`. `Tree` -> `build_tree`,
   ## `DiningChair` -> `build_dining_chair`, `bed_queen` ->
   ## `build_bed_queen`. Already-prefixed names are kept as-is.
   if requested_name == "":
@@ -188,22 +188,22 @@ proc to_unit_id*(requested_name: string): string =
 
 proc claim_name(self: Worker, requested: string) =
   ## Called from the `name` macro at the top of a prototype script.
-  ## If the unit's on-disk id already matches `requested`, no-ops.
-  ## If a conflicting unit already exists in the level, raises a
+  ## If the thing's on-disk id already matches `requested`, no-ops.
+  ## If a conflicting thing already exists in the level, raises a
   ## script error. Otherwise, schedules a rename of the script + data
   ## files and exits the current script — the file watcher then
-  ## reloads the unit under the new id.
-  let unit = self.active_unit
-  if unit.is_nil or not ?unit.script_ctx:
+  ## reloads the thing under the new id.
+  let thing = self.active_thing
+  if thing.is_nil or not ?thing.script_ctx:
     return
-  # Every named unit is a prototype. Apply the level's prototype-visibility
+  # Every named thing is a prototype. Apply the level's prototype-visibility
   # default before any user `show = ...` in the script body runs. If the
   # script sets `show` explicitly later it wins (assignments run after
   # claim_name in the macro-generated code).
   if not state.show_prototypes:
-    unit.global_flags -= VISIBLE
-  let target_id = to_unit_id(requested)
-  if target_id == "" or unit.id == target_id:
+    thing.global_flags -= VISIBLE
+  let target_id = to_thing_id(requested)
+  if target_id == "" or thing.id == target_id:
     return
 
   let
@@ -211,18 +211,18 @@ proc claim_name(self: Worker, requested: string) =
     new_data_dir = state.config.data_dir / target_id
   if file_exists(new_script) or dir_exists(new_data_dir):
     raise ValueError.init(
-      "The name '" & requested & "' conflicts with the existing unit '" &
+      "The name '" & requested & "' conflicts with the existing thing '" &
         target_id & "'. Choose a different name."
     )
 
   let
-    old_id = unit.id
-    old_script = unit.script_ctx.script
+    old_id = thing.id
+    old_script = thing.script_ctx.script
     old_data_dir = state.config.data_dir / old_id
     old_data_file = old_data_dir / (old_id & ".json")
     new_data_file = new_data_dir / (target_id & ".json")
 
-  self.exit(unit.script_ctx, 0)
+  self.exit(thing.script_ctx, 0)
   after_boop:
     # Capture the file content with id rewrites before any moves.
     var data_content = ""
@@ -243,24 +243,24 @@ proc claim_name(self: Worker, requested: string) =
     if file_exists(old_script):
       move_file(old_script, new_script)
 
-    # Drop the in-memory unit; the file watcher picks up the new
+    # Drop the in-memory thing; the file watcher picks up the new
     # `data/<target_id>/<target_id>.json` on its next pass.
-    if unit.parent.is_nil:
-      state.units -= unit
+    if thing.parent.is_nil:
+      state.things -= thing
     else:
-      unit.parent.units -= unit
+      thing.parent.things -= thing
     save_level(state.config.level_dir)
 
 proc load_level(self: Worker, level: string, world: string) =
   var world = world
   if not ?world:
     world = state.config.world
-  self.exit(self.active_unit.script_ctx, 0)
+  self.exit(self.active_thing.script_ctx, 0)
   after_boop:
     change_loaded_level(level, world)
 
 proc reset_level(self: Worker) =
-  self.exit(self.active_unit.script_ctx, 0)
+  self.exit(self.active_thing.script_ctx, 0)
   after_boop:
     let current_level = state.config.level_dir
     state.config_value.value:
@@ -269,31 +269,31 @@ proc reset_level(self: Worker) =
     state.config_value.value:
       level_dir = current_level
 
-proc ensure_unit_impl[T: Unit](self: Worker, unit: T) {.gcsafe.} =
-  if unit notin self.node_map:
+proc ensure_thing_impl[T: Thing](self: Worker, thing: T) {.gcsafe.} =
+  if thing notin self.node_map:
     var node = self.template_node_map[$T].copy_tree
-    self.map_unit(unit, node)
+    self.map_thing(thing, node)
 
-method ensure_exists(self: Unit, worker: Worker) {.base, gcsafe.} =
-  raise_assert "ensure_unit not implemented for " & $self.type
+method ensure_exists(self: Thing, worker: Worker) {.base, gcsafe.} =
+  raise_assert "ensure_thing not implemented for " & $self.type
 
 method ensure_exists(self: Player, worker: Worker) =
-  worker.ensure_unit_impl(self)
+  worker.ensure_thing_impl(self)
 
 method ensure_exists(self: Bot, worker: Worker) =
-  worker.ensure_unit_impl(self)
+  worker.ensure_thing_impl(self)
 
 method ensure_exists(self: Build, worker: Worker) =
-  worker.ensure_unit_impl(self)
+  worker.ensure_thing_impl(self)
 
 method ensure_exists(self: Sign, worker: Worker) =
-  worker.ensure_unit_impl(self)
+  worker.ensure_thing_impl(self)
 
-proc current_colliders*(self: Worker, unit: Unit, kind: string): seq[Unit] =
-  var colliders: seq[Unit]
-  state.units.value.walk_tree proc(other: Unit) =
-    if unit.collisions.value.any_it(it.id == other.id):
-      if kind == "Unit" or kind == "Player" and other of Player or
+proc current_colliders*(self: Worker, thing: Thing, kind: string): seq[Thing] =
+  var colliders: seq[Thing]
+  state.things.value.walk_tree proc(other: Thing) =
+    if thing.collisions.value.any_it(it.id == other.id):
+      if kind == "Thing" or kind == "Player" and other of Player or
           kind == "Bot" and other of Bot or kind == "Build" and other of Build or
           kind == "Sign" and other of Sign:
         colliders.add(other)
@@ -316,9 +316,9 @@ proc color_to_lower(c: Colors): string =
   of WHITE: "white"
   of BROWN: "brown"
 
-proc block_log(self: Unit): string =
+proc block_log(self: Thing): string =
   ## Recent blocks the player has placed (or erased) via the in-game block
-  ## tools, oldest first. Each line: "ago=<sec>s color=<c> unit=<id>
+  ## tools, oldest first. Each line: "ago=<sec>s color=<c> thing=<id>
   ## local=(x,y,z) global=(x,y,z)". Cap is BLOCK_LOG_CAP from builds.nim.
   if not (self of Player):
     return ""
@@ -326,19 +326,19 @@ proc block_log(self: Unit): string =
   for entry in Player(self).block_log_entries.value:
     let ago = (now - entry.timestamp).in_milliseconds.float / 1000.0
     result &=
-      "ago=" & $ago & "s color=" & color_to_lower(entry.color) & " unit=" &
-      entry.unit_id & " local=(" & $entry.local_position.x & "," &
+      "ago=" & $ago & "s color=" & color_to_lower(entry.color) & " thing=" &
+      entry.thing_id & " local=(" & $entry.local_position.x & "," &
       $entry.local_position.y & "," & $entry.local_position.z & ") global=(" &
       $entry.global_position.x & "," & $entry.global_position.y & "," &
       $entry.global_position.z & ")\n"
 
-proc clear_block_log(self: Unit) =
+proc clear_block_log(self: Thing) =
   if self of Player:
     Player(self).block_log_entries.clear
 
 proc begin_turn(
     self: Worker,
-    unit: Unit,
+    thing: Thing,
     direction: Vector3,
     degrees: float,
     lean: bool,
@@ -346,22 +346,22 @@ proc begin_turn(
 ): string =
   assert not degrees.is_nan
   var degrees = floor_mod(degrees, 360)
-  let ctx = self.active_unit.script_ctx
-  ctx.callback = unit.on_begin_turn(direction, degrees, lean, move_mode)
+  let ctx = self.active_thing.script_ctx
+  ctx.callback = thing.on_begin_turn(direction, degrees, lean, move_mode)
   ctx.last_ran = MonoTime.default
   if not ctx.callback.is_nil:
     self.pause_script()
 
 proc begin_move(
-    self: Worker, unit: Unit, direction: Vector3, steps: float, move_mode: int
+    self: Worker, thing: Thing, direction: Vector3, steps: float, move_mode: int
 ) =
   var steps = steps
   var direction = direction
-  let ctx = self.active_unit.script_ctx
+  let ctx = self.active_thing.script_ctx
   if steps < 0:
     steps = steps * -1
     direction = direction * -1
-  ctx.callback = unit.on_begin_move(direction, steps, move_mode)
+  ctx.callback = thing.on_begin_move(direction, steps, move_mode)
   ctx.last_ran = MonoTime.default
   if not ctx.callback.is_nil:
     self.pause_script()
@@ -379,21 +379,21 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   ctx.last_ran = MonoTime.default
   self.pause_script()
 
-proc hit(self: Unit, unit_b: Unit): bool =
-  if not ?unit_b:
+proc hit(self: Thing, thing_b: Thing): bool =
+  if not ?thing_b:
     return
 
   for collision in self.collisions:
-    if collision.id == unit_b.id:
+    if collision.id == thing_b.id:
       return true
 
-proc find_all[T: Unit](worker: Worker, _: type T): seq[T] =
-  var units: seq[T]
-  state.units.value.walk_tree proc(unit: Unit) =
-    if unit of T:
-      unit.ensure_exists(worker)
-      units.add T(unit)
-  units
+proc find_all[T: Thing](worker: Worker, _: type T): seq[T] =
+  var things: seq[T]
+  state.things.value.walk_tree proc(thing: Thing) =
+    if thing of T:
+      thing.ensure_exists(worker)
+      things.add T(thing)
+  things
 
 proc all_players(worker: Worker): seq[Player] =
   worker.find_all(Player)
@@ -407,13 +407,13 @@ proc all_builds(worker: Worker): seq[Build] =
 proc all_signs(worker: Worker): seq[Sign] =
   worker.find_all(Sign)
 
-proc all_units(worker: Worker): seq[Unit] =
-  worker.find_all(Unit)
+proc all_things(worker: Worker): seq[Thing] =
+  worker.find_all(Thing)
 
-proc added_units(worker: Worker): seq[Unit] =
-  for unit in worker.find_all(Unit):
-    if unit.frame_created == state.frame_count:
-      result.add unit
+proc added_things(worker: Worker): seq[Thing] =
+  for thing in worker.find_all(Thing):
+    if thing.frame_created == state.frame_count:
+      result.add thing
 
 proc echo_console(msg: string) =
   echo(msg)
@@ -430,50 +430,50 @@ proc dump_stats(label: string) =
   else:
     info "dump_stats: build with -d:metrics to enable stats"
 
-proc action_running(self: Unit): bool =
+proc action_running(self: Thing): bool =
   self.script_ctx.action_running
 
-proc `action_running=`(self: Unit, value: bool) =
+proc `action_running=`(self: Thing, value: bool) =
   if value:
     self.script_ctx.timer = get_mono_time() + advance_step
   else:
     self.script_ctx.timer = MonoTime.high
   self.script_ctx.action_running = value
 
-proc id(self: Unit): string =
+proc id(self: Thing): string =
   self.id
 
-proc global(self: Unit): bool =
+proc global(self: Thing): bool =
   GLOBAL in self.global_flags
 
-proc `global=`(self: Unit, global: bool) =
+proc `global=`(self: Thing, global: bool) =
   if global:
     self.global_flags += GLOBAL
   else:
     self.global_flags -= GLOBAL
 
-proc lock(self: Unit): bool =
+proc lock(self: Thing): bool =
   LOCK in self.global_flags
 
-proc `lock=`(self: Unit, value: bool) =
+proc `lock=`(self: Thing, value: bool) =
   if value:
     self.global_flags += LOCK
   else:
     self.global_flags -= LOCK
 
-proc position(self: Unit): Vector3 =
-  units.position(self)
+proc position(self: Thing): Vector3 =
+  things.position(self)
 
-proc local_position(self: Unit): Vector3 =
+proc local_position(self: Thing): Vector3 =
   self.transform.origin
 
-proc start_position(self: Unit): Vector3 =
+proc start_position(self: Thing): Vector3 =
   if GLOBAL in self.global_flags:
     self.start_transform.origin
   else:
     self.start_transform.origin.global_from(self.parent)
 
-proc position_set(self: Unit, position: Vector3) =
+proc position_set(self: Thing, position: Vector3) =
   var position = position
   if self of Player and position.y <= 0:
     position.y = 0.1
@@ -483,51 +483,51 @@ proc position_set(self: Unit, position: Vector3) =
   else:
     self.set_pivot_local(position.local_to(self.parent))
 
-proc start_position_set(self: Unit, position: Vector3) =
+proc start_position_set(self: Thing, position: Vector3) =
   if GLOBAL in self.global_flags:
     self.start_transform.origin = position
   else:
     self.start_transform.origin = position.local_to(self.parent)
   self.global_flags += DIRTY
 
-proc reset_anchor(self: Unit) =
-  ## Reset the unit's anchor to identity. Used at the start of an
+proc reset_anchor(self: Thing) =
+  ## Reset the thing's anchor to identity. Used at the start of an
   ## `anchor:` block so the body's turtle commands accumulate from a
   ## clean pivot.
   self.anchor = Transform.init
 
-proc capture_start_transform(self: Unit) =
-  ## Stamp the unit's current pose as its spawn pose. Called at the end of
+proc capture_start_transform(self: Thing) =
+  ## Stamp the thing's current pose as its spawn pose. Called at the end of
   ## `.new()` so a clone's `start_position` (and reset target) is the point
   ## it was spawned at, not the spawner's transform it was seeded with.
   self.start_transform = self.transform
 
-proc delete(self: Unit) =
-  ## Remove the unit from the level and delete its on-disk script + data.
+proc delete(self: Thing) =
+  ## Remove the thing from the level and delete its on-disk script + data.
   ## Distinct from the `destroy` method, which only tears down the in-memory
   ## instance.
 
-  # Evacuate descendants we don't own so they outlive us: real units, the
+  # Evacuate descendants we don't own so they outlive us: real things, the
   # player, and instances spawned elsewhere (e.g. one adopted onto us to ride).
   # Our own instances (`spawned_by == self.id`) stay and are torn down in the
   # cascade when we're removed below — but the cascade is recursive, so a
-  # foreign unit adopted onto one of our instances must be evacuated too: we
-  # recurse through our own instances and evacuate the top-most foreign unit of
+  # foreign thing adopted onto one of our instances must be evacuated too: we
+  # recurse through our own instances and evacuate the top-most foreign thing of
   # each branch (its own subtree rides along with it). Collected first
   # (reparenting mutates the tree), and done here, before removal, so it isn't
   # re-entrant with the destroy cascade (which mutating ed mid-teardown would
   # be).
-  var foreign: seq[Unit]
-  proc collect(children: seq[Unit]) =
+  var foreign: seq[Thing]
+  proc collect(children: seq[Thing]) =
     for child in children:
       if child.spawned_by != self.id:
         foreign.add child
       else:
-        collect(child.units.value)
+        collect(child.things.value)
 
-  collect(self.units.value)
-  for unit in foreign:
-    unit.reparent_to_root()
+  collect(self.things.value)
+  for thing in foreign:
+    thing.reparent_to_root()
 
   if ?self.script_ctx and self.script_ctx.script != "" and
       file_exists(self.script_ctx.script):
@@ -542,63 +542,63 @@ proc delete(self: Unit) =
     except OSError:
       discard
   if self.parent.is_nil:
-    state.units -= self
+    state.things -= self
   else:
-    self.parent.units -= self
+    self.parent.things -= self
 
-proc adopt(self: Unit, unit: Unit) =
-  ## Make `unit` ride `self` (e.g. a moving platform): move it from its current
-  ## units collection into `self.units` and nest its node under `self`'s, so the
-  ## engine composes transforms and `unit` follows `self`. Bots don't auto-ride a
+proc adopt(self: Thing, thing: Thing) =
+  ## Make `thing` ride `self` (e.g. a moving platform): move it from its current
+  ## things collection into `self.things` and nest its node under `self`'s, so the
+  ## engine composes transforms and `thing` follows `self`. Bots don't auto-ride a
   ## moving platform — this is how you make them. Ownership moves with membership
-  ## for now (`self` owns `unit` until destructor-driven teardown lands — see
-  ## getenu/enu#65). `TRANSFERRING` keeps the remove/add from tearing the unit
+  ## for now (`self` owns `thing` until destructor-driven teardown lands — see
+  ## getenu/enu#65). `TRANSFERRING` keeps the remove/add from tearing the thing
   ## down (it's a move, not a delete).
-  if unit == self or unit.parent == self:
+  if thing == self or thing.parent == self:
     return
   # Adopting an ancestor would make parent links circular — every parent walk
   # (local_to, world_from, walk_tree) would then loop forever and hang the
   # worker.
   var ancestor = self.parent
   while ?ancestor:
-    if ancestor == unit:
-      logger("err", "can't adopt " & unit.id & ": it contains " & self.id)
+    if ancestor == thing:
+      logger("err", "can't adopt " & thing.id & ": it contains " & self.id)
       return
     ancestor = ancestor.parent
-  # Only top-level units can be adopted for now: the node reparents off the
-  # GLOBAL flag's removed-edge, and a nested unit has no GLOBAL flag to remove —
+  # Only top-level things can be adopted for now: the node reparents off the
+  # GLOBAL flag's removed-edge, and a nested thing has no GLOBAL flag to remove —
   # the model would move but the node would stay under the old parent. `release`
   # first. (Proper chained adoption comes with destructor-driven teardown,
   # getenu/enu#65.)
-  if ?unit.parent:
+  if ?thing.parent:
     logger(
       "err",
-      "can't adopt " & unit.id & ": it's already on " & unit.parent.id &
+      "can't adopt " & thing.id & ": it's already on " & thing.parent.id &
         "; release it first",
     )
     return
-  unit.global_flags += TRANSFERRING
-  self.units.add unit
-  state.units -= unit
-  unit.parent = self
-  unit.global_flags -= GLOBAL
+  thing.global_flags += TRANSFERRING
+  self.things.add thing
+  state.things -= thing
+  thing.parent = self
+  thing.global_flags -= GLOBAL
   # World -> parent-local through the platform's full transform chain, so
   # adopting onto an already-rotated platform lands at the right local spot.
-  unit.transform_value.origin = unit.transform.origin.local_into(self)
+  thing.transform_value.origin = thing.transform.origin.local_into(self)
   after_boop:
-    unit.global_flags -= TRANSFERRING
+    thing.global_flags -= TRANSFERRING
 
-proc release(self: Unit) =
-  ## Reverse of `adopt`: re-root `self` to the top-level units collection and
+proc release(self: Thing) =
+  ## Reverse of `adopt`: re-root `self` to the top-level things collection and
   ## restore its world transform, so it stops riding its parent.
   self.reparent_to_root()
 
-proc speed(self: Unit): float =
+proc speed(self: Thing): float =
   types.speed(self)
 
 const ASAP_VALUE = 0
 
-proc `speed=`(self: Unit, speed: float) =
+proc `speed=`(self: Thing, speed: float) =
   if self of Build and speed == ASAP_VALUE:
     Build(self).begin_asap()
     types.`speed=`(self, 0.0)
@@ -607,29 +607,29 @@ proc `speed=`(self: Unit, speed: float) =
       Build(self).end_asap()
     types.`speed=`(self, speed)
 
-proc scale(self: Unit): float =
+proc scale(self: Thing): float =
   types.scale(self)
 
 
-proc color(self: Unit): Colors =
+proc color(self: Thing): Colors =
   action_index self.color_value.value
 
-proc `color=`(self: Unit, color: Colors) =
+proc `color=`(self: Thing, color: Colors) =
   types.`color=`(self, ACTION_COLORS[color])
 
-proc show(self: Unit): bool =
+proc show(self: Thing): bool =
   VISIBLE in self.global_flags
 
-proc `show=`(self: Unit, value: bool) =
+proc `show=`(self: Thing, value: bool) =
   if value:
     self.global_flags += VISIBLE
   else:
     self.global_flags -= VISIBLE
 
-# `rotation` (the anchor-aware yaw getter) lives in models/units — shared
-# with external agents that pose units.
+# `rotation` (the anchor-aware yaw getter) lives in models/things — shared
+# with external agents that pose things.
 
-proc `rotation=`(self: Unit, degrees: float) =
+proc `rotation=`(self: Thing, degrees: float) =
   if self of Player:
     Player(self).rotation_value.touch degrees
     var t = Transform.init
@@ -642,7 +642,7 @@ proc `rotation=`(self: Unit, degrees: float) =
       .scaled(vec3(s, s, s))
     self.set_pivot_basis(pivot_basis)
 
-proc `scale=`(self: Unit, scale: float) =
+proc `scale=`(self: Thing, scale: float) =
   types.`scale=`(self, scale)
   if self of Player:
     return
@@ -659,7 +659,7 @@ proc `scale=`(self: Unit, scale: float) =
   self.set_pivot_basis(pivot_basis)
 
 proc sees(
-    worker: Worker, self: Unit, target: Unit, distance: float
+    worker: Worker, self: Thing, target: Thing, distance: float
 ): Future[bool] =
   result = Future.init(bool, "sees")
 
@@ -688,21 +688,21 @@ proc sees(
 proc frame_count(): int =
   state.frame_count
 
-proc frame_created(unit: Unit): int =
-  unit.frame_created
+proc frame_created(thing: Thing): int =
+  thing.frame_created
 
-proc drop_transform(unit: Unit): Transform =
-  if unit of Bot:
+proc drop_transform(thing: Thing): Transform =
+  if thing of Bot:
     result = Transform.init
-  elif unit of Build:
-    result = Build(unit).draw_transform
+  elif thing of Build:
+    result = Build(thing).draw_transform
     result.origin = result.origin.snapped(vec3(1, 1, 1))
     result = result.translated(FORWARD * 0.51)
     result.origin = result.origin - (FORWARD + LEFT + DOWN) * 0.5
   else:
-    raise ObjectConversionDefect.init("Unknown unit type")
+    raise ObjectConversionDefect.init("Unknown thing type")
 
-proc reset(self: Unit, clear: bool) =
+proc reset(self: Thing, clear: bool) =
   if clear:
     if self of Build:
       Build(self).reset()
@@ -769,63 +769,63 @@ proc restore(self: Build, name: string) =
 
 # Player binding
 
-proc playing(self: Unit): bool =
+proc playing(self: Thing): bool =
   PLAYING in state.local_flags
 
-proc `playing=`*(self: Unit, value: bool) =
+proc `playing=`*(self: Thing, value: bool) =
   state.set_flag PLAYING, value
 
-proc god(self: Unit): bool =
+proc god(self: Thing): bool =
   GOD in state.local_flags
 
-proc `god=`*(self: Unit, value: bool) =
+proc `god=`*(self: Thing, value: bool) =
   state.set_flag GOD, value
 
-proc flying(self: Unit): bool =
+proc flying(self: Thing): bool =
   FLYING in state.local_flags
 
-proc `flying=`*(self: Unit, value: bool) =
+proc `flying=`*(self: Thing, value: bool) =
   state.set_flag FLYING, value
 
-proc running(self: Unit): bool =
+proc running(self: Thing): bool =
   ALT_WALK_SPEED in state.local_flags
 
-proc `running=`*(self: Unit, value: bool) =
+proc `running=`*(self: Thing, value: bool) =
   state.set_flag ALT_WALK_SPEED, value
 
-proc tool(self: Unit): int =
+proc tool(self: Thing): int =
   int(state.tool)
 
-proc `tool=`(self: Unit, value: int) =
+proc `tool=`(self: Thing, value: int) =
   state.tool = Tools(value)
 
-proc tools_has(self: Unit, tool: int): bool =
+proc tools_has(self: Thing, tool: int): bool =
   Tools(tool) in state.tools
 
-proc tools_incl(self: Unit, tool: int) =
+proc tools_incl(self: Thing, tool: int) =
   state.tools += Tools(tool)
 
-proc tools_excl(self: Unit, tool: int) =
+proc tools_excl(self: Thing, tool: int) =
   state.tools -= Tools(tool)
 
-proc tools_clear(self: Unit) =
+proc tools_clear(self: Thing) =
   state.tools.clear()
 
-proc open_sign(self: Unit): Sign =
+proc open_sign(self: Thing): Sign =
   state.open_sign
 
-proc `open_sign=`(self: Unit, value: Sign) =
+proc `open_sign=`(self: Thing, value: Sign) =
   state.open_sign = value
 
 proc executing_player(worker: Worker): Player =
-  let active = worker.active_unit
+  let active = worker.active_thing
   if active of Player:
     return Player(active)
 
   let owner_id = \"player-{active.code.owner}"
-  for unit in state.units.value:
-    if unit of Player:
-      let player = Player(unit)
+  for thing in state.things.value:
+    if thing of Player:
+      let player = Player(thing)
       if player.id == owner_id:
         player.ensure_exists(worker)
         return player
@@ -855,7 +855,7 @@ proc `megapixels=`(_: PNode, pixels: float) =
 
 proc new_markdown_sign(
     self: Worker,
-    unit: Unit,
+    thing: Thing,
     pnode: PNode,
     message: string,
     more: string,
@@ -863,12 +863,12 @@ proc new_markdown_sign(
     height: float,
     size: int,
     billboard: bool,
-): Unit =
+): Thing =
   result = Sign.init(
     message,
     more = more,
-    owner = self.active_unit,
-    transform = drop_transform(unit),
+    owner = self.active_thing,
+    transform = drop_transform(thing),
     width = width,
     height = height,
     size = size,
@@ -876,12 +876,12 @@ proc new_markdown_sign(
   )
 
   info "creating sign", id = result.id
-  self.map_unit(result, pnode)
-  unit.units.add(result)
+  self.map_thing(result, pnode)
+  thing.things.add(result)
 
 proc update_markdown_sign(
     self: Worker,
-    unit: Sign,
+    thing: Sign,
     message: string,
     more: string,
     width: float,
@@ -889,12 +889,12 @@ proc update_markdown_sign(
     size: int,
     billboard: bool,
 ) =
-  unit.width = width
-  unit.height = height
-  unit.size = size
-  unit.billboard = billboard
-  unit.more = more
-  unit.message = message
+  thing.width = width
+  thing.height = height
+  thing.size = size
+  thing.billboard = billboard
+  thing.more = more
+  thing.message = message
 
 proc `width=`(self: Sign, value: float) =
   types.`width=`(self, value)
@@ -920,28 +920,28 @@ proc `open=`(self: Sign, value: bool) =
   elif not value and self.open:
     state.open_sign = nil
 
-proc coding(self: Worker, unit: Unit): Unit =
-  if unit == state.player:
-    if ?state.open_unit:
-      state.open_unit.ensure_exists(self)
-      result = state.open_unit
+proc coding(self: Worker, thing: Thing): Thing =
+  if thing == state.player:
+    if ?state.open_thing:
+      state.open_thing.ensure_exists(self)
+      result = state.open_thing
 
-proc `coding=`(self: Unit, value: Unit) =
-  state.open_unit = value
+proc `coding=`(self: Thing, value: Thing) =
+  state.open_thing = value
 
 proc signal_test_complete(self: Worker, exit_code: int) =
   state.test_exit_code = exit_code
 
 proc find_block_at(position: Vector3): Option[VoxelInfo] =
-  for unit in state.units.value:
-    if unit of Build:
-      let build = Build(unit)
+  for thing in state.things.value:
+    if thing of Build:
+      let build = Build(thing)
       let local_pos = position.local_to(build)
       if local_pos in build:
         let info = build.voxel_info(local_pos)
         if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
           return some(info)
-    for child in unit.units.value:
+    for child in thing.things.value:
       if child of Build:
         let build = Build(child)
         let local_pos = position.local_to(build)
@@ -963,8 +963,8 @@ proc rendered_voxel_count_get(self: Build): int =
   ## if a delta is re-pasted (idempotent), so compare with `>=`.
   self.rendered_voxel_count
 
-proc pending_block_updates_get(self: Unit): int =
-  ## Unfinished voxel pipeline work for the unit and all of its
+proc pending_block_updates_get(self: Thing): int =
+  ## Unfinished voxel pipeline work for the thing and all of its
   ## descendants: worker-side chunks/edits not yet flushed to the render
   ## thread, plus the terrain backlog (queued, in-flight, or awaiting
   ## apply) as last pushed from the nodes. 0 = every submitted edit is
@@ -973,7 +973,7 @@ proc pending_block_updates_get(self: Unit): int =
   if self of Build and ?Build(self).voxels:
     let voxels = Build(self).voxels
     result += voxels.pending_chunks.len + voxels.pending_edits.len
-  for child in self.units.value:
+  for child in self.things.value:
     result += child.pending_block_updates_get
 
 type WorldBox* = tuple[min, max: Vector3]
@@ -1006,19 +1006,19 @@ proc tight_voxel_aabb(self: Build): tuple[present: bool, lo, hi: Vector3] =
     if pos.z + 1.0 > hi.z: hi.z = pos.z + 1.0
   (any_voxel, lo, hi)
 
-proc world_aabb(unit: Unit, lo, hi: Vector3): WorldBox =
+proc world_aabb(thing: Thing, lo, hi: Vector3): WorldBox =
   # Transform all 8 corners of the local-space AABB through the
-  # unit's own transform, then walk the parent chain accumulating
+  # thing's own transform, then walk the parent chain accumulating
   # parent origins (mirroring `global_from` / the position getter).
   # Re-fit to an axis-aligned box at the end.
   var w_lo = vec3(float.high, float.high, float.high)
   var w_hi = vec3(-float.high, -float.high, -float.high)
-  let t = unit.transform
+  let t = thing.transform
   for cx in [lo.x, hi.x]:
     for cy in [lo.y, hi.y]:
       for cz in [lo.z, hi.z]:
         var p = t.basis.xform(vec3(cx, cy, cz)) + t.origin
-        var parent = unit.parent
+        var parent = thing.parent
         while parent != nil:
           p += parent.transform.origin
           parent = parent.parent
@@ -1030,7 +1030,7 @@ proc world_aabb(unit: Unit, lo, hi: Vector3): WorldBox =
         if p.z > w_hi.z: w_hi.z = p.z
   (w_lo, w_hi)
 
-proc bounds(self: Unit): WorldBox =
+proc bounds(self: Thing): WorldBox =
   ## Tight world-space AABB after scale/rotation/anchor are applied.
   ## Builds report the bounding box of placed voxels. Bots/players
   ## fall back to a small box around `position` (collider-aware
@@ -1108,12 +1108,12 @@ proc box_intersects(a, b: WorldBox): bool {.inline.} =
     a.min.y >= b.max.y or a.max.z <= b.min.z or a.min.z >= b.max.z
   )
 
-proc world_offset(unit: Unit): Vector3 =
+proc world_offset(thing: Thing): Vector3 =
   # Sum parent origins so per-voxel coords resolve to world space,
   # mirroring `global_from` / `world_aabb`. Used by the query API to
-  # walk voxels in world coordinates without re-traversing the unit
+  # walk voxels in world coordinates without re-traversing the thing
   # tree for each lookup.
-  var p = unit.parent
+  var p = thing.parent
   while p != nil:
     result += p.transform.origin
     p = p.parent
@@ -1144,8 +1144,8 @@ proc voxel_overlaps(a: Build, b: Build): bool =
         return true
   false
 
-proc overlaps(a: Unit, b: Unit): bool =
-  ## True if the two units' geometry actually overlaps. AABBs are
+proc overlaps(a: Thing, b: Thing): bool =
+  ## True if the two things' geometry actually overlaps. AABBs are
   ## checked first as a cheap reject; for two Builds we then test
   ## whether any of `a`'s voxels falls inside one of `b`'s, which
   ## handles the "furniture inside a hollow room" case correctly
@@ -1158,14 +1158,14 @@ proc overlaps(a: Unit, b: Unit): bool =
     return voxel_overlaps(Build(a), Build(b))
   true
 
-proc units_overlapping(box: WorldBox): seq[Unit] =
-  ## Units (root + nested) whose world-space bounds intersect `box`.
-  proc walk(unit: Unit, out_units: var seq[Unit]) =
-    if box_intersects(unit.bounds, box):
-      out_units.add(unit)
-    for c in unit.units.value:
-      walk(c, out_units)
-  for u in state.units.value:
+proc things_overlapping(box: WorldBox): seq[Thing] =
+  ## Things (root + nested) whose world-space bounds intersect `box`.
+  proc walk(thing: Thing, out_things: var seq[Thing]) =
+    if box_intersects(thing.bounds, box):
+      out_things.add(thing)
+    for c in thing.things.value:
+      walk(c, out_things)
+  for u in state.things.value:
     walk(u, result)
 
 proc voxels_in_box*(box: WorldBox): bool =
@@ -1173,12 +1173,12 @@ proc voxels_in_box*(box: WorldBox): bool =
   ## Walks only builds whose own bounds overlap the query, then tests
   ## each of those builds' voxels — cost scales with the voxel count
   ## of nearby builds, not with the query volume.
-  proc walk(unit: Unit): bool =
-    if unit of Build:
-      let build = Build(unit)
-      # Explicit Unit() so we dispatch through the WorldBox-returning
+  proc walk(thing: Thing): bool =
+    if thing of Build:
+      let build = Build(thing)
+      # Explicit Thing() so we dispatch through the WorldBox-returning
       # `bounds` above, not Build's local-AABB field accessor.
-      if box_intersects(Unit(build).bounds, box):
+      if box_intersects(Thing(build).bounds, box):
         let
           t = build.transform
           offset = build.world_offset
@@ -1192,40 +1192,40 @@ proc voxels_in_box*(box: WorldBox): bool =
             vhi = vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z))
           if box_intersects((vlo, vhi), box):
             return true
-    for c in unit.units.value:
+    for c in thing.things.value:
       if walk(c): return true
     false
 
-  for u in state.units.value:
+  for u in state.things.value:
     if walk(u): return true
   false
 
 proc box_is_free(box: WorldBox): bool =
   ## True if `box` is free of voxels (any Build's voxel data) AND
-  ## doesn't intersect any unit's bounds. Use to validate a proposed
+  ## doesn't intersect any thing's bounds. Use to validate a proposed
   ## placement. Contrast with `clear_box`, which only checks voxels.
   if voxels_in_box(box):
     return false
-  for u in state.units.value:
+  for u in state.things.value:
     if box_intersects(u.bounds, box):
       return false
   true
 
-proc units_in_box(
+proc things_in_box(
     x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
-): seq[Unit] =
-  ## Units whose origins are inside the inclusive world-space box.
-  ## For "is this unit's body in the box," use `units_overlapping`.
+): seq[Thing] =
+  ## Things whose origins are inside the inclusive world-space box.
+  ## For "is this thing's body in the box," use `things_overlapping`.
   let lo = vec3(min(x1, x2), min(y1, y2), min(z1, z2))
   let hi = vec3(max(x1, x2), max(y1, y2), max(z1, z2))
-  proc walk(unit: Unit, out_units: var seq[Unit]) =
-    let p = unit.position
+  proc walk(thing: Thing, out_things: var seq[Thing]) =
+    let p = thing.position
     if p.x >= lo.x and p.x <= hi.x and p.y >= lo.y and p.y <= hi.y and
         p.z >= lo.z and p.z <= hi.z:
-      out_units.add(unit)
-    for c in unit.units.value:
-      walk(c, out_units)
-  for u in state.units.value:
+      out_things.add(thing)
+    for c in thing.things.value:
+      walk(c, out_things)
+  for u in state.things.value:
     walk(u, result)
 
 proc floor_at(x: float, z: float): int =
@@ -1259,9 +1259,9 @@ proc find_voxel_overlaps(limit: int = 50): string =
   ## (non-HOLE, non-eraser) voxel — i.e., actual z-fighting in the
   ## rendered scene. Returns one line per overlap up to `limit`.
   var occupants = init_table[Vector3, seq[string]]()
-  proc collect(unit: Unit) =
-    if unit of Build:
-      let build = Build(unit)
+  proc collect(thing: Thing) =
+    if thing of Build:
+      let build = Build(thing)
       # Skip scaled/rotated builds — their voxel-to-world mapping isn't a
       # simple translation and overlap reports would be misleading.
       let euler = build.transform.basis.get_euler()
@@ -1277,10 +1277,10 @@ proc find_voxel_overlaps(limit: int = 50): string =
             occupants[global_pos] = @[]
           if build.id notin occupants[global_pos]:
             occupants[global_pos].add(build.id)
-    for child in unit.units.value:
+    for child in thing.things.value:
       collect(child)
-  for unit in state.units.value:
-    collect(unit)
+  for thing in state.things.value:
+    collect(thing)
   var n = 0
   for pos, ids in occupants:
     if ids.len < 2: continue
@@ -1567,7 +1567,7 @@ proc place_block(self: Build, position: Vector3, color: Colors) =
 proc save_level_now() =
   serializers.save_level(state.config.level_dir, force = true)
 
-proc reload_unit(self: Build) =
+proc reload_thing(self: Build) =
   self.voxels.clear()
   self.voxels.rebuild_local_edits()
   self.restore_edits()
@@ -1606,14 +1606,14 @@ proc bridge_to_vm*(worker: Worker) =
     exec_instance, capture_start_transform, hit, exit, global, `global=`,
     position, local_position,
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
-    velocity, `velocity=`, active_unit, color, `color=`, sees, start_position,
+    velocity, `velocity=`, active_thing, color, `color=`, sees, start_position,
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, release_action, load_level, level_name,
     world_name,
-    reset_level, current_colliders, added_units, all_players, all_builds,
-    all_bots, all_signs, all_units, signal_test_complete, now_seconds,
-    dump_stats, find_voxel_overlaps, units_in_box, floor_at, clear_box, bounds,
-    overlaps, units_overlapping, box_is_free, bounds_at, adopt, release
+    reset_level, current_colliders, added_things, all_players, all_builds,
+    all_bots, all_signs, all_things, signal_test_complete, now_seconds,
+    dump_stats, find_voxel_overlaps, things_in_box, floor_at, clear_box, bounds,
+    overlaps, things_overlapping, box_is_free, bounds_at, adopt, release
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
@@ -1625,7 +1625,7 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, save, restore, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
-    draw_voxel, save_level_now, reload_unit, box_impl, sphere_impl,
+    draw_voxel, save_level_now, reload_thing, box_impl, sphere_impl,
     cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get
 
   result.bridged_from_vm "builds_private", place_block

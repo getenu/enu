@@ -1,4 +1,4 @@
-# Regression test checker. After all spawners finish, count units. If the
+# Regression test checker. After all spawners finish, count things. If the
 # count exceeds the known-correct baseline, signal failure.
 #
 # Why: this fixture's spawners create a fixed number of clones in their
@@ -11,12 +11,12 @@
 #
 # Tolerance is generous so timing/clone-load skew doesn't flake the test.
 sleep 3.0  # let all spawners complete their .new() calls
-let n = all_units().len
-echo "BULK_SPAWN_CHECK: ", n, " units"
+let n = all_things().len
+echo "BULK_SPAWN_CHECK: ", n, " things"
 const expected = 27
 const max_allowed = expected + 10  # generous tolerance
 if n > max_allowed:
-  echo "FAIL: too many units (", n, " > ", max_allowed, ")"
+  echo "FAIL: too many things (", n, " > ", max_allowed, ")"
   signal_test_complete(1)
 else:
   echo "OK"

@@ -39,7 +39,7 @@ bridged_to_host:
   proc `billboard=`*(self: Sign, value: bool)
 
 proc say*(
-    self: Unit,
+    self: Thing,
     message: string,
     more = "",
     width = float.high,
@@ -47,7 +47,7 @@ proc say*(
     size = int.high,
     billboard = none(bool),
 ): Sign {.discardable.} =
-  ## Show a message on a sign above the unit: `say "Hello!"`. Call it
+  ## Show a message on a sign above the thing: `say "Hello!"`. Call it
   ## again to change the message, or `say ""` to put the sign away.
   ## Markdown works, `more` adds extra text for when the sign is
   ## opened, and `width`/`height`/`size` control the shape if you're

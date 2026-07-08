@@ -6,7 +6,7 @@ import
     voxel_buffer, voxel_server, shader_material, resource_loader, packed_scene,
     ray_cast,
   ]
-import core, models/[units, builds, colors, voxels], gdutils
+import core, models/[things, builds, colors, voxels], gdutils
 import ./queries
 
 const
@@ -86,14 +86,14 @@ gdobj BuildNode of VoxelTerrain:
         # block entering view pulls its chunk data from the server (no-op if
         # already loaded; a miss leaves a per-key subscription behind, so
         # someone building here pops in). The tables are LAZY — they arrive
-        # as empty handles with the unit.
+        # as empty handles with the thing.
         self.model.voxels.packed_chunks.request(chunk_id)
         self.model.voxels.chunk_deltas.request(chunk_id)
         if not self.paging_logged:
           self.paging_logged = true
           # One line per build: paired with "voxel data arriving" below, a
           # build that requests but never receives is visible in the logs.
-          info "voxel paging", unit = self.model.id
+          info "voxel paging", thing = self.model.id
 
       if chunk_id in self.model.voxels.packed_chunks:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
@@ -192,7 +192,7 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         if not self.data_logged:
           self.data_logged = true
-          info "voxel data arriving", unit = self.model.id
+          info "voxel data arriving", thing = self.model.id
         if change.item.key in self.loaded_chunks:
           if ASAP_MODE in self.model.global_flags:
             self.renderer.buffer_snapshot(change.item.key, change.item.value)

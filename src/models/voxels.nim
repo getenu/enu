@@ -285,7 +285,7 @@ proc decode_delta*(
 proc init*(
     _: type VoxelStore,
     ctx: EdContext = nil,
-    unit_id: string = "",
+    thing_id: string = "",
     build: Build = nil,
     edit_snapshots: EdTable[EditKey, SnapshotData] = nil,
     edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]] = nil,
@@ -298,7 +298,7 @@ proc init*(
   let use_ctx = if not ?ctx: Ed.thread_ctx else: ctx
   VoxelStore(
     ctx: use_ctx,
-    unit_id: unit_id,
+    thing_id: thing_id,
     build: build,
     edit_snapshots: edit_snapshots,
     edit_deltas: edit_deltas,
@@ -409,7 +409,7 @@ proc flush_dirty_chunks*(self: VoxelStore) =
     discard
 
 proc flush_edit_snapshot(self: VoxelStore, chunk_id: Vector3) =
-  let key: EditKey = (self.unit_id, chunk_id)
+  let key: EditKey = (self.thing_id, chunk_id)
   let voxels = self.build_edit_state(chunk_id)
   let packed = encode_chunk(voxels)
 
@@ -430,7 +430,7 @@ proc flush_edit_delta(
     chunk_id: Vector3,
     changes: seq[tuple[pos: Vector3, voxel: PackedVoxel]],
 ) =
-  let key: EditKey = (self.unit_id, chunk_id)
+  let key: EditKey = (self.thing_id, chunk_id)
   let delta = encode_delta(changes)
 
   if key notin self.edit_deltas:
@@ -450,7 +450,7 @@ proc flush_dirty_edits*(self: VoxelStore) =
     return
 
   for chunk_id, changes in self.pending_edits:
-    let key: EditKey = (self.unit_id, chunk_id)
+    let key: EditKey = (self.thing_id, chunk_id)
     let has_snapshot = key in self.edit_snapshots
     let delta_count =
       if key in self.edit_deltas:
@@ -567,7 +567,7 @@ proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
 
   if self.ctx.metrics_label == "main" or self.immediate:
     self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
-    let key: EditKey = (self.unit_id, chunk_id)
+    let key: EditKey = (self.thing_id, chunk_id)
     let delta_count =
       if key in self.edit_deltas:
         self.edit_deltas[key].len
@@ -590,7 +590,7 @@ proc del_edit*(self: VoxelStore, position: Vector3) =
     let packed = EMPTY_VOXEL
     if self.ctx.metrics_label == "main" or self.immediate:
       self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
-      let key: EditKey = (self.unit_id, chunk_id)
+      let key: EditKey = (self.thing_id, chunk_id)
       let delta_count =
         if key in self.edit_deltas:
           self.edit_deltas[key].len
@@ -622,7 +622,7 @@ proc rebuild_local_edits*(self: VoxelStore) =
     return
 
   for key, snapshot in self.edit_snapshots:
-    if key.id != self.unit_id:
+    if key.id != self.thing_id:
       continue
     let chunk_id = key.loc
     let voxels = decode_chunk(snapshot)
@@ -640,7 +640,7 @@ proc rebuild_local_edits*(self: VoxelStore) =
     return
 
   for key, delta_seq in self.edit_deltas:
-    if key.id != self.unit_id or not ?delta_seq:
+    if key.id != self.thing_id or not ?delta_seq:
       continue
     let chunk_id = key.loc
     for delta in delta_seq:

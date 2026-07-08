@@ -280,7 +280,7 @@ converter vec3_to_bool*(v: Vector3): bool =
   v != vec3(0, 0, 0)
 
 # WorldBox helpers — axis-aligned world-space bounding box queries.
-# Returned by `bounds()` and consumed by `box_is_free`, `units_overlapping`,
+# Returned by `bounds()` and consumed by `box_is_free`, `things_overlapping`,
 # `overlaps`, etc. See `docs/notes/instance-query-api.md`.
 
 proc size*(b: WorldBox): Vector3 {.inline.} =

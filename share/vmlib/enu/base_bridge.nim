@@ -1,24 +1,24 @@
-## Properties and queries that every unit has, like `position`, `speed`,
+## Properties and queries that every thing has, like `position`, `speed`,
 ## `color` and `scale`. These commands cross over into the Enu engine
 ## itself.
 
 import types, vm_bridge_utils
 
 # NOTE: overridden by ScriptController. Only for tests.
-var current_active_unit: Unit
-proc register_active_impl(self: Unit) =
-  current_active_unit = self
+var current_active_thing: Thing
+proc register_active_impl(self: Thing) =
+  current_active_thing = self
 
-proc active_unit_impl(): Unit =
-  current_active_unit
+proc active_thing_impl(): Thing =
+  current_active_thing
 
-proc register_active*(self: Unit) =
+proc register_active*(self: Thing) =
   register_active_impl(self)
 
-proc active_unit*(): Unit =
-  active_unit_impl()
+proc active_thing*(): Thing =
+  active_thing_impl()
 
-proc sees_impl*(self: Unit, target: Unit, less_than = 100.0): bool =
+proc sees_impl*(self: Thing, target: Thing, less_than = 100.0): bool =
   discard
 
 bridged_to_host:
@@ -26,78 +26,78 @@ bridged_to_host:
     ## Seconds since Enu started. `now()` is usually nicer.
 
   proc write_stack_trace*()
-  proc id*(self: Unit): string
-    ## The unit's name, like "bot_1729". Every unit has a different one.
+  proc id*(self: Thing): string
+    ## The thing's name, like "bot_1729". Every thing has a different one.
 
-  proc position*(self: Unit): Vector3
-    ## Where the unit is. Assign to it to teleport:
+  proc position*(self: Thing): Vector3
+    ## Where the thing is. Assign to it to teleport:
     ## `position = player.position` (zap!).
 
-  proc local_position*(self: Unit): Vector3
-    ## Where the unit is compared to its parent, instead of the world.
+  proc local_position*(self: Thing): Vector3
+    ## Where the thing is compared to its parent, instead of the world.
 
-  proc start_position*(self: Unit): Vector3
-    ## Where the unit starts when the level loads. Assigning moves the
+  proc start_position*(self: Thing): Vector3
+    ## Where the thing starts when the level loads. Assigning moves the
     ## start point, and that sticks around after a reload.
 
-  proc speed*(self: Unit): float
-    ## How fast the unit moves or builds. `1` is normal, bigger is
+  proc speed*(self: Thing): float
+    ## How fast the thing moves or builds. `1` is normal, bigger is
     ## faster, and `0` means "all at once" for building.
 
-  proc `speed=`*(self: Unit, speed: float)
-  proc scale*(self: Unit): float
-    ## How big the unit is. `1` is normal size, `2` is double, `0.5` is
+  proc `speed=`*(self: Thing, speed: float)
+  proc scale*(self: Thing): float
+    ## How big the thing is. `1` is normal size, `2` is double, `0.5` is
     ## half. Careful going tiny — it's easy to lose things.
 
-  proc `scale=`*(self: Unit, scale: float)
-  proc glow*(self: Unit): float
-    ## How much the unit glows. `0` is no glow; crank it up to make
+  proc `scale=`*(self: Thing, scale: float)
+  proc glow*(self: Thing): float
+    ## How much the thing glows. `0` is no glow; crank it up to make
     ## something impossible to miss.
 
-  proc `glow=`*(self: Unit, energy: float)
-  proc global*(self: Unit): bool
-    ## Whether the unit lives in world space (`true`) or moves around
+  proc `glow=`*(self: Thing, energy: float)
+  proc global*(self: Thing): bool
+    ## Whether the thing lives in world space (`true`) or moves around
     ## with its parent (`false`).
 
-  proc `global=`*(self: Unit, global: bool)
-  proc rotation*(self: Unit): float
-    ## Which way the unit is facing, in degrees. Assign to spin it
+  proc `global=`*(self: Thing, global: bool)
+  proc rotation*(self: Thing): float
+    ## Which way the thing is facing, in degrees. Assign to spin it
     ## around: `rotation = 180` does an about-face.
 
-  proc `rotation=`*(self: Unit, degrees: float)
-  proc hit*(self: Unit, node: Unit): bool
-  proc `velocity=`*(self: Unit, velocity: Vector3)
-  proc velocity*(self: Unit): Vector3
-    ## How fast (and which way) the unit is moving right now.
+  proc `rotation=`*(self: Thing, degrees: float)
+  proc hit*(self: Thing, node: Thing): bool
+  proc `velocity=`*(self: Thing, velocity: Vector3)
+  proc velocity*(self: Thing): Vector3
+    ## How fast (and which way) the thing is moving right now.
 
-  proc color*(self: Unit): Colors
-    ## The unit's color. For a Build this is the drawing color — blocks
+  proc color*(self: Thing): Colors
+    ## The thing's color. For a Build this is the drawing color — blocks
     ## you draw after changing it use the new color.
 
-  proc `color=`*(self: Unit, color: Colors)
-  proc show*(self: Unit): bool
-    ## Whether the unit is visible. `show = false` makes it vanish.
+  proc `color=`*(self: Thing, color: Colors)
+  proc show*(self: Thing): bool
+    ## Whether the thing is visible. `show = false` makes it vanish.
     ## It's still there. It's just being sneaky.
 
-  proc `show=`*(self: Unit, value: bool)
-  proc frame_created*(self: Unit): int
-    ## The frame number when the unit was created.
+  proc `show=`*(self: Thing, value: bool)
+  proc frame_created*(self: Thing): int
+    ## The frame number when the thing was created.
 
-  proc lock*(self: Unit): bool
-    ## Locked units can't be edited in the world with the mouse. Good
+  proc lock*(self: Thing): bool
+    ## Locked things can't be edited in the world with the mouse. Good
     ## for finished builds you don't want to nudge by accident.
 
-  proc `lock=`*(self: Unit, value: bool)
-  proc reset*(self: Unit, clear = false)
-    ## Send the unit back to its start position, rotation and scale.
+  proc `lock=`*(self: Thing, value: bool)
+  proc reset*(self: Thing, clear = false)
+    ## Send the thing back to its start position, rotation and scale.
     ## With `clear = true`, a Build also forgets its drawn blocks.
 
-  proc adopt*(self: Unit, unit: Unit)
-    ## Make another unit this unit's child, so it moves when this one
+  proc adopt*(self: Thing, thing: Thing)
+    ## Make another thing this thing's child, so it moves when this one
     ## moves.
 
-  proc release*(self: Unit)
-    ## Let a child unit go free. The opposite of `adopt`.
+  proc release*(self: Thing)
+    ## Let a child thing go free. The opposite of `adopt`.
 
   proc press_action*(name: string)
     ## Pretend a button was pressed, like "jump". `release_action`
@@ -116,7 +116,7 @@ bridged_to_host:
   proc world_name*(): string
     ## The name of the current world.
 
-  proc current_colliders*(self: Unit, name: string): seq[Unit]
+  proc current_colliders*(self: Thing, name: string): seq[Thing]
   proc all_builds*(): seq[Build]
     ## Every build in the world. `Build.all` is the fancier way.
 
@@ -129,14 +129,14 @@ bridged_to_host:
   proc all_players*(): seq[Player]
     ## Everyone playing right now.
 
-  proc all_units*(): seq[Unit]
-    ## Every unit in the world — builds, bots, signs and players.
+  proc all_things*(): seq[Thing]
+    ## Every thing in the world — builds, bots, signs and players.
 
   proc find_voxel_overlaps*(limit: int = 50): string
-  proc units_in_box*(
+  proc things_in_box*(
     x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
-  ): seq[Unit]
-    ## Every unit inside the box between two corners.
+  ): seq[Thing]
+    ## Every thing inside the box between two corners.
 
   proc floor_at*(x: float, z: float): int
     ## The height of the ground at a spot — the y of the highest solid
@@ -147,14 +147,14 @@ bridged_to_host:
   ): bool
     ## Erase every block inside the box between two corners.
 
-  proc bounds*(self: Unit): WorldBox
-    ## The invisible box around the unit and everything it's made of.
+  proc bounds*(self: Thing): WorldBox
+    ## The invisible box around the thing and everything it's made of.
 
-  proc overlaps*(a: Unit, b: Unit): bool
-    ## `true` if two units' boxes overlap.
+  proc overlaps*(a: Thing, b: Thing): bool
+    ## `true` if two things' boxes overlap.
 
-  proc units_overlapping*(box: WorldBox): seq[Unit]
-    ## Every unit whose box overlaps this one.
+  proc things_overlapping*(box: WorldBox): seq[Thing]
+    ## Every thing whose box overlaps this one.
 
   proc box_is_free*(box: WorldBox): bool
     ## `true` if nothing is in the box — handy for checking a spot
@@ -166,16 +166,16 @@ bridged_to_host:
     ## The box this build *would* take up at a different position,
     ## rotation or scale. Check before you leap.
 
-  proc added_units*(): seq[Unit]
-  proc register_template_node*(self: Unit, name: string)
+  proc added_things*(): seq[Thing]
+  proc register_template_node*(self: Thing, name: string)
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)
   proc exit*(exit_code = 0, msg = "")
-  proc new_instance*(src, dest: Unit)
-  proc exec_instance*(self: Unit)
-  proc capture_start_transform*(self: Unit)
-  proc wake*(self: Unit)
-  proc create_new*(self: Unit)
+  proc new_instance*(src, dest: Thing)
+  proc exec_instance*(self: Thing)
+  proc capture_start_transform*(self: Thing)
+  proc wake*(self: Thing)
+  proc create_new*(self: Thing)
   proc frame_count*(): int
   proc signal_test_complete*(exit_code: int)

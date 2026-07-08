@@ -4,7 +4,7 @@ import
     viewport_container, viewport, camera, mesh_instance, surface_tool,
     array_mesh, mesh, spatial_material, spatial, environment,
   ]
-import core, models/[units, builds, colors]
+import core, models/[things, builds, colors]
 
 # The turtle indicator: a three-line arrow — shaft plus two barbs — from the
 # centre of the draw cell along the draw heading, rigidly attached to the
@@ -135,8 +135,8 @@ gdobj TurtleOverlay of ViewportContainer:
       self.overlay.size = self.rect_size
 
     var show = false
-    let unit = state.open_unit
-    if ?unit and unit of Build and ?unit.node:
+    let thing = state.open_thing
+    if ?thing and thing of Build and ?thing.node:
       let world_camera = self.world_viewport.get_camera()
       if ?world_camera:
         show = true
@@ -145,7 +145,7 @@ gdobj TurtleOverlay of ViewportContainer:
         self.camera.far = world_camera.far
         self.camera.global_transform = world_camera.global_transform
         self.arrow.global_transform =
-          unit.node.global_transform *
-          arrow_transform(Build(unit).turtle_transform)
+          thing.node.global_transform *
+          arrow_transform(Build(thing).turtle_transform)
     self.arrow.visible = show
     self.visible = show

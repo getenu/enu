@@ -10,10 +10,10 @@ bridged_to_host:
     ## reload.
 
 proc fill_square*(length = 1) =
-  Build(active_unit()).fill_square(length)
+  Build(active_thing()).fill_square(length)
 
 proc save*(name = "default") =
-  Build(active_unit()).save(name)
+  Build(active_thing()).save(name)
 
 proc restore*(name = "default") =
-  Build(active_unit()).restore(name)
+  Build(active_thing()).restore(name)

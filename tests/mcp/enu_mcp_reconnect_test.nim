@@ -139,7 +139,7 @@ proc run_reconnect_tests*() =
     # to contain the requestId, so a bare `"1" in r1` would pass on an
     # error). Full args make this verify eval execution, not just a reply.
     let r1 = s.do_call_tool(
-      "eval", %*{"code": "1", "top_level": false, "unit_id": ""}
+      "eval", %*{"code": "1", "top_level": false, "thing_id": ""}
     )
     check r1 == "1", "initial eval failed: " & r1
 
@@ -148,7 +148,7 @@ proc run_reconnect_tests*() =
     sleep 15_000
 
     let r2 = s.do_call_tool(
-      "eval", %*{"code": "2", "top_level": false, "unit_id": ""},
+      "eval", %*{"code": "2", "top_level": false, "thing_id": ""},
       timeout_ms = 30_000,
     )
     check r2 == "2", "post-timeout eval failed: " & r2
@@ -216,7 +216,7 @@ proc run_reconnect_tests*() =
     else:
       let r = s.do_call_tool(
         "eval",
-        %*{"code": "1", "top_level": false, "unit_id": ""},
+        %*{"code": "1", "top_level": false, "thing_id": ""},
         timeout_ms = 15_000,
       )
       check not r.starts_with("Error"), "iter " & $i & " eval: " & r

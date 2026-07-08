@@ -32,10 +32,10 @@ different each time a script is executed. However, sometimes you want randomness
 to create variety, but want the same values to be chosen each time a script is
 run. This is especially important when using randomness in a `Build` that you
 plan to manually edit later. To ensure the same values are selected each time a
-script is run, set the unit's `seed` property to some integer of your choosing,
+script is run, set the thing's `seed` property to some integer of your choosing,
 ie `seed = 12345` or `me.seed = 54321`.
 
-Any child units instanced by a unit with a seed value will get the same seed by
+Any child things instanced by a thing with a seed value will get the same seed by
 default. However, it will still get a unique random number generator, so
 changing the script for a child object won't impact the random numbers selected
 by the parent.

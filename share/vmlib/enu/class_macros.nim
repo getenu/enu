@@ -90,7 +90,7 @@ proc build_ctors(
     assert not instance.is_nil
 
     result = `type_name`()
-    result.seed = active_unit().seed
+    result.seed = active_thing().seed
     new_instance(instance, result)
 
   for param in params:
@@ -264,7 +264,7 @@ proc visit_tree(
       visit_tree(node, convert, receiver, alias)
 
 # Converts variable access to property access. Ex. `speed = 1` -> `me.speed = 1`
-# Anything for `enu_target` must work for all units. `me` can be class specific.
+# Anything for `enu_target` must work for all things. `me` can be class specific.
 # This tries to take aliasing into account. If a variable called `speed` is
 # created, anywhere it's in scope won't get `me` prefixed.
 proc auto_insert_receiver(
@@ -350,7 +350,7 @@ macro load_enu_script*(
   result.add script_start
   let run_script_def = quote do:
     proc run_script*(me {.inject.}: me.type, is_instance {.inject.}: bool) =
-      var enu_target {.inject.}: Unit = me
+      var enu_target {.inject.}: Thing = me
       let home {.inject.} = PositionOffset(position: me.local_position)
       var move_mode {.inject.} = 1
       include loops

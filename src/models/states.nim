@@ -155,14 +155,14 @@ proc init*(_: type GameState): GameState =
     player_value: EdValue[Player].init(flags = flags),
     local_flags: EdSet[LocalStateFlags].init(flags = flags),
     global_flags: EdSet[GlobalStateFlags].init(id = "state_global_flags"),
-    units: EdSeq[Unit].init(
-      # OWNS_MEMBERS (ownerless): nothing cascades into root units, but ed
-      # indexes the members so partial subscribers get each unit's ownership
+    things: EdSeq[Thing].init(
+      # OWNS_MEMBERS (ownerless): nothing cascades into root things, but ed
+      # indexes the members so partial subscribers get each thing's ownership
       # closure pushed ahead of the collection (husk-free parse).
-      id = "root_units",
+      id = "root_things",
       flags = DEFAULT_FLAGS + {OWNS_MEMBERS},
     ),
-    open_unit_value: EdValue[Unit].init(flags = flags),
+    open_thing_value: EdValue[Thing].init(flags = flags),
     config_value: EdValue[Config].init(flags = flags, id = "config"),
     tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
     tools: Ed.init({CODE_MODE .. PLACE_BOT}, flags = {SYNC_LOCAL, SYNC_REMOTE}),
@@ -187,7 +187,7 @@ proc init*(_: type GameState): GameState =
   self.init_logger
 
   result = self
-  self.open_unit_value.changes:
+  self.open_thing_value.changes:
     if added and change.item != nil:
       self.push_flags EDITOR_VISIBLE, EDITOR_OPENING
     elif added:
@@ -275,7 +275,7 @@ when is_main_module:
   state.push_flag MOUSE_CAPTURED
   assert MOUSE_CAPTURED in state.local_flags
 
-  state.open_unit = Unit()
+  state.open_thing = Thing()
   assert MOUSE_CAPTURED notin state.local_flags
 
   state.push_flag COMMAND_MODE
@@ -284,7 +284,7 @@ when is_main_module:
   state.pop_flag MOUSE_CAPTURED
   assert MOUSE_CAPTURED in state.local_flags
 
-  state.open_unit = nil
+  state.open_thing = nil
   assert MOUSE_CAPTURED in state.local_flags
 
   state.pop_flag COMMAND_MODE

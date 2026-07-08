@@ -1,6 +1,6 @@
 # Writing Commands
 
-A command is a piece of code that can be run to control a unit or to get
+A command is a piece of code that can be run to control a thing or to get
 information about the world. Enu has many built in commands like `forward`,
 `back`, `left`, and `right`, and it's easy to add your own.
 

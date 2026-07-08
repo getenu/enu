@@ -3,12 +3,12 @@ import godotapi/spatial
 from pkg/core/godotcoretypes import Basis
 import core, models/[states, colors], libs/interpreters
 
-proc fix_parents*(self: Unit, parent: Unit) =
+proc fix_parents*(self: Thing, parent: Thing) =
   self.parent = parent
-  for unit in self.units:
-    unit.fix_parents(self)
+  for thing in self.things:
+    thing.fix_parents(self)
 
-proc init_shared*(self: Unit) =
+proc init_shared*(self: Thing) =
   assert ?self.shared_value
   if ?self.parent:
     self.shared = self.parent.shared
@@ -22,7 +22,7 @@ proc init_shared*(self: Unit) =
     elif self.shared_value.loaded:
       # Construction: the root mints its tree's `Shared`, owns the edit tables
       # under it, and *publishes* it so the singleton syncs everywhere.
-      debug "init_shared minting fresh shared", unit = self.id
+      debug "init_shared minting fresh shared", thing = self.id
       var shared = Shared(id: generate_id())
       shared.id.own:
         shared.init_ed_fields
@@ -38,12 +38,12 @@ proc init_shared*(self: Unit) =
       # it owns — down everywhere, no synced ownership state required.
       Ed.thread_ctx.set_owner(self.shared, self.id)
 
-proc init_unit*[T: Unit](self: T, shared = true) =
+proc init_thing*[T: Thing](self: T, shared = true) =
   self.lifetime = new_lifetime()
   with self:
     # OWNS_MEMBERS: children belong to us — membership drives ed's owned index,
     # so our destroy cascades into them (and removal un-registers them).
-    units = EdSeq[Unit].init(flags = DEFAULT_FLAGS + {OWNS_MEMBERS})
+    things = EdSeq[Thing].init(flags = DEFAULT_FLAGS + {OWNS_MEMBERS})
     transform_value = ed(self.start_transform)
     global_flags = EdSet[GlobalModelFlags].init()
     local_flags = EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL})
@@ -62,8 +62,8 @@ proc init_unit*[T: Unit](self: T, shared = true) =
     anchor_value = ed(Transform.init)
     rendered_voxel_count_value = ed(0)
     pending_block_updates_value = ed(0)
-    query_value = EdValue[UnitQuery].init(UnitQuery())
-    # Stamp the creating context (init_unit only runs on the creating side;
+    query_value = EdValue[ThingQuery].init(ThingQuery())
+    # Stamp the creating context (init_thing only runs on the creating side;
     # synced replicas are reconstructed via parse), synced remote+local.
     owner_ctx_value = ed(Ed.thread_ctx.id)
 
@@ -71,15 +71,15 @@ proc init_unit*[T: Unit](self: T, shared = true) =
   self.global_flags += VISIBLE
   self.global_flags += DIRTY
 
-proc sync_ready*(self: Unit): bool =
+proc sync_ready*(self: Thing): bool =
   ## Ready to join the scene: the core containers hold real data. Locally
-  ## created units always are; on a narrow (non-deep) partial replica they
+  ## created things always are; on a narrow (non-deep) partial replica they
   ## arrive as placeholders and fill once the deep fetch lands. SYNC_LOCAL
   ## fields never fill on replicas, so only scene-critical synced fields are
   ## checked.
   result = self.global_flags.loaded and self.transform_value.loaded and
     self.shared_value.loaded
-  # A parented unit inherits `shared` from its parent (init_shared copies it).
+  # A parented thing inherits `shared` from its parent (init_shared copies it).
   # On a replica the parent can join after us; joining now would copy a nil
   # `shared` and crash in init_voxels_if_needed. Wait for the parent to resolve
   # its own `shared` first. Parent chains bottom out at a root that mints or
@@ -87,26 +87,26 @@ proc sync_ready*(self: Unit): bool =
   if result and ?self.parent:
     result = ?self.parent.shared
 
-proc pivot_local*(self: Unit): Vector3 =
-  ## The unit's anchor pivot in parent-local coords (or world coords if
-  ## the unit is GLOBAL). Defaults to `transform.origin` when no anchor
+proc pivot_local*(self: Thing): Vector3 =
+  ## The thing's anchor pivot in parent-local coords (or world coords if
+  ## the thing is GLOBAL). Defaults to `transform.origin` when no anchor
   ## has been set, since the anchor's identity Transform has origin = 0.
   self.transform.origin + self.transform.basis.xform(self.anchor.origin)
 
-proc pivot_basis*(self: Unit): Basis =
-  ## The basis the unit is "rotated to" from the user's perspective —
+proc pivot_basis*(self: Thing): Basis =
+  ## The basis the thing is "rotated to" from the user's perspective —
   ## i.e. the basis at the anchor pivot. Composes the stored transform
   ## basis with the anchor's basis offset.
   self.transform.basis * self.anchor.basis
 
-proc set_pivot_local*(self: Unit, pivot_in_parent_local: Vector3) =
-  ## Reposition the unit so its anchor pivot lands at the given
+proc set_pivot_local*(self: Thing, pivot_in_parent_local: Vector3) =
+  ## Reposition the thing so its anchor pivot lands at the given
   ## parent-local coord. Leaves rotation/scale alone.
   self.transform_value.origin =
     pivot_in_parent_local - self.transform.basis.xform(self.anchor.origin)
 
-proc set_pivot_basis*(self: Unit, new_pivot_basis: Basis) =
-  ## Re-orient the unit so the anchor pivot adopts the given basis,
+proc set_pivot_basis*(self: Thing, new_pivot_basis: Basis) =
+  ## Re-orient the thing so the anchor pivot adopts the given basis,
   ## keeping the pivot's parent-local position fixed.
   let pivot = self.pivot_local
   let new_basis = new_pivot_basis * self.anchor.basis.inverse
@@ -115,13 +115,13 @@ proc set_pivot_basis*(self: Unit, new_pivot_basis: Basis) =
   t.origin = pivot - new_basis.xform(self.anchor.origin)
   self.transform = t
 
-proc position*(self: Unit): Vector3 =
+proc position*(self: Thing): Vector3 =
   if GLOBAL in self.global_flags:
     self.pivot_local
   else:
     self.pivot_local.global_from(self.parent)
 
-proc rotation*(self: Unit): float =
+proc rotation*(self: Thing): float =
   ## Yaw in degrees. Players track yaw directly; everyone else derives it
   ## from the anchor-pivot basis.
   if self of Player:
@@ -142,24 +142,24 @@ proc rotation*(self: Unit): float =
       degrees += 360.0
     result = degrees
 
-proc move_to*(self: Unit, pos: Vector3, yaw_deg = 0.0) =
-  ## Set the unit's position and yaw (no pitch).
+proc move_to*(self: Thing, pos: Vector3, yaw_deg = 0.0) =
+  ## Set the thing's position and yaw (no pitch).
   self.transform = Transform.init(pos, yaw_deg)
   if self of Player:
     Player(self).rotation = yaw_deg
 
-proc `position=`*(self: Unit, pos: Vector3) =
-  ## Move the unit to `pos`, keeping its orientation. Pairs with `position`.
+proc `position=`*(self: Thing, pos: Vector3) =
+  ## Move the thing to `pos`, keeping its orientation. Pairs with `position`.
   self.transform_value.origin = pos
 
-proc `rotation=`*(self: Unit, degrees: float) =
-  ## Set the unit's yaw in degrees, keeping its position. Pairs with `rotation`.
+proc `rotation=`*(self: Thing, degrees: float) =
+  ## Set the thing's yaw in degrees, keeping its position. Pairs with `rotation`.
   self.transform_value.basis = yaw_basis(degrees)
   if self of Player:
     Player(self).rotation = degrees
 
-proc look_at*(self: Unit, target: Vector3) =
-  ## Aim the unit at `target` from its current position — yaw plus
+proc look_at*(self: Thing, target: Vector3) =
+  ## Aim the thing at `target` from its current position — yaw plus
   ## up/down pitch, like godot's `Spatial.look_at`. Builds the look basis
   ## directly (forward / right / up) so off-axis angles don't roll the
   ## horizon.
@@ -205,10 +205,10 @@ proc frame*(
   (pos, rad_to_deg(arctan2(float(dir.x), -float(dir.z))))
 
 proc step_toward*(
-    self: Unit, pos: Vector3, yaw: float, max_dist, max_degrees: float
+    self: Thing, pos: Vector3, yaw: float, max_dist, max_degrees: float
 ): bool =
   ## Advance one bounded step toward a goal pose — at most `max_dist`
-  ## units and `max_degrees` of yaw, taking the short way around. True on
+  ## things and `max_degrees` of yaw, taking the short way around. True on
   ## the step that arrives, so a caller can step once per frame until done.
   let
     origin = self.transform.origin
@@ -221,42 +221,42 @@ proc step_toward*(
   arrived and abs(turn) <= max_degrees
 
 template get_or_init*[T](
-    units: EdSeq[Unit], _: typedesc[T], unit_id: string, init: untyped
+    things: EdSeq[Thing], _: typedesc[T], thing_id: string, init: untyped
 ): T =
-  ## The unit with `unit_id` in `units`, or `init` evaluated and added —
-  ## Ruby's `||=` for a unit collection.
+  ## The thing with `thing_id` in `things`, or `init` evaluated and added —
+  ## Ruby's `||=` for a thing collection.
   block:
     var found: T
-    for u in units:
-      if u.id == unit_id and u of T:
+    for u in things:
+      if u.id == thing_id and u of T:
         found = T(u)
         break
     if found.is_nil:
       found = init
-      units.add found
+      things.add found
     found
 
-proc query*(self: Unit, q: UnitQuery): EdValue[UnitQuery] =
-  ## File a cross-context query against this unit and return the slot its
+proc query*(self: Thing, q: ThingQuery): EdValue[ThingQuery] =
+  ## File a cross-context query against this thing and return the slot its
   ## answer arrives in — watch for `state == DONE`. Whichever context owns
-  ## the unit's behavior answers (today: the server, for ephemeral bots).
+  ## the thing's behavior answers (today: the server, for ephemeral bots).
   var pending = q
   pending.state = PENDING
   self.query = pending
   self.query_value
 
 proc query*(
-    self: Unit,
-    kind: UnitQueryKind,
+    self: Thing,
+    kind: ThingQueryKind,
     code = "",
     top_level = false,
-    unit_id = "",
-): EdValue[UnitQuery] =
-  self.query UnitQuery(
-    kind: kind, code: code, top_level: top_level, unit_id: unit_id
+    thing_id = "",
+): EdValue[ThingQuery] =
+  self.query ThingQuery(
+    kind: kind, code: code, top_level: top_level, thing_id: thing_id
   )
 
-proc find_root*(self: Unit, all_clones = false): Unit =
+proc find_root*(self: Thing, all_clones = false): Thing =
   result = self
   var parent = self.parent
 
@@ -269,61 +269,61 @@ proc find_root*(self: Unit, all_clones = false): Unit =
     else:
       parent = parent.parent
 
-proc walk_tree*(units: seq[Unit], callback: proc(unit: Unit) {.gcsafe.}) =
-  for unit in units:
-    walk_tree(unit.units.value, callback)
-    callback(unit)
+proc walk_tree*(things: seq[Thing], callback: proc(thing: Thing) {.gcsafe.}) =
+  for thing in things:
+    walk_tree(thing.things.value, callback)
+    callback(thing)
 
-proc walk_tree*(root: Unit, callback: proc(unit: Unit) {.gcsafe.}) =
+proc walk_tree*(root: Thing, callback: proc(thing: Thing) {.gcsafe.}) =
   walk_tree(@[root], callback)
 
-proc data_dir*(self: Unit): string =
-  ## Always top-level: a unit's on-disk data lives at `config.data_dir/<id>/`
-  ## regardless of in-memory nesting (adopt, instances). Reparenting a unit
-  ## never moves its files, and the file watcher finds every unit at a stable,
-  ## flat path — so an adopted (nested) unit isn't mistaken for a deleted one.
+proc data_dir*(self: Thing): string =
+  ## Always top-level: a thing's on-disk data lives at `config.data_dir/<id>/`
+  ## regardless of in-memory nesting (adopt, instances). Reparenting a thing
+  ## never moves its files, and the file watcher finds every thing at a stable,
+  ## flat path — so an adopted (nested) thing isn't mistaken for a deleted one.
   state.config.data_dir / self.id
 
-proc data_file*(self: Unit): string =
+proc data_file*(self: Thing): string =
   self.data_dir / self.id & ".json"
 
-method main_thread_joined*(self: Unit) {.base, gcsafe.} =
+method main_thread_joined*(self: Thing) {.base, gcsafe.} =
   discard
 
-method worker_thread_joined*(self: Unit, worker: Worker) {.base, gcsafe.} =
+method worker_thread_joined*(self: Thing, worker: Worker) {.base, gcsafe.} =
   discard
 
-method batch_changes*(self: Unit): bool {.base, gcsafe.} =
+method batch_changes*(self: Thing): bool {.base, gcsafe.} =
   discard
 
-method apply_changes*(self: Unit) {.base, gcsafe.} =
+method apply_changes*(self: Thing) {.base, gcsafe.} =
   discard
 
 method on_begin_move*(
-    self: Unit, direction: Vector3, steps: float, move_mode: int
+    self: Thing, direction: Vector3, steps: float, move_mode: int
 ): Callback {.base, gcsafe.} =
   fail "override me"
 
 method on_begin_turn*(
-    self: Unit, direction: Vector3, degrees: float, lean: bool, move_mode: int
+    self: Thing, direction: Vector3, degrees: float, lean: bool, move_mode: int
 ): Callback {.base, gcsafe.} =
   fail "override me"
 
-method clone*(self: Unit, clone_to: Unit, id: string): Unit {.base, gcsafe.} =
+method clone*(self: Thing, clone_to: Thing, id: string): Thing {.base, gcsafe.} =
   fail "override me"
 
-method code_template*(self: Unit, imports: string): string {.base, gcsafe.} =
+method code_template*(self: Thing, imports: string): string {.base, gcsafe.} =
   read_file self.script_ctx.script
 
-method reset*(self: Unit) {.base, gcsafe.} =
+method reset*(self: Thing) {.base, gcsafe.} =
   discard
 
-method collect_garbage*(self: Unit) {.base, gcsafe.} =
+method collect_garbage*(self: Thing) {.base, gcsafe.} =
   # Edit garbage collection now happens via the packed format
   # The edit_snapshots are re-encoded when changes are made
   discard
 
-method ensure_visible*(self: Unit) {.base, gcsafe.} =
+method ensure_visible*(self: Thing) {.base, gcsafe.} =
   discard
 
 method on_collision*(
@@ -334,9 +334,9 @@ method on_collision*(
 method off_collision*(self: Model, partner: Model) {.base, gcsafe.} =
   discard
 
-proc reparent_to_root*(self: Unit) =
-  ## Move `self` out of its current parent's `units` into the top-level
-  ## `state.units`, re-rooting its node and restoring its world transform — the
+proc reparent_to_root*(self: Thing) =
+  ## Move `self` out of its current parent's `things` into the top-level
+  ## `state.things`, re-rooting its node and restoring its world transform — the
   ## reverse of `adopt`. Also used to evacuate a non-owned child when its parent
   ## is destroyed. `TRANSFERRING` keeps the collection move from being read as a
   ## delete; it's cleared on the next tick.
@@ -344,18 +344,18 @@ proc reparent_to_root*(self: Unit) =
   if parent.is_nil:
     return
   self.global_flags += TRANSFERRING
-  state.units.add self
-  parent.units -= self
+  state.things.add self
+  parent.things -= self
   self.parent = nil
   self.global_flags += GLOBAL
   # Local -> world through the parent chain's full transforms: an origin-only
-  # sum would restore the position the unit had before the parent ever rotated.
+  # sum would restore the position the thing had before the parent ever rotated.
   self.transform_value.origin = self.transform.origin.world_from(parent)
   after_boop:
     self.global_flags -= TRANSFERRING
 
-method destroy*(self: Unit) {.gcsafe.} =
-  # Override of ed's EdRef base: a Unit must be destroyed through a concrete
+method destroy*(self: Thing) {.gcsafe.} =
+  # Override of ed's EdRef base: a Thing must be destroyed through a concrete
   # subtype's destroy (Bot/Build/Sign/Player), which does enu cleanup and then
   # calls the generic EdRef teardown.
   fail "override me"
@@ -377,10 +377,10 @@ proc destroy_impl*(self: Bot | Build | Sign) =
           if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
             const field_type = $typeof(field)
             error "unowned Ed field at destroy (missing id.own:/own:?)",
-              unit = self.id, field_id = fid, field_type
+              thing = self.id, field_id = fid, field_type
 
-  if state.open_unit == self:
-    state.open_unit = nil
+  if state.open_thing == self:
+    state.open_thing = nil
 
   when self is Sign:
     if state.open_sign_value.valid and state.open_sign == self:
@@ -389,23 +389,23 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   # Unlink from the parent (syncs REMOVED). parent is a {.cursor.} — no cycle to
   # break by nil-ing it, and ORC owns the memory now.
   if ?self.parent:
-    self.parent.units.pause:
-      self.parent.units -= self
+    self.parent.things.pause:
+      self.parent.things -= self
 
   # Everything else is ownership: the EdRef teardown finishes our lifetime
-  # (callbacks) and destroys all we own — our containers, the child units (the
-  # OWNS_MEMBERS `units` collection cascades through their destroy), and, on
+  # (callbacks) and destroys all we own — our containers, the child things (the
+  # OWNS_MEMBERS `things` collection cascades through their destroy), and, on
   # the root, the shared voxel-edit tables (created in our `id.own:` scope).
   proc_call EdRef(self).destroy()
 
-proc clear_all*(units: EdSeq[Unit]) =
-  var roots = units.value
-  for unit in roots:
-    # EPHEMERAL units (the human's Player + client-owned bots like MCP)
+proc clear_all*(things: EdSeq[Thing]) =
+  var roots = things.value
+  for thing in roots:
+    # EPHEMERAL things (the human's Player + client-owned bots like MCP)
     # survive level reloads. Their lifecycle belongs to the owning
     # remote context, not the loaded level.
-    if EPHEMERAL in unit.global_flags:
+    if EPHEMERAL in thing.global_flags:
       continue
-    unit.walk_tree proc(unit: Unit) =
-      unit.units.clear
-    units -= unit
+    thing.walk_tree proc(thing: Thing) =
+      thing.things.clear
+    things -= thing

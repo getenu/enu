@@ -116,7 +116,7 @@ proc setup_mock_functions(interp: Interpreter) =
     proc(args: VmArgs) =
       args.set_result(BiggestInt(0))
 
-  # Note: register_active_impl is NOT mocked - let the stub set current_active_unit
+  # Note: register_active_impl is NOT mocked - let the stub set current_active_thing
 
   # Mock get_last_error for error checking - returns ErrorData tuple (id: int, msg: string)
   interp.implement_routine pkg,

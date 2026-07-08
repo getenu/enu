@@ -132,7 +132,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     self.voxels.rebuild_local_edits()
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
-  # `start_color` is always written (the shared unit serializer), but tolerate
+  # `start_color` is always written (the shared thing serializer), but tolerate
   # hand-authored or ancient files that lack it.
   let color =
     if "start_color" in json:
@@ -167,11 +167,11 @@ proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
 
 proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
   ## Serialize edit_snapshots to JSON format for backwards compatibility
-  # Group edits by unit_id
-  var by_unit: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
+  # Group edits by thing_id
+  var by_thing: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
 
   for key, packed in edit_snapshots.value:
-    let unit_id = key.id
+    let thing_id = key.id
     let chunk_id = key.loc
 
     let decoded = decode_chunk(packed)
@@ -187,20 +187,20 @@ proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
           chunk_id.z * ChunkDim + local_pos.z,
         )
         let info = (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
-        if unit_id notin by_unit:
-          by_unit[unit_id] = @[]
-        by_unit[unit_id].add((world_pos, info))
+        if thing_id notin by_thing:
+          by_thing[thing_id] = @[]
+        by_thing[thing_id].add((world_pos, info))
 
   # Format output
   let edits = collect:
-    for unit_id, voxels in by_unit:
+    for thing_id, voxels in by_thing:
       let json = voxels.map_it($(it.pos, it.info))
       if json.len > 0:
         let elements = json.join(",\n").indent(2)
-        \"\"{unit_id}\": [\n{elements}\n]"
+        \"\"{thing_id}\": [\n{elements}\n]"
   result = edits.join(",\n")
 
-proc `$`(self: Unit): string =
+proc `$`(self: Thing): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
@@ -221,25 +221,25 @@ proc `$`(self: Unit): string =
 }}
     """
 
-proc save*(unit: Unit) =
-  if not ?unit.clone_of:
-    if unit of Build:
-      Build(unit).voxels.flush_edits_for_save()
+proc save*(thing: Thing) =
+  if not ?thing.clone_of:
+    if thing of Build:
+      Build(thing).voxels.flush_edits_for_save()
 
     let data =
-      if unit of Build or unit of Bot:
-        $unit
+      if thing of Build or thing of Bot:
+        $thing
       else:
         return
-    # Units are marked DIRTY at init, so freshly-deserialized units get
+    # Things are marked DIRTY at init, so freshly-deserialized things get
     # re-saved verbatim on the next save_level; write_file_if_changed keeps
     # that from bumping the mtime and reload-looping another instance
     # watching the same level dir.
-    create_dir unit.data_dir
-    write_file_if_changed(unit.data_file, data)
+    create_dir thing.data_dir
+    write_file_if_changed(thing.data_file, data)
 
-    for unit in unit.units:
-      unit.save
+    for thing in thing.things:
+      thing.save
 
 proc topo_sort(
     nodes: seq[string], graph: Table[string, seq[string]]
@@ -272,7 +272,7 @@ proc topo_sort(
 
   result = order
 
-proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
+proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
   let opts = JOptions(allow_missing_keys: true)
   let path = if ?parent: parent.data_dir else: state.config.data_dir
 
@@ -282,15 +282,15 @@ proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
   var script_to_data = initTable[string, int]()
 
   for dir in walk_dirs(path / "*"):
-    let unit_id = dir.split_path.tail
-    let file_name = dir / unit_id & ".json"
+    let thing_id = dir.split_path.tail
+    let file_name = dir / thing_id & ".json"
     if not file_exists(file_name):
       continue
 
     try:
       let data_file = read_file(file_name).parse_json
-      let script_name = unit_id
-      loaded_data.add((unit_id, dir, data_file, script_name))
+      let script_name = thing_id
+      loaded_data.add((thing_id, dir, data_file, script_name))
       # players.nim is loaded separately or always first, so exclude it from
       # the dependency graph sort to avoid circular dependency issues or
       # confusion.
@@ -298,7 +298,7 @@ proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
         sort_nodes.add(script_name)
       script_to_data[script_name] = loaded_data.high
     except Exception as e:
-      error "Failed to read unit file", unit_id, error = e
+      error "Failed to read thing file", thing_id, error = e
 
   var sorted_scripts = load_order
 
@@ -313,41 +313,41 @@ proc load_units*(parent: Unit, load_order: seq[string] = newSeq[string]()) =
       continue
 
     let idx = script_to_data[script_name]
-    let (unit_id, dir, data_file, _) = loaded_data[idx]
+    let (thing_id, dir, data_file, _) = loaded_data[idx]
 
     try:
-      var unit: Unit
-      if unit_id.starts_with("bot_"):
-        unit = data_file.json_to(Bot, opts)
-      elif unit_id.starts_with("build_"):
-        unit = data_file.json_to(Build, opts)
+      var thing: Thing
+      if thing_id.starts_with("bot_"):
+        thing = data_file.json_to(Bot, opts)
+      elif thing_id.starts_with("build_"):
+        thing = data_file.json_to(Build, opts)
       else:
-        # quit "Unknown unit type: " & unit_id
-        error "Unknown unit type", unit_id
+        # quit "Unknown thing type: " & thing_id
+        error "Unknown thing type", thing_id
         continue
 
-      unit.global_flags += SCRIPT_INITIALIZING
+      thing.global_flags += SCRIPT_INITIALIZING
       if parent.is_nil:
-        state.units.add(unit)
+        state.things.add(thing)
       else:
-        parent.units.add(unit)
-      if unit of Build:
-        Build(unit).reset_bounds
-        Build(unit).restore_edits
+        parent.things.add(thing)
+      if thing of Build:
+        Build(thing).reset_bounds
+        Build(thing).restore_edits
 
-      if file_exists(unit.script_ctx.script):
-        unit.code = Code.init(read_file(unit.script_ctx.script))
+      if file_exists(thing.script_ctx.script):
+        thing.code = Code.init(read_file(thing.script_ctx.script))
       else:
-        unit.global_flags -= SCRIPT_INITIALIZING
+        thing.global_flags -= SCRIPT_INITIALIZING
         # A scripted build renders its restored edits when its code loads
         # (change_code -> reset, then end_asap when the script finishes). A
         # build with no script never gets that pass, so do it here: reset()
         # restores+draws into the ASAP buffer, end_asap() flushes it to a mesh.
-        if unit of Build:
-          Build(unit).reset()
-          Build(unit).end_asap()
+        if thing of Build:
+          Build(thing).reset()
+          Build(thing).end_asap()
     except Exception as e:
-      error "Failed to load unit", unit_id, error = e
+      error "Failed to load thing", thing_id, error = e
 
 const
   # Distinctive token present in every managed file's marker, in any format.
@@ -410,7 +410,7 @@ proc save_agent_support(level_dir: string) =
   else:
     debug "Enu MCP binary not found; skipping .mcp.json", path = mcp_bin
   # .claude/ — skills, commands, examples, and MCP auto-approval, managed as a
-  # unit: a single `.enu_managed` marker means Enu owns the whole dir and rewrites
+  # thing: a single `.enu_managed` marker means Enu owns the whole dir and rewrites
   # it wholesale on load; delete the marker to take it over yourself. Skills
   # auto-load from .claude/skills (no plugin/install), commands are namespaced
   # under enu/ (→ /enu:<cmd>), and settings.local.json pre-approves the MCP.
@@ -456,26 +456,26 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
     var graph = initTable[string, seq[string]]()
     var sort_nodes = newSeq[string]()
     var error_nodes = newSeq[string]()
-    for unit in state.units:
-      if EPHEMERAL in unit.global_flags:
+    for thing in state.things:
+      if EPHEMERAL in thing.global_flags:
         continue
-      if unit.script_ctx != nil:
-        let filename = unit.script_ctx.file_name.extract_filename
+      if thing.script_ctx != nil:
+        let filename = thing.script_ctx.file_name.extract_filename
         if filename != "":
           let name =
             if filename.ends_with(".nim"):
               filename[0 .. ^5]
             else:
               filename
-          if unit.errors.value.len > 0:
+          if thing.errors.value.len > 0:
             if name notin error_nodes:
               error_nodes.add(name)
           else:
             if name notin sort_nodes:
               sort_nodes.add(name)
-            if unit.script_ctx.dependencies.len > 0:
+            if thing.script_ctx.dependencies.len > 0:
               var deps: seq[string] = @[]
-              for dep in unit.script_ctx.dependencies:
+              for dep in thing.script_ctx.dependencies:
                 let dep_name = dep.extract_filename
                 deps.add(
                   if dep_name.ends_with(".nim"):
@@ -508,18 +508,18 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       jsonutils.to_json(level).pretty
     save_ide_support(level_dir, sorted_scripts)
 
-    for unit in state.units:
-      if EPHEMERAL in unit.global_flags:
+    for thing in state.things:
+      if EPHEMERAL in thing.global_flags:
         continue
-      if save_all or DIRTY in unit.global_flags:
-        unit.save
-        if ?unit.script_ctx:
+      if save_all or DIRTY in thing.global_flags:
+        thing.save
+        if ?thing.script_ctx:
           try:
-            unit.script_ctx.last_saved_json_mtime =
-              get_last_modification_time(unit.data_file)
+            thing.script_ctx.last_saved_json_mtime =
+              get_last_modification_time(thing.data_file)
           except OSError:
             discard
-        unit.global_flags -= DIRTY
+        thing.global_flags -= DIRTY
   else:
     debug "not server. Skipping save."
 
@@ -578,7 +578,7 @@ proc change_loaded_level*(level, world: string) =
 proc run_state_initializers*(worker: Worker) =
   # Re-establish VM-side globals (players.nim's `player`, etc.) registered via
   # register_state_init. Must run after every interpreter rebuild before any
-  # unit script executes — unit scripts reference `player` at top level.
+  # thing script executes — thing scripts reference `player` at top level.
   let init_proc =
     worker.interpreter.select_routine("initialize_state", "core")
 
@@ -586,9 +586,9 @@ proc run_state_initializers*(worker: Worker) =
     "initialize_state routine not found in core module. " &
       "Ensure core defines and exports initialize_state()."
 
-  # Set player as active unit so VM hooks work correctly during initialization
-  assert worker.active_unit.is_nil, "active_unit should be nil at this point"
-  worker.active_unit = state.player
+  # Set player as active thing so VM hooks work correctly during initialization
+  assert worker.active_thing.is_nil, "active_thing should be nil at this point"
+  worker.active_thing = state.player
   state.player.script_ctx.fuel = script_fuel
 
   try:
@@ -597,13 +597,13 @@ proc run_state_initializers*(worker: Worker) =
   except VMQuit as e:
     state.err(e.msg)
 
-  worker.active_unit = nil
+  worker.active_thing = nil
 
 proc unload_level*(worker: Worker) =
   state.global_flags += LOADING_LEVEL
   state.push_flag LOADING_SCRIPT
   state.pop_flag PLAYING
-  state.units.clear_all
+  state.things.clear_all
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
 
@@ -667,7 +667,7 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   dont_join = true
   worker.retry_failures = true
-  load_units(nil, load_order)
+  load_things(nil, load_order)
 
   worker.retry_failed_scripts()
   worker.retry_failures = false
@@ -676,7 +676,7 @@ proc load_level*(worker: Worker, level_dir: string) =
   # Save after retry so all deps (including those from retried scripts) are captured
   save_level(state.config.level_dir, save_all = true)
 
-  for unit in state.units:
-    unit.global_flags -= DIRTY
+  for thing in state.things:
+    thing.global_flags -= DIRTY
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL

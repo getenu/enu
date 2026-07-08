@@ -25,7 +25,7 @@ bridged_to_host:
     ## Jump the turtle back to a spot remembered with `save`.
 
   proc draw_position*(self: Build): Vector3
-    ## Where the turtle is. Assign a position (or a unit) to teleport
+    ## Where the turtle is. Assign a position (or a thing) to teleport
     ## the turtle there and keep drawing.
 
   proc `draw_position=`*(self: Build, value: Vector3)
@@ -46,7 +46,7 @@ bridged_to_host:
   proc save_level_now*()
     ## Triggers an immediate level save. Used for testing persistence.
 
-  proc reload_unit*(self: Build)
+  proc reload_thing*(self: Build)
     ## Reloads the Build's voxel data from disk without stopping the script.
 
   proc box_impl*(
@@ -85,9 +85,9 @@ bridged_to_host:
 
   proc rendered_voxel_count_get*(self: Build): int
 
-  proc pending_block_updates_get*(self: Unit): int
+  proc pending_block_updates_get*(self: Thing): int
     ## Unfinished voxel pipeline work (queued, in-flight, or awaiting
-    ## apply) for the unit and its descendants. 0 = every submitted edit
+    ## apply) for the thing and its descendants. 0 = every submitted edit
     ## is meshed and visible.
 
   proc advance*(self: Build, steps: float)
@@ -96,7 +96,7 @@ bridged_to_host:
     ## animation, no speed/ASAP interaction. Used by `wall` / `floor`
     ## to leave the turtle at the far end of the shape.
 
-proc pending_block_updates*(self: Unit): int =
+proc pending_block_updates*(self: Thing): int =
   ## How many block changes are still being worked on. `0` means
   ## everything you've drawn is actually on screen.
   pending_block_updates_get(self)
@@ -104,7 +104,7 @@ proc pending_block_updates*(self: Unit): int =
 template asap*(body: untyped) =
   ## Draw everything inside the block instantly, instead of block by
   ## block. Like `speed = ASAP`, but it puts the speed back afterward.
-  let self = Build(active_unit())
+  let self = Build(active_thing())
   let prev_speed = self.speed
   self.speed = ASAP
   try:
@@ -112,8 +112,8 @@ template asap*(body: untyped) =
   finally:
     self.speed = prev_speed
 
-proc `draw_position=`*(self: Build, unit: Unit) =
-  self.draw_position = unit.position
+proc `draw_position=`*(self: Build, thing: Thing) =
+  self.draw_position = thing.position
 
 proc go_home*(self: Build) =
   ## Head back to the start position by going forward, left, and down
@@ -137,14 +137,14 @@ proc place*(self: Build, x, y, z: int, color = self.color) =
   ## turtle. `place 3, 0, 5, red`.
   self.draw_voxel((x.float, y.float, z.float), color)
 
-template place*(x, y, z: int, color = active_unit().color) =
-  Build(active_unit()).place(x, y, z, color)
+template place*(x, y, z: int, color = active_thing().color) =
+  Build(active_thing()).place(x, y, z, color)
 
 # === Turtle-aware shape primitives ==================================
 #
 # `box`, `sphere`, `cylinder` all default to the turtle's current
 # transform; pass `at = vec3(...)` to override with an explicit
-# unit-local coord. `box` additionally accepts `rotation` (around Y)
+# thing-local coord. `box` additionally accepts `rotation` (around Y)
 # and a `pivot` (corner / centre / bottom_centre) when not using the
 # turtle's basis. Default pivots: box = corner (back-bottom-left in
 # turtle-local), sphere = centre, cylinder = centre-of-bottom-face.
@@ -180,7 +180,7 @@ proc box*(
     fill = true,
     pivot: BoxPivot = corner,
 ) =
-  # At an explicit unit-local coord. Optional yaw rotation.
+  # At an explicit thing-local coord. Optional yaw rotation.
   self.box_impl(
     width, height, depth, color, fill, ord(pivot), at, rotation, false
   )
@@ -199,26 +199,26 @@ proc box*(self: Build, at, to: Vector3, color = self.color, fill = true) =
 
 template box*(
     width, height, depth: int,
-    color = active_unit().color,
+    color = active_thing().color,
     fill = true,
     pivot: BoxPivot = corner,
 ) =
-  Build(active_unit()).box(width, height, depth, color, fill, pivot)
+  Build(active_thing()).box(width, height, depth, color, fill, pivot)
 
 template box*(
     width, height, depth: int,
     at: Vector3,
-    color = active_unit().color,
+    color = active_thing().color,
     rotation = 0.0,
     fill = true,
     pivot: BoxPivot = corner,
 ) =
-  Build(active_unit()).box(
+  Build(active_thing()).box(
     width, height, depth, at, color, rotation, fill, pivot
   )
 
-template box*(at, to: Vector3, color = active_unit().color, fill = true) =
-  Build(active_unit()).box(at, to, color, fill)
+template box*(at, to: Vector3, color = active_thing().color, fill = true) =
+  Build(active_thing()).box(at, to, color, fill)
 
 # ---- sphere --------------------------------------------------------
 #
@@ -247,27 +247,27 @@ proc sphere*(
 ) =
   self.sphere(size.float, at, color, fill)
 
-template sphere*(size: int | float, color = active_unit().color, fill = true) =
-  Build(active_unit()).sphere(size, color, fill)
+template sphere*(size: int | float, color = active_thing().color, fill = true) =
+  Build(active_thing()).sphere(size, color, fill)
 
 template sphere*(
-    size: int | float, at: Vector3, color = active_unit().color, fill = true
+    size: int | float, at: Vector3, color = active_thing().color, fill = true
 ) =
-  Build(active_unit()).sphere(size, at, color, fill)
+  Build(active_thing()).sphere(size, at, color, fill)
 
 # ---- ball: kid-friendly alias for sphere ---------------------------
 #
 # `ball 10` reads better than `sphere 10` for young builders. Same
 # args as `sphere`; color defaults to the current turtle color.
 
-template ball*(size: int | float, color = active_unit().color, fill = true) =
+template ball*(size: int | float, color = active_thing().color, fill = true) =
   ## A sphere, but friendlier. Same as `sphere`.
-  Build(active_unit()).sphere(size, color, fill)
+  Build(active_thing()).sphere(size, color, fill)
 
 template ball*(
-    size: int | float, at: Vector3, color = active_unit().color, fill = true
+    size: int | float, at: Vector3, color = active_thing().color, fill = true
 ) =
-  Build(active_unit()).sphere(size, at, color, fill)
+  Build(active_thing()).sphere(size, at, color, fill)
 
 # ---- cylinder ------------------------------------------------------
 #
@@ -308,18 +308,18 @@ proc cylinder*(
   self.cylinder(size.float, height, at, color, fill)
 
 template cylinder*(
-    size: int | float, height: int, color = active_unit().color, fill = true
+    size: int | float, height: int, color = active_thing().color, fill = true
 ) =
-  Build(active_unit()).cylinder(size, height, color, fill)
+  Build(active_thing()).cylinder(size, height, color, fill)
 
 template cylinder*(
     size: int | float,
     height: int,
     at: Vector3,
-    color = active_unit().color,
+    color = active_thing().color,
     fill = true,
 ) =
-  Build(active_unit()).cylinder(size, height, at, color, fill)
+  Build(active_thing()).cylinder(size, height, at, color, fill)
 
 # ---- can: kid-friendly alias for cylinder --------------------------
 #
@@ -327,41 +327,41 @@ template cylinder*(
 # Same args as `cylinder`; color defaults to the current turtle color.
 
 template can*(
-    size: int | float, height: int, color = active_unit().color, fill = true
+    size: int | float, height: int, color = active_thing().color, fill = true
 ) =
   ## A cylinder, but friendlier. Same as `cylinder`.
-  Build(active_unit()).cylinder(size, height, color, fill)
+  Build(active_thing()).cylinder(size, height, color, fill)
 
 template can*(
     size: int | float,
     height: int,
     at: Vector3,
-    color = active_unit().color,
+    color = active_thing().color,
     fill = true,
 ) =
-  Build(active_unit()).cylinder(size, height, at, color, fill)
+  Build(active_thing()).cylinder(size, height, at, color, fill)
 
 # ---- wall / floor --------------------------------------------------
 
 template wall*(
-    length: int, height: int = 4, color: Colors = active_unit().color
+    length: int, height: int = 4, color: Colors = active_thing().color
 ) =
   ## Draw a wall, `length` blocks long and `height` tall (4 unless you
   ## say), heading the way the turtle faces. The turtle ends up at the
   ## far end, so `wall 10; turn right; wall 10` makes a perfect corner.
   ## Four of those and you've got yourself a fort.
-  let me = Build(active_unit())
+  let me = Build(active_thing())
   me.box(1, height, length, color)
   if length > 1:
     me.advance (length - 1).float
 
 template floor*(
-    length: int, width: int = length, color: Colors = active_unit().color
+    length: int, width: int = length, color: Colors = active_thing().color
 ) =
   ## Draw a flat slab, `length` deep and `width` wide (square unless
   ## you say). Like `wall`, the turtle ends up at the far edge, ready
   ## for whatever you're building next.
-  let me = Build(active_unit())
+  let me = Build(active_thing())
   me.box(width, 1, length, color)
   if length > 1:
     me.advance (length - 1).float

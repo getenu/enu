@@ -36,7 +36,7 @@ speed = 1
     color = white,
   )
   speed = 0
-  Build(active_unit()).advance 1.0
+  Build(active_thing()).advance 1.0
   speed = 1
 
 sleep 3.0  # let chunks load + buffer paste settle

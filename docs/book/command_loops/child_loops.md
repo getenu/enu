@@ -1,7 +1,7 @@
 # Child Loops
 
 Sometimes you want to write a command with its own Command Loop. Imagine we have
-a unit that performs two complicated commands, `find_treasure` and
+a thing that performs two complicated commands, `find_treasure` and
 `fight_monster`. `find_treasure` might need to `navigate` an area, `locate`
 items of interest, `interact` with them,then return to `home_base` to deposit
 them. `fight_monster` could require commands like `evade`, `attack`, `hide`, and
@@ -40,7 +40,7 @@ loop fight_monster:
     any ==> nil
 
 loop:
-  # We want our unit to find_treasure indefinately.
+  # We want our thing to find_treasure indefinately.
   # `find_treasure` doesn't exit (switch to nil).
   nil -> find_treasure
   if monster.near:

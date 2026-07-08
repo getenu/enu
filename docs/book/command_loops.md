@@ -1,6 +1,6 @@
 # Command Loops
 
-Command loops are how you control the behavior of units. They look like this:
+Command loops are how you control the behavior of things. They look like this:
 
 ```nim
 - boogie:
