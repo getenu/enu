@@ -385,15 +385,19 @@ else:
         echo "holding frame 4"
   else:
     let fps = FRAMES.float / LOOP
-    build.play(fps = fps)
     if SAVE:
-      # NOTE: playback + scale are runtime state, not persisted here. On
-      # reload the frames come back but nothing replays them or restores the
-      # scale — that belongs in a persisted script (`scale = ...; play(...)`)
-      # the generator should author. Authoring a unit script from a client
-      # isn't wired up yet (Code carries server-side context), so a reloaded
-      # save currently shows a static frame at scale 1. See the notes.
-      echo "sea frames saved — reload shows a static frame (script TODO)"
+      # Persist a script (not baked-in runtime state): it re-applies the
+      # scale and starts playback on load, so the saved sea comes back
+      # animating without the save format carrying playback/scale. The
+      # generator authors it by setting the unit's code with the server as
+      # the runner (a client doesn't run scripts itself).
+      build.code = Code.init(
+        "scale = " & $SCALE & "\nplay(" & $fps & ")\n",
+        runner = Enu.server_ctx_id,
+      )
+      echo "sea saved with a script (scale + play) — reload animates it"
+    else:
+      build.play(fps = fps)
     echo "BUILD=", build.id, " playing ", FRAMES, " frames at ", fps,
       "fps — kill me to reap it"
     Enu.client.every(1.second):

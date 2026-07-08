@@ -156,6 +156,16 @@ proc connect*(_: type Enu, address = "", id = ""): bool {.discardable.} =
   if not result:
     Enu.disconnect
 
+proc server_ctx_id*(_: type Enu): string =
+  ## The connected server's ed context id, from the client's remote
+  ## subscription (empty when not connected). A client uses it to author a
+  ## unit's script: `unit.code = Code.init(src, runner = Enu.server_ctx_id)`
+  ## — the server's code watch only runs a change whose `runner` is its own
+  ## context, and a plain client never populates `state.server_ctx_name`.
+  for sub in Ed.thread_ctx.subscribers:
+    if sub.kind == REMOTE:
+      return sub.ctx_id
+
 proc launch_and_connect*(
     _: type Enu,
     level_dir: string,
