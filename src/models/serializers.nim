@@ -156,13 +156,11 @@ proc from_json_hook(self: var Build, json: JsonNode) =
       current = meta{"current"}.get_int(-1)
     if loaded > 0:
       self.frames_loop = meta["loop"].get_bool
-      if loaded > 1:
-        # fps > 0 resumes playback exactly where the level left off
-        self.frames_fps = meta["fps"].get_float
-      if self.frames_fps == 0 and "current" in meta:
-        # not playing: restore the displayed frame. This is how scriptless
-        # frame units (e.g. a persisted sea) come back visible at all —
-        # their voxels are TRANSIENT, so only frames survive the reload.
+      # Playback is never auto-resumed: it's a runtime action a script
+      # triggers with `play()`. On reload we only restore the displayed
+      # frame so the unit comes back visible (its voxels are TRANSIENT, so
+      # only frames survive) — a script then takes over if it plays.
+      if "current" in meta:
         let current = meta["current"].get_int
         if current >= 0 and current < loaded:
           self.current_frame = current
@@ -297,11 +295,15 @@ proc extras_json(self: Unit): string =
     "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:
+    # One color per line: a gradient build's palette runs to hundreds of
+    # entries, and a single wrapped line is unreadable / undiffable.
     let entries = collect:
       for color in self.shared.palette:
-        $color
+        \"    {$color}"
     result.add \""",
-  "palette": [{entries.join(", ")}]"""
+  "palette": [
+{entries.join(",\n")}
+  ]"""
 
 proc edited_voxel_count(shared: Shared): int =
   for _, packed in shared.edit_snapshots.value:
