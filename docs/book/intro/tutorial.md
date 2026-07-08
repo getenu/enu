@@ -54,9 +54,8 @@ They can be placed with the `left` mouse button or the `L2` gamepad trigger.
 
 ![Coding Screenshot](../assets/tutorial_1_screenshot_3.webp)
 
-We control Enu using [Nim](https://nim-lang.org), a powerful programming
-language that's useful for a wide variety of tasks. Almost everything in Enu
-can be coded with Nim.
+We control Enu by writing code — almost everything in Enu can be programmed.
+You don't need any experience to start; you'll pick it up as you go.
 
 With the `Code` tool selected, you can code anything you've created by clicking
 on it with the `left` mouse button, or `L2` on the controller
@@ -102,5 +101,5 @@ Ready to build something? The [Build a House](tutorial2.html) tutorial walks
 through making a house you can walk into, one command at a time.
 
 You can also read the [full controls](../intro/controls.html), tweak Enu's
-[settings](../intro/settings.html), or get a quick overview of using Nim to
+[settings](../intro/settings.html), or get a quick overview of how to
 [code Enu](../coding.html).
