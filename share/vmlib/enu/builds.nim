@@ -225,7 +225,7 @@ template box*(at, to: Vector3, color = active_thing().color, fill = true) =
 # `size` = diameter in voxels. Rasterisation is centred on the target
 # voxel, so the effective width is always odd: size 4 and size 5 both
 # span 5 voxels (5 is fuller at the diagonals). Fractional sizes are
-# allowed — useful for smooth tapers (stacked-disk cones, spires).
+# allowed, useful for smooth tapers (stacked-disk cones, spires).
 # Int and float sizes both accepted.
 
 proc sphere*(self: Build, size: float, color = self.color, fill = true) =

@@ -5,7 +5,7 @@ import std/math
 import types
 
 proc vec3*(x, y, z: float): Vector3 {.inline.} =
-  ## Make a `Vector3` — a spot (or a direction) in the world.
+  ## Make a `Vector3`, a spot (or a direction) in the world.
   ## `x` is left/right, `y` is up/down, and `z` is forward/back.
   (x: x, y: y, z: z)
 
@@ -279,7 +279,7 @@ proc moveToward*(vFrom, to: Vector3, delta: float32): Vector3 =
 converter vec3_to_bool*(v: Vector3): bool =
   v != vec3(0, 0, 0)
 
-# WorldBox helpers — axis-aligned world-space bounding box queries.
+# WorldBox helpers, axis-aligned world-space bounding box queries.
 # Returned by `bounds()` and consumed by `box_is_free`, `things_overlapping`,
 # `overlaps`, etc. See `docs/notes/instance-query-api.md`.
 

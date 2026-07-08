@@ -110,7 +110,7 @@ template loop_body(body: untyped) =
       looping = ctx.advance(frame)
 
 macro loop*(body: untyped) =
-  ## A command loop — the heart of a thing's behavior. The body runs
+  ## A command loop, the heart of a thing's behavior. The body runs
   ## over and over (about twice a second), switching between states
   ## with `->` rules:
   ##

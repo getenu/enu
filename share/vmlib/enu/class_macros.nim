@@ -147,7 +147,7 @@ proc build_ctors(
   # Apply rotation and scale after the proto body has drawn its voxels so
   # the body can't accidentally clobber the caller's requested values. 0
   # is the "not specified" sentinel for both (a 0 rotation is a no-op, a
-  # 0 scale would be invisible — neither is a useful value to actually
+  # 0 scale would be invisible, neither is a useful value to actually
   # pass through).
   ctor_body.add quote do:
     if `rotation` != 0.0:

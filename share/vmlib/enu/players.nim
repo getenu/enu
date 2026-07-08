@@ -18,7 +18,7 @@ bridged_to_host:
 
   proc `playing=`*(self: Player, value: bool)
   proc flying*(self: Player): bool
-    ## Whether the player is flying. `player.flying = true` — no
+    ## Whether the player is flying. `player.flying = true`, no
     ## double-jump needed.
 
   proc `flying=`*(self: Player, value: bool)
@@ -49,7 +49,7 @@ bridged_to_host:
 
 var player*: Player
 template runner*(): Player =
-  ## The player who ran this script — useful in multiplayer, where
+  ## The player who ran this script, useful in multiplayer, where
   ## `player` is just the first one.
   executing_player()
 

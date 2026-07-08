@@ -34,7 +34,7 @@ type
     b
 
   Thing* = ref object of RootObj
-    ## Anything that exists in the world — a build, a bot, a sign, or
+    ## Anything that exists in the world: a build, a bot, a sign, or
     ## the player. Most commands work on any thing.
     id: int
     name*: string
@@ -78,7 +78,7 @@ type
     ## `player`.
 
   Colors* = enum
-    ## The colors blocks come in. `eraser` isn't really a color — it
+    ## The colors blocks come in. `eraser` isn't really a color, it
     ## removes blocks instead of drawing them.
     eraser
     blue
