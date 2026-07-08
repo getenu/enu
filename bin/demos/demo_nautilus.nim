@@ -1,6 +1,6 @@
 import std/math
 import client
-import core, models/[builds, units, colors]
+import core, models/[builds, things, colors]
 
 Enu.client.connect
 
@@ -16,7 +16,7 @@ let
   line_colors = [col"fc0e0b", col"0067ff", col"14f707", col"d9eed8"]
 
 let build = Build.init(0, 0, -150, save = true)
-Enu.units.add build
+Enu.things.add build
 
 var theta = 0.0
 build.buffer:

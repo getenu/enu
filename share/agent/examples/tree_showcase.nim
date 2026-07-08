@@ -1,7 +1,7 @@
 # Spawner for SpiralTree (see spiral_tree.nim): a row of instances.
 # The first two use IDENTICAL params on purpose — the proto's internal
 # randomness still makes them differ. Spawners set drawing = false so
-# the spawner unit itself places no blocks.
+# the spawner thing itself places no blocks.
 drawing = false
 
 SpiralTree.new(position = vec3(-50, 0, -370))

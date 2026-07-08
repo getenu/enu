@@ -269,7 +269,7 @@ task client_smoke,
   expect_check "Unable to connect to server" notin client_log,
     "no connect timeout"
   expect_check "adding child" in client_log,
-    "client renders units (add_to_scene)"
+    "client renders things (add_to_scene)"
   expect_check client_log.count("player-") >= 2,
     "client sees both players (own + server's)"
   expect_check server_log.count("adding child") >= 1 and

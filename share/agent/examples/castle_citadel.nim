@@ -4,7 +4,7 @@
 # slits, crowned by a spire and banner. The most composition-heavy
 # example: small procs (merlons/spire/banner/round_tower/tier) reused
 # everywhere. NB: locals avoid reserved accessor names — `rad`/`tall`,
-# never `radius`/`height`/`width` (those resolve to unit accessors).
+# never `radius`/`height`/`width` (those resolve to thing accessors).
 let stone = brown
 let trim = white
 let dark = black

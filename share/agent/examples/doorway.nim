@@ -1,7 +1,7 @@
 # Doorway spawner: a wall with a gap, a sliding Door filling it, and a
 # Button in front wired to the door. Walk into the button to open it.
 # - Pass `color` explicitly: `.new()` defaults it to eraser, and a
-#   turtle-drawn instance paints in the unit color.
+#   turtle-drawn instance paints in the thing color.
 # - Nudge a sliding part off the wall plane (z + 0.1 here) so it doesn't
 #   z-fight the static geometry it slides past.
 drawing = false
