@@ -6,11 +6,11 @@ Commands for drawing whole shapes at once (`box`, `ball`, `can`, `wall`,
 
 ## `move` / `build`
 
-When dealing with a `Build` unit, commands can do different things depending on
-whether the unit is in `build` mode or `move` mode. `move` mode moves the unit
+When dealing with a `Build` thing, commands can do different things depending on
+whether the thing is in `build` mode or `move` mode. `move` mode moves the thing
 around, while `build` creates new blocks. By default a `Build` is in `build`
-mode. Often you'll pass the `me` unit to `move/build`, but it's also possible to
-pass other units. For example:
+mode. Often you'll pass the `me` thing to `move/build`, but it's also possible to
+pass other things. For example:
 
 ```nim
 build me # generally not required, as it's the default
@@ -23,7 +23,7 @@ right 3
 move me
 up 3
 
-# create another unit and add some blocks
+# create another thing and add some blocks
 var enemy = Ghost.new
 build enemy
 down 5
@@ -33,7 +33,7 @@ move enemy
 up 5
 ```
 
-It's also possible to call commands directly against a unit instance. They use
+It's also possible to call commands directly against a thing instance. They use
 whichever `move`/`build` mode is currently active, but don't change the current
 target:
 
@@ -55,17 +55,17 @@ enemy.up 2
 
 ## `turn`
 
-Turn a unit. Can be passed:
+Turn a thing. Can be passed:
 - a number in degrees. Positive for clockwise, negative for counter-clockwise.
   Ex. `turn 180`.
 - a direction (`forward/back/up/down/left/right`) which will turn in that
   direction. 90 degrees by default. Ex. `turn left`, or `turn up, 180`.
-- a unit to turn towards. Ex. `turn player`.
-- a negative unit to turn away from. Ex. `turn -player`.
+- a thing to turn towards. Ex. `turn player`.
+- a negative thing to turn away from. Ex. `turn -player`.
 
 ## `lean`
 
-Like `turn`, but it tips the unit (or drawing turtle) forward, back, left, or
+Like `turn`, but it tips the thing (or drawing turtle) forward, back, left, or
 right instead of spinning it flat. Leaning lets the drawing turtle climb walls
 and loop over the top of things.
 
@@ -76,7 +76,7 @@ lean right, 45   # tip right, 45 degrees
 
 ## `say`
 
-Show a message on a sign above a unit. Call it again to change the message, or
+Show a message on a sign above a thing. Call it again to change the message, or
 `say ""` to put the sign away. The text is markdown, so `**bold**` and lists
 work.
 
@@ -89,7 +89,7 @@ say "Careful, dragons ahead."
 
 `near(less_than = 5.0)` / `far(greater_than = 100.0)`
 
-Returns true or false if a unit is nearer/farther than the specified distance.
+Returns true or false if a thing is nearer/farther than the specified distance.
 For example:
 
 ```nim
@@ -108,7 +108,7 @@ if player.far(25):
 
 ## `hit`
 
-Returns `true` if a unit is touching another unit. Defaults to testing against
+Returns `true` if a thing is touching another thing. Defaults to testing against
 `me`. For example:
 
 ```nim
@@ -121,8 +121,8 @@ if player.hit(enemy1):
 
 ## `position` / `position=`
 
-Gets or set the position of a unit as a Vector3. `me` by default. Can also
-be assigned a unit, which is a shortcut for `unit.position`.
+Gets or set the position of a thing as a Vector3. `me` by default. Can also
+be assigned a thing, which is a shortcut for `thing.position`.
 
 ```nim
 if player.hit(enemy):
@@ -134,7 +134,7 @@ if player.hit(enemy):
 ## `draw_position` / `draw_position=`
 
 Gets or sets the draw point of a `Build` as a Vector3. `me` by default. Can also
-be assigned a unit, which is a shortcut for `unit.position`.
+be assigned a thing, which is a shortcut for `thing.position`.
 
 ```nim
 speed = 0.1
@@ -148,12 +148,12 @@ forever:
 
 ## `start_position`
 
-Gets or sets the starting position of a unit. Setting it updates the unit's
+Gets or sets the starting position of a thing. Setting it updates the thing's
 spawn position, which persists across reloads.
 
 ## `speed` / `speed=`
 
-Gets or sets the speed of a unit. `me` by default.
+Gets or sets the speed of a thing. `me` by default.
 
 While building, speed refers to the number of blocks placed per frame. In the
 future this will be normalized to 60fps, but currently the speed is tied to the
@@ -169,54 +169,54 @@ automatically reset the speed to 1.
 
 ## `scale` / `scale=`
 
-Sets the scale/size of a unit. `me` by default.
+Sets the scale/size of a thing. `me` by default.
 
 ## `glow` / `glow=`
 
-Specifies the glow/brightness of a unit. `me` by default. Currently does nothing
+Specifies the glow/brightness of a thing. `me` by default. Currently does nothing
 for bots, but will in the future.
 
 ## `global` / `global=`
 
-Specifies if a unit is in global space, or the space of its parent. If
-`global = true` and the parent unit moves, child units are unaffected. If
+Specifies if a thing is in global space, or the space of its parent. If
+`global = true` and the parent thing moves, child things are unaffected. If
 `global = false`, the child will move with its parent. Does nothing for top
-level units, as they're always global.
+level things, as they're always global.
 
-By default, new `Build` units are `global = false` and new `Bot` units are
+By default, new `Build` things are `global = false` and new `Bot` things are
 `global = true`.
 
 ## `rotation`
 
-Gets the rotation of a unit, in degrees.
+Gets the rotation of a thing, in degrees.
 
 ## `velocity` / `velocity=`
 
-Gets or sets the velocity of a unit, as a Vector3. Currently buggy.
+Gets or sets the velocity of a thing, as a Vector3. Currently buggy.
 
 ## `color` / `color=`
 
-Gets or sets a units color. `me` by default. For `Build` units, this only
-impacts blocks placed after the property is set. For `Bot` units this does
+Gets or sets a things color. `me` by default. For `Build` things, this only
+impacts blocks placed after the property is set. For `Bot` things this does
 nothing, but in the future it will change their color.
 
 ## `bounce`
 
-Bounces a unit in the air. Currently only works for the player.
+Bounces a thing in the air. Currently only works for the player.
 
 ## `save` / `restore`
 
-`Build` units only. `save` the position, direction, drawing state, and color of
+`Build` things only. `save` the position, direction, drawing state, and color of
 the draw point, to `restore` it later. Can optionally take a name string to
 enable saving/restoring multiple points.
 
 ## `reset`
 
-Instantly return unit to start position and resets rotation and scale.
+Instantly return thing to start position and resets rotation and scale.
 
 ## `go_home`
 
-Moves a unit to its start position via a `forward`, `left`, `down` sequence with
+Moves a thing to its start position via a `forward`, `left`, `down` sequence with
 appropriate values. Can fail if there are obstructions along the way. Compare
 `position` to `start_position` after running to test for success.
 
@@ -224,7 +224,7 @@ appropriate values. Can fail if there are obstructions along the way. Compare
 `sleep(seconds = 0.0)`
 
 Do nothing for the specified number of seconds. If no argument is provided, or
-the argument is 0 or less, this will wait for 0.5 seconds or until the unit is
+the argument is 0 or less, this will wait for 0.5 seconds or until the thing is
 interrupted, which will end the `sleep` prematurely. This allows the following:
 
 ```nim

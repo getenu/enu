@@ -1,4 +1,4 @@
 import
-  types, models/[states, units, builds, bots, ground, colors, players, signs]
+  types, models/[states, things, builds, bots, ground, colors, players, signs]
 
-export states, units, builds, bots, ground, colors, players, signs, types
+export states, things, builds, bots, ground, colors, players, signs, types

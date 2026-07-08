@@ -66,7 +66,7 @@ suite "JSON Loading of Holes":
     # 4. Initialize VoxelStore and rebuild edits
     var voxels = VoxelStore.init(
       id = "test_voxels",
-      unit_id = "test_build",
+      thing_id = "test_build",
       edit_snapshots = shared.edit_snapshots,
     )
     voxels.rebuild_local_edits()

@@ -108,8 +108,8 @@ gdobj Editor of MarginContainer:
         event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
           COMMAND_MODE notin state.local_flags:
-        state.open_unit.code = Code.init(self.text_edit.text)
-        state.open_unit = nil
+        state.open_thing.code = Code.init(self.text_edit.text)
+        state.open_thing = nil
         self.get_tree().set_input_as_handled()
 
   proc clear_errors() =
@@ -118,8 +118,8 @@ gdobj Editor of MarginContainer:
 
   proc highlight_errors() =
     self.text_edit.clear_executing_line()
-    if ?state.open_unit:
-      for err in state.open_unit.errors:
+    if ?state.open_thing:
+      for err in state.open_thing.errors:
         self.text_edit.set_line_as_marked(int64(err.info.line - 1), true)
 
   proc `executing_line=`*(line: int) =
@@ -223,34 +223,34 @@ gdobj Editor of MarginContainer:
     discard self.tween.tween_callback(self, "_open_done")
     discard self.tween.tween_callback(self, "_rescale")
 
-  proc watch_open_unit() =
+  proc watch_open_thing() =
     var line_zid, code_zid: EID
-    state.open_unit_value.changes:
+    state.open_thing_value.changes:
       if removed:
-        let unit = state.open_unit
-        if unit.is_nil:
+        let thing = state.open_thing
+        if thing.is_nil:
           Ed.thread_ctx.untrack(line_zid)
           Ed.thread_ctx.untrack(code_zid)
           self.close_editor()
           state.player.open_code = ""
         else:
           self.open_editor()
-          line_zid = unit.current_line_value.changes:
+          line_zid = thing.current_line_value.changes:
             if added:
               # only update the executing line if the code hasn't been changed.
-              if self.text_edit.text == state.open_unit.code.nim:
+              if self.text_edit.text == state.open_thing.code.nim:
                 self.executing_line = change.item - 1
               else:
                 self.text_edit.clear_executing_line()
 
-          code_zid = unit.code_value.changes:
+          code_zid = thing.code_value.changes:
             if added or touched:
               let new_code = change.item.nim
               if new_code != "" and new_code != self.text_edit.text:
                 self.text_edit.text = new_code
                 state.player.open_code = new_code
 
-          self.text_edit.text = state.open_unit.code.nim
+          self.text_edit.text = state.open_thing.code.nim
           state.player.open_code = self.text_edit.text
 
           if COMMAND_MODE in state.local_flags:
@@ -259,7 +259,7 @@ gdobj Editor of MarginContainer:
             self.unghost()
           self.clear_errors()
           self.highlight_errors()
-          let line = unit.current_line - 1
+          let line = thing.current_line - 1
           self.executing_line = line
 
   proc watch_local_flags() =
@@ -280,7 +280,7 @@ gdobj Editor of MarginContainer:
         self.left_panel.raisee()
       if COMMAND_MODE.added:
         if EDITOR_VISIBLE in state.local_flags:
-          state.open_unit.code = Code.init(self.text_edit.text)
+          state.open_thing.code = Code.init(self.text_edit.text)
 
           self.ghost()
           self.text_edit.release_focus()
@@ -292,7 +292,7 @@ gdobj Editor of MarginContainer:
           self.mouse_filter = MOUSE_FILTER_STOP
 
   proc watch() =
-    self.watch_open_unit()
+    self.watch_open_thing()
     self.watch_local_flags()
 
   proc content_height(): float =
@@ -397,14 +397,14 @@ gdobj Editor of MarginContainer:
     self.enable_idle
 
   method on_close() =
-    if ?state.open_unit:
-      state.open_unit.code = Code.init(self.text_edit.text)
-      state.open_unit = nil
+    if ?state.open_thing:
+      state.open_thing.code = Code.init(self.text_edit.text)
+      state.open_thing = nil
 
   method on_run() =
-    if ?state.open_unit:
-      state.open_unit.code = Code.init("")
-      state.open_unit.code = Code.init(self.text_edit.text)
+    if ?state.open_thing:
+      state.open_thing.code = Code.init("")
+      state.open_thing.code = Code.init(self.text_edit.text)
 
   method on_child_focused(event: InputEvent) =
     self.grab_focus()

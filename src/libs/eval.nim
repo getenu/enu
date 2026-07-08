@@ -161,7 +161,7 @@ proc processModule*(
   #     than the bytecode the second-execute ends up touching, surfacing
   #     as cross-script IndexDefects
   #   - that second-execute also causes spawner scripts to re-run their
-  #     constructor instantiations, producing unbounded unit growth
+  #     constructor instantiations, producing unbounded thing growth
   #     (~6.5x over the correct count on the api-test level)
   # Keeping exit() in the templates is the production fix. Removing it
   # without first dropping this finalize sequence will re-introduce both

@@ -16,7 +16,7 @@ proc col*(hex: string): chroma.Color =
 proc col*(hash: Hash): chroma.Color =
   ## A stable, vivid color from a hash: map to a hue at fixed saturation and
   ## lightness, so every value lands somewhere bright and distinguishable.
-  ## `col(id.hash)` gives an agent or unit a consistent color.
+  ## `col(id.hash)` gives an agent or thing a consistent color.
   hsl(float(hash and 0xFFFF) / 65536.0 * 360.0, 70, 55).color
 
 type

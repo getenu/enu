@@ -224,7 +224,7 @@ gdobj GUI of Control:
       if SETTINGS_FOCUSED in flags:
         state.pop_flags SETTINGS_FOCUSED, SETTINGS_VISIBLE
       elif EDITOR_FOCUSED in flags:
-        state.open_unit = nil
+        state.open_thing = nil
       elif DOCS_FOCUSED in flags:
         state.open_sign = nil
 

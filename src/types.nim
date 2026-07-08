@@ -1,14 +1,14 @@
 import std/[tables, monotimes, times, sets, options, macros]
 
 type
-  # A general way to run a query against a unit from another context (another
+  # A general way to run a query against a thing from another context (another
   # thread, or a remote process over the network). The asker fills in a
-  # UnitQuery and sets the unit's `query` to it with state PENDING; the
-  # context that owns the unit's behavior answers by writing the same value
+  # ThingQuery and sets the thing's `query` to it with state PENDING; the
+  # context that owns the thing's behavior answers by writing the same value
   # back with `result`/`error` filled in and state DONE. Today only
   # EPHEMERAL bots subscribe for answers (see bots.nim and bot_node.nim), but the
-  # slot exists on every unit.
-  UnitQueryKind* = enum
+  # slot exists on every thing.
+  ThingQueryKind* = enum
     BLANK
     SCREENSHOT
     EVAL
@@ -17,20 +17,20 @@ type
     LEVEL_DIR
     PING
 
-  UnitQueryState* = enum
+  ThingQueryState* = enum
     IDLE
     PENDING
     READY
     DONE
 
-  UnitQuery* = object
-    kind*: UnitQueryKind
+  ThingQuery* = object
+    kind*: ThingQueryKind
     code*: string
     result*: string
     error*: string
-    state*: UnitQueryState
+    state*: ThingQueryState
     top_level*: bool
-    unit_id*: string
+    thing_id*: string
     screenshot_from_player*: bool
     screenshot_with_ui*: bool
     screenshot_top_down*: bool
@@ -140,24 +140,24 @@ type
     HIGHLIGHT_ERROR
     ASAP_MODE
     EPHEMERAL
-      ## Set on units owned by a remote client context — the human's
+      ## Set on things owned by a remote client context — the human's
       ## Player and any client-owned bot (MCP, scripted agents). Agent
-      ## units survive level reloads (peer to the human), are skipped
+      ## things survive level reloads (peer to the human), are skipped
       ## by level persistence (their lifecycle is the client's, not
       ## the level's), and get cleaned up when their owning context
-      ## unsubscribes — matched on the unit's `owner_ctx` (the ctx that
+      ## unsubscribes — matched on the thing's `owner_ctx` (the ctx that
       ## created it), which worker.nim reaps on unsubscribe.
     VOXEL_VIEWER
-      ## The unit streams voxel terrain around itself: the server attaches
-      ## a VoxelViewer node so chunks near the unit get meshed even when no
+      ## The thing streams voxel terrain around itself: the server attaches
+      ## a VoxelViewer node so chunks near the thing get meshed even when no
       ## player is nearby. Off by default — players bring their own viewer,
-      ## and most units don't need one. Set it on agent bots that take
+      ## and most things don't need one. Set it on agent bots that take
       ## screenshots away from the player.
     TRANSFERRING
-      ## Transient: the unit is being moved between units collections (see
+      ## Transient: the thing is being moved between things collections (see
       ## `adopt`/`release`). Set across the collection remove/add so the
       ## destroy-on-remove watchers (node controller + worker) detach/re-attach
-      ## the node instead of tearing the unit down. Synced (SYNC_REMOTE, via
+      ## the node instead of tearing the thing down. Synced (SYNC_REMOTE, via
       ## GlobalModelFlags) because every context applies the membership move and
       ## runs the same ungated destroy. Interim until destructor-driven teardown
       ## (getenu/enu#65) makes remove==detach; then this flag goes away.
@@ -187,7 +187,7 @@ type
     wants*: EdSeq[LocalStateFlags]
     global_flags*: EdSet[GlobalStateFlags]
     config_value*: EdValue[Config]
-    open_unit_value*: EdValue[Unit]
+    open_thing_value*: EdValue[Thing]
     tool_value*: EdValue[Tools]
     tools*: EdSet[Tools]
     gravity*: float
@@ -197,9 +197,9 @@ type
     player_camera*: Node
     screenshot_counter*: int
     player_value*: EdValue[Player]
-    units*: EdSeq[Unit]
+    things*: EdSeq[Thing]
     ground*: Ground
-    draw_unit_id*: string
+    draw_thing_id*: string
     console*: ConsoleModel
     paused*: bool
     show_prototypes*: bool
@@ -247,7 +247,7 @@ type
     # rebuilt on each side.
     ctx* {.cursor.}: EdContext
       # back-ref; the Build owns this VoxelStore, ctx outlives it
-    unit_id*: string # For edit key construction
+    thing_id*: string # For edit key construction
     immediate*: bool
       ## Apply draws straight to the synced `chunk_deltas`/`edit_deltas` tables
       ## instead of buffering into `pending_*` for a later `flush_dirty_*`. The
@@ -286,13 +286,13 @@ type
     EdSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
 
   SightQuery* = object
-    target*: Unit
+    target*: Thing
     distance*: float
     answer*: Option[bool]
 
-  Unit* = ref object of Model
-    parent* {.cursor.}: Unit # back-ref; the parent owns this child via `units`
-    units*: EdSeq[Unit]
+  Thing* = ref object of Model
+    parent* {.cursor.}: Thing # back-ref; the parent owns this child via `things`
+    things*: EdSeq[Thing]
     start_transform*: Transform
     scale_value*: EdValue[float]
     glow_value*: EdValue[float]
@@ -302,13 +302,13 @@ type
     disabled*: bool
     velocity_value*: EdValue[Vector3]
     transform_value*: EdValue[Transform]
-    clone_of*: Unit
+    clone_of*: Thing
     spawned_by*: string
-      ## Id of the unit whose script `.new()`'d this instance, set once at
+      ## Id of the thing whose script `.new()`'d this instance, set once at
       ## creation and never changed. Distinguishes *my* instances from foreign
-      ## ones (both have `clone_of`): when a unit is destroyed, only children
+      ## ones (both have `clone_of`): when a thing is destroyed, only children
       ## with `spawned_by == self.id` go down with it; everything else (real
-      ## units, the player, instances spawned elsewhere) is re-rooted.
+      ## things, the player, instances spawned elsewhere) is re-rooted.
     collisions*: EdSeq[tuple[id: string, normal: Vector3]]
     shared_value*: EdValue[Shared]
     start_color*: Color
@@ -322,41 +322,41 @@ type
     anchor_value*: EdValue[Transform]
     rendered_voxel_count_value*: EdValue[int]
     pending_block_updates_value*: EdValue[int]
-    query_value*: EdValue[UnitQuery]
+    query_value*: EdValue[ThingQuery]
     owner_ctx_value*: EdValue[string]
-      # ctx id that created the unit, synced so the authority can reap EPHEMERAL
-      # units when that context drops -- without encoding the ctx in the id.
+      # ctx id that created the thing, synced so the authority can reap EPHEMERAL
+      # things when that context drops -- without encoding the ctx in the id.
 
   BlockLogEntry* =
     tuple[
-      unit_id: string,
+      thing_id: string,
       color: Colors,
       local_position: Vector3,
       global_position: Vector3,
       timestamp: MonoTime,
     ]
 
-  Player* = ref object of Unit
+  Player* = ref object of Thing
     colliders*: HashSet[Model]
     rotation_value*: EdValue[float]
     input_direction_value*: EdValue[Vector3]
     cursor_position_value*: EdValue[tuple[line: int, col: int]]
     block_log_entries*: EdSeq[BlockLogEntry]
 
-  Bot* = ref object of Unit
+  Bot* = ref object of Thing
     animation_value*: EdValue[string]
 
-  Sign* = ref object of Unit
+  Sign* = ref object of Thing
     message_value*, more_value*: EdValue[string]
     width_value*, height_value*: EdValue[float]
     size_value*: EdValue[int]
     billboard_value*: EdValue[bool]
-    owner_value*: EdValue[Unit]
+    owner_value*: EdValue[Thing]
     text_only*: bool
 
-  Build* = ref object of Unit
+  Build* = ref object of Thing
     # The synced voxel tables ride the build's closure as real Ed fields (like
-    # `units`) — reconnected by reference after sync, with generated ids. So they
+    # `things`) — reconnected by reference after sync, with generated ids. So they
     # need no id lookup, and a reload gets fresh ids (no destroy+recreate-same-id
     # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
     # at these.
@@ -499,30 +499,30 @@ type
     worker_thread*: system.Thread[tuple[ctx: EdContext, state: GameState]]
 
   Worker* = ref object
-    # Units that arrived before their data (narrow partial replica): the worker
+    # Things that arrived before their data (narrow partial replica): the worker
     # join is deferred until their core containers fill. Drained per loop tick.
-    pending_units*: seq[Unit]
+    pending_things*: seq[Thing]
     retry_failures*: bool
     interpreter*: Interpreter
-    active_unit*: Unit
-    unit_map*: Table[PNode, Unit]
-    node_map*: Table[Unit, PNode]
+    active_thing*: Thing
+    thing_map*: Table[PNode, Thing]
+    node_map*: Table[Thing, PNode]
     template_node_map*: Table[string, PNode]
-    failed*: seq[tuple[unit: Unit, e: ref VMQuit]]
+    failed*: seq[tuple[thing: Thing, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
     module_names*: HashSet[string]
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
     eval_proc*: proc(
-      code: string, top_level: bool, unit_id: string
+      code: string, top_level: bool, thing_id: string
     ): tuple[result: string, error: string] {.gcsafe.}
     update_files_proc*: proc() {.gcsafe.}
 
   NodeController* = ref object
-    # Units that arrived before their data (narrow partial replica): the scene
+    # Things that arrived before their data (narrow partial replica): the scene
     # add is deferred until their core containers fill. Drained per frame.
-    pending*: seq[Unit]
+    pending*: seq[Thing]
 
   SavedState* = object
     transform*: Transform

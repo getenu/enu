@@ -1,6 +1,6 @@
 import std/[math]
 import godotapi/spatial
-import core, models/units
+import core, models/things
 
 proc init*(_: type Player): Player =
   let player_id = \"player-{Ed.thread_ctx.id}"
@@ -13,7 +13,7 @@ proc init*(_: type Player): Player =
       cursor_position_value: ed((0, 0)),
       block_log_entries: EdSeq[BlockLogEntry].init(flags = {SYNC_LOCAL}),
     )
-    self.init_unit(shared = false)
+    self.init_thing(shared = false)
     self.global_flags += GLOBAL
     self.global_flags += EPHEMERAL
 
@@ -39,24 +39,24 @@ method collect_garbage*(self: Player) =
   discard
 
 proc open_code*(self: Player): string =
-  for unit in self.units:
-    if unit of Sign:
-      let unit = Sign(unit)
-      return unit.message
+  for thing in self.things:
+    if thing of Sign:
+      let thing = Sign(thing)
+      return thing.message
 
 proc `open_code=`*(self: Player, code: string) =
-  for unit in self.units:
-    if unit of Sign:
-      let unit = Sign(unit)
+  for thing in self.things:
+    if thing of Sign:
+      let thing = Sign(thing)
       if code == "":
-        unit.global_flags -= VISIBLE
+        thing.global_flags -= VISIBLE
       else:
-        unit.message = code
-        unit.more = code
-        unit.global_flags += VISIBLE
+        thing.message = code
+        thing.more = code
+        thing.global_flags += VISIBLE
       return
 
 method destroy*(self: Player) =
-  if self.units.len > 0:
-    Sign(self.units[0]).owner = nil
-    self.units.clear
+  if self.things.len > 0:
+    Sign(self.things[0]).owner = nil
+    self.things.clear

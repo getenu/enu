@@ -31,11 +31,11 @@ bridged_to_host:
     ## edited. With great power, etc.
 
   proc `god=`*(self: Player, value: bool)
-  proc coding*(self: Player): Unit
-    ## The unit whose code the player has open, or `nil` if the editor
-    ## is closed. Assign a unit to open its code for them.
+  proc coding*(self: Player): Thing
+    ## The thing whose code the player has open, or `nil` if the editor
+    ## is closed. Assign a thing to open its code for them.
 
-  proc `coding=`*(self: Player, value: Unit)
+  proc `coding=`*(self: Player, value: Thing)
   proc open_sign*(self: Player): Sign
     ## The sign the player is reading, or `nil` if none. Assign a sign
     ## to shove it in front of them.
@@ -44,8 +44,8 @@ bridged_to_host:
   proc executing_player*(): Player
     ## The player who ran this script. `runner` is the friendly name.
 
-  proc block_log*(self: Unit): string
-  proc clear_block_log*(self: Unit)
+  proc block_log*(self: Thing): string
+  proc clear_block_log*(self: Thing)
 
 var player*: Player
 template runner*(): Player =

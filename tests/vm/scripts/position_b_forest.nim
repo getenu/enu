@@ -5,9 +5,9 @@
 import std/[tables]
 import types, core, base_bridge, position_a_tree
 
-var test_unit = Unit()
-test_unit.query_results = initTable[string, seq[Unit]]()
-register_active(test_unit)
+var test_thing = Thing()
+test_thing.query_results = initTable[string, seq[Thing]]()
+register_active(test_thing)
 
 # Add local variables to increase register pressure before Tree.new calls.
 # This is needed to trigger the genProc else-branch truncation bug:

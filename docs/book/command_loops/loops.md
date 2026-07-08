@@ -1,6 +1,6 @@
 # Loops
 
-Command Loops can help manage the complexity of the logic for your units. They
+Command Loops can help manage the complexity of the logic for your things. They
 allow you to run complicated lists of commands and switch between them easily
 when situations change.
 
@@ -84,7 +84,7 @@ loop:
   nil -> wander
   if 1 in 50:
     # When each `wander` command finishes there's a 1 in 50
-    # (2%) chance of our unit getting a sudden burst of
+    # (2%) chance of our thing getting a sudden burst of
     # energy and switching to the `charge` command.
     # Otherwise we just keep wandering.
     wander -> charge

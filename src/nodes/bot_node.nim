@@ -8,11 +8,11 @@ import
     text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
     area, ray_cast,
   ]
-import gdutils, core, models/[colors, units, builds], ui/markdown_label
+import gdutils, core, models/[colors, things, builds], ui/markdown_label
 import ./queries
 
 const CLIMB_SPEED = 10.0
-  ## How fast a bot rises onto a block (units/sec) — the climb is animated at
+  ## How fast a bot rises onto a block (things/sec) — the climb is animated at
   ## this rate (~0.1s per block) instead of snapping; the drop back down is
   ## animated by gravity.
 
@@ -36,7 +36,7 @@ const SELF_AVATAR_LAYER = 1'i64 shl 19
 
 gdobj BotNode of KinematicBody:
   var
-    model* {.cursor.}: Unit
+    model* {.cursor.}: Thing
     material* {.gdExport.},
       highlight_material* {.gdExport.},
       selected_material* {.gdExport.}: Material
@@ -215,7 +215,7 @@ gdobj BotNode of KinematicBody:
     if self.model of Bot:
       let bot = Bot(self.model)
 
-      # Unit queries are answered only by the server. A connected client also
+      # Thing queries are answered only by the server. A connected client also
       # holds the synced bot (and its query_value); answering here too makes
       # two writers race on the same synced response container — seen live as
       # an eval answered with a screenshot path.
@@ -231,7 +231,7 @@ gdobj BotNode of KinematicBody:
       # acted on the model — so they didn't ride or, on a flag/watch race, move.
       self.set_process(true)
       self.set_physics_process(true)
-      # A VOXEL_VIEWER unit streams voxel terrain around itself, so screenshots
+      # A VOXEL_VIEWER thing streams voxel terrain around itself, so screenshots
       # render even when no player is nearby. Server-side only: that's
       # where queries (and their renders) are served. (Qualified: in Nim
       # `VOXEL_VIEWER` and godot's `VoxelViewer` are the same identifier.)
@@ -257,7 +257,7 @@ gdobj BotNode of KinematicBody:
     # The body isn't the only collider: bots are targeted through their
     # SelectionArea (layer 16), which the player's aim rays hit. Left enabled,
     # the avatar — co-located with the camera — intercepts every aim, so block
-    # placement, unit highlight, and code-open all resolve to the player's own
+    # placement, thing highlight, and code-open all resolve to the player's own
     # model. Zero its layer too so the rays pass through to the world.
     let selection = self.get_node("SelectionArea") as Area
     selection.collision_layer = 0
@@ -305,7 +305,7 @@ gdobj BotNode of KinematicBody:
             self.skin.visible = true
             self.skin_hidden_during_screenshot = false
           bot.query =
-            UnitQuery(kind: SCREENSHOT, result: path, state: DONE)
+            ThingQuery(kind: SCREENSHOT, result: path, state: DONE)
         elif q.state == READY and q.kind == SCREENSHOT and
             self.screenshot_warmup_frames < 0:
           # with_ui captures the root viewport (game + GUI overlay) so the
@@ -390,12 +390,12 @@ gdobj BotNode of KinematicBody:
 
   proc scan_builds(): seq[Build] =
     ## Every build in the level with a live node, nested included —
-    ## script-spawned instances and adopted builds live under other units, not
+    ## script-spawned instances and adopted builds live under other things, not
     ## at the top level, and bots must stand on those too.
     var found: seq[Build]
-    state.units.value.walk_tree proc(unit: Unit) {.gcsafe.} =
-      if unit of Build and ?unit.node:
-        found.add Build(unit)
+    state.things.value.walk_tree proc(thing: Thing) {.gcsafe.} =
+      if thing of Build and ?thing.node:
+        found.add Build(thing)
     found
 
   proc find_floor(
@@ -468,7 +468,7 @@ gdobj BotNode of KinematicBody:
       if build.solid_at(cell):
         # Climb to the top of the contiguous stack: on a fine-scaled build a
         # 1m step is several cells tall (4 at scale 0.25), and the climbable
-        # rise is measured in WORLD units, not cells. Give up as soon as the
+        # rise is measured in WORLD things, not cells. Give up as soon as the
         # stack's top exceeds the 1m-ish cap — that's a wall, not a step.
         var top_cell = cell
         var top = bnode.global_transform.xform_vector3(
@@ -481,7 +481,7 @@ gdobj BotNode of KinematicBody:
             vec3(local.x, top_cell.y + 1.0, local.z)
           ).y
         if top > floor_top + 0.05 and top <= floor_top + 1.1:
-          # Standing room above the step's top, also in world units.
+          # Standing room above the step's top, also in world things.
           var clear = true
           var y = top + 0.3
           while y < top + 1.6:

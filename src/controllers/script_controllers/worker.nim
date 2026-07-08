@@ -11,12 +11,12 @@ var
 worker_lock.init_lock
 work_done.init_cond
 
-proc handle_catchable_error(self: Worker, unit: Unit, e: ref Exception) =
+proc handle_catchable_error(self: Worker, thing: Thing, e: ref Exception) =
   ## Convert host-side exception to VMQuit and display in console.
   ## Accepts Defect as well as CatchableError so VM-level bugs (e.g.
   ## IndexDefect from corrupted register frames after module reset) don't
   ## crash the worker thread.
-  let ctx = unit.script_ctx
+  let ctx = thing.script_ctx
   let info =
     if ?ctx:
       ctx.current_line
@@ -27,8 +27,8 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref Exception) =
       \"{ctx.file_name}({int info.line},{int info.col})"
     else:
       ""
-  # Add error to unit.errors for console display (similar to error_hook)
-  unit.errors.add (e.msg, info, loc, false)
+  # Add error to thing.errors for console display (similar to error_hook)
+  thing.errors.add (e.msg, info, loc, false)
   if ?ctx:
     ctx.exit_code = error_code
     ctx.running = false
@@ -37,18 +37,18 @@ proc handle_catchable_error(self: Worker, unit: Unit, e: ref Exception) =
   if ?ctx:
     self.interpreter.reset_module(ctx.module_name)
     self.module_names.excl ctx.module_name
-  self.script_error(unit, vm_error)
+  self.script_error(thing, vm_error)
 
-proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
-  let ctx = unit.script_ctx
+proc advance_thing(self: Worker, thing: Thing, timeout: MonoTime): bool =
+  let ctx = thing.script_ctx
   if ?ctx and ctx.running:
-    if ASAP_MODE notin unit.global_flags:
-      unit.current_line = ctx.current_line.line.int
-    if unit of Build:
-      let unit = Build(unit)
-      unit.voxels_remaining_this_frame += unit.voxels_per_frame
+    if ASAP_MODE notin thing.global_flags:
+      thing.current_line = ctx.current_line.line.int
+    if thing of Build:
+      let thing = Build(thing)
+      thing.voxels_remaining_this_frame += thing.voxels_per_frame
     try:
-      assert self.active_unit.is_nil
+      assert self.active_thing.is_nil
       var task_state = NEXT_TASK
 
       let now = get_mono_time()
@@ -66,114 +66,114 @@ proc advance_unit(self: Worker, unit: Unit, timeout: MonoTime): bool =
       ):
         ctx.timer = MonoTime.high
         ctx.action_running = false
-        self.active_unit = unit
+        self.active_thing = thing
         ctx.fuel = script_fuel
         ctx.running = ctx.resume()
         if not ctx.running:
-          if unit of Build:
-            Build(unit).end_asap()
-          if not ?unit.clone_of:
-            unit.collect_garbage
-            unit.ensure_visible
-            unit.current_line = 0
+          if thing of Build:
+            Build(thing).end_asap()
+          if not ?thing.clone_of:
+            thing.collect_garbage
+            thing.ensure_visible
+            thing.current_line = 0
 
         result = ctx.running and task_state == NEXT_TASK
       elif now >= ctx.timer:
         ctx.timer = now + advance_step
         ctx.saved_callback = ctx.callback
         ctx.callback = nil
-        self.active_unit = unit
+        self.active_thing = thing
         ctx.fuel = script_fuel
         discard ctx.resume()
     except VMQuit as e:
-      self.interpreter.reset_module(unit.script_ctx.module_name)
-      self.module_names.excl unit.script_ctx.module_name
-      self.script_error(unit, e)
+      self.interpreter.reset_module(thing.script_ctx.module_name)
+      self.module_names.excl thing.script_ctx.module_name
+      self.script_error(thing, e)
     except CatchableError as e:
-      self.handle_catchable_error(unit, e)
+      self.handle_catchable_error(thing, e)
     except Defect as e:
       # Bytecode-level defects (e.g. IndexDefect inside vm.nim from a
       # corrupted register frame after module reset) are bugs in the VM/script
       # path, not the host. Treat them as script errors so a single bad script
       # doesn't take down the worker thread.
-      self.handle_catchable_error(unit, e)
+      self.handle_catchable_error(thing, e)
     finally:
-      self.active_unit = nil
+      self.active_thing = nil
 
-proc load_unit_from_json(unit_id, json_file: string) =
+proc load_thing_from_json(thing_id, json_file: string) =
   let opts = JOptions(allow_missing_keys: true)
   let data_json = read_file(json_file).parse_json
-  var new_unit: Unit
-  if unit_id.starts_with("bot_"):
-    new_unit = data_json.json_to(Bot, opts)
-  elif unit_id.starts_with("build_"):
-    new_unit = data_json.json_to(Build, opts)
+  var new_thing: Thing
+  if thing_id.starts_with("bot_"):
+    new_thing = data_json.json_to(Bot, opts)
+  elif thing_id.starts_with("build_"):
+    new_thing = data_json.json_to(Build, opts)
   else:
-    error "Unknown unit type for new JSON file", unit_id
+    error "Unknown thing type for new JSON file", thing_id
     return
-  new_unit.global_flags += SCRIPT_INITIALIZING
+  new_thing.global_flags += SCRIPT_INITIALIZING
   dont_join = true
-  state.units.add(new_unit)
-  load_units(new_unit, @[])
+  state.things.add(new_thing)
+  load_things(new_thing, @[])
   dont_join = false
-  if new_unit of Build:
-    Build(new_unit).reset_bounds
-    Build(new_unit).restore_edits
-  if ?new_unit.script_ctx:
-    new_unit.script_ctx.last_saved_json_mtime =
+  if new_thing of Build:
+    Build(new_thing).reset_bounds
+    Build(new_thing).restore_edits
+  if ?new_thing.script_ctx:
+    new_thing.script_ctx.last_saved_json_mtime =
       get_last_modification_time(json_file)
-    if file_exists(new_unit.script_ctx.script):
-      new_unit.code = Code.init(read_file(new_unit.script_ctx.script))
+    if file_exists(new_thing.script_ctx.script):
+      new_thing.code = Code.init(read_file(new_thing.script_ctx.script))
     else:
-      new_unit.global_flags -= SCRIPT_INITIALIZING
+      new_thing.global_flags -= SCRIPT_INITIALIZING
       # A scripted build renders its restored edits when its code loads
       # (change_code -> reset, then end_asap when the script finishes). A
       # build with no script never gets that pass, so do it here: reset()
       # restores+draws into the ASAP buffer, end_asap() flushes it to a mesh.
-      if new_unit of Build:
-        Build(new_unit).reset()
-        Build(new_unit).end_asap()
+      if new_thing of Build:
+        Build(new_thing).reset()
+        Build(new_thing).end_asap()
 
-proc write_script_file(unit: Unit, code: string) =
+proc write_script_file(thing: Thing, code: string) =
   # Code changes that originate from disk (level load, file-watcher reloads)
   # round-trip through here; write_file_if_changed keeps them from bumping
   # the mtime and reload-looping another instance on the same level dir.
-  write_file_if_changed(unit.script_ctx.script, code)
+  write_file_if_changed(thing.script_ctx.script, code)
   try:
-    unit.script_ctx.last_saved_mtime =
-      get_last_modification_time(unit.script_ctx.script)
+    thing.script_ctx.last_saved_mtime =
+      get_last_modification_time(thing.script_ctx.script)
   except OSError:
     discard
 
-proc change_code(self: Worker, unit: Unit, code: Code) =
-  debug "code changing", unit = unit.id
-  unit.errors.clear
-  unit.global_flags -= HIGHLIGHT_ERROR
-  if ?unit.script_ctx and unit.script_ctx.running and not ?unit.clone_of:
-    unit.collect_garbage
+proc change_code(self: Worker, thing: Thing, code: Code) =
+  debug "code changing", thing = thing.id
+  thing.errors.clear
+  thing.global_flags -= HIGHLIGHT_ERROR
+  if ?thing.script_ctx and thing.script_ctx.running and not ?thing.clone_of:
+    thing.collect_garbage
 
-  unit.reset()
+  thing.reset()
   if LOADING_SCRIPT notin state.local_flags and code.nim.strip == "":
-    self.interpreter.reset_module(unit.script_ctx.module_name)
-    self.module_names.excl unit.script_ctx.module_name
-    debug "reset module", module = unit.script_ctx.module_name
-    unit.script_ctx.running = false
+    self.interpreter.reset_module(thing.script_ctx.module_name)
+    self.module_names.excl thing.script_ctx.module_name
+    debug "reset module", module = thing.script_ctx.module_name
+    thing.script_ctx.running = false
     try:
-      remove_file unit.script_ctx.script
+      remove_file thing.script_ctx.script
     except OSError:
       discard
   elif code.nim.strip != "":
-    debug "loading unit", unit_id = unit.id
+    debug "loading thing", thing_id = thing.id
     if LOADING_SCRIPT notin state.local_flags and not self.retry_failures:
-      unit.write_script_file(code.nim)
+      thing.write_script_file(code.nim)
       if not self.interpreter.is_nil:
-        self.load_script_and_dependents(unit)
+        self.load_script_and_dependents(thing)
       else:
         # We load the player before we init the interpreter to get to an
         # interactive state quicker. Otherwise this shouldn't ever be nil.
-        assert unit.id == state.player.id
+        assert thing.id == state.player.id
     else:
-      self.load_script(unit)
+      self.load_script(thing)
 
 const file_watch_interval = 2.seconds
 
@@ -182,114 +182,114 @@ proc update_files*(self: Worker) =
     return
 
   # Mid-reload there is no level: switch_world(0) writes level_dir = "" then
-  # back, and unload_level has already emptied state.units. Scanning now would
-  # make every on-disk unit look newly added and batch-load the whole level
+  # back, and unload_level has already emptied state.things. Scanning now would
+  # make every on-disk thing look newly added and batch-load the whole level
   # into a VM that hasn't run initialize_state yet.
   if state.config.level_dir == "" or RESETTING_VM in state.local_flags or
       LOADING_LEVEL in state.global_flags:
     return
 
   # Detect on-disk deletions before the mtime scans (which silently swallow
-  # OSError for missing files and so would leave a deleted unit in state).
-  var unit_deletions: seq[Unit]
-  var script_clears: seq[Unit]
-  for unit in state.units.value:
-    if not ?unit.script_ctx:
+  # OSError for missing files and so would leave a deleted thing in state).
+  var thing_deletions: seq[Thing]
+  var script_clears: seq[Thing]
+  for thing in state.things.value:
+    if not ?thing.script_ctx:
       continue
-    # Skip units whose JSON has never been observed (still initializing) —
+    # Skip things whose JSON has never been observed (still initializing) —
     # we can't tell "deleted" from "never existed yet".
-    if unit.script_ctx.last_saved_json_mtime != Time.default and
-        not file_exists(unit.data_file):
-      unit_deletions.add(unit)
+    if thing.script_ctx.last_saved_json_mtime != Time.default and
+        not file_exists(thing.data_file):
+      thing_deletions.add(thing)
       continue
-    if unit.script_ctx.script != "" and
-        unit.script_ctx.last_saved_mtime != Time.default and
-        not file_exists(unit.script_ctx.script):
-      script_clears.add(unit)
+    if thing.script_ctx.script != "" and
+        thing.script_ctx.last_saved_mtime != Time.default and
+        not file_exists(thing.script_ctx.script):
+      script_clears.add(thing)
 
-  for unit in unit_deletions:
-    debug "unit data file deleted on disk; removing", unit_id = unit.id
-    if unit.parent.is_nil:
-      state.units -= unit
+  for thing in thing_deletions:
+    debug "thing data file deleted on disk; removing", thing_id = thing.id
+    if thing.parent.is_nil:
+      state.things -= thing
     else:
-      unit.parent.units -= unit
-  if unit_deletions.len > 0:
+      thing.parent.things -= thing
+  if thing_deletions.len > 0:
     save_level(state.config.level_dir)
 
-  for unit in script_clears:
-    debug "script file deleted on disk; clearing code", unit_id = unit.id
+  for thing in script_clears:
+    debug "script file deleted on disk; clearing code", thing_id = thing.id
     # Mark the script as unobserved so a future re-add re-loads it.
-    unit.script_ctx.last_saved_mtime = Time.default
-    unit.code = Code.init("")
+    thing.script_ctx.last_saved_mtime = Time.default
+    thing.code = Code.init("")
 
-  # Script mtime scan (root-level units only; nested units handled via deps).
+  # Script mtime scan (root-level things only; nested things handled via deps).
   # Use `touch` rather than `=` so the watcher re-runs the script even when
   # the file's mtime changed but its content didn't (e.g. an explicit save
   # to force a re-run). watch_code -> change_code already does reset + reload,
   # mirroring the in-game editor's save path.
-  for unit in state.units.value:
-    if ?unit.script_ctx and unit.script_ctx.script != "":
+  for thing in state.things.value:
+    if ?thing.script_ctx and thing.script_ctx.script != "":
       try:
-        let mtime = get_last_modification_time(unit.script_ctx.script)
-        if mtime != unit.script_ctx.last_saved_mtime:
-          let code = read_file(unit.script_ctx.script)
-          unit.script_ctx.last_saved_mtime = mtime
-          unit.code_value.touch Code.init(code)
+        let mtime = get_last_modification_time(thing.script_ctx.script)
+        if mtime != thing.script_ctx.last_saved_mtime:
+          let code = read_file(thing.script_ctx.script)
+          thing.script_ctx.last_saved_mtime = mtime
+          thing.code_value.touch Code.init(code)
       except OSError:
         discard
 
-  # Table of every loaded unit (whole tree, not just top level) for the JSON
-  # watch + orphan detection. A unit adopted onto another lives nested in memory
+  # Table of every loaded thing (whole tree, not just top level) for the JSON
+  # watch + orphan detection. A thing adopted onto another lives nested in memory
   # but its data stays at the flat top-level path, so it'd otherwise look "new"
   # to the walk_dirs scan below and get reconstructed. Walking the tree keeps it
   # recognized as already-loaded.
-  var loaded_units: Table[string, Unit]
-  state.units.value.walk_tree proc(unit: Unit) {.gcsafe.} =
-    loaded_units[unit.id] = unit
+  var loaded_things: Table[string, Thing]
+  state.things.value.walk_tree proc(thing: Thing) {.gcsafe.} =
+    loaded_things[thing.id] = thing
 
-  # JSON watch: reload changed units inline; collect newly-appeared ones to
+  # JSON watch: reload changed things inline; collect newly-appeared ones to
   # load together as a batch afterward.
-  var new_units: seq[tuple[id, json_file: string]]
+  var new_things: seq[tuple[id, json_file: string]]
   for dir in walk_dirs(state.config.data_dir / "*"):
-    let unit_id = dir.split_path.tail
-    let json_file = dir / unit_id & ".json"
+    let thing_id = dir.split_path.tail
+    let json_file = dir / thing_id & ".json"
     if not file_exists(json_file):
       continue
-    if unit_id in loaded_units:
-      let unit = loaded_units[unit_id]
-      if not (unit of Build or unit of Bot) or not ?unit.script_ctx:
+    if thing_id in loaded_things:
+      let thing = loaded_things[thing_id]
+      if not (thing of Build or thing of Bot) or not ?thing.script_ctx:
         continue
-      if unit.script_ctx.last_saved_json_mtime == Time.default:
+      if thing.script_ctx.last_saved_json_mtime == Time.default:
         continue
       try:
-        let json_mtime = get_last_modification_time(unit.data_file)
-        if json_mtime != unit.script_ctx.last_saved_json_mtime:
-          let parent = unit.parent
+        let json_mtime = get_last_modification_time(thing.data_file)
+        if json_mtime != thing.script_ctx.last_saved_json_mtime:
+          let parent = thing.parent
           state.push_flag LOADING_SCRIPT
           if parent.is_nil:
-            state.units -= unit
+            state.things -= thing
           else:
-            parent.units -= unit
+            parent.things -= thing
           state.pop_flag LOADING_SCRIPT
-          load_unit_from_json(unit_id, json_file)
+          load_thing_from_json(thing_id, json_file)
       except OSError:
         discard
     else:
-      new_units.add (unit_id, json_file)
+      new_things.add (thing_id, json_file)
 
-  # Load newly-appeared units as one batch: queue each (deferring "symbol not
+  # Load newly-appeared things as one batch: queue each (deferring "symbol not
   # found" failures) under retry_failures, then retry until they all resolve.
-  # Cross-script dependencies between simultaneously-added units (e.g. a proto
+  # Cross-script dependencies between simultaneously-added things (e.g. a proto
   # and the spawner that references it) sort themselves out regardless of
   # filesystem order, the same way a full level load does.
-  if new_units.len > 0:
+  if new_things.len > 0:
     state.push_flag LOADING_SCRIPT
     self.retry_failures = true
-    for (unit_id, json_file) in new_units:
+    for (thing_id, json_file) in new_things:
       try:
-        load_unit_from_json(unit_id, json_file)
+        load_thing_from_json(thing_id, json_file)
       except Exception as e:
-        error "Failed to load new unit from JSON", unit_id, error = e
+        error "Failed to load new thing from JSON", thing_id, error = e
     self.retry_failed_scripts()
     self.retry_failures = false
     state.pop_flag LOADING_SCRIPT
@@ -300,7 +300,7 @@ proc update_files*(self: Worker) =
     let stem = script_path.split_file.name
     if stem == "players":
       continue
-    if stem notin loaded_units:
+    if stem notin loaded_things:
       let json_file = state.config.data_dir / stem / stem & ".json"
       if not file_exists(json_file) and
           script_path notin self.orphan_scripts_reported:
@@ -311,96 +311,96 @@ proc update_files*(self: Worker) =
 
   self.watch_files_at = get_mono_time() + file_watch_interval
 
-proc watch_code(self: Worker, unit: Unit) =
-  unit.code_value.changes:
+proc watch_code(self: Worker, thing: Thing) =
+  thing.code_value.changes:
     if added or touched:
       if change.item.runner == Ed.thread_ctx.id:
         save_level(state.config.level_dir)
-        self.change_code(unit, change.item)
+        self.change_code(thing, change.item)
         if change.item.nim == "":
-          remove_file unit.script_ctx.script
+          remove_file thing.script_ctx.script
         else:
-          unit.write_script_file(change.item.nim)
+          thing.write_script_file(change.item.nim)
 
-  unit.eval_value.changes:
+  thing.eval_value.changes:
     if added or touched and change.item != "":
-      unit.eval = ""
+      thing.eval = ""
       try:
-        discard self.eval(unit, change.item)
+        discard self.eval(thing, change.item)
       except VMQuit as e:
-        self.script_error(unit, e)
+        self.script_error(thing, e)
 
-  let errors_zid = unit.errors.changes:
-    if unit.code.owner == Ed.thread_ctx.id:
+  let errors_zid = thing.errors.changes:
+    if thing.code.owner == Ed.thread_ctx.id:
       if added and change.item.log:
         state.err(
-          \"[url=unit://{unit.id}]{change.item.msg} {unit.errors.len}[/url]"
+          \"[url=thing://{thing.id}]{change.item.msg} {thing.errors.len}[/url]"
         )
         if state.config.auto_show_console:
           state.push_flags CONSOLE_VISIBLE
 
       if removed and state.config.auto_show_console:
         state.pop_flags CONSOLE_VISIBLE
-  unit.errors.bind_lifetime(unit.require_lifetime, errors_zid)
+  thing.errors.bind_lifetime(thing.require_lifetime, errors_zid)
 
-  if unit.script_ctx.is_nil:
-    unit.script_ctx =
-      ScriptCtx.init(owner = unit, interpreter = self.interpreter)
+  if thing.script_ctx.is_nil:
+    thing.script_ctx =
+      ScriptCtx.init(owner = thing, interpreter = self.interpreter)
 
-    unit.script_ctx.script = script_file_for unit
+    thing.script_ctx.script = script_file_for thing
     try:
-      unit.script_ctx.last_saved_mtime =
-        get_last_modification_time(unit.script_ctx.script)
+      thing.script_ctx.last_saved_mtime =
+        get_last_modification_time(thing.script_ctx.script)
     except OSError:
       discard
     try:
-      unit.script_ctx.last_saved_json_mtime =
-        get_last_modification_time(unit.data_file)
+      thing.script_ctx.last_saved_json_mtime =
+        get_last_modification_time(thing.data_file)
     except OSError:
       discard
 
-proc watch_units(
+proc watch_things(
     self: Worker,
-    units: EdSeq[Unit],
-    parent: Unit,
-    body: proc(unit: Unit, change: Change[Unit], added: bool, removed: bool) {.
+    things: EdSeq[Thing],
+    parent: Thing,
+    body: proc(thing: Thing, change: Change[Thing], added: bool, removed: bool) {.
       gcsafe
     .},
 ) {.gcsafe.} =
-  units.track proc(changes: seq[Change[Unit]]) {.gcsafe.} =
+  things.track proc(changes: seq[Change[Thing]]) {.gcsafe.} =
     for change in changes:
-      let unit = change.item
+      let thing = change.item
       let added = Added in change.changes
       let removed = Removed in change.changes
-      body(unit, change, added, removed)
+      body(thing, change, added, removed)
       if added:
         # FIXME: this is being set for the main thread in node_controller
-        unit.fix_parents(parent)
-        unit.frame_created = state.frame_count
-        if SERVER notin state.local_flags and not unit.sync_ready:
-          # Narrow partial replica: the unit arrived without its data. One deep
+        thing.fix_parents(parent)
+        thing.frame_created = state.frame_count
+        if SERVER notin state.local_flags and not thing.sync_ready:
+          # Narrow partial replica: the thing arrived without its data. One deep
           # fetch pulls its whole ownership closure (containers + subtree); the
           # fills relay to the node ctx, whose deferred scene add completes.
-          discard Ed.thread_ctx.fetch(unit.id, deep = true)
+          discard Ed.thread_ctx.fetch(thing.id, deep = true)
         # A TRANSFERRING add is a reparent relink (adopt/release), not a new
-        # unit: its collision and child-collection watchers are already
+        # thing: its collision and child-collection watchers are already
         # registered, and re-adding them would run every downstream join and
         # teardown once per accumulated subscription (growing with each hop).
-        if TRANSFERRING notin unit.global_flags:
-          unit.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
-            # script_ctx is nil for a unit that never finished joining (a narrow
+        if TRANSFERRING notin thing.global_flags:
+          thing.collisions.track proc(changes: seq[Change[(string, Vector3)]]) =
+            # script_ctx is nil for a thing that never finished joining (a narrow
             # replica's deferred join, destroyed before its fetch completed —
             # e.g. an agent bot churned during a reload). The CLOSED this
             # watcher gets from that destroy must not deref it.
-            if ?unit.script_ctx:
-              unit.script_ctx.timer = get_mono_time()
-          self.watch_units(unit.units, unit, body)
+            if ?thing.script_ctx:
+              thing.script_ctx.timer = get_mono_time()
+          self.watch_things(thing.things, thing, body)
 
-template for_all_units(self: Worker, body: untyped) {.dirty.} =
-  self.watch_units state.units,
+template for_all_things(self: Worker, body: untyped) {.dirty.} =
+  self.watch_things state.things,
     parent = nil,
     proc(
-        unit: Unit, change: Change[Unit], added: bool, removed: bool
+        thing: Thing, change: Change[Thing], added: bool, removed: bool
     ) {.gcsafe.} =
       body
 
@@ -460,44 +460,44 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   var worker = Worker()
 
-  worker.for_all_units:
+  worker.for_all_things:
     if added:
-      if TRANSFERRING in unit.global_flags:
-        # Relink (adopt/release): the unit is already joined and its script is
+      if TRANSFERRING in thing.global_flags:
+        # Relink (adopt/release): the thing is already joined and its script is
         # running. Re-adding it to a new collection must not re-join or re-watch.
         discard
-      elif unit.sync_ready:
-        unit.worker_thread_joined(worker)
-        worker.watch_code unit
+      elif thing.sync_ready:
+        thing.worker_thread_joined(worker)
+        worker.watch_code thing
       else:
-        # Narrow replica: the unit's data is still arriving (the deep fetch in
-        # watch_units pulls it). Join once it lands — drained per loop tick.
-        worker.pending_units.add unit
+        # Narrow replica: the thing's data is still arriving (the deep fetch in
+        # watch_things pulls it). Join once it lands — drained per loop tick.
+        worker.pending_things.add thing
 
     if removed:
-      if TRANSFERRING in unit.global_flags:
-        # Moving between collections, not leaving the level: keep the unit, its
+      if TRANSFERRING in thing.global_flags:
+        # Moving between collections, not leaving the level: keep the thing, its
         # script mapping, and its on-disk script/data intact.
         discard
       else:
-        worker.unmap_unit(unit)
+        worker.unmap_thing(thing)
 
-        if ?unit.script_ctx:
-          unit.script_ctx.running = false
-          unit.script_ctx.callback = nil
-          if not (unit of Player) and LOADING_SCRIPT notin state.local_flags and
-              not ?unit.clone_of:
-            remove_file unit.script_ctx.script
-            remove_dir unit.data_dir
+        if ?thing.script_ctx:
+          thing.script_ctx.running = false
+          thing.script_ctx.callback = nil
+          if not (thing of Player) and LOADING_SCRIPT notin state.local_flags and
+              not ?thing.clone_of:
+            remove_file thing.script_ctx.script
+            remove_dir thing.data_dir
 
-        unit.destroy
+        thing.destroy
 
   let player = state.player
 
   # add player before interpreter is initialized to get to an interactive
   # state quicker
   if SERVER in state.local_flags:
-    state.units.add player
+    state.things.add player
   else:
     state.push_flag(CONNECTING)
     let tmp_path = join_path(state.config.work_dir, "tmp")
@@ -509,34 +509,34 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   worker.bridge_to_vm
 
   worker.eval_proc = proc(
-      code: string, top_level: bool, unit_id: string
+      code: string, top_level: bool, thing_id: string
   ): tuple[result: string, error: string] {.gcsafe.} =
     try:
-      var unit: Unit = state.player
-      if unit_id != "":
-        unit = nil
-        proc find_in(units: EdSeq[Unit]): Unit =
-          for u in units.value:
-            if u.id == unit_id:
+      var thing: Thing = state.player
+      if thing_id != "":
+        thing = nil
+        proc find_in(things: EdSeq[Thing]): Thing =
+          for u in things.value:
+            if u.id == thing_id:
               return u
-            let found = find_in(u.units)
+            let found = find_in(u.things)
             if not found.is_nil:
               return found
 
-        unit = find_in(state.units)
-        if unit.is_nil:
-          return ("", "Error: unit not found: " & unit_id)
-        if unit.script_ctx.is_nil or unit.script_ctx.interpreter.is_nil:
-          return ("", "Error: unit has no script context: " & unit_id)
+        thing = find_in(state.things)
+        if thing.is_nil:
+          return ("", "Error: thing not found: " & thing_id)
+        if thing.script_ctx.is_nil or thing.script_ctx.interpreter.is_nil:
+          return ("", "Error: thing has no script context: " & thing_id)
         # Clones share the proto's module — they don't have one of their
         # own. The interpreter.eval below would assert on a missing
         # module, taking the worker thread down. Surface a clean error
         # instead.
-        if not unit.clone_of.is_nil:
+        if not thing.clone_of.is_nil:
           return (
             "",
-            "Error: unit " & unit_id & " is a clone; eval in clone context " &
-              "isn't supported. Try the proto: " & unit.clone_of.id,
+            "Error: thing " & thing_id & " is a clone; eval in clone context " &
+              "isn't supported. Try the proto: " & thing.clone_of.id,
           )
       let wrapped =
         if top_level:
@@ -544,7 +544,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         else:
           let indented = code.split_lines.map_it("  " & it).join("\n")
           "(block:\n" & indented & "\n)"
-      (worker.eval(unit, wrapped).get(""), "")
+      (worker.eval(thing, wrapped).get(""), "")
     except VMQuit as e:
       (
         "",
@@ -580,7 +580,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             worker.load_script_and_dependents(player)
             # The fresh VM has no `player` global until initialize_state runs,
             # and load_level (which normally runs it) may not happen until a
-            # later change event. Anything that loads a unit script in that
+            # later change event. Anything that loads a thing script in that
             # window hits a nil player at script top level.
             worker.run_state_initializers()
           level_dir = change.item.level_dir
@@ -595,8 +595,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     while not connected and get_mono_time() < timeout_at:
       try:
         Ed.thread_ctx.subscribe(
-          # Partial replica: the unit directory plus (server-pushed) each
-          # unit's ownership closure — see OWNS_MEMBERS on root_units. Our own
+          # Partial replica: the thing directory plus (server-pushed) each
+          # thing's ownership closure — see OWNS_MEMBERS on root_things. Our own
           # writes still flow up (the reverse direction stays full).
           connect_address,
           # Non-blocking partial: placeholders fill on later ticks, never
@@ -604,9 +604,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           mode = PARTIAL_ASYNC,
           # deep stays default-false for now: a stress test of the narrow path
           # (placeholders + materialize-on-access). Flip to deep = true if it
-          # doesn't hold up — that pushes unit closures so units arrive
+          # doesn't hold up — that pushes thing closures so things arrive
           # render-ready.
-          fetch = ["root_units"],
+          fetch = ["root_things"],
         )
         connected = true
         # Get the remote server's context ID from subscribers
@@ -619,7 +619,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         discard
 
     state.pop_flag(CONNECTING)
-    state.units.add player
+    state.things.add player
     player.script_ctx.interpreter = worker.interpreter
     if not connected:
       state.err \"Unable to connect to server at {connect_address}"
@@ -642,7 +642,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     transform = Transform.init(origin = vec3(0, 4, 0)),
   )
 
-  state.player.units += sign
+  state.player.things += sign
   sign.global_flags -= VISIBLE
   sign.local_flags += HIDE
 
@@ -699,28 +699,28 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       let wait_until = frame_start + min_time
       inc tick_count
 
-      if worker.pending_units.len > 0:
-        var still_pending: seq[Unit]
-        for unit in worker.pending_units:
-          if unit.destroyed:
+      if worker.pending_things.len > 0:
+        var still_pending: seq[Thing]
+        for thing in worker.pending_things:
+          if thing.destroyed:
             continue
-          if unit.sync_ready:
-            unit.worker_thread_joined(worker)
-            worker.watch_code unit
+          if thing.sync_ready:
+            thing.worker_thread_joined(worker)
+            worker.watch_code thing
           else:
-            still_pending.add unit
-        worker.pending_units = still_pending
+            still_pending.add thing
+        worker.pending_things = still_pending
 
       for ctx_name in Ed.thread_ctx.drain_unsubscribed:
         var i = 0
-        while i < state.units.len:
-          let unit = state.units[i]
-          # EPHEMERAL units carry the ctx that created them in `owner_ctx`.
+        while i < state.things.len:
+          let thing = state.things[i]
+          # EPHEMERAL things carry the ctx that created them in `owner_ctx`.
           # When that context unsubscribes, drop the corresponding agents.
-          if EPHEMERAL in unit.global_flags and unit.owner_ctx == ctx_name:
-            debug "reaping agent unit on ctx unsubscribe",
-              unit_id = unit.id, ctx_name
-            state.units.del i
+          if EPHEMERAL in thing.global_flags and thing.owner_ctx == ctx_name:
+            debug "reaping agent thing on ctx unsubscribe",
+              thing_id = thing.id, ctx_name
+            state.things.del i
           else:
             i += 1
 
@@ -728,21 +728,21 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           state.push_flag(NEEDS_RESTART)
           break
 
-      var to_process: seq[Unit]
-      state.units.value.walk_tree proc(unit: Unit) =
-        if unit.code.runner == Ed.thread_ctx.id and ?unit.script_ctx:
-          if unit.script_ctx.running:
-            unit.global_flags += SCRIPT_RUNNING
+      var to_process: seq[Thing]
+      state.things.value.walk_tree proc(thing: Thing) =
+        if thing.code.runner == Ed.thread_ctx.id and ?thing.script_ctx:
+          if thing.script_ctx.running:
+            thing.global_flags += SCRIPT_RUNNING
           else:
-            unit.global_flags -= SCRIPT_RUNNING
-        to_process.add unit
+            thing.global_flags -= SCRIPT_RUNNING
+        to_process.add thing
       to_process.shuffle
 
-      # Check if any unit is in ASAP mode - if so, skip voxel_tasks check
+      # Check if any thing is in ASAP mode - if so, skip voxel_tasks check
       # because periodic paste will cause many tasks to queue up
       var any_asap = false
-      for unit in to_process:
-        if unit of Build and ASAP_MODE in Build(unit).global_flags:
+      for thing in to_process:
+        if thing of Build and ASAP_MODE in Build(thing).global_flags:
           any_asap = true
           break
 
@@ -753,12 +753,12 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
       while Ed.thread_ctx.pressure < 0.9 and to_process.len > 0 and
           (any_asap or state.voxel_tasks <= 10) and get_mono_time() < timeout:
-        let units = to_process
+        let things = to_process
         to_process = @[]
-        for unit in units:
-          if READY in unit.global_flags:
-            if worker.advance_unit(unit, timeout):
-              to_process.add(unit)
+        for thing in things:
+          if READY in thing.global_flags:
+            if worker.advance_thing(thing, timeout):
+              to_process.add(thing)
 
       # Flush pending changes for all Builds
       let asap_interval_elapsed =
@@ -766,9 +766,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       # Only flush ASAP builds if interval elapsed AND voxel_tasks is low enough
       let can_flush_asap = asap_interval_elapsed and state.voxel_tasks <= 10
       var did_flush_asap = false
-      state.units.value.walk_tree proc(unit: Unit) =
-        if unit of Build and ?Build(unit).voxels:
-          let build = Build(unit)
+      state.things.value.walk_tree proc(thing: Thing) =
+        if thing of Build and ?Build(thing).voxels:
+          let build = Build(thing)
           let in_asap = ASAP_MODE in build.global_flags
           # Flush if not in ASAP mode, or if in ASAP mode and we can flush
           let should_flush = not in_asap or can_flush_asap
@@ -803,10 +803,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       if frame_start > last_stats_log + stats_log_interval:
         var total_snapshots = 0
         var total_deltas = 0
-        state.units.value.walk_tree proc(unit: Unit) =
-          if unit of Build and ?Build(unit).voxels:
-            total_snapshots += Build(unit).voxels.snapshots_flushed
-            total_deltas += Build(unit).voxels.deltas_flushed
+        state.things.value.walk_tree proc(thing: Thing) =
+          if thing of Build and ?Build(thing).voxels:
+            total_snapshots += Build(thing).voxels.snapshots_flushed
+            total_deltas += Build(thing).voxels.deltas_flushed
 
         let snapshots_this_period = total_snapshots - last_snapshots_flushed
         let deltas_this_period = total_deltas - last_deltas_flushed
@@ -837,10 +837,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
         var any_running = false
         var running_scripts: seq[string]
-        state.units.value.walk_tree proc(unit: Unit) =
-          if ?unit.script_ctx and unit.script_ctx.running:
+        state.things.value.walk_tree proc(thing: Thing) =
+          if ?thing.script_ctx and thing.script_ctx.running:
             any_running = true
-            running_scripts.add unit.id
+            running_scripts.add thing.id
 
         let elapsed = get_mono_time() - test_started_at
         # Log progress every 30 seconds

@@ -1,8 +1,8 @@
 import pkg/godot
 import godotapi/[ray_cast]
-import core, models/[units]
+import core, models/[things]
 
-proc run*(query: var SightQuery, source: Unit) =
+proc run*(query: var SightQuery, source: Thing) =
   assert not ?query.answer
   query.answer = some(false)
 

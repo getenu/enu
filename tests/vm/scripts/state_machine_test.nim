@@ -6,10 +6,10 @@ import core
 import base_bridge
 import types
 
-# Create a test unit and register it as active
-var test_unit = Unit()
-test_unit.query_results = initTable[string, seq[Unit]]()
-register_active(test_unit)
+# Create a test thing and register it as active
+var test_thing = Thing()
+test_thing.query_results = initTable[string, seq[Thing]]()
+register_active(test_thing)
 
 suite "State Machine":
   test "basic loop with counter":

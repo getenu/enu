@@ -14,11 +14,11 @@ type
     ## up/down, and `z` is forward/back.
 
   WorldBox* = tuple[min, max: Vector3]
-    ## An invisible box around a unit, described by its lowest corner
+    ## An invisible box around a thing, described by its lowest corner
     ## and its highest corner. Used to check what fits where.
 
   Directions* = enum
-    ## The 6 directions a unit can move, turn or lean. Each one has a
+    ## The 6 directions a thing can move, turn or lean. Each one has a
     ## single-letter shorthand, so `turn r` means `turn right`.
     up
     u
@@ -33,16 +33,16 @@ type
     back
     b
 
-  Unit* = ref object of RootObj
+  Thing* = ref object of RootObj
     ## Anything that exists in the world — a build, a bot, a sign, or
-    ## the player. Most commands work on any unit.
+    ## the player. Most commands work on any thing.
     id: int
     name*: string
     advance_state_machine*: proc(): bool
     rng: Rand
     seed: int
     sign*: Sign
-    query_results*: Table[string, seq[Unit]]
+    query_results*: Table[string, seq[Thing]]
 
   Query*[T] = object of RootObj
     ## The answer to a question like `Bot.all` or `?player`. Acts like
@@ -62,18 +62,18 @@ type
     offset*: float
     direction*: Vector3
 
-  Bot* = ref object of Unit
+  Bot* = ref object of Thing
     ## A robot character. Bots can walk, run, play animations, and be
     ## programmed to do whatever you like.
 
-  Build* = ref object of Unit
+  Build* = ref object of Thing
     ## Something made of blocks. Builds have a drawing turtle that
     ## commands like `forward` and `turn` steer around.
 
-  Sign* = ref object of Unit
+  Sign* = ref object of Thing
     ## A sign or message floating in the world.
 
-  Player* = ref object of Unit
+  Player* = ref object of Thing
     ## A person playing the game. The one at this computer is named
     ## `player`.
 

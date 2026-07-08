@@ -24,8 +24,8 @@ a few configurable options:
 
 - `show_stats`: Show FPS and other stats. `false` by default.
 
-- `god_mode`: Makes hidden units slightly visible, and allows editing locked
-  units. `false` by default.
+- `god_mode`: Makes hidden things slightly visible, and allows editing locked
+  things. `false` by default.
 
 - `megapixels`: The render resolution, in mega pixels. Increase for more
   detail. Decrease for better performance. `2.0` by default.

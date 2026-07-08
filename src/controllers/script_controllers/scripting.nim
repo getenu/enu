@@ -7,7 +7,7 @@ import
     [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents, vm]
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
-import core, models/[states, bots, builds, units, signs, players]
+import core, models/[states, bots, builds, things, signs, players]
 import libs/[interpreters, eval, fd_tracking]
 import ./vars
 
@@ -16,8 +16,8 @@ type ScriptCycleError* = object of VMQuit
 
 proc init*(
     _: type ScriptCtx,
-    owner: Unit,
-    clone_of: Unit = nil,
+    owner: Thing,
+    clone_of: Thing = nil,
     interpreter: Interpreter,
 ): ScriptCtx =
   result = ScriptCtx(
@@ -36,25 +36,25 @@ proc extract_file_info(msg: string): tuple[name: string, info: TLineInfo] =
       ),
     )
 
-proc script_error*(self: Worker, unit: Unit, e: ref VMQuit) =
+proc script_error*(self: Worker, thing: Thing, e: ref VMQuit) =
   var msg = e.msg
   if ?e.parent:
     msg = e.parent.msg
 
-  info "vm error", msg, file = unit.script_ctx.file_name
-  for i, error in unit.errors.value:
+  info "vm error", msg, file = thing.script_ctx.file_name
+  for i, error in thing.errors.value:
     var error = error
     error.log = true
-    unit.errors[i] = error
+    thing.errors[i] = error
 
-  unit.global_flags += HIGHLIGHT_ERROR
-  unit.global_flags -= SCRIPT_INITIALIZING
-  unit.ensure_visible
+  thing.global_flags += HIGHLIGHT_ERROR
+  thing.global_flags -= SCRIPT_INITIALIZING
+  thing.ensure_visible
 
   if e of ScriptCycleError:
     let cycle_err = (ref ScriptCycleError)(e)
     for script_name in cycle_err.scripts:
-      for u in state.units:
+      for u in state.things:
         if ?u.script_ctx and
             u.script_ctx.file_name.extract_filename == script_name:
           u.global_flags += HIGHLIGHT_ERROR
@@ -91,12 +91,12 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
     var info = info
     var msg = msg
 
-    let ctx = controller.active_unit.script_ctx
-    let errors = controller.active_unit.errors
+    let ctx = controller.active_thing.script_ctx
+    let errors = controller.active_thing.errors
     if severity == Severity.Error and config.error_counter >= config.error_max:
-      # While retrying (level load / new-unit batch), a failure here may just
+      # While retrying (level load / new-thing batch), a failure here may just
       # be an as-yet-unloaded cross-script dependency that resolves on a later
-      # pass. Don't echo it as an error; if it's genuinely broken, the unit
+      # pass. Don't echo it as an error; if it's genuinely broken, the thing
       # stays in `failed` and script_error reports it once retries are done.
       if not controller.retry_failures:
         echo msg
@@ -142,10 +142,10 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       c: PCtx, pc: int, tos: PStackFrame, instr: TInstr
   ) =
     assert ?controller
-    assert ?controller.active_unit
-    assert ?controller.active_unit.script_ctx
+    assert ?controller.active_thing
+    assert ?controller.active_thing.script_ctx
 
-    let ctx = controller.active_unit.script_ctx
+    let ctx = controller.active_thing.script_ctx
 
     ctx.ctx = c
     ctx.pc = pc
@@ -182,42 +182,42 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       ctx.pause_requested = false
       raise VMPause.new_exception("vm paused")
 
-proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
-  if SCRIPT_LOADING in unit.global_flags:
-    # Re-entry on the same unit is a bug — an Ed callback fired during a
+proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
+  if SCRIPT_LOADING in thing.global_flags:
+    # Re-entry on the same thing is a bug — an Ed callback fired during a
     # script load that drove back through load_level → retry_failed_scripts.
     # Crash with as much context as possible so we can diagnose.
-    let outer = if self.active_unit.is_nil: "<nil>" else: self.active_unit.id
+    let outer = if self.active_thing.is_nil: "<nil>" else: self.active_thing.id
     error "load_script re-entered",
-      unit_id = unit.id,
-      script = unit.script_ctx.script,
-      outer_active_unit = outer,
+      thing_id = thing.id,
+      script = thing.script_ctx.script,
+      outer_active_thing = outer,
       stack = get_stack_trace()
     logger("err",
-      "load_script re-entered for " & unit.id & " (outer active=" & outer &
+      "load_script re-entered for " & thing.id & " (outer active=" & outer &
       "); see log for stack trace.")
     raise (ref AssertionDefect)(
-      msg: "load_script re-entered for " & unit.id & "; outer active=" & outer
+      msg: "load_script re-entered for " & thing.id & "; outer active=" & outer
     )
-  unit.global_flags += SCRIPT_LOADING
+  thing.global_flags += SCRIPT_LOADING
   defer:
-    unit.global_flags -= SCRIPT_LOADING
-  let ctx = unit.script_ctx
+    thing.global_flags -= SCRIPT_LOADING
+  let ctx = thing.script_ctx
   try:
-    self.active_unit = unit
-    unit.errors.clear
-    unit.global_flags -= HIGHLIGHT_ERROR
+    self.active_thing = thing
+    thing.errors.clear
+    thing.global_flags -= HIGHLIGHT_ERROR
 
     if not state.paused:
       let module_name = ctx.script.split_file.name
       let script_dir = ctx.script.split_file.dir
       # Only import modules that have already successfully loaded (they're
       # added to module_names at the end of a successful load, below). An
-      # import of a not-yet-loaded unit resolves to its RAW script file (the
+      # import of a not-yet-loaded thing resolves to its RAW script file (the
       # scripts dir is on the VM search path) — unwrapped user code with no
       # API in scope — and fails with confusing built-in-symbol errors
       # ('undeclared identifier: speed'). A real cross-script reference to a
-      # not-yet-loaded unit now fails on the user's own symbol instead, and
+      # not-yet-loaded thing now fails on the user's own symbol instead, and
       # converges through the normal retry pass. (github issue #51)
       var others = self.module_names
       others.excl module_name
@@ -233,7 +233,7 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
           "import " & valid_others.to_seq.join(", ")
         else:
           ""
-      let code = unit.code_template(imports)
+      let code = thing.code_template(imports)
 
       # Write generated code to a 'generated' dir for tooling like nimlangserver
       # — but only for project scripts. Files loaded from outside the project
@@ -265,7 +265,7 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
           scripts.add(node)
           raise (ref ScriptCycleError)(msg: msg, scripts: scripts)
         temp_visited.incl(node)
-        for u in state.units:
+        for u in state.things:
           if u.script_ctx != nil and
               u.script_ctx.file_name.extract_filename == node:
             for dep in u.script_ctx.dependencies:
@@ -275,30 +275,30 @@ proc load_script*(self: Worker, unit: Unit, fuel = script_fuel) =
 
       visit(ctx.file_name.extract_filename)
 
-      # Loaded successfully: other units' wrappers may now import this module.
+      # Loaded successfully: other things' wrappers may now import this module.
       self.module_names.incl ctx.module_name
 
-      if not ctx.running and not ?unit.clone_of:
-        unit.collect_garbage
-        unit.ensure_visible
+      if not ctx.running and not ?thing.clone_of:
+        thing.collect_garbage
+        thing.ensure_visible
   except VMQuit as e:
     ctx.running = false
-    self.interpreter.reset_module(unit.script_ctx.module_name)
-    self.module_names.excl unit.script_ctx.module_name
+    self.interpreter.reset_module(thing.script_ctx.module_name)
+    self.module_names.excl thing.script_ctx.module_name
     if self.retry_failures and e.kind != TIMEOUT:
       # One calm line per transient failure; the detail is DEBUG. If the
       # retries exhaust, script_error reports it loudly.
       info "script failed, will retry",
-        script = unit.script_ctx.script.extract_filename
+        script = thing.script_ctx.script.extract_filename
       debug "script failure detail",
-        script = unit.script_ctx.script, error = e.msg
-      self.failed.add (unit, e)
+        script = thing.script_ctx.script, error = e.msg
+      self.failed.add (thing, e)
     else:
-      if e.kind == TIMEOUT and unit.errors.value.len == 0:
-        unit.errors.add (e.msg, e.info, e.location, false)
-      self.script_error(unit, e)
+      if e.kind == TIMEOUT and thing.errors.value.len == 0:
+        thing.errors.add (e.msg, e.info, e.location, false)
+      self.script_error(thing, e)
   finally:
-    self.active_unit = nil
+    self.active_thing = nil
 
 proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
   sample_open_fds()
@@ -308,8 +308,8 @@ proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
     prev_failed = self.failed
     self.failed = @[]
     for f in prev_failed:
-      debug "retrying", script = f.unit.script_ctx.script
-      self.load_script(f.unit)
+      debug "retrying", script = f.thing.script_ctx.script
+      self.load_script(f.thing)
   sample_open_fds()
   info "retry_failed_scripts exit", fds = open_fd_count()
 
@@ -318,50 +318,50 @@ proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
       failed_count = self.failed.len
 
   for f in prev_failed:
-    self.script_error(f.unit, f.e)
+    self.script_error(f.thing, f.e)
   self.failed = @[]
 
-proc load_script_and_dependents*(self: Worker, unit: Unit) =
-  var units_to_reload: HashSet[Unit]
-  units_to_reload.incl unit
+proc load_script_and_dependents*(self: Worker, thing: Thing) =
+  var things_to_reload: HashSet[Thing]
+  things_to_reload.incl thing
 
   state.push_flag LOADING_SCRIPT
   self.retry_failures = true
 
   var previous_count = 0
-  while units_to_reload.card != previous_count:
-    previous_count = units_to_reload.card
-    for other in state.units.value:
-      if other notin units_to_reload and ?other.script_ctx:
+  while things_to_reload.card != previous_count:
+    previous_count = things_to_reload.card
+    for other in state.things.value:
+      if other notin things_to_reload and ?other.script_ctx:
         for dep in other.script_ctx.dependencies:
-          # dependencies are full paths. Check if they match any reloading unit's file.
+          # dependencies are full paths. Check if they match any reloading thing's file.
           var found = false
-          for reloading in units_to_reload:
+          for reloading in things_to_reload:
             if reloading.script_ctx.file_name == dep:
               found = true
               break
           if found:
-            units_to_reload.incl other
+            things_to_reload.incl other
             break
 
-  for other in units_to_reload:
-    if other != unit:
+  for other in things_to_reload:
+    if other != thing:
       debug "resetting", module = other.script_ctx.module_name
       self.interpreter.reset_module(other.script_ctx.module_name)
       self.module_names.excl other.script_ctx.module_name
 
-  debug "loading unit", unit_id = unit.id
-  self.load_script(unit)
+  debug "loading thing", thing_id = thing.id
+  self.load_script(thing)
 
-  for other in units_to_reload:
-    if other != unit:
+  for other in things_to_reload:
+    if other != thing:
       other.code_value.touch Code.init(other.code.nim)
 
   self.retry_failed_scripts()
   self.retry_failures = false
   state.pop_flag LOADING_SCRIPT
 
-proc script_file_for*(self: Unit): string =
+proc script_file_for*(self: Thing): string =
   if self.id == state.player.id:
     state.config.lib_dir & "/vmlib/enu/players.nim"
   elif not ?self.clone_of:
@@ -369,12 +369,12 @@ proc script_file_for*(self: Unit): string =
   else:
     ""
 
-proc eval*(self: Worker, unit: Unit, code: string): Option[string] =
-  let active = self.active_unit
-  self.active_unit = unit
+proc eval*(self: Worker, thing: Thing, code: string): Option[string] =
+  let active = self.active_thing
+  self.active_thing = thing
   defer:
-    self.active_unit = active
+    self.active_thing = active
 
-  unit.script_ctx.fuel = script_fuel
+  thing.script_ctx.fuel = script_fuel
   {.gcsafe.}:
-    result = unit.script_ctx.eval(code)
+    result = thing.script_ctx.eval(code)

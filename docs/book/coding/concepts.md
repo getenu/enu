@@ -1,22 +1,20 @@
 # Core Concepts
 
-## Units
+## Things
 
-Entities/objects in Enu are referred to as units, and have a base type of
-`Unit`. Currently there are `Build` units (voxel objects) and `Bot` units (the
+Entities/objects in Enu are referred to as things, and have a base type of
+`Thing`. Currently there are `Build` things (voxel objects) and `Bot` things (the
 robot). There will be more in the future.
 
-`me` is the unit that owns a script, and is equivalent to `self`/`this` in other
+`me` is the thing that owns a script, and is equivalent to `self`/`this` in other
 environments. `me` was selected because it's easier for a child to type. `me.`
-can be auto-inserted when accessing properties of the unit. For example,
+can be auto-inserted when accessing properties of the thing. For example,
 `me.speed = 10` would commonly be written as `speed = 10`. There are probably
 bugs with this behavior.  Please report them.
 
-`Unit` will be renamed to `Thing` at some point in the future.
-
 ## Prototypes
 
-Enu uses a prototype based object system for units. To allow a unit to be a
+Enu uses a prototype based object system for things. To allow a thing to be a
 prototype, you give it a name. Prototype names start with a capital letter:
 
 ```nim
@@ -36,8 +34,8 @@ instance:
 name Ghost(color = white, speed = 5, spookiness = 10)
 ```
 
-These become properties of the unit (ie `me.spookiness = 5`), but can be treated
-like variables in the unit's script due to auto `me` insertion
+These become properties of the thing (ie `me.spookiness = 5`), but can be treated
+like variables in the thing's script due to auto `me` insertion
 (`spookiness = 200`).
 
 To create a new instance with specific property values:

@@ -72,7 +72,7 @@ proc await_future[T](future: Future[T], a: VmArgs) =
   future.add_callback proc(future: Future[T]) =
     set_result(a, to_result(future.read))
 
-const unit_types = ["Unit", "Bot", "Build", "Sign", "Player"]
+const thing_types = ["Thing", "Bot", "Build", "Sign", "Player"]
 
 macro bridged_from_vm(
     self: Worker, module_name: string, proc_refs: varargs[untyped]
@@ -88,8 +88,8 @@ macro bridged_from_vm(
     if symbol.kind != nnkSym:
       # Overloaded. Prefer, in order: a proc defined in this module — the
       # bridge wraps host_bridge's own procs first (`save` must bind the
-      # draw-position save here, not serializers' persist-the-unit save);
-      # then a Unit-first overload (procs that live in models, like
+      # draw-position save here, not serializers' persist-the-thing save);
+      # then a Thing-first overload (procs that live in models, like
       # `rotation`); then the first candidate.
       chosen = symbol[0]
       var found_local = false
@@ -103,7 +103,7 @@ macro bridged_from_vm(
       if not found_local:
         for candidate in symbol:
           let params = candidate.get_impl[3]
-          if params.len > 1 and params[1][1].repr == "Unit":
+          if params.len > 1 and params[1][1].repr == "Thing":
             chosen = candidate
             break
     let
@@ -125,8 +125,8 @@ macro bridged_from_vm(
           ident"a"
         elif typ == "ScriptCtx":
           quote:
-            script_engine.active_unit.script_ctx
-        elif typ in unit_types:
+            script_engine.active_thing.script_ctx
+        elif typ in thing_types:
           let getter = "get_" & typ
           pos.inc
           var call = new_call(
@@ -135,7 +135,7 @@ macro bridged_from_vm(
           if name == "self":
             call = new_call(bind_sym("assert_self"), call, new_lit(proc_name))
           call
-        elif typ in unit_types.map_it(\"type {it}"):
+        elif typ in thing_types.map_it(\"type {it}"):
           let type_name = typ.split(" ")[1]
           ident(type_name)
         else:
@@ -146,8 +146,8 @@ macro bridged_from_vm(
 
     var call = new_call(proc_ref, args)
     let return_type = return_node.repr
-    if return_type in unit_types or
-        return_type in unit_types.map_it(\"seq[{it}]"):
+    if return_type in thing_types or
+        return_type in thing_types.map_it(\"seq[{it}]"):
       call = new_call(
         bind_sym"set_result",
         ident"a",

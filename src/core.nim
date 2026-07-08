@@ -232,40 +232,40 @@ import pkg/godot
 import ed
 export ed
 
-proc global_from*(self: Vector3, unit: Unit): Vector3 =
+proc global_from*(self: Vector3, thing: Thing): Vector3 =
   result = self
-  var unit = unit
-  while unit != nil:
-    result += unit.transform.origin
-    unit = unit.parent
+  var thing = thing
+  while thing != nil:
+    result += thing.transform.origin
+    thing = thing.parent
 
-proc local_to*(self: Vector3, unit: Unit): Vector3 =
+proc local_to*(self: Vector3, thing: Thing): Vector3 =
   result = self
-  var unit = unit
-  while unit != nil:
-    result -= unit.transform.origin
-    unit = unit.parent
+  var thing = thing
+  while thing != nil:
+    result -= thing.transform.origin
+    thing = thing.parent
 
-proc world_from*(self: Vector3, unit: Unit): Vector3 =
+proc world_from*(self: Vector3, thing: Thing): Vector3 =
   ## Local point -> world through each ancestor's FULL transform, so it's
-  ## correct on rotated/scaled units. `global_from` above only sums origins,
-  ## which silently breaks once a unit has turned: a point on a rotated
+  ## correct on rotated/scaled things. `global_from` above only sums origins,
+  ## which silently breaks once a thing has turned: a point on a rotated
   ## platform maps to where it would be had the platform never rotated. The
   ## exact inverse of the node's `to_local`.
   result = self
-  var unit = unit
-  while unit != nil:
-    result = unit.transform.xform_vector3(result)
-    unit = unit.parent
+  var thing = thing
+  while thing != nil:
+    result = thing.transform.xform_vector3(result)
+    thing = thing.parent
 
-proc local_into*(self: Vector3, unit: Unit): Vector3 =
-  ## Inverse of `world_from`: world point -> `unit`-local through each
-  ## ancestor's full transform (root's inverse applied first, `unit`'s last).
+proc local_into*(self: Vector3, thing: Thing): Vector3 =
+  ## Inverse of `world_from`: world point -> `thing`-local through each
+  ## ancestor's full transform (root's inverse applied first, `thing`'s last).
   ## affine_inverse-based — `xform_inv` assumes an orthonormal basis, and
   ## scale lives in the basis.
-  if unit.is_nil:
+  if thing.is_nil:
     return self
-  unit.transform.affine_inverse.xform_vector3(self.local_into(unit.parent))
+  thing.transform.affine_inverse.xform_vector3(self.local_into(thing.parent))
 
 proc `+=`*(self: EdValue[string], str: string) =
   self.value = self.value & str
@@ -332,27 +332,27 @@ proc update_action_index*(state: GameState, change: int) =
 
   state.tool = available[index]
 
-proc require_lifetime*(unit: Unit): Lifetime =
-  ## The Unit's owner Lifetime, created on demand. Locally built units get one in
-  ## `init_unit`, but units arriving via sync are reconstructed through flatty's
-  ## `parse` (which skips `init_unit`), so their lifetime is nil until first use.
-  ## Any code binding a watcher to a unit goes through here, so a synced unit
+proc require_lifetime*(thing: Thing): Lifetime =
+  ## The Thing's owner Lifetime, created on demand. Locally built things get one in
+  ## `init_thing`, but things arriving via sync are reconstructed through flatty's
+  ## `parse` (which skips `init_thing`), so their lifetime is nil until first use.
+  ## Any code binding a watcher to a thing goes through here, so a synced thing
   ## still gets a real Lifetime the moment it's watched.
-  if unit.lifetime.is_nil:
-    unit.lifetime = new_lifetime()
-  unit.lifetime
+  if thing.lifetime.is_nil:
+    thing.lifetime = new_lifetime()
+  thing.lifetime
 
-template watch*[T, O](zen: Ed[T, O], unit: untyped, body: untyped) =
-  when unit is Unit:
+template watch*[T, O](zen: Ed[T, O], thing: untyped, body: untyped) =
+  when thing is Thing:
     mixin thread_ctx
     let zid = zen.changes:
       body
-    zen.bind_lifetime(unit.require_lifetime, zid)
+    zen.bind_lifetime(thing.require_lifetime, zid)
     make_discardable(zid)
   else:
     {.
       error:
-        "Watch needs a Unit object to bind its lifetime to. The Unit " &
+        "Watch needs a Thing object to bind its lifetime to. The Thing " &
         "can be passed explicitly, or found implicitly by evaluating " &
         "`self.model`, then `self`."
     .}

@@ -4,7 +4,7 @@ import core, states, bots, builds
 
 var add_to {.threadvar.}: Build
 proc fire(self: Ground, append = false) {.gcsafe.} =
-  state.draw_unit_id = "ground"
+  state.draw_thing_id = "ground"
   let point = (self.target_point - vec3(0.5, 0, 0.5)).trunc
   if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     if not append:
@@ -14,7 +14,7 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
       if ?current_build and time_since_last <= 500:
         add_to = current_build
       else:
-        add_to = state.units.find_first(point.surrounding)
+        add_to = state.things.find_first(point.surrounding)
     if ?add_to:
       let local = point.local_to(add_to)
       add_to.draw(local, (MANUAL, state.selected_color))
@@ -29,10 +29,10 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
       # no script; render its voxels directly.
       add_to.end_asap()
 
-      state.units += add_to
+      state.things += add_to
   elif state.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
     var t = Transform.init(origin = self.target_point)
-    state.units += Bot.init(transform = t)
+    state.things += Bot.init(transform = t)
 
 proc init*(_: type Ground, node: Spatial): Ground =
   let self = Ground(
@@ -46,10 +46,10 @@ proc init*(_: type Ground, node: Spatial): Ground =
       self.fire(append = false)
     if PRIMARY_DOWN.removed or SECONDARY_DOWN.removed:
       dont_join = false
-      state.draw_unit_id = ""
+      state.draw_thing_id = ""
 
   self.local_flags.changes:
-    if PRIMARY_DOWN in state.local_flags and state.draw_unit_id == "ground":
+    if PRIMARY_DOWN in state.local_flags and state.draw_thing_id == "ground":
       if change.item == TARGET_MOVED and state.tool notin {PLACE_BOT, Tools.NONE}:
         self.fire(append = true)
 

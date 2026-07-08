@@ -56,7 +56,7 @@ macro bridged_to_host*(body: untyped): untyped =
 
 when is_main_module:
   type
-    Unit = ref object
+    Thing = ref object
     Vector3 = object
     Colors = object
 
@@ -65,4 +65,4 @@ when is_main_module:
 
   bridged_to_host:
     proc write_stack_trace*()
-    proc id*(self: Unit): string
+    proc id*(self: Thing): string

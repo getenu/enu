@@ -7,7 +7,7 @@ and know how to fix a build when it comes out wrong.
 
 ## Get a Build to code
 
-Everything here is drawn by a `Build`, a unit made of blocks. Place one by
+Everything here is drawn by a `Build`, a thing made of blocks. Place one by
 picking a block color from the toolbar and dropping a block in the world.
 Then switch to the `Code` tool (key `1`) and click the block to open its code.
 

@@ -1,16 +1,16 @@
 ## Client-side convenience layer for native apps that drive a running Enu
 ## over `ed` (the demos under `bin/`, the MCP server). `Enu` is a marker type
 ## whose "class methods" wrap the boilerplate of standing up an `EdClient` and
-## reaching into its context, so an app reads `Enu.client` / `Enu.units`
+## reaching into its context, so an app reads `Enu.client` / `Enu.things`
 ## instead of spelling out the context plumbing.
 ##
 ## This is purely an app-facing helper — regular Enu doesn't use it.
 
 import std/[os, osproc, net, strutils, sequtils]
 import pkg/ed
-import core, models/units
+import core, models/things
 
-export ed, core, units
+export ed, core, things
 
 type Enu* = object ## Marker type for the `Enu.*` helpers; never instantiated.
 
@@ -38,31 +38,31 @@ proc client*(_: type Enu, address = "", mode = PARTIAL, id = ""): EdClient =
     enu_client = EdClient(id: id, address: resolved, mode: mode)
   enu_client
 
-proc units*(_: type Enu): EdSeq[Unit] =
-  ## The level's top-level units, via this thread's client.
-  EdSeq[Unit](enu_client.ctx["root_units"])
+proc things*(_: type Enu): EdSeq[Thing] =
+  ## The level's top-level things, via this thread's client.
+  EdSeq[Thing](enu_client.ctx["root_things"])
 
-proc find_unit*(_: type Enu, id: string): Unit =
-  ## The root unit with this `id`, or nil if there's no match.
-  for unit in Enu.units:
-    if unit.id == id:
-      return unit
+proc find_thing*(_: type Enu, id: string): Thing =
+  ## The root thing with this `id`, or nil if there's no match.
+  for thing in Enu.things:
+    if thing.id == id:
+      return thing
 
-proc ask*(unit: Unit, q: UnitQuery, timeout = 30.seconds): UnitQuery =
-  ## File query `q` against `unit` and tick until Enu answers (or `timeout`).
-  let slot = unit.query(q)
+proc ask*(thing: Thing, q: ThingQuery, timeout = 30.seconds): ThingQuery =
+  ## File query `q` against `thing` and tick until Enu answers (or `timeout`).
+  let slot = thing.query(q)
   if Enu.client.tick_until(timeout, slot.value.state == DONE):
     return slot.value
-  unit.query = UnitQuery(state: DONE)
-  UnitQuery(state: DONE, error: "Error: Enu did not respond within " & $timeout)
+  thing.query = ThingQuery(state: DONE)
+  ThingQuery(state: DONE, error: "Error: Enu did not respond within " & $timeout)
 
-proc answer*(q: UnitQuery): string =
+proc answer*(q: ThingQuery): string =
   ## A query's result, or its error message.
   if q.error != "": q.error else: q.result
 
-proc eval*(unit: Unit, code: string, top_level = false): string =
-  ## Run Nim `code` in `unit`'s scripting context; return the value or error.
-  answer unit.ask(UnitQuery(kind: EVAL, code: code, top_level: top_level))
+proc eval*(thing: Thing, code: string, top_level = false): string =
+  ## Run Nim `code` in `thing`'s scripting context; return the value or error.
+  answer thing.ask(ThingQuery(kind: EVAL, code: code, top_level: top_level))
 
 # --- Managed Enu instances -------------------------------------------------
 # Launch and own an Enu process, rather than connecting to one the user is

@@ -20,8 +20,8 @@
   what you're doing.
 - `Cmd`+`P` / `Ctrl`+`P` - Pause scripts.
 - `Cmd`+`Shift`+`S` / `Ctrl`+`Shift`+`S` - Save and reload all scripts, then
-  pause. If you have a script that makes a unit
-  inaccessible (ex. moves the unit below the ground) this is a way to get things
+  pause. If you have a script that makes a thing
+  inaccessible (ex. moves the thing below the ground) this is a way to get things
   back to their start positions so they can be edited.
 - `Left Click` - Place a block/object or open the code for the currently
   selected object.
@@ -47,7 +47,7 @@ To change how Enu looks and behaves (resolution, font size, full screen,
 worlds, multiplayer, and more), open the [Settings](settings.html) panel with
 the gear button.
 
-## Building and Placing Units
+## Building and Placing Things
 
 Drop a block or robot with the left mouse button/controller trigger, remove it
 with the right. Adjoining blocks will be combined into a single structure. With

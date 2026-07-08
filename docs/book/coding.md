@@ -49,9 +49,8 @@ Every piece of data in Enu has a type. These are the most common:
 - `Position` - The place of something in the world. Example:
   `me.position = player.position`
 
-- `Unit` - Anything that exists in the Enu world. This could be something you
-  build, a robot, or the player. This will be renamed to `Thing` in a future
-  version.
+- `Thing` - Anything that exists in the Enu world. This could be something you
+  build, a robot, or the player.
 
 ## Variables
 
@@ -75,19 +74,19 @@ if birthday:
 
 Usually variables are defined with just a value, but sometimes you need to
 specify their type as well. This could be because you're not ready to give it a
-value, or because you want it to contain more than one kind of `Unit`.
+value, or because you want it to contain more than one kind of `Thing`.
 
 For example:
 
 ```nim
 # this won't work because `enemy` gets automatically set 
-# to the type of `Player`, so other units won't work:
+# to the type of `Player`, so other things won't work:
 var enemy = player
 enemy = me
 
 # it will work if we do it like this, since `player` and
-# `me` are both `Unit`
-var enemy: Unit
+# `me` are both `Thing`
+var enemy: Thing
 enemy = player
 enemy = me
 ```
@@ -112,16 +111,16 @@ var
 
 Enu has some built in variables.
 
-- `me` - the `Unit` that we're working on in the current script.
+- `me` - the `Thing` that we're working on in the current script.
 
 - `speed` - a `Number` to get or set our current speed. `1.0` by default.
 
 - `color` - the current drawing `Color`. `blue` by default.
 
-- `scale` - a `Number` to grow or shrink a `Unit`. `1.0` by default. Be careful
-  about making this too small. You might lose the `Unit` you're working on.
+- `scale` - a `Number` to grow or shrink a `Thing`. `1.0` by default. Be careful
+  about making this too small. You might lose the `Thing` you're working on.
 
-- `position` - where a `Unit` is. You can use this to move something
+- `position` - where a `Thing` is. You can use this to move something
   immediately. `position = player.position` would teleport `me` to the player.
 
 - `drawing` - a `bool` that indicates if commands like `forward` or `back`
@@ -129,7 +128,7 @@ Enu has some built in variables.
   without drawing anything, which can be useful for making a hole or a new
   object.
 
-- `glow` - how bright a `Unit` is. Can be used to make something flash, or to
+- `glow` - how bright a `Thing` is. Can be used to make something flash, or to
   highlight it.
 
 ## Code Blocks
