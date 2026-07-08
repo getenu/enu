@@ -52,11 +52,13 @@ reasonable default value to use, specify a type (`spookiness: int`) instead, or
 omit both the value and the type, which will make the type `auto`.
 
 <details class="note">
-<summary>Note for Nimions</summary>
+<summary>Under the hood</summary>
 
-Because `auto` can be implicit, `name ghost(a, b: int)` treats parameters
-differently than `proc ghost(a, b: int)` would. With the proc, `a` and `b` are
-both `int`, whereas the `name` version would make `a` `auto` and `b` `int`.
+Enu runs on the [Nim](https://nim-lang.org) language, and prototypes compile
+down to Nim procs. Because Nim's `auto` type can be implicit,
+`name ghost(a, b: int)` treats parameters differently than a plain
+`proc ghost(a, b: int)` would: with the proc, `a` and `b` are both `int`,
+whereas the `name` version makes `a` `auto` and `b` `int`.
 
 </details>
 

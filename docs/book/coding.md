@@ -1,15 +1,16 @@
 # Coding Enu
 
-Enu is programmed with a language called [Nim](https://nim-lang.org). This
-tutorial covers some of the basics of Nim, as well as a few special features
-that are unique to Enu.
+You build and control everything in Enu by writing code. This section covers
+the basics — variables, commands, loops — plus a few things that are special to
+Enu. You don't need to know how to program already; we'll go from the start.
 
 <details class="note">
-<summary>Note for Nimions</summary>
+<summary>Under the hood</summary>
 
-Enu simplifies some Nim concepts, mainly to defer explaining unfamiliar terms.
-In particular, Enu tries to be forgiving with types, calls procs 'commands',
-and avoids immutable variables.
+Enu's code is [Nim](https://nim-lang.org), a real, grown-up programming
+language. Enu smooths off some of Nim's corners to keep things approachable: it
+is forgiving with types, calls procs "commands", and avoids immutable
+variables. Everything you learn here is real Nim you can use elsewhere.
 
 </details>
 

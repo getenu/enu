@@ -31,13 +31,14 @@ echo hello("Scott")
 ```
 
 <details class="note">
-<summary>Note for Nimions</summary>
+<summary>Under the hood</summary>
 
-A command is just a `proc`. Anything that can be done with commands can also be
-done with normal procs.
+Enu runs on the [Nim](https://nim-lang.org) language, and a command is just a
+Nim `proc`. Anything you can do with a command you can also do with a normal
+proc.
 
-Command parameters (called details here) will default to `auto` if no type is
-provided. Each parameter is shadowed my a mutable variable inside the command
-body.
+Command parameters (called details here) will default to Nim's `auto` type if
+no type is provided. Each parameter is shadowed by a mutable variable inside the
+command body.
 
 </details>

@@ -6,12 +6,12 @@ nb_text:
   """
   # Introduction
 
-  Build 3D worlds in Nim.
+  Build 3D worlds with code.
 
   ![Enu Screenshot](assets/screenshot_3.webp)
 
   Enu lets you build and explore worlds using a familiar block-building interface
-  and a Logo inspired API. It tries to make 3D development easier, and will
-  eventually be able to create standalone games.
+  and a Logo inspired coding language. It tries to make 3D development easier, and
+  will eventually be able to create standalone games.
   """
 nb_save

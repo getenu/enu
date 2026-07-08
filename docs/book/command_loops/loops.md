@@ -126,9 +126,10 @@ loop:
 ```
 
 <details class="note">
-<summary>Note for Nimions</summary>
+<summary>Under the hood</summary>
 
-Command Loops are state machines, and any proc can be a state. If the proc
-has a return value it will be discarded.
+Command Loops are state machines. Enu runs on the [Nim](https://nim-lang.org)
+language, and any Nim proc can be a state. If the proc has a return value it
+will be discarded.
 
 </details>

@@ -137,7 +137,7 @@ box 2, 3, 1, at = vec3(4, 0, 0), color = eraser
 ```
 
 <details class="note">
-<summary>Note for Nimions</summary>
+<summary>Under the hood</summary>
 
 `ball` and `can` are aliases for `sphere` and `cylinder`. Sphere and cylinder
 sizes are diameters, rasterised centred on the target block, so even sizes
