@@ -47,7 +47,7 @@ bridged_to_host:
   proc `speed=`*(self: Thing, speed: float)
   proc scale*(self: Thing): float
     ## How big the thing is. `1` is normal size, `2` is double, `0.5` is
-    ## half. Careful going tiny — it's easy to lose things.
+    ## half. Careful going tiny, it's easy to lose things.
 
   proc `scale=`*(self: Thing, scale: float)
   proc glow*(self: Thing): float
@@ -71,7 +71,7 @@ bridged_to_host:
     ## How fast (and which way) the thing is moving right now.
 
   proc color*(self: Thing): Colors
-    ## The thing's color. For a Build this is the drawing color — blocks
+    ## The thing's color. For a Build this is the drawing color, blocks
     ## you draw after changing it use the new color.
 
   proc `color=`*(self: Thing, color: Colors)
@@ -130,7 +130,7 @@ bridged_to_host:
     ## Everyone playing right now.
 
   proc all_things*(): seq[Thing]
-    ## Every thing in the world — builds, bots, signs and players.
+    ## Every thing in the world: builds, bots, signs and players.
 
   proc find_voxel_overlaps*(limit: int = 50): string
   proc things_in_box*(
@@ -139,7 +139,7 @@ bridged_to_host:
     ## Every thing inside the box between two corners.
 
   proc floor_at*(x: float, z: float): int
-    ## The height of the ground at a spot — the y of the highest solid
+    ## The height of the ground at a spot, the y of the highest solid
     ## block, plus 1.
 
   proc clear_box*(
@@ -157,7 +157,7 @@ bridged_to_host:
     ## Every thing whose box overlaps this one.
 
   proc box_is_free*(box: WorldBox): bool
-    ## `true` if nothing is in the box — handy for checking a spot
+    ## `true` if nothing is in the box, handy for checking a spot
     ## before building there.
 
   proc bounds_at*(

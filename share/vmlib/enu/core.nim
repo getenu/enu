@@ -48,7 +48,7 @@ proc quit*(code = 0, msg = "") =
   exit(code, msg)
 
 proc `position=`*(self: Thing, position: Vector3) =
-  ## Teleport the thing. No walking, no animation — it's just there now.
+  ## Teleport the thing. No walking, no animation, it's just there now.
   ## You can also assign another thing to teleport to wherever it is:
   ## `me.position = player.position`, or just `me.position = player`.
   self.position_set(position)
@@ -111,7 +111,7 @@ template wait(body: untyped) =
 proc sleep*(seconds = 0.0) =
   ## Do nothing for this many seconds. With no argument (or 0), naps
   ## for up to half a second, but wakes up early if something bumps
-  ## into the thing — perfect for a loop that mostly waits around.
+  ## into the thing, perfect for a loop that mostly waits around.
   wait sleep_impl(seconds)
 
 proc forward*(self: Thing, steps: float, move_mode: int) =
@@ -135,7 +135,7 @@ template back*(self: Thing, steps = 1.0) =
   wait self.begin_move(BACK, steps, move_mode)
 
 proc left*(self: Thing, steps: float, move_mode: int) =
-  ## Go left this many blocks (1 if you don't say). Slides sideways —
+  ## Go left this many blocks (1 if you don't say). Slides sideways,
   ## no turning.
   wait self.begin_move(LEFT, steps, move_mode)
 
@@ -144,7 +144,7 @@ template left*(self: Thing, steps = 1.0) =
   wait self.begin_move(LEFT, steps, move_mode)
 
 proc right*(self: Thing, steps: float, move_mode: int) =
-  ## Go right this many blocks (1 if you don't say). Slides sideways —
+  ## Go right this many blocks (1 if you don't say). Slides sideways,
   ## no turning.
   wait self.begin_move(RIGHT, steps, move_mode)
 
@@ -203,12 +203,12 @@ template back*(steps = 1.0) =
   enu_target.back(steps)
 
 template left*(steps = 1.0) =
-  ## Go left this many blocks (1 if you don't say). Slides sideways —
+  ## Go left this many blocks (1 if you don't say). Slides sideways,
   ## no turning. `l` for short.
   enu_target.left(steps)
 
 template right*(steps = 1.0) =
-  ## Go right this many blocks (1 if you don't say). Slides sideways —
+  ## Go right this many blocks (1 if you don't say). Slides sideways,
   ## no turning. `r` for short.
   enu_target.right(steps)
 
@@ -420,7 +420,7 @@ template t*(self: Thing, degrees: float) =
 
 proc lean*(self: Thing, direction: Directions, degrees = 90.0, move_mode: int) =
   ## Tip the thing (or the drawing turtle) forward, back, left or
-  ## right. Like `turn`, but instead of spinning like a top, you tilt —
+  ## right. Like `turn`, but instead of spinning like a top, you tilt,
   ## which lets the turtle draw up and down walls or loop-the-loops.
   let dir = vec3(direction)
   if dir in [UP, DOWN]:
@@ -441,7 +441,7 @@ template lean*(self: Thing, direction: Directions, degrees = 90.0) =
 
 template lean*(direction: Directions, degrees = 90.0) =
   ## Tip the thing (or the drawing turtle) forward, back, left or
-  ## right. Like `turn`, but instead of spinning like a top, you tilt —
+  ## right. Like `turn`, but instead of spinning like a top, you tilt,
   ## which lets the turtle draw up and down walls or loop-the-loops.
   mixin wait
   wait enu_target.lean(direction, degrees, move_mode)
@@ -621,7 +621,7 @@ proc rng(): var Rand =
 
 proc rand*[T: int | float](range: Slice[T]): T =
   ## A random number from a range: `rand(1..6)` rolls a die. Mostly
-  ## you don't even need to call this — passing a range where a number
+  ## you don't even need to call this, passing a range where a number
   ## goes does it automatically, like `forward 2..10`.
   rnd.rand rng(),
     if range.a > range.b:

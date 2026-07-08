@@ -11,7 +11,7 @@ bridged_to_host:
 
   proc `message=`*(self: Sign, value: string)
   proc more*(self: Sign): string
-    ## Extra text shown when the player opens the sign — good for
+    ## Extra text shown when the player opens the sign, good for
     ## the long version of the story.
 
   proc `more=`*(self: Sign, value: string)
