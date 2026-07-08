@@ -10,29 +10,30 @@ change without editing the [config file](config.html) by hand.
 
 The **Levels** dropdown lists every level in your current world. Pick one to
 jump straight to it. Choosing **New...** lets you name and create a fresh level
-to build in — your worlds are kept separate, so you can have one for
-experiments and one for your masterpiece.
+to build in. Your worlds are kept separate, so you can have one for experiments
+and one for your masterpiece.
 
 ## Player Color
 
-The color of your character in multiplayer. Pick one of Enu's built-in colors,
-or the panel will show a hex color if you've set a custom one in your config.
+The color of your character in multiplayer. Enu picks a random color for you
+the first time it launches, so everyone in a shared world looks different. Use
+this dropdown to change it to any of Enu's built-in colors.
 
 ## Environment
 
 Changes the scenery and lighting around you. `default` is the usual purple
-world; `none` strips it back; and there are others to try. Switching is
+world, but there are others to try: `gb` gives everything a Game Boy tint,
+`noir` goes hazy black and white, and `strange` is, well, strange. Switching is
 instant, so flip through them and see which you like.
 
 ## Full Screen
 
-Toggles between filling the whole screen and running in a window. (Hidden on
-iOS, where it wouldn't make sense.)
+Toggles between filling the whole screen and running in a window.
 
 ## Megapixels
 
-How sharp the world looks. Higher is crisper but asks more of your computer;
-lower is blurrier but runs faster. If things ever feel choppy, turn this down a
+How sharp the world looks. Higher is crisper but asks more of your computer.
+Lower is blurrier but runs faster. If things ever feel choppy, turn this down a
 notch. Use the arrows to step through sensible values.
 
 ## Font Size
@@ -44,13 +45,11 @@ the arrows.
 
 How big the tool icons are along the bottom of the screen.
 
-## Run Server / Connect
+## Connect
 
-The multiplayer controls. **Run Server** turns your Enu into a server other
-people can join. When it's on, a field appears for a **server address** so you
-can share your world. To join someone else's world instead, type their address
-and press **Connect**. Multiplayer is still experimental — see the
-[Multiplayer](multiplayer.html) page. Connecting or disconnecting restarts Enu.
+To join someone else's world, type their address into **Remote Server
+Address** and press **Connect**. Connecting or disconnecting restarts Enu. See
+the [Multiplayer](multiplayer.html) page for how to host a world of your own.
 
 <details class="note">
 <summary>Note</summary>

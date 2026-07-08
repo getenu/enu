@@ -1,8 +1,8 @@
 # Built-in Commands
 
 This page covers the commands for moving, turning, and reading the world.
-Commands for drawing whole shapes at once — `box`, `ball`, `can`, `wall`,
-`floor` — have their own page: [Drawing Shapes](shapes.html).
+Commands for drawing whole shapes at once (`box`, `ball`, `can`, `wall`,
+`floor`) have their own page: [Drawing Shapes](shapes.html).
 
 ## `move` / `build`
 
@@ -24,7 +24,7 @@ move me
 up 3
 
 # create another unit and add some blocks
-var enemy = ghost.new
+var enemy = Ghost.new
 build enemy
 down 5
 
@@ -82,7 +82,7 @@ work.
 
 ```nim
 say "Hello!"
-say "Careful — dragons ahead."
+say "Careful, dragons ahead."
 ```
 
 ## `near` / `far`

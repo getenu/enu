@@ -3,15 +3,18 @@ import nimibook
 var book = init_book_with_toc:
   section "Introduction", "intro":
     entry "Tutorial", "intro/tutorial"
+    entry "Tutorial: Build a House", "intro/tutorial2"
     entry "Install or Build", "intro/building"
     entry "Controls and Usage", "intro/controls"
+    entry "Settings", "intro/settings"
     entry "Examples", "intro/examples"
-    entry "Multiplayer (Experimental)", "intro/multiplayer"
+    entry "Multiplayer", "intro/multiplayer"
     entry "Config", "intro/config"
 
   section "Coding Enu", "coding":
     entry "Concepts", "coding/concepts"
     entry "Built-in Commands", "coding/commands"
+    entry "Drawing Shapes", "coding/shapes"
     entry "Shorthand Commands", "coding/shorthand"
     entry "Random Numbers", "coding/random_numbers"
     entry "API Reference", "api/enu_api"

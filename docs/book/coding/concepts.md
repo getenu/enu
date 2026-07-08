@@ -17,23 +17,23 @@ bugs with this behavior.  Please report them.
 ## Prototypes
 
 Enu uses a prototype based object system for units. To allow a unit to be a
-prototype, you give it a name:
+prototype, you give it a name. Prototype names start with a capital letter:
 
 ```nim
-name ghost
+name Ghost
 ```
 
 Then create a new instance in a different script with `.new`:
 
 ```nim
-var ghost2 = ghost.new
+var ghost2 = Ghost.new
 ```
 
 You can also provide parameters, which can be overridden when creating a new
 instance:
 
 ```nim
-name ghost(color = white, speed = 5, spookiness = 10)
+name Ghost(color = white, speed = 5, spookiness = 10)
 ```
 
 These become properties of the unit (ie `me.spookiness = 5`), but can be treated
@@ -43,7 +43,7 @@ like variables in the unit's script due to auto `me` insertion
 To create a new instance with specific property values:
 
 ```nim
-var ghost2 = ghost.new(spookiness = 11)
+var ghost2 = Ghost.new(spookiness = 11)
 ```
 
 Parameters can have a default value (`spookiness = 10`), which makes them
@@ -56,8 +56,8 @@ omit both the value and the type, which will make the type `auto`.
 
 Enu runs on the [Nim](https://nim-lang.org) language, and prototypes compile
 down to Nim procs. Because Nim's `auto` type can be implicit,
-`name ghost(a, b: int)` treats parameters differently than a plain
-`proc ghost(a, b: int)` would: with the proc, `a` and `b` are both `int`,
+`name Ghost(a, b: int)` treats parameters differently than a plain
+`proc Ghost(a, b: int)` would: with the proc, `a` and `b` are both `int`,
 whereas the `name` version makes `a` `auto` and `b` `int`.
 
 </details>

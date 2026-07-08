@@ -1,16 +1,17 @@
 # Coding Enu
 
 You build and control everything in Enu by writing code. This section covers
-the basics — variables, commands, loops — plus a few things that are special to
+the basics (variables, commands, loops) plus a few things that are special to
 Enu. You don't need to know how to program already; we'll go from the start.
 
 <details class="note">
 <summary>Under the hood</summary>
 
-Enu's code is [Nim](https://nim-lang.org), a real, grown-up programming
-language. Enu smooths off some of Nim's corners to keep things approachable: it
-is forgiving with types, calls procs "commands", and avoids immutable
-variables. Everything you learn here is real Nim you can use elsewhere.
+Enu's code is [Nim](https://nim-lang.org), a real programming language that
+reads about as easily as Python but runs as fast as C. Enu smooths off some of
+Nim's corners to keep things approachable: it is forgiving with types, calls
+procs "commands", and avoids immutable variables. Everything you learn here is
+real Nim you can use elsewhere.
 
 </details>
 
@@ -23,7 +24,7 @@ general information, such as the author of the code and when it was written.
 They start with a `#` sign. Everything else on the line is ignored.
 
 ```nim
-# Copyright Scott Wadden, 2023
+# Copyright Scott Wadden, 2026
 
 # we only want to change colors on the last row
 var last_row = false
