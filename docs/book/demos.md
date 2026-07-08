@@ -1,5 +1,9 @@
 # Demos
 
+## Extending Enu, and building worlds with Claude - NimConf 2026
+
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/kjOUEDfuzQI" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
 ## Inky: Isolation. A 90 minute game built with Enu and Nim
 
 <iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/9e9sLsmsu_o?si=anystxG6UCk3b0W2" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
