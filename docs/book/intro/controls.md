@@ -43,8 +43,8 @@
 Enu currently includes 6 block types/colors, and 1 object model (a robot). This
 will be expanded in the future.
 
-To change how Enu looks and behaves — resolution, font size, full screen,
-worlds, multiplayer, and more — open the [Settings](settings.html) panel with
+To change how Enu looks and behaves (resolution, font size, full screen,
+worlds, multiplayer, and more), open the [Settings](settings.html) panel with
 the gear button.
 
 ## Building and Placing Units

@@ -54,7 +54,7 @@ They can be placed with the `left` mouse button or the `L2` gamepad trigger.
 
 ![Coding Screenshot](../assets/tutorial_1_screenshot_3.webp)
 
-We control Enu by writing code — almost everything in Enu can be programmed.
+We control Enu by writing code. Almost everything in Enu can be programmed.
 You don't need any experience to start; you'll pick it up as you go.
 
 With the `Code` tool selected, you can code anything you've created by clicking

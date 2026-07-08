@@ -47,7 +47,7 @@ ball 9
 
 ![A red ball](../assets/shape_ball.png)
 
-Hollow balls make good domes — draw one, then erase the bottom half, or bury
+Hollow balls make good domes. Draw one, then erase the bottom half, or bury
 half of it in the ground. `sphere` is the same command with a fancier name.
 
 ## `can`
@@ -66,7 +66,7 @@ command with more syllables.
 
 ## `wall` and `floor`
 
-`wall length` draws a wall heading the way the turtle faces — 4 blocks tall
+`wall length` draws a wall heading the way the turtle faces, 4 blocks tall
 unless you say otherwise:
 
 ```nim
@@ -142,7 +142,7 @@ box 2, 3, 1, at = vec3(4, 0, 0), color = eraser
 `ball` and `can` are aliases for `sphere` and `cylinder`. Sphere and cylinder
 sizes are diameters, rasterised centred on the target block, so even sizes
 round up to the next odd width. Fractional sizes are allowed, which is useful
-for smooth tapers — stack thin `can` slices with shrinking sizes to make cones
+for smooth tapers. Stack thin `can` slices with shrinking sizes to make cones
 and spires.
 
 </details>

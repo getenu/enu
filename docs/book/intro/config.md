@@ -1,7 +1,7 @@
 # Config
 
 Most of these can be changed right inside Enu from the [Settings](settings.html)
-panel — this page is for editing them by hand, or for the few options the panel
+panel. This page is for editing them by hand, or for the few options the panel
 doesn't cover.
 
 The Enu data directory lives in `~/Library/Application Support/enu` on Mac,
