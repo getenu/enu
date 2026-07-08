@@ -5,9 +5,9 @@ const CLAUDE_ORANGE = col"d97757"
 Enu.client.connect
 let bot = Bot.init(0, 0, -150, color = CLAUDE_ORANGE)
 
-Enu.units.add bot
+Enu.things.add bot
 
-proc reply(q: UnitQuery): string =
+proc reply(q: ThingQuery): string =
   ## A query's answer, flagging a genuine query failure (q.error) as a tool
   ## error. eval bypasses this on purpose — its errors come back as plain
   ## strings for the agent to interpret.
@@ -42,7 +42,7 @@ let server = mcp_server("enu-mini", "1.0.0"):
   mcp_tool:
     proc screenshot(): string =
       ## Take a screenshot from your bot's POV. Returns the PNG path.
-      reply bot.ask(UnitQuery(kind: SCREENSHOT))
+      reply bot.ask(ThingQuery(kind: SCREENSHOT))
 
 new_stdio_transport().serve(
   server,

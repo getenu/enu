@@ -1,13 +1,13 @@
 import std/[os, math]
 import client
-import core, models/[bots, builds, units, colors]
+import core, models/[bots, builds, things, colors]
 
 Enu.client.connect
 discard Enu.client.tick_until(3.seconds, Enu.client.connected)
 
 let build = Build.init(-20, 0, 20)
 build.voxels.immediate = true
-Enu.units.add build
+Enu.things.add build
 Enu.client.tick
 
 let palette = [col"fc0e0b", col"14f707", col"0067ff", col"d9eed8"]
