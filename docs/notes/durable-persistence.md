@@ -187,7 +187,7 @@ opaque blobs edited in-world.
 - `track(replay = true)` + a `filled()` sugar predicate.
 - *(Store + schema gate: done — ed PR #30.)*
 
-**Phase 1 — enu: store attach + isolated wins.**
+**Milestone 1 — enu: store attach + isolated wins.**
 - Attach the store on the worker (authority), per level dir.
 - Player identity/presence split: stable id in `config.json`, durable `PlayerRecord`
   outside `root_units`, avatar rehydrates from it.
@@ -196,7 +196,7 @@ opaque blobs edited in-world.
 - *Delivers:* player state survives restart; scripts can save progress (the 0.3
   features), with none of the world/script-rebuild entanglement.
 
-**Phase 2 — enu: durable world + script re-run model (the big one).**
+**Milestone 2 — enu: durable world + script re-run model (the big one).**
 - `PERSIST`-flag the world containers (unit graph, voxel tables, `level_name`).
 - World materializes from the store (faithful voxels + history; no lossy
   re-derivation).
@@ -207,7 +207,7 @@ opaque blobs edited in-world.
 - *Delivers:* fast startup (no full rebuild), faithful voxel persistence, script
   resume.
 
-**Phase 3 — later: JSON as an editable view + git.**
+**Milestone 3 — later: JSON as an editable view + git.**
 - Field-named codec (nim-serialization) for the durable path; voxels stay blobs.
 - JSON editable projection + base-LSN three-way-merge bidirectional sync; log is
   authority.
@@ -215,8 +215,12 @@ opaque blobs edited in-world.
   git-hosting / first-joiner authority).
 
 The natural first PR is the ed primitives — small, and `PERSIST` gates the rest.
-Phase 1 is the satisfying first enu milestone (visible value, low entanglement);
-the world/script-rebuild change all lands in Phase 2.
+Milestone 1 is the satisfying first step (visible value, low entanglement); the
+world/script-rebuild change all lands in Milestone 2.
+
+(These "Milestone" stages are the enu adoption work; ed's own framework roadmap
+uses "Phase" numbering — see `consistency-and-partial-sync-plan.md`, where the
+durable store is Phase 2.)
 
 ## Open questions
 
@@ -229,6 +233,6 @@ the world/script-rebuild change all lands in Phase 2.
   scripts don't re-run, so the store value stands; a checkpoint-aware script that
   re-runs reconciles via its declared state.
 - **Coexistence vs replacement of `save_level`** — recommended path is migrate world
-  content onto the store and demote JSON to export/interchange, but Phase 2 is the
-  point that decision gets executed (backups, templates, migration flags all key off
-  the current JSON layout).
+  content onto the store and demote JSON to export/interchange, but Milestone 2 is
+  the point that decision gets executed (backups, templates, migration flags all key
+  off the current JSON layout).
