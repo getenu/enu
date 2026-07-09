@@ -17,6 +17,8 @@ import
   core, types, gdutils, controllers, models/[serializers, units, colors, builds]
 import libs/fd_tracking
 
+var next_perf_log {.threadvar.}: MonoTime
+
 if file_exists(".env"):
   dotenv.overload()
 
@@ -90,6 +92,21 @@ gdobj Game of Node:
       if self.update_metrics_at < time:
         update_thread_metrics()
         self.update_metrics_at = time + 10.seconds
+
+    # Opt-in perf sampling (ENU_PERF_LOG=1): one "PERF" line every ~2s with
+    # render-side metrics for before/after comparisons (e.g. greedy meshing).
+    # vertex_mem / draw_calls / objects are the geometry cost; fps / frame_ms
+    # the resulting cost. Off by default — the env check only runs on the 2s
+    # tick, never per frame.
+    if time > next_perf_log and get_env("ENU_PERF_LOG") != "":
+      next_perf_log = time + 2.seconds
+      info "PERF",
+        fps = get_monitor(TIME_FPS),
+        frame_ms = get_monitor(TIME_PROCESS) * 1000.0,
+        vertex_mem_kb = (get_monitor(RENDER_VERTEX_MEM_USED) / 1024.0).int,
+        objects = get_monitor(RENDER_OBJECTS_IN_FRAME).int,
+        draw_calls = get_monitor(RENDER_DRAW_CALLS_IN_FRAME).int,
+        video_mem_mb = (get_monitor(RENDER_VIDEO_MEM_USED) / 1048576.0).int
 
     # Wait for the level's config (level_dir/data_dir set by load_level) before
     # syncing window state: this is a whole-Config read-modify-write, and doing
