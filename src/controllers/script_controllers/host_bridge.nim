@@ -13,7 +13,7 @@ import
 import libs/[interpreters, eval]
 import enu/shared/errors
 
-import ./[vars, scripting]
+import ./[vars, scripting, path_safety]
 include ./host_bridge_utils
 
 # Program start time for now_seconds() function
@@ -206,6 +206,15 @@ proc claim_name(self: Worker, requested: string) =
   if target_id == "" or thing.id == target_id:
     return
 
+  # `to_thing_id` lowercases but doesn't strip separators, so a name like
+  # `../../evil` would flow into the move_file/move_dir paths below and relocate
+  # this thing's script + data outside the level. Require a plain segment.
+  if not valid_path_component(target_id):
+    raise ValueError.init(
+      "Invalid name '" & requested &
+        "'. Names can't contain path separators or '..'."
+    )
+
   let
     new_script = state.config.script_dir / (target_id & ".nim")
     new_data_dir = state.config.data_dir / target_id
@@ -255,11 +264,39 @@ proc load_level(self: Worker, level: string, world: string) =
   var world = world
   if not ?world:
     world = state.config.world
+  # `change_loaded_level` joins world/level under work_dir with no checks, so a
+  # traversing name would point level_dir (and every subsequent load/save/reset)
+  # at an arbitrary directory. Keep both as plain segments so level_dir stays
+  # under work_dir/<world> (the world_dir).
+  if not valid_path_component(world) or not valid_path_component(level):
+    raise ValueError.init(
+      "Invalid level '" & world & "/" & level &
+        "'. World and level names must each be a single path segment " &
+        "with no '/' or '..'."
+    )
   self.exit(self.active_thing.script_ctx, 0)
   after_boop:
     change_loaded_level(level, world)
 
 proc reset_level(self: Worker) =
+  # reset_level deletes the level dir and relies on the bundled source being
+  # re-cloned on the next load (see serializers.load_level). Only levels that
+  # actually have a bundled source can be reset — otherwise the delete is
+  # unrecoverable. This mirrors load_level's clone-source detection.
+  let
+    base = state.config.lib_dir / "worlds" / state.config.world
+    bundled_level = base / state.config.level
+    world_template = state.config.world_dir / "template"
+    base_template = base / "template"
+  if not (
+    dir_exists(bundled_level) or dir_exists(world_template) or
+    dir_exists(base_template)
+  ):
+    raise ValueError.init(
+      "reset_level only works for levels bundled with Enu. '" &
+        state.config.world & "/" & state.config.level &
+        "' has no bundled source to restore from."
+    )
   self.exit(self.active_thing.script_ctx, 0)
   after_boop:
     let current_level = state.config.level_dir
@@ -1584,18 +1621,23 @@ proc bridge_to_vm*(worker: Worker) =
     "read_enu_script",
     proc(a: VmArgs) {.gcsafe.} =
       let filename = get_string(a, 0)
+      let level_dir = state.config_value.value.level_dir
       let full_path =
         if filename.is_absolute:
           filename
         else:
-          state.config_value.value.level_dir / "generated" / filename
+          level_dir / "generated" / filename
 
-      let normalized_path = full_path.replace("\\", "/").normalized_path()
-      debug "reading script source", path = normalized_path
-      if "/scripts/" notin normalized_path:
+      # Confine reads to the current level dir. The previous check only required
+      # the substring "/scripts/" anywhere in the path, which let an absolute
+      # path read any file under any dir named `scripts` (including other
+      # levels'). is_within canonicalizes both sides (symlinks + `..`), so
+      # read_file below resolves to the same file it validated.
+      debug "reading script source", path = full_path
+      if not is_within(level_dir, full_path):
         raise ValueError.init(
-          "Direct file access blocked for security. Scripts can only be read from within the scripts directory. Attempted: " &
-            normalized_path
+          "Direct file access blocked for security. Scripts can only be read " &
+            "from within the current level directory. Attempted: " & full_path
         )
       set_result(a, to_result(read_file(full_path)))
 
