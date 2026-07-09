@@ -317,6 +317,11 @@ proc save_edits_sidecar(self: Unit): bool =
   ## data/<id>/edits.bin instead of the per-voxel JSON list (~30-40x
   ## smaller before compression). Returns whether the sidecar was written
   ## — the JSON then records "edits_file" instead of inline edits.
+  if state.is_nil or not state.config_value.loaded:
+    # No level dir (bare `$unit`, e.g. a unit test with no game state) —
+    # there's nowhere to write a sidecar, so keep edits inline and touch no
+    # files. `data_dir` dereferences `state.config`, absent here.
+    return false
   if edited_voxel_count(self.shared) <= EDITS_SIDECAR_THRESHOLD:
     let stale = self.data_dir / "edits.bin"
     if file_exists(stale):

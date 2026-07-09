@@ -933,10 +933,14 @@ proc signal_test_complete(self: Worker, exit_code: int) =
   state.test_exit_code = exit_code
 
 proc find_block_at(position: Vector3): Option[VoxelInfo] =
+  # local_into is the FULL inverse transform (scale + rotation), unlike
+  # local_to which only subtracts origins — so a query against a scaled or
+  # rotated build lands on the right local voxel instead of a world-space
+  # coordinate the build never stored there.
   for unit in state.units.value:
     if unit of Build:
       let build = Build(unit)
-      let local_pos = position.local_to(build)
+      let local_pos = position.local_into(build)
       if local_pos in build:
         let info = build.voxel_info(local_pos)
         if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
@@ -944,7 +948,7 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
     for child in unit.units.value:
       if child of Build:
         let build = Build(child)
-        let local_pos = position.local_to(build)
+        let local_pos = position.local_into(build)
         if local_pos in build:
           let info = build.voxel_info(local_pos)
           if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
@@ -1228,16 +1232,41 @@ proc units_in_box(
   for u in state.units.value:
     walk(u, result)
 
+proc top_local_world_y(build: Build, x, z: float): Option[int] =
+  ## The world y of the highest visible voxel in `build`'s column under
+  ## world (x, z), or none. Scans the build's OWN local column so scaled
+  ## builds report the right height — a world-y scan steps whole world
+  ## units and skips a scaled build's layers (spaced `scale` apart). The
+  ## local x,z are sampled at the ground (rotated builds are approximate;
+  ## for the common axis-aligned + scaled case it's exact).
+  let ground = vec3(floor(x), 0, floor(z)).local_into(build)
+  let lx = floor(ground.x)
+  let lz = floor(ground.z)
+  # Local range generous enough to cover the world -32..64 span at scales
+  # down to ~0.25; first hit from the top is the surface.
+  for ly in countdown(256, -128):
+    let lpos = vec3(lx, ly.float, lz)
+    if lpos in build:
+      let info = build.voxel_info(lpos)
+      if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
+        return some(floor(lpos.world_from(build).y).int)
+
 proc floor_at(x: float, z: float): int =
-  ## Return the highest y at (x, z) that has a visible voxel, or -1 if the
-  ## column is empty. Walks downward from y=64 to y=-32. Useful for "where
-  ## should I place this on the ground".
-  let x = floor(x)
-  let z = floor(z)
-  result = -1
-  for y in countdown(64, -32):
-    if find_block_at(vec3(x, y.float, z)).is_some:
-      return y
+  ## Return the highest world y at (x, z) that has a visible voxel, or -1 if
+  ## the column is empty. Useful for "where should I place this on the
+  ## ground". Correct for scaled builds (see top_local_world_y).
+  var top = low(int)
+  for unit in state.units.value:
+    if unit of Build:
+      let hit = top_local_world_y(Build(unit), x, z)
+      if hit.is_some:
+        top = max(top, hit.get)
+    for child in unit.units.value:
+      if child of Build:
+        let hit = top_local_world_y(Build(child), x, z)
+        if hit.is_some:
+          top = max(top, hit.get)
+  result = if top == low(int): -1 else: top
 
 proc clear_box(
     x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
