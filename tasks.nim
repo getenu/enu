@@ -359,6 +359,50 @@ task test_mcp, "run MCP integration tests (launches a private Enu)":
   # the game lib is already built (`nim build`).
   exec "nim c -r tests/mcp/enu_mcp_test.nim"
 
+task test_sandbox, "verify scripts can't reach host files/env from the VM":
+  # Runs an isolated level whose scripts try `read_file` / `get_env`. The VM must
+  # block these: the host-IO vmops aren't bridged in enu's build, so the calls
+  # fall through to importc FFI, which the VM refuses -- an *uncatchable* abort.
+  # The regression signal is therefore negative: a healthy sandbox prints no
+  # `SANDBOX-LEAK`. We fail if that marker appears (a script reached host data)
+  # or if the probe never loaded (can't vouch for a green we didn't observe).
+  let
+    level = this_dir() / "tests/worlds/sandbox-probe"
+    params = command_line_params()
+    use_dist = "dist" in params
+    headless = "headless" in params
+    bin =
+      if use_dist:
+        case host_os
+        of "macosx": this_dir() / "dist/Enu.app/Contents/MacOS/Enu"
+        of "linux": this_dir() / &"dist/enu-{git_version}/bin/enu"
+        of "windows": this_dir() / &"dist/enu-{git_version}/enu.exe"
+        else: quit &"--dist not supported on {host_os}"
+      elif headless:
+        case host_os
+        of "linux": godot_bin("server")
+        else: quit "Headless tests are only supported on Linux"
+      else:
+        godot_bin()
+    cmd =
+      if use_dist:
+        bin & " --level-dir " & level & " --enu-test --minimized --temp-workdir"
+      else:
+        "cd app && " & bin & " --level-dir " & level &
+          " --enu-test --minimized scenes/game.tscn --temp-workdir"
+  # The env probe reads this back via `get_env`; a non-empty return there means
+  # get_env is bridged to the real host environment (a leak). The child godot/
+  # Enu inherits our environment through gorge_ex.
+  put_env "ENU_SANDBOX_CANARY", "enu-canary-must-not-be-readable-from-vm"
+  p &"Running sandbox probe: {level.split_path.tail}"
+  let r = gorge_ex(cmd)
+  echo r.output
+  if "SANDBOX-LEAK" in r.output:
+    quit "SANDBOX ESCAPE: a script read host file/env data from the VM"
+  if "build_read_probe" notin r.output or "build_env_probe" notin r.output:
+    quit "sandbox probe did not run (level failed to load); cannot verify"
+  p "sandbox probe passed: scripts can't read host files or env"
+
 proc run_tests(names: openArray[string]) =
   ## Run each `nim <name>` task in turn, echo its output, and fail the whole
   ## run (quit 1) if any of them fail.
@@ -378,8 +422,8 @@ proc run_tests(names: openArray[string]) =
 task test, "fast default tests (unit + vm); run test_all for the full suite":
   run_tests ["test_unit", "test_vm"]
 
-task test_all, "full test suite (unit + vm + world + mcp)":
-  run_tests ["test_unit", "test_vm", "test_world", "test_mcp"]
+task test_all, "full test suite (unit + vm + world + sandbox + mcp)":
+  run_tests ["test_unit", "test_vm", "test_world", "test_sandbox", "test_mcp"]
 
 proc find_and_copy_dlls(dep_path, dest: string, dlls: varargs[string]) =
   for dep in dlls:
