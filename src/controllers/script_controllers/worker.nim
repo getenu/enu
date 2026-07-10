@@ -835,6 +835,19 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             deltas = total_deltas,
             deltas_delta = deltas_this_period,
             ed_objects = Ed.thread_ctx.len
+        if get_env("ENU_VOXEL_MEM_LOG") != "":
+          # Resident voxel memory sampling — worker-side counterpart of the
+          # VOXMEM log in game.nim.
+          let s = voxel_mem_stats(state.things)
+          info "VOXMEM worker",
+            occupied_kb = get_occupied_mem() div 1024,
+            builds = s.builds,
+            lv_chunks = s.lv_chunks,
+            lv_voxels = s.lv_voxels,
+            packed = s.packed,
+            edit_chunks = s.edit_chunks,
+            edit_voxels = s.edit_voxels
+
         last_stats_log = frame_start
         last_snapshots_flushed = total_snapshots
         last_deltas_flushed = total_deltas

@@ -18,6 +18,7 @@ import
 import libs/fd_tracking
 
 var next_perf_log {.threadvar.}: MonoTime
+var next_voxmem_log {.threadvar.}: MonoTime
 
 # Immediate process exit that runs no atexit handlers, C++ destructors, or Nim
 # GC teardown. Used to end test-mode runs without triggering Godot's headless
@@ -113,6 +114,21 @@ gdobj Game of Node:
         objects = get_monitor(RENDER_OBJECTS_IN_FRAME).int,
         draw_calls = get_monitor(RENDER_DRAW_CALLS_IN_FRAME).int,
         video_mem_mb = (get_monitor(RENDER_VIDEO_MEM_USED) / 1048576.0).int
+
+    # Opt-in resident voxel memory sampling (ENU_VOXEL_MEM_LOG=1): thread-heap
+    # occupancy + per-store counters, for before/after comparisons of the
+    # resident voxel representation. Same pattern as ENU_PERF_LOG above.
+    if time > next_voxmem_log and get_env("ENU_VOXEL_MEM_LOG") != "":
+      next_voxmem_log = time + 5.seconds
+      let s = voxel_mem_stats(state.things)
+      info "VOXMEM main",
+        occupied_kb = get_occupied_mem() div 1024,
+        builds = s.builds,
+        lv_chunks = s.lv_chunks,
+        lv_voxels = s.lv_voxels,
+        packed = s.packed,
+        edit_chunks = s.edit_chunks,
+        edit_voxels = s.edit_voxels
 
     # Wait for the level's config (level_dir/data_dir set by load_level) before
     # syncing window state: this is a whole-Config read-modify-write, and doing

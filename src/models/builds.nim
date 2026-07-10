@@ -813,6 +813,25 @@ method clone*(self: Build, clone_to: Thing, id: string): Thing =
   clone.restore_edits
   result = clone
 
+proc voxel_mem_stats*(
+    things: EdSeq[Thing]
+): tuple[builds, lv_chunks, lv_voxels, packed, edit_chunks, edit_voxels: int] =
+  ## Aggregate resident voxel-store sizes across every build in the tree — the
+  ## ENU_VOXEL_MEM_LOG counters logged per side (see game.nim / worker.nim).
+  var builds, lv_chunks, lv_voxels, packed, edit_chunks, edit_voxels = 0
+  things.value.walk_tree proc(thing: Thing) =
+    if thing of Build and ?Build(thing).voxels:
+      let v = Build(thing).voxels
+      inc builds
+      lv_chunks += v.local_voxels.len
+      for chunk in v.local_voxels.values:
+        lv_voxels += chunk.len
+      packed += v.packed_chunks.value.len
+      edit_chunks += v.local_edits.len
+      for chunk in v.local_edits.values:
+        edit_voxels += chunk.len
+  (builds, lv_chunks, lv_voxels, packed, edit_chunks, edit_voxels)
+
 when is_main_module:
   import unittest, states
   type Node = ref object of RootObj
