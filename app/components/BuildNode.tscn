@@ -1,4 +1,4 @@
-[gd_scene load_steps=25 format=2]
+[gd_scene load_steps=27 format=2]
 
 [ext_resource path="res://components/BuildNode.gdns" type="Script" id=1]
 [ext_resource path="res://textures/black_block.png" type="Texture" id=2]
@@ -8,6 +8,7 @@
 [ext_resource path="res://textures/blue_block.png" type="Texture" id=6]
 [ext_resource path="res://shaders/terrain_voxel.shader" type="Shader" id=7]
 [ext_resource path="res://textures/tile_nrm.png" type="Texture" id=8]
+[ext_resource path="res://shaders/terrain_voxel_rgb.shader" type="Shader" id=9]
 
 [sub_resource type="VoxelGeneratorFlat" id=1]
 channel = 0
@@ -238,6 +239,25 @@ shader_param/uv2_offset = Vector3( 0, 0, 0 )
 shader_param/texture_albedo = ExtResource( 3 )
 shader_param/texture_normal = ExtResource( 8 )
 
+[sub_resource type="ShaderMaterial" id=17]
+shader = ExtResource( 9 )
+shader_param/albedo = Color( 1, 1, 1, 0.117647 )
+shader_param/specular = 0.5
+shader_param/metallic = 0.0
+shader_param/draw_distance = 230.0
+shader_param/roughness = 1.0
+shader_param/point_size = 1.0
+shader_param/emission = Color( 1, 1, 1, 1 )
+shader_param/emission_energy = 0.0
+shader_param/normal_scale = 2.0
+shader_param/uv1_blend_sharpness = 1.0
+shader_param/uv1_scale = Vector3( 1, 1, 1 )
+shader_param/uv1_offset = Vector3( 0, 0, 0 )
+shader_param/uv2_scale = Vector3( 1, 1, 1 )
+shader_param/uv2_offset = Vector3( 0, 0, 0 )
+shader_param/texture_albedo = ExtResource( 3 )
+shader_param/texture_normal = ExtResource( 8 )
+
 [node name="Build" type="VoxelTerrain"]
 generator = SubResource( 1 )
 mesher = SubResource( 10 )
@@ -249,6 +269,7 @@ material/2 = SubResource( 13 )
 material/3 = SubResource( 14 )
 material/4 = SubResource( 15 )
 material/5 = SubResource( 16 )
+material/6 = SubResource( 17 )
 script = ExtResource( 1 )
 
 [node name="SightRay" type="RayCast" parent="."]

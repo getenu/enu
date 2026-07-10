@@ -13,6 +13,15 @@ type
     ## A spot (or a direction) in the world. `x` is left/right, `y` is
     ## up/down, and `z` is forward/back.
 
+  Basis* = tuple[x, y, z: Vector3]
+
+  Transform* = tuple[basis: Basis, origin: Vector3]
+
+  Pen* = tuple[position: Transform, color: Color, drawing: bool]
+    ## A build's drawing context — turtle pose, color, pen-down state.
+    ## `var spot = pen` captures it; `pen = spot` returns there. A plain
+    ## tuple for now; it will grow into an object.
+
   WorldBox* = tuple[min, max: Vector3]
     ## An invisible box around a thing, described by its lowest corner
     ## and its highest corner. Used to check what fits where.
@@ -77,16 +86,12 @@ type
     ## A person playing the game. The one at this computer is named
     ## `player`.
 
-  Colors* = enum
-    ## The colors blocks come in. `eraser` isn't really a color, it
-    ## removes blocks instead of drawing them.
-    eraser
-    blue
-    red
-    green
-    black
-    white
-    brown
+  Color* = tuple[r, g, b, a: float32]
+    ## A color value. The named colors (`blue`, `red`, ...) are instances of
+    ## this type; environments will be able to remap them later. Any other
+    ## value is a static color, unaffected by environment palettes.
+
+  Colors* {.deprecated: "use Color".} = Color
 
   Context* = ref object
     stack*: seq[Frame]
@@ -114,6 +119,29 @@ type
     PlaceBot
     None
 
+proc `==`*(a, b: Color): bool =
+  # Tolerant compare: VM const evaluation keeps float64 precision while
+  # host round-trips are float32; the drift is ~1e-9, far below the 1/255
+  # gap between distinct 8-bit color steps.
+  abs(a.r - b.r) < 0.0001 and abs(a.g - b.g) < 0.0001 and
+    abs(a.b - b.b) < 0.0001 and abs(a.a - b.a) < 0.0001
+
+proc color_from_hex(hex: int): Color =
+  (
+    r: float32((hex shr 16) and 0xff) / 255,
+    g: float32((hex shr 8) and 0xff) / 255,
+    b: float32(hex and 0xff) / 255,
+    a: 1.0'f32,
+  )
+
+const
+  eraser*: Color = (0.0'f32, 0.0'f32, 0.0'f32, 0.0'f32)
+  blue* = color_from_hex(0x0067ff)
+  red* = color_from_hex(0xfc0e0b)
+  green* = color_from_hex(0x14f707)
+  black* = color_from_hex(0x000000)
+  white* = color_from_hex(0xd9eed8)
+  brown* = color_from_hex(0x3f302b)
 # Timing types - simple wrappers that don't require posix
 
 type
