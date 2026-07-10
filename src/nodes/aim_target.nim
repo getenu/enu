@@ -48,10 +48,12 @@ gdobj AimTarget of Sprite3D:
         self.target_model.local_flags -= HOVER
         state.pop_flag BLOCK_TARGET_VISIBLE
       self.target_model = thing
-      # :(
+      # Locked builds still hover and show the aim target — clicking them
+      # places into a NEW thing, like clicking the ground (see Build.fire).
+      # Locked bots stay inert.
       if not (
         thing == nil or (thing of Sign and Sign(thing).more == "") or (
-          GOD notin state.local_flags and (thing of Bot or thing of Build) and
+          GOD notin state.local_flags and thing of Bot and
           LOCK in Thing(thing).find_root.global_flags
         )
       ):
