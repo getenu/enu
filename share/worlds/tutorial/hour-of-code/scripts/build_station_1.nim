@@ -1,13 +1,13 @@
 lock = true
 # Main sign - Exercise A
-save()
+let start = pen
 color = black
 5.times:
   up 10
   left 1
   down 10
   left 1
-restore()
+pen = start
 let main_overview = """
 # Building Station
 **Difficulty**: * (Easiest)
