@@ -125,10 +125,7 @@ proc expand_bounds_to_chunk*(self: Build, chunk_id: Vector3) =
 proc reset_bounds*(self: Build) =
   self.bounds = init_aabb(vec3(), vec3(-1, -1, -1))
 
-  for chunk_id, chunk in self.voxels.local_voxels:
-    self.expand_bounds_to_chunk(chunk_id)
-
-  for chunk_id, _ in self.voxels.packed_chunks:
+  for chunk_id in self.voxels.chunk_ids:
     self.expand_bounds_to_chunk(chunk_id)
 
   # Frames bypass the voxel tables, but the terrain clips loading and
@@ -823,9 +820,12 @@ proc voxel_mem_stats*(
     if thing of Build and ?Build(thing).voxels:
       let v = Build(thing).voxels
       inc builds
-      lv_chunks += v.local_voxels.len
-      for chunk in v.local_voxels.values:
-        lv_voxels += chunk.len
+      # lv_* now counts the decoded chunk cache — the resident working set
+      # that replaced local_voxels (same meaning: decoded voxels held in
+      # memory on this side).
+      lv_chunks += v.chunk_cache.len
+      for chunk in v.chunk_cache.values:
+        lv_voxels += chunk.count
       packed += v.packed_chunks.value.len
       edit_chunks += v.local_edits.len
       for chunk in v.local_edits.values:

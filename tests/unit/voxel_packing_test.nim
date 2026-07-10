@@ -228,6 +228,9 @@ suite "Frame pack/load round-trip":
     for pos in [vec3(0, 0, 0), vec3(1, 2, 3), vec3(20, 0, -5), vec3(4, 4, 4)]:
       check pos in b
       check b.voxel_info(pos) == a.voxel_info(pos)
-    # apply_snapshot doesn't count HOLEs as blocks (add_voxel does — a
-    # pre-existing inconsistency for fresh holes); 3 solid + 1 hole here
-    check b.block_count == 3
+    # 3 solid + 1 hole round-tripped
+    var solid = 0
+    for _, info in b.all_voxels:
+      if info.kind != HOLE:
+        inc solid
+    check solid == 3
