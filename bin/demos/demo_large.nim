@@ -16,7 +16,7 @@ for x in 0 ..< 40:
   for z in 0 ..< 40:
     let h = (sin(x.float / 5.0) + cos(z.float / 5.0)) * 4.0
     let y = int(round(h)) + 8
-    build.draw(vec3(x.float, y.float, z.float), (MANUAL, palette[(x + z) mod 4]))
+    build.draw(vec3(x.float, y.float, z.float), (PERSISTED, palette[(x + z) mod 4]))
   Enu.client.tick
 echo "BUILD=" & build.id
 Enu.client.every(1.second):

@@ -10,12 +10,12 @@ const
   b = 0.10
   tube_ratio = 0.22
   line_density = 0
-  block_kind = MANUAL
+  block_kind = TRANSIENT
 let
   body_color = col"000000"
   line_colors = [col"fc0e0b", col"0067ff", col"14f707", col"d9eed8"]
 
-let build = Build.init(0, 0, -150, save = true)
+let build = Build.init(0, 0, -150, save = false)
 Enu.things.add build
 
 var theta = 0.0
@@ -43,3 +43,5 @@ build.buffer:
           body_color
       build.draw(vec3(px.round, py.round, pz.round), (block_kind, color))
     theta += 0.7 / r
+
+Enu.client.every(1.second): discard
