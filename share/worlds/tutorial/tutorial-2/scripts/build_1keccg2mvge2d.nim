@@ -5,7 +5,7 @@ scale = 0.6
 
 360.times:
   turn 1
-  save()
+  let start = pen
   lean back, 20
   200.times(i):
     if 1 in 500:
@@ -15,7 +15,7 @@ scale = 0.6
     drawing = 2 in 3
     forward 1
     lean back, sin(i * 0.06) * 3.0
-  restore()
+  pen = start
 
 # Now that we've finished building we move it into position.
 move me

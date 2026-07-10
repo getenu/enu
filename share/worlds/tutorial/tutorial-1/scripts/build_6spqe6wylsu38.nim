@@ -30,7 +30,7 @@ forward 10
 turn right
 forward 2
 
-save()
+let start = pen
 
 color = red
 up 4
@@ -51,7 +51,7 @@ var end_sign2 = make_sign()
 color = red
 down 3
 
-restore()
+pen = start
 
 color = white
 forward 1
