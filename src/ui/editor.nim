@@ -108,7 +108,9 @@ gdobj Editor of MarginContainer:
         event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
           COMMAND_MODE notin state.local_flags:
-        state.open_thing.code = Code.init(self.text_edit.text)
+        # only push code (and so save + re-run the script) if it changed
+        if self.text_edit.text != state.open_thing.code.nim:
+          state.open_thing.code = Code.init(self.text_edit.text)
         state.open_thing = nil
         self.get_tree().set_input_as_handled()
 
@@ -398,7 +400,8 @@ gdobj Editor of MarginContainer:
 
   method on_close() =
     if ?state.open_thing:
-      state.open_thing.code = Code.init(self.text_edit.text)
+      if self.text_edit.text != state.open_thing.code.nim:
+        state.open_thing.code = Code.init(self.text_edit.text)
       state.open_thing = nil
 
   method on_run() =
