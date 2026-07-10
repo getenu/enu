@@ -1,8 +1,39 @@
 proc get_int(a: VmArgs, i: Natural): int =
   int vm.get_int(a, i)
 
-proc get_colors(a: VmArgs, i: Natural): Colors =
-  Colors(vm.get_int(a, i))
+proc color_from_node(n: PNode): Color =
+  let fields = n.sons
+  result = Color(
+    r: fields[0].float_val.float32,
+    g: fields[1].float_val.float32,
+    b: fields[2].float_val.float32,
+    a: fields[3].float_val.float32,
+  )
+  # Snap VM float drift onto the named palette: a named color must stay
+  # exactly equal to its ACTION_COLORS entry so it packs as a named index
+  # (and environment remapping keeps applying to it later).
+  for named in ACTION_COLORS:
+    if abs(result.r - named.r) < 1e-5 and abs(result.g - named.g) < 1e-5 and
+        abs(result.b - named.b) < 1e-5 and abs(result.a - named.a) < 1e-5:
+      return named
+
+proc get_color(a: VmArgs, i: Natural): Color =
+  color_from_node(a.get_node(i))
+
+proc vector3_from_node(n: PNode): Vector3 =
+  vec3(n.sons[0].float_val, n.sons[1].float_val, n.sons[2].float_val)
+
+proc get_pen(a: VmArgs, i: Natural): Pen =
+  ## Mirrors the wire shape produced by to_node: ((basis rows), origin),
+  ## color, drawing.
+  let n = a.get_node(i)
+  let transform = n.sons[0]
+  let basis = transform.sons[0]
+  for row in 0 .. 2:
+    result.position.basis.elements[row] = vector3_from_node(basis.sons[row])
+  result.position.origin = vector3_from_node(transform.sons[1])
+  result.color = color_from_node(n.sons[1])
+  result.drawing = n.sons[2].int_val != 0
 
 proc get_pnode(a: VmArgs, pos: int): PNode {.inline.} =
   a.get_node(pos)
@@ -38,6 +69,13 @@ proc to_node(tree: tuple | object): PNode =
   for field in tree.fields:
     result.sons.add(field.to_node)
 
+proc to_node(basis: Basis): PNode =
+  ## Three row vectors, so the VM sees tuple[x, y, z: Vector3] instead of
+  ## the host's single elements array.
+  result = nkPar.new_tree
+  for row in 0 .. 2:
+    result.sons.add(basis.elements[row].to_node)
+
 proc to_node(a: PNode): PNode =
   a
 
@@ -54,7 +92,7 @@ proc to_result(val: float): BiggestFloat =
 proc to_result(val: SomeOrdinal or enum or bool): BiggestInt =
   BiggestInt(val)
 
-proc to_result(val: Vector3 or string or tuple): PNode =
+proc to_result(val: Vector3 or string or tuple or Color): PNode =
   val.to_node
 
 proc to_result(val: PNode): PNode =

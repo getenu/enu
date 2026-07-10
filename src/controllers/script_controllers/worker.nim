@@ -207,8 +207,14 @@ proc update_files*(self: Worker) =
         not file_exists(thing.script_ctx.script):
       script_clears.add(thing)
 
+  if thing_deletions.len > 0 and state.config.data_dir == "":
+    # A blank data_dir means every thing's data_file resolves relative and
+    # looks missing; deleting the whole level over that would be a massacre.
+    warn "skipping thing deletion scan: config has no data_dir"
+    thing_deletions = @[]
   for thing in thing_deletions:
-    debug "thing data file deleted on disk; removing", thing_id = thing.id
+    debug "thing data file deleted on disk; removing",
+      thing_id = thing.id, data_file = thing.data_file
     if thing.parent.is_nil:
       state.things -= thing
     else:
@@ -264,6 +270,8 @@ proc update_files*(self: Worker) =
       try:
         let json_mtime = get_last_modification_time(thing.data_file)
         if json_mtime != thing.script_ctx.last_saved_json_mtime:
+          debug "thing json changed on disk; reloading",
+            thing_id = thing.id, json_mtime
           let parent = thing.parent
           state.push_flag LOADING_SCRIPT
           if parent.is_nil:
@@ -526,6 +534,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         thing = find_in(state.things)
         if thing.is_nil:
           return ("", "Error: thing not found: " & thing_id)
+        if thing.destroyed:
+          # a reload can briefly leave the outgoing instance findable; its
+          # Ed fields are torn down and any accessor would crash the worker
+          return ("", "Error: thing is reloading, try again: " & thing_id)
         if thing.script_ctx.is_nil or thing.script_ctx.interpreter.is_nil:
           return ("", "Error: thing has no script context: " & thing_id)
         # Clones share the proto's module — they don't have one of their
@@ -877,6 +889,18 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
       if now > worker.watch_files_at:
         worker.update_files()
+        # Agent queries hold in PENDING until a top-level file scan has run
+        # (their handler only schedules one — see bots.nim): any reload the
+        # scan triggers ran to completion above, so answers can't observe a
+        # half-reloaded unit. Promote them now; the READY write re-fires
+        # their watch, which answers the query.
+        for unit in state.things.value:
+          if unit of Bot and EPHEMERAL in unit.global_flags:
+            let bot = Bot(unit)
+            if bot.query.state == PENDING:
+              var q = bot.query
+              q.state = READY
+              bot.query = q
 
       # Track max tick time for debugging
       let tick_time = get_mono_time() - frame_start

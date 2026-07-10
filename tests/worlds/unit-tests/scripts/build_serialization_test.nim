@@ -1,7 +1,7 @@
 import testing
 
 ## Serialization Test
-## Places a MANUAL block, saves, reloads from disk, and verifies persistence.
+## Places a PERSISTED block, saves, reloads from disk, and verifies persistence.
 
 speed = 0
 
@@ -9,7 +9,7 @@ let test_pos = vec3(5, 5, 5)
 
 suite "Serialization":
   test "manual block persists after save and reload":
-    # Place a MANUAL block
+    # Place a PERSISTED block
     me.place_block(test_pos, green)
 
     # Save the level to disk

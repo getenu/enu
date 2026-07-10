@@ -55,14 +55,24 @@ const
   CHUNK_VOLUME* = ChunkDim * ChunkDim * ChunkDim # 4096
   ChunkSize* = vec3(16, 16, 16)
   MAX_BUILD_DIMENSION* = 65535 # VoxelBuffer.MAX_SIZE
-  EMPTY_VOXEL* = 0'u8
+  EMPTY_VOXEL* = 0'u16
+
+  # Voxel color index ranges. 0..6 are the named `Colors`; 7..63 are reserved
+  # for named-palette growth; STATIC_COLOR_BASE+ are per-Shared static RGB
+  # palette entries (env-independent).
+  STATIC_COLOR_BASE* = 64
+  MAX_STATIC_COLORS* = 4096
+  MAX_FRAMES* = 64
+    ## Animation frame cap per build: frames persist across script re-runs
+    ## (clearing is explicit via clear_frames), so an unguarded save
+    ## in a loop would grow forever. Call 65 raises.
 
   # Delta thresholds
   MAX_CHANGES_FOR_DELTA* = 100
   MAX_DELTAS_BEFORE_SNAPSHOT* = 100
 
 type
-  PackedVoxel* = uint8
+  PackedVoxel* = uint16
 
   SnapshotData* = object
     data*: string
@@ -73,11 +83,23 @@ type
   PackedChunk* = SnapshotData # Legacy alias
 
   VoxelKind* = enum
+    ## Ordinals are persisted (JSON edits) and on the wire — keep positions.
     HOLE
-    MANUAL
-    COMPUTED
+    PERSISTED ## hand-style edits; saved with the unit and restored on load
+    TRANSIENT ## dropped on script restart — the script regenerates them
 
   VoxelInfo* = tuple[kind: VoxelKind, color: Color]
+
+  Pen* = tuple[position: Transform, color: Color, drawing: bool]
+    ## A build's drawing context — turtle pose, color, pen-down state.
+    ## Scripts capture and restore it through the `pen` accessor. A plain
+    ## tuple for now; it will grow into an object.
+
+  FrameData* = object
+    ## One animation frame: the unit's whole voxel state as packed chunks —
+    ## the same encoding the sync layer uses. Frames are data; meshes are
+    ## derived per side (see docs/notes/voxel-frame-animation.md).
+    chunks*: Table[Vector3, SnapshotData]
 
   EditKey* = tuple[id: string, loc: Vector3]
 
@@ -235,10 +257,21 @@ type
   Ground* = ref object of Model
 
   Shared* = ref object of EdRef
-    materials*: seq[ShaderMaterial]
-    emission_colors*: seq[godot.Color]
+    materials* {.ed_ignore.}: seq[ShaderMaterial]
+      ## Node-side Godot refs, shared across the unit tree's nodes.
+      ## `ed_ignore`: godot refs can't ride a body sync — a revive would
+      ## wipe them (and glow/highlight with them).
+    emission_colors* {.ed_ignore.}: seq[godot.Color]
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
+    palette*: EdSeq[Color]
+      ## Static (non-named) voxel colors for this unit tree, in allocation
+      ## order. A packed color_index >= STATIC_COLOR_BASE indexes this seq.
+      ## Append-only; not persisted (edit JSON stores hex, load re-allocates).
+    palette_cache* {.ed_ignore.}: Table[Color, int]
+      ## Local color -> palette index cache; rebuilt when out of sync.
+      ## `ed_ignore`: per-side state — syncing it would race concurrent
+      ## lookups during body serialization.
 
   VoxelStore* = ref object
     # Local per-side render wrapper. The synced tables (`packed_chunks`,
@@ -272,8 +305,14 @@ type
     snapshots_flushed*: int
     deltas_flushed*: int
 
+  ColorIndexResolver* = proc(color_index: int): int64 {.gcsafe.}
+    ## Maps a packed color_index to the voxel library slot the engine should
+    ## render. Identity for named colors; static palette entries resolve to
+    ## runtime-registered library slots.
+
   VoxelRenderer* = ref object
     voxel_tool*: VoxelTool
+    resolver*: ColorIndexResolver
     buffer*: VoxelBuffer
     min_pos*: Vector3
     max_pos*: Vector3
@@ -330,7 +369,7 @@ type
   BlockLogEntry* =
     tuple[
       thing_id: string,
-      color: Colors,
+      color: Color,
       local_position: Vector3,
       global_position: Vector3,
       timestamp: MonoTime,
@@ -372,10 +411,37 @@ type
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
     drawing*: bool
-    save_points*:
-      Table[string, tuple[position: Transform, color: Color, drawing: bool]]
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
+    frames*: EdTable[int, FrameData]
+      ## Saved animation frames, keyed by dense 0-based index (the Build API
+      ## keeps keys contiguous). A table rather than a seq so replace is one
+      ## keyed op — ed's positional seq ops don't sync order-safely. Synced
+      ## once as data; playback only moves `current_frame`.
+    current_frame_value*: EdValue[int]
+      ## Displayed frame, or -1 for the live voxel state. Display-only:
+      ## queries and collisions keep reading the live voxels (use
+      ## `load_frame` to actually restore a frame for editing).
+    frames_fps_value*: EdValue[float]
+      ## > 0 while playing; the server advances `current_frame` at this rate.
+    frames_loop_value*: EdValue[bool]
+    sealed_frames_value*: EdValue[bool]
+      ## Bake frame meshes self-contained: chunk borders treated as open,
+      ## so every chunk mesh carries its own boundary skin and any mix of
+      ## displayed frames is visually closed — no seams, ever, at the cost
+      ## of ~a third more (invisible, backface-culled) border quads and no
+      ## neighbor-aware ambient occlusion at chunk edges. Off: meshes bake
+      ## against the frame's real neighbor content — fewer quads, exact AO,
+      ## but chunks displaying different frames (temporal LOD bands,
+      ## catch-up after movement) can show transient seams.
+    cull_down_faces_value*: EdValue[bool]
+      ## Sheet hint: skip downward faces when meshing. An ocean slab's
+      ## underside is never visible but costs ~a third of its geometry.
+      ## Set it before drawing/playing — cached frame meshes don't rebake.
+    greedy_value*: EdValue[bool]
+      ## Greedy meshing: merge coplanar, same-voxel, uniformly-shaded cube
+      ## faces into larger quads. Identical render, 30-70% fewer vertices;
+      ## on by default (scripts opt out with `greedy = false`).
 
   Config* = object
     font_size*: int

@@ -17,7 +17,7 @@ proc fire(self: Ground, append = false) {.gcsafe.} =
         add_to = state.things.find_first(point.surrounding)
     if ?add_to:
       let local = point.local_to(add_to)
-      add_to.draw(local, (MANUAL, state.selected_color))
+      add_to.draw(local, (PERSISTED, state.selected_color))
     else:
       add_to = Build.init(
         transform = Transform.init(origin = point),

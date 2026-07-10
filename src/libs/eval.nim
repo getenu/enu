@@ -274,12 +274,17 @@ proc loadModule*(
   # which causes "cannot evaluate at compile time" issues with some variables.
   # Force things back to emRepl.
   PCtx(i.graph.vm).mode = emRepl
+  # A failed eval elsewhere can leave the global error counter latched at or
+  # past errorMax; stopCompile() then makes processModule skip this module's
+  # body without a peep — the script "runs" as an empty module.
+  i.graph.config.errorCounter = 0
 
   ctx = preparePContext(i.graph, module, i.idgen)
 
   {.gcsafe.}:
     with_import_stack_recovery(i.graph):
-      discard processModule(i.graph, module, i.idgen, stream, ctx, dependencies)
+      if not processModule(i.graph, module, i.idgen, stream, ctx, dependencies):
+        stderr.write_line "module load incomplete: " & moduleName
 
 proc node_to_str(n: PNode): string =
   case n.kind
@@ -399,7 +404,13 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[st
       module = iface.module
       break
 
-  assert module != nil, "no valid module selected"
+  if module == nil:
+    # Catchable (unlike an assert, which takes the worker thread — and the
+    # process — down): evals can race a unit whose module isn't registered
+    # yet, e.g. an agent bot evaluated right after creation.
+    raise newException(
+      ValueError, "no module loaded for " & moduleName & " (still loading?)"
+    )
   # If closePContext was called (for scripts that complete without VMPause,
   # e.g. players.nim), restore the context so extendModule can work.
   # closePContext also pops the proc context and owner, both of which must

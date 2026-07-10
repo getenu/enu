@@ -1,6 +1,7 @@
 import std/[os, macros, math, asyncfutures, hashes, times]
 import locks except Lock
-import pkg/godot except print
+import pkg/godot except print, Color
+import pkg/chroma
 import pkg/compiler/vm except get_int
 from pkg/compiler/vm {.all.} import stack_trace_aux
 import pkg/compiler/ast except new_node
@@ -343,15 +344,13 @@ proc world_name(): string =
 proc level_name(): string =
   state.config.level
 
-proc color_to_lower(c: Colors): string =
-  case c
-  of ERASER: "eraser"
-  of BLUE: "blue"
-  of RED: "red"
-  of GREEN: "green"
-  of BLACK: "black"
-  of WHITE: "white"
-  of BROWN: "brown"
+proc color_to_lower(c: Color): string =
+  ## Block-log label: the name for named colors, hex for static ones.
+  let named = c.action_index
+  if named != ERASER or c == ACTION_COLORS[ERASER]:
+    to_lower_ascii($named)
+  else:
+    "#" & to_lower_ascii(c.to_html_hex)
 
 proc block_log(self: Thing): string =
   ## Recent blocks the player has placed (or erased) via the in-game block
@@ -404,6 +403,15 @@ proc begin_move(
     self.pause_script()
 
 proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
+  # A bare sleep is the idle park at the end of a script beat — drawing has
+  # settled, so publish now. Without this, the flush waits out the 0.5s
+  # park for end_asap at script completion: every rerun's voxels arrived
+  # (and painted) half a second after the script finished drawing.
+  if seconds <= 0 and ?self.active_thing and self.active_thing of Build:
+    let build = Build(self.active_thing)
+    if ASAP_MODE in build.global_flags:
+      build.voxels.flush_dirty_chunks()
+      build.reset_bounds()
   var duration = 0.0
   ctx.callback = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
@@ -648,11 +656,11 @@ proc scale(self: Thing): float =
   types.scale(self)
 
 
-proc color(self: Thing): Colors =
-  action_index self.color_value.value
+proc color(self: Thing): Color =
+  self.color_value.value
 
-proc `color=`(self: Thing, color: Colors) =
-  types.`color=`(self, ACTION_COLORS[color])
+proc `color=`(self: Thing, color: Color) =
+  types.`color=`(self, color)
 
 proc show(self: Thing): bool =
   VISIBLE in self.global_flags
@@ -788,21 +796,15 @@ proc draw_position_set(self: Build, position: Vector3) =
       (position - self.position).local_to(self.parent)
   self.sync_turtle()
 
-proc save(self: Build, name: string) =
-  self.save_points[name] =
-    (self.draw_transform, self.color_value.value, self.drawing)
+proc pen(self: Build): Pen =
+  (self.draw_transform, self.color_value.value, self.drawing)
 
-proc restore(self: Build, name: string) =
-  # A missing name is a no-op, not a crash: scripts can restore() before
-  # their first save(), and a reload can clear the table mid-run.
-  if name in self.save_points:
-    # Assign each part explicitly: tuple unpacking onto accessor calls
-    # compiles but silently writes into the getters' temporaries.
-    let (position, color, drawing) = self.save_points[name]
-    self.draw_transform = position
-    self.sync_turtle()
-    self.color_value.value = color
-    self.drawing = drawing
+proc pen_set(self: Build, value: Pen) =
+  # Assign each part explicitly: tuple unpacking onto accessor calls
+  # compiles but silently writes into the getters' temporaries.
+  self.draw_transform = value.position
+  self.color_value.value = value.color
+  self.drawing = value.drawing
 
 # Player binding
 
@@ -970,10 +972,14 @@ proc signal_test_complete(self: Worker, exit_code: int) =
   state.test_exit_code = exit_code
 
 proc find_block_at(position: Vector3): Option[VoxelInfo] =
+  # local_into is the FULL inverse transform (scale + rotation), unlike
+  # local_to which only subtracts origins — so a query against a scaled or
+  # rotated build lands on the right local voxel instead of a world-space
+  # coordinate the build never stored there.
   for thing in state.things.value:
     if thing of Build:
       let build = Build(thing)
-      let local_pos = position.local_to(build)
+      let local_pos = position.local_into(build)
       if local_pos in build:
         let info = build.voxel_info(local_pos)
         if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
@@ -981,7 +987,7 @@ proc find_block_at(position: Vector3): Option[VoxelInfo] =
     for child in thing.things.value:
       if child of Build:
         let build = Build(child)
-        let local_pos = position.local_to(build)
+        let local_pos = position.local_into(build)
         if local_pos in build:
           let info = build.voxel_info(local_pos)
           if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
@@ -1265,16 +1271,41 @@ proc things_in_box(
   for u in state.things.value:
     walk(u, result)
 
+proc top_local_world_y(build: Build, x, z: float): Option[int] =
+  ## The world y of the highest visible voxel in `build`'s column under
+  ## world (x, z), or none. Scans the build's OWN local column so scaled
+  ## builds report the right height — a world-y scan steps whole world
+  ## units and skips a scaled build's layers (spaced `scale` apart). The
+  ## local x,z are sampled at the ground (rotated builds are approximate;
+  ## for the common axis-aligned + scaled case it's exact).
+  let ground = vec3(floor(x), 0, floor(z)).local_into(build)
+  let lx = floor(ground.x)
+  let lz = floor(ground.z)
+  # Local range generous enough to cover the world -32..64 span at scales
+  # down to ~0.25; first hit from the top is the surface.
+  for ly in countdown(256, -128):
+    let lpos = vec3(lx, ly.float, lz)
+    if lpos in build:
+      let info = build.voxel_info(lpos)
+      if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
+        return some(floor(lpos.world_from(build).y).int)
+
 proc floor_at(x: float, z: float): int =
-  ## Return the highest y at (x, z) that has a visible voxel, or -1 if the
-  ## column is empty. Walks downward from y=64 to y=-32. Useful for "where
-  ## should I place this on the ground".
-  let x = floor(x)
-  let z = floor(z)
-  result = -1
-  for y in countdown(64, -32):
-    if find_block_at(vec3(x, y.float, z)).is_some:
-      return y
+  ## Return the highest world y at (x, z) that has a visible voxel, or -1 if
+  ## the column is empty. Useful for "where should I place this on the
+  ## ground". Correct for scaled builds (see top_local_world_y).
+  var top = low(int)
+  for unit in state.things.value:
+    if unit of Build:
+      let hit = top_local_world_y(Build(unit), x, z)
+      if hit.is_some:
+        top = max(top, hit.get)
+    for child in unit.things.value:
+      if child of Build:
+        let hit = top_local_world_y(Build(child), x, z)
+        if hit.is_some:
+          top = max(top, hit.get)
+  result = if top == low(int): -1 else: top
 
 proc clear_box(
     x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
@@ -1328,12 +1359,12 @@ proc find_voxel_overlaps(limit: int = 50): string =
       result &= "... (truncated at " & $limit & ")\n"
       return
 
-proc block_color_at(position: Vector3): Colors =
+proc block_color_at(position: Vector3): Color =
   let block_info = find_block_at(position)
   if block_info.is_some:
-    action_index(block_info.get.color)
+    block_info.get.color
   else:
-    ERASER
+    ACTION_COLORS[ERASER]
 
 proc count_draw(self: Build) =
   ## Cooperative pacing for the immediate drawing APIs. The logo APIs yield
@@ -1349,12 +1380,12 @@ proc count_draw(self: Build) =
       self.script_ctx.unyielded_draws = 0
       self.script_ctx.pause()
 
-proc draw_voxel(self: Build, position: Vector3, color: Colors) =
-  ## Paint a COMPUTED voxel. Goes through Build.draw, which only writes to
+proc draw_voxel(self: Build, position: Vector3, color: Color) =
+  ## Paint a TRANSIENT voxel. Goes through Build.draw, which only writes to
   ## local_voxels (not local_edits), so the block is regenerated when the
   ## script reloads and isn't bloating the save file. Backs place.
   self.count_draw
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (TRANSIENT, color)
   self.draw(position, info)
 
 const
@@ -1420,7 +1451,7 @@ proc box_impl(
     w: int,
     h: int,
     d: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     pivot: int,
     at: Vector3,
@@ -1468,7 +1499,7 @@ proc box_impl(
   let iy_hi = u_hi.y.ceil.int
   let iz_hi = u_hi.z.ceil.int
 
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (TRANSIENT, color)
   # 0.5 = half-voxel inclusion threshold. For axis-aligned cases this
   # is a no-op (voxel centres land exactly on integer coords, the
   # extra 0.5 margin doesn't add any cells). For off-axis cases it
@@ -1501,7 +1532,7 @@ proc box_impl(
 proc sphere_impl(
     self: Build,
     size: float,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -1515,7 +1546,7 @@ proc sphere_impl(
   let centre = if use_turtle: self.draw_transform.origin else: at
   let radius = size / 2.0
   let r_int = (radius + 0.5).floor.int
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (TRANSIENT, color)
   for dx in -r_int .. r_int:
     for dy in -r_int .. r_int:
       for dz in -r_int .. r_int:
@@ -1531,7 +1562,7 @@ proc cylinder_impl(
     self: Build,
     size: float,
     height: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -1579,7 +1610,7 @@ proc cylinder_impl(
   let iy_hi = u_hi.y.ceil.int
   let iz_hi = u_hi.z.ceil.int
 
-  let info: VoxelInfo = (COMPUTED, ACTION_COLORS[color])
+  let info: VoxelInfo = (TRANSIENT, color)
   for ix in ix_lo .. ix_hi:
     for iy in iy_lo .. iy_hi:
       for iz in iz_lo .. iz_hi:
@@ -1594,12 +1625,53 @@ proc cylinder_impl(
           continue
         self.draw(world, info)
 
-proc place_block(self: Build, position: Vector3, color: Colors) =
-  ## Place a persistent MANUAL voxel. The block is saved to local_edits and
+proc place_block(self: Build, position: Vector3, color: Color) =
+  ## Place a persistent PERSISTED voxel. The block is saved to local_edits and
   ## survives reload. For programmatic block-placement use draw_voxel.
-  let info: VoxelInfo = (MANUAL, ACTION_COLORS[color])
+  let info: VoxelInfo = (PERSISTED, color)
   self.add_voxel(position, info)
   self.voxels.set_edit(position, info)
+  self.global_flags += DIRTY # hand-style edit: persist on the next save
+
+proc sealed_frames(self: Build): bool =
+  self.sealed_frames
+
+proc sealed_frames_set(self: Build, value: bool) =
+  self.sealed_frames = value
+  self.global_flags += DIRTY
+
+proc cull_down_faces(self: Build): bool =
+  self.cull_down_faces
+
+proc cull_down_faces_set(self: Build, value: bool) =
+  self.cull_down_faces = value
+  self.global_flags += DIRTY
+
+proc greedy(self: Build): bool =
+  self.greedy
+
+proc greedy_set(self: Build, value: bool) =
+  self.greedy = value
+  self.global_flags += DIRTY
+
+proc frames_len(self: Build): int =
+  self.frame_count
+
+proc save_frame_impl(self: Build, at: int): int =
+  self.save(at)
+
+proc play_impl(self: Build, fps: float, loop: bool) =
+  self.play(fps, loop)
+
+proc stop_impl(self: Build) =
+  self.stop()
+
+proc frame(self: Build): int =
+  self.current_frame
+
+proc `frame=`(self: Build, index: int) =
+  self.current_frame = index
+  self.global_flags += DIRTY # the displayed frame persists
 
 proc save_level_now() =
   serializers.save_level(state.config.level_dir, force = true)
@@ -1645,6 +1717,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge",
     register_active, register_template_node, echo_console, new_instance,
+    pending_block_updates_get,
     exec_instance, capture_start_transform, hit, exit, global, `global=`,
     position, local_position,
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
@@ -1665,10 +1738,13 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "bots", play
 
   result.bridged_from_vm "builds",
-    drawing, `drawing=`, initial_position, save, restore, draw_position,
+    drawing, `drawing=`, initial_position, pen, pen_set, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, save_level_now, reload_thing, box_impl, sphere_impl,
-    cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get
+    cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
+    save_frame_impl, load_frame, delete_frame, clear_frames, frame,
+    `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
+    cull_down_faces_set, sealed_frames, sealed_frames_set, greedy, greedy_set
 
   result.bridged_from_vm "builds_private", place_block
 
