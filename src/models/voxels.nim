@@ -1344,12 +1344,6 @@ proc fill_padded_chunk_bytes*(
     let v = ids[bi shr 1]
     b = if (bi and 1) == 0: uint8(v and 0xff) else: uint8(v shr 8)
 
-proc frame_chunk_keys*(frame: FrameData): Table[Vector3, Hash] =
-  ## Whole-frame convenience (tests): every chunk's shell-aware key.
-  var decoded: DecodedChunks
-  for chunk_id in frame.chunks.keys:
-    result[chunk_id] = chunk_frame_key(decoded, frame, chunk_id)
-
 {.pop.}
 
 proc render_snapshot_direct*(
