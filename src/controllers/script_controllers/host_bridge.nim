@@ -1381,7 +1381,7 @@ proc count_draw(self: Build) =
 
 proc draw_voxel(self: Build, position: Vector3, color: Color) =
   ## Paint a TRANSIENT voxel. Goes through Build.draw, which only writes to
-  ## local_voxels (not local_edits), so the block is regenerated when the
+  ## the chunk tables (not local_edits), so the block is regenerated when the
   ## script reloads and isn't bloating the save file. Backs place.
   self.count_draw
   let info: VoxelInfo = (TRANSIENT, color)

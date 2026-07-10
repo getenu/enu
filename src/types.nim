@@ -71,6 +71,11 @@ const
   MAX_CHANGES_FOR_DELTA* = 100
   MAX_DELTAS_BEFORE_SNAPSHOT* = 100
 
+  MAIN_CHUNK_CACHE_CAP* = 256
+    ## Max decoded chunks resident on the main thread (~2 MB at u16 cells).
+    ## Main only runs interactive point queries, so a bounded LRU suffices;
+    ## the worker is unbounded (see VoxelStore.cache_cap).
+
 type
   PackedVoxel* = uint16
 
@@ -273,11 +278,18 @@ type
       ## `ed_ignore`: per-side state — syncing it would race concurrent
       ## lookups during body serialization.
 
+  CachedChunk* = ref object
+    ## One decoded chunk in a VoxelStore's read-through cache: the dense cell
+    ## array composed from the synced tables (packed ⊕ deltas ⊕ pending).
+    cells*: array[CHUNK_VOLUME, PackedVoxel]
+    count*: int ## non-empty cells — the flush gate / has-voxels signal
+    tick*: int ## LRU touch stamp (only enforced where cache_cap > 0)
+
   VoxelStore* = ref object
     # Local per-side render wrapper. The synced tables (`packed_chunks`,
     # `chunk_deltas`) are owned by the Build (Build Ed fields) and merely
-    # referenced here; the rest (`local_voxels`, `pending_*`, …) is local state
-    # rebuilt on each side.
+    # referenced here; the rest (`chunk_cache`, `pending_*`, …) is local state
+    # decoded on demand per side.
     ctx* {.cursor.}: EdContext
       # back-ref; the Build owns this VoxelStore, ctx outlives it
     thing_id*: string # For edit key construction
@@ -295,12 +307,20 @@ type
     build* {.cursor.}: Build
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
-    local_voxels*: Table[Vector3, Table[Vector3, VoxelInfo]]
+    chunk_cache*: Table[Vector3, CachedChunk]
+      ## Lazily decoded chunks (see `cached_chunk` in voxels.nim). Point reads
+      ## and writes go through here; snapshot arrival invalidates, delta
+      ## arrival pokes. Bulk iteration composes throwaway arrays instead so a
+      ## full-build scan can't flush the hot set.
+    cache_cap*: int
+      ## Max cached chunks; 0 = unbounded. Small on main (bounded working
+      ## set for interactive point queries); unbounded on the worker (its
+      ## scripts and saves touch everything anyway).
+    cache_tick*: int
     local_edits*: Table[Vector3, Table[Vector3, VoxelInfo]]
     pending_chunks*:
       Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
     pending_edits*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
-    block_count*: int
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
     snapshots_flushed*: int
     deltas_flushed*: int
