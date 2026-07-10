@@ -27,6 +27,7 @@ var
   draw_normal = vec3()
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
+proc fire_beside(self: Build) {.gcsafe.}
 proc init_voxels_if_needed*(self: Build) {.gcsafe.}
 
 # =============================================================================
@@ -50,6 +51,10 @@ proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
 proc find_first*(things: EdSeq[Thing], positions: open_array[Vector3]): Build =
   for thing in things:
     if thing of Build:
+      if LOCK in thing.find_root.global_flags:
+        # locked things behave like the ground: placements next to them
+        # start (or extend) a separate thing, never join the locked one
+        continue
       let thing = Build(thing)
       let offset = vec3().global_from(thing)
       for position in positions:
@@ -89,6 +94,9 @@ proc maybe_join_previous_build(
     if root of Build:
       partner = Build(root)
 
+    if LOCK in partner.global_flags:
+      return
+
     if partner != self:
       for position in position.global_from(self).surrounding:
         if position.local_to(partner) in partner:
@@ -123,6 +131,14 @@ proc reset_bounds*(self: Build) =
   for chunk_id, _ in self.voxels.packed_chunks:
     self.expand_bounds_to_chunk(chunk_id)
 
+  # Frames bypass the voxel tables, but the terrain clips loading and
+  # meshing to these bounds — a frame unit whose bounds ignore its frames
+  # displays a ~50-voxel box around its origin after a reload.
+  for _, frame in self.frames:
+    for chunk_id in frame.chunks.keys:
+      self.expand_bounds_to_chunk(chunk_id)
+
+
 proc begin_asap*(self: Build) {.gcsafe.} =
   if ASAP_MODE notin self.global_flags:
     debug "ASAP mode BEGIN", build_id = self.id
@@ -131,14 +147,16 @@ proc begin_asap*(self: Build) {.gcsafe.} =
 proc end_asap*(self: Build) {.gcsafe.} =
   if ASAP_MODE in self.global_flags:
     debug "ASAP mode END", build_id = self.id
-    self.reset_bounds()
+    # flush before bounds: reset_bounds reads the chunk tables, which only
+    # reflect this run's drawing once the dirty chunks are flushed
     self.voxels.flush_dirty_chunks()
+    self.reset_bounds()
     self.global_flags -= ASAP_MODE
 
 template buffer*(self: Build, body: untyped) =
   ## Batch many draws into a single flush. `draw` normally syncs each voxel,
   ## which is costly for large procedural builds; inside `buffer:` the draws
-  ## accumulate locally (ASAP mode) and flush once — chunks and MANUAL edits —
+  ## accumulate locally (ASAP mode) and flush once — chunks and PERSISTED edits —
   ## when the block exits (even on exception). Suspends `immediate` for the
   ## duration so the draws actually batch, then restores it.
   let was_immediate = self.voxels.immediate
@@ -151,6 +169,73 @@ template buffer*(self: Build, body: untyped) =
     self.voxels.flush_dirty_edits()
     self.voxels.immediate = was_immediate
 
+proc frame_count*(self: Build): int =
+  self.frames.len
+
+proc save*(self: Build, at: int = -1): int {.discardable.} =
+  ## Snapshot the current voxels as an animation frame and return its index:
+  ## appended by default, or overwriting frame `at` (replace workflow:
+  ## `load_frame(3)`, edit, `save(at = 3)`). Keyed table writes make
+  ## both cases a single synced op.
+  self.global_flags += DIRTY
+  if at >= 0 and at < self.frames.len:
+    self.frames[at] = self.voxels.pack_frame
+    at
+  else:
+    if self.frames.len >= MAX_FRAMES:
+      raise ResourceLimitError.init(
+        "frame limit reached (" & $MAX_FRAMES &
+          "): call clear_frames(), or overwrite with save(at = ...)"
+      )
+    let index = self.frames.len
+    self.frames[index] = self.voxels.pack_frame
+    index
+
+proc load_frame*(self: Build, index: int) =
+  ## Restore a saved frame into the live voxels for editing. Unlike
+  ## `current_frame=`, this changes the real state (and syncs it). Also
+  ## switches the display to the live state, so you see what you edit.
+  self.global_flags += DIRTY
+  if index >= 0 and index < self.frames.len:
+    self.voxels.load_frame(self.frames[index])
+    self.reset_bounds()
+    self.current_frame = -1
+
+proc clear_frames*(self: Build) =
+  ## Drop every saved frame, stop playback, and show the live state.
+  ## Scripts that build an animation programmatically call this first;
+  ## otherwise save keeps appending across script re-runs.
+  self.global_flags += DIRTY
+  self.frames_fps = 0.0
+  self.current_frame = -1
+  self.frames.clear
+
+proc delete_frame*(self: Build, index: int) =
+  ## Remove a saved frame; later frames shift down one index (keys stay
+  ## dense: each higher frame rewrites down by one keyed op).
+  self.global_flags += DIRTY
+  if index >= 0 and index < self.frames.len:
+    let last = self.frames.len - 1
+    for i in index ..< last:
+      self.frames[i] = self.frames[i + 1]
+    self.frames.del last
+    if self.current_frame == index:
+      self.current_frame = -1
+    elif self.current_frame > index:
+      self.current_frame = self.current_frame - 1
+
+proc play*(self: Build, fps: float = 8.0, loop: bool = true) =
+  ## Start frame playback; the server advances `current_frame` at `fps`.
+  ## `current_frame=` displays a frame without touching the live voxels;
+  ## `load_frame` restores one for editing.
+  self.global_flags += DIRTY
+  self.frames_loop = loop
+  self.frames_fps = fps
+
+proc stop*(self: Build) =
+  self.global_flags += DIRTY
+  self.frames_fps = 0.0
+
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
   self.voxels.add_voxel(position, voxel)
 
@@ -159,7 +244,7 @@ proc del_voxel(self: Build, position: Vector3) =
 
 proc restore_edits*(self: Build) =
   self.voxels.for_all_edits:
-    assert info.kind in {MANUAL, HOLE}
+    assert info.kind in {PERSISTED, HOLE}
     if info.kind != HOLE:
       self.add_voxel(pos, info)
     else:
@@ -170,7 +255,7 @@ proc restore_edits*(self: Build) =
         self.voxels.del_voxel(pos)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
-  if voxel.kind == COMPUTED:
+  if voxel.kind == TRANSIENT:
     if self.voxels.has_edit(position):
       var edit = self.voxels.get_edit(position)
       if edit.kind == HOLE:
@@ -178,7 +263,7 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
         edit.color = voxel.color
         self.voxels.set_edit(position, edit)
         return
-      elif edit.kind == MANUAL and edit.color == voxel.color:
+      elif edit.kind == PERSISTED and edit.color == voxel.color:
         self.voxels.del_edit(position)
     elif ?self.clone_of and Build(self.clone_of).voxels.has_edit(position) and
         Build(self.clone_of).voxels.get_edit(position).kind == HOLE:
@@ -197,10 +282,10 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
       else:
         self.del_voxel(position)
 
-  if position == vec3(0, 0, 0) and voxel.kind != COMPUTED:
+  if position == vec3(0, 0, 0) and voxel.kind != TRANSIENT:
     self.start_color = voxel.color
 
-  if not dont_join and voxel.kind == MANUAL:
+  if not dont_join and voxel.kind == PERSISTED:
     self.maybe_join_previous_build(position, voxel)
 
 proc sync_turtle*(self: Build) =
@@ -212,7 +297,7 @@ proc sync_turtle*(self: Build) =
 proc drop_block(self: Build) =
   if self.drawing:
     var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
-    self.draw(p, (COMPUTED, self.color))
+    self.draw(p, (TRANSIENT, self.color))
 
 proc has_visible_voxels(self: Build): bool =
   for pos, info in self.voxels.all_voxels:
@@ -222,7 +307,7 @@ proc has_visible_voxels(self: Build): bool =
 
 const BLOCK_LOG_CAP = 200
 
-proc log_block_placement(self: Build, local: Vector3, color: Colors) =
+proc log_block_placement(self: Build, local: Vector3, color: Color) =
   if state.player.is_nil:
     return
   let entry: BlockLogEntry = (
@@ -237,6 +322,8 @@ proc log_block_placement(self: Build, local: Vector3, color: Colors) =
     state.player.block_log_entries.del 0
 
 proc remove(self: Build) =
+  if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
+    return
   if state.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
     state.skip_block_paint = true
     draw_normal = self.target_normal
@@ -247,7 +334,7 @@ proc remove(self: Build) =
     skip_point = vec3()
     last_point = self.target_point
     self.draw(point, (HOLE, ACTION_COLORS[ERASER]))
-    self.log_block_placement(point, ERASER)
+    self.log_block_placement(point, ACTION_COLORS[ERASER])
 
     if self.things.len == 0 and not self.has_visible_voxels:
       if self.parent.is_nil:
@@ -259,19 +346,24 @@ proc fire(self: Build) =
   # Full transform, not global_from: on a rotated platform the origin-only sum
   # drops the rotation, so the dropped bot lands blocks from the aim target.
   let global_point = self.target_point.world_from(self)
+  let locked =
+    LOCK in self.find_root.global_flags and GOD notin state.local_flags
   if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+    if locked:
+      self.fire_beside()
+      return
     state.skip_block_paint = true
     draw_normal = self.target_normal
     let point = (self.target_point + (self.target_normal * 0.5)).floor
     skip_point = self.target_point + self.target_normal
     last_point = self.target_point
-    self.draw(point, (MANUAL, state.selected_color))
-    self.log_block_placement(point, Colors(ord state.tool))
+    self.draw(point, (PERSISTED, state.selected_color))
+    self.log_block_placement(point, state.selected_color)
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
     state.things += Bot.init(transform = transform)
-  elif state.tool == CODE_MODE:
+  elif state.tool == CODE_MODE and not locked:
     let root = self.find_root
     state.open_thing = root
 
@@ -393,12 +485,23 @@ method reset*(self: Build) =
   self.global_flags += VISIBLE
   self.reset_state()
 
+  # a reload stops playback and drops the displayed frame, but saved frames
+  # persist — the hand-edit workflow is "pose, re-run a script that calls
+  # save, repeat", so each run appends. Scripts building animations
+  # programmatically call clear_frames() first. A build with NO script has
+  # no rerun to re-establish playback or display — its persisted frame
+  # state is all it has (e.g. a saved sea), so leave it untouched.
+  if ?self.script_ctx and self.script_ctx.script != "" and
+      file_exists(self.script_ctx.script):
+    self.frames_fps = 0.0
+    self.current_frame = -1
+
   self.voxels.clear()
 
   self.things.clear()
   self.global_flags -= RESETTING
   self.restore_edits
-  self.draw(vec3(), (COMPUTED, self.start_color))
+  self.draw(vec3(), (TRANSIENT, self.start_color))
 
 method ensure_visible*(self: Build) =
   if self.things.len == 0 and not self.has_visible_voxels:
@@ -407,7 +510,7 @@ method ensure_visible*(self: Build) =
         ACTION_COLORS[BLUE]
       else:
         self.start_color
-    self.draw(vec3(), (COMPUTED, color))
+    self.draw(vec3(), (TRANSIENT, color))
 
 method destroy*(self: Build) =
   self.destroy_impl
@@ -437,10 +540,21 @@ proc init*(
       flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
     )
     let voxels = VoxelStore.init(thing_id = id)
+    let frames = EdTable[int, FrameData].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
     var self = Build(
       id: id,
       packed_chunks: packed_chunks,
       chunk_deltas: chunk_deltas,
+      frames: frames,
+      current_frame_value: EdValue[int].init(-1, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      sealed_frames_value:
+        EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      cull_down_faces_value:
+        EdValue[bool].init(false, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      greedy_value:
+        EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       voxels: voxels,
       start_transform: transform,
       draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
@@ -487,6 +601,36 @@ proc init*(_: type Build, x, y, z: float, save = false): Build =
   # each draw. `buffer:` flips both back for the span of a batch.
   result.end_asap()
   result.voxels.immediate = true
+
+proc fire_beside(self: Build) =
+  ## Ground-style placement for locked builds: the clicked face's outside
+  ## cell goes to an adjacent unlocked build (find_first skips locked
+  ## trees), or starts a new unit — the locked build itself never changes.
+  state.skip_block_paint = true
+  draw_normal = self.target_normal
+  let local_cell = (self.target_point + (self.target_normal * 0.5)).floor
+  skip_point = self.target_point + self.target_normal
+  last_point = self.target_point
+  let point = local_cell.world_from(self).round
+  let now = get_mono_time()
+  var add_to =
+    if ?current_build and (now - last_placement_time).in_milliseconds <= 500:
+      current_build
+    else:
+      state.things.find_first(point.surrounding)
+  if ?add_to:
+    add_to.draw(point.local_to(add_to), (PERSISTED, state.selected_color))
+    add_to.log_block_placement(point.local_to(add_to), state.selected_color)
+  else:
+    add_to = Build.init(
+      transform = Transform.init(origin = point),
+      global = true,
+      color = state.selected_color,
+    )
+    # A placed build has no script; render its voxels directly instead of
+    # waiting out the ASAP paste batching (see Ground.fire).
+    add_to.end_asap()
+    state.things += add_to
 
 proc init_voxels_if_needed*(self: Build) =
   ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
@@ -575,7 +719,7 @@ method worker_thread_joined*(self: Build, worker: Worker) =
       self.code.nim.strip == "" and
       not (?self.script_ctx and self.script_ctx.script != "" and
         file_exists(self.script_ctx.script)):
-    self.draw(vec3(), (COMPUTED, self.start_color))
+    self.draw(vec3(), (TRANSIENT, self.start_color))
     self.end_asap()
 
 method main_thread_joined*(self: Build) =
@@ -586,7 +730,9 @@ method main_thread_joined*(self: Build) =
   self.local_flags.watch:
     if HOVER.added and state.tool == CODE_MODE:
       if PLAYING notin state.local_flags and
-          TOUCH_CONTROLS notin state.local_flags:
+          TOUCH_CONTROLS notin state.local_flags and (
+            LOCK notin self.find_root.global_flags or GOD in state.local_flags
+          ):
         let root = self.find_root(true)
         root.walk_tree proc(thing: Thing) =
           thing.local_flags += HIGHLIGHT
@@ -675,12 +821,12 @@ when is_main_module:
 
   var b = Build.init
 
-  b.draw vec3(1, 1, 1), (COMPUTED, Color())
+  b.draw vec3(1, 1, 1), (TRANSIENT, Color())
   assert vec3(1, 1, 1) in b.voxels
-  b.draw vec3(17, 17, 17), (COMPUTED, Color())
+  b.draw vec3(17, 17, 17), (TRANSIENT, Color())
   assert vec3(17, 17, 17) in b.voxels
   var c = Build.init(transform = Transform(origin: vec3(5, 5, 5)))
   c.parent = b
 
-  c.draw vec3(14, 14, 14), (MANUAL, Color())
+  c.draw vec3(14, 14, 14), (PERSISTED, Color())
   c.local_flags += HOVER

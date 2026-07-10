@@ -312,8 +312,16 @@ proc write_file_if_changed*(path, content: string) =
     discard
   write_file(path, content)
 
-proc init*(_: type Code, nim: string): Code =
-  Code(owner: state.worker_ctx_name, runner: state.server_ctx_name, nim: nim)
+proc init*(_: type Code, nim: string, runner = state.server_ctx_name): Code =
+  ## `runner` is the ed context that should run the code — the server's
+  ## worker. It defaults to `state.server_ctx_name`, which is set on the
+  ## server (and on server→server links). A plain client has no `state`, so
+  ## a client authoring a unit's script passes the server's id explicitly
+  ## (see `Enu.server_ctx_id`); the server's code watch only acts on a
+  ## change whose `runner` matches its own context. On the server the owner
+  ## is this worker; a client (nil state) owns it as the server too.
+  let owner = if state.is_nil: runner else: state.worker_ctx_name
+  Code(owner: owner, runner: runner, nim: nim)
 
 proc update_action_index*(state: GameState, change: int) =
   # Cycle through the available tools only, skipping NONE/DISABLED and any tool

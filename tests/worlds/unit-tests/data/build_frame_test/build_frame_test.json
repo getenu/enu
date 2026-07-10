@@ -1,0 +1,15 @@
+{
+  "id": "build_frame_test",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [30.0, 0.0, 0.0]
+  },
+  "start_color": "BLUE",
+  "edits": {
+    
+  }
+}

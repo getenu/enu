@@ -16,13 +16,10 @@ bridged_to_host:
 
   proc `drawing=`*(self: Build, drawing: bool)
   proc initial_position(self: Build): Vector3
-  proc save*(self: Build, name = "default")
-    ## Remember the turtle's position, direction, color and drawing
-    ## state, so `restore` can jump back later. Give it a name to keep
-    ## more than one: `save "doorway"`.
-
-  proc restore*(self: Build, name = "default")
-    ## Jump the turtle back to a spot remembered with `save`.
+  proc pen*(self: Build): Pen
+    ## The drawing context — turtle pose, color, pen-down state. Capture
+    ## with `var spot = pen`, return with `pen = spot`.
+  proc `pen=`*(self: Build, value: Pen)
 
   proc draw_position*(self: Build): Vector3
     ## Where the turtle is. Assign a position (or a thing) to teleport
@@ -32,16 +29,16 @@ bridged_to_host:
   proc has_block_at*(position: Vector3): bool
     ## `true` if this build has a block at that spot.
 
-  proc block_color_at*(position: Vector3): Colors
+  proc block_color_at*(position: Vector3): Color
     ## The color of the block at that spot.
   proc begin_asap*(self: Build)
   proc end_asap*(self: Build)
-  proc draw_voxel*(self: Build, position: Vector3, color: Colors)
-    ## Paints a COMPUTED block at the given position. Re-runs of the script
+  proc draw_voxel*(self: Build, position: Vector3, color: Color)
+    ## Paints a TRANSIENT block at the given position. Re-runs of the script
     ## regenerate it, so it isn't persisted to the save file. Used by
     ## place (the box/sphere/cylinder primitives draw host-side). For
     ## persistent placement (eg. user edits via eval, holes for windows) use
-    ## place_block from builds_private, which marks the voxel MANUAL.
+    ## place_block from builds_private, which marks the voxel PERSISTED.
 
   proc save_level_now*()
     ## Triggers an immediate level save. Used for testing persistence.
@@ -54,7 +51,7 @@ bridged_to_host:
     w: int,
     h: int,
     d: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     pivot: int,
     at: Vector3,
@@ -67,7 +64,7 @@ bridged_to_host:
   proc sphere_impl*(
     self: Build,
     size: float,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
@@ -77,11 +74,56 @@ bridged_to_host:
     self: Build,
     size: float,
     height: int,
-    color: Colors,
+    color: Color,
     fill: bool,
     at: Vector3,
     use_turtle: bool,
   )
+
+  proc save_frame_impl*(self: Build, at: int): int
+
+  proc delete_frame*(self: Build, index: int)
+    ## Remove a saved frame; later frames shift down one index.
+
+  proc clear_frames*(self: Build)
+    ## Drop every saved frame and stop playback. Frames persist across
+    ## script re-runs (that's the hand-edit flow: pose, run a script that
+    ## calls save, repeat) — so programmatic animations clear first.
+    ## save raises after 64 frames without a clear.
+
+  proc load_frame*(self: Build, index: int)
+    ## Restore a saved frame into the live voxels for editing (this changes
+    ## the real state, unlike `frame=` which only changes the display).
+
+  proc `frame=`*(self: Build, index: int)
+    ## Display a saved frame (-1 = the live voxel state). Display-only.
+
+  proc frame*(self: Build): int
+
+  proc frames_len*(self: Build): int
+
+  proc play_impl*(self: Build, fps: float, loop: bool)
+
+  proc stop_impl*(self: Build)
+
+  proc sealed_frames*(self: Build): bool
+    ## Frame meshes bake self-contained (no cross-chunk face culling):
+    ## chunks on different animation frames can never show seams. On by
+    ## default; turn off for fewer quads and exact border lighting when
+    ## the whole animation stays in lockstep.
+  proc `sealed_frames=`*(self: Build, value: bool)
+
+  proc greedy*(self: Build): bool
+    ## Greedy meshing: merge coplanar, uniformly-shaded cube faces into
+    ## larger quads. On by default (identical render, less geometry);
+    ## `greedy = false` opts a build out.
+  proc `greedy=`*(self: Build, value: bool)
+
+  proc cull_down_faces*(self: Build): bool
+    ## Sheet hint: skip downward faces when meshing — an ocean slab's
+    ## underside is never visible but costs ~a third of its geometry.
+    ## Set it before drawing or playing frames.
+  proc `cull_down_faces=`*(self: Build, value: bool)
 
   proc rendered_voxel_count_get*(self: Build): int
 
@@ -95,6 +137,46 @@ bridged_to_host:
     ## direction without going through `begin_move`. No drawing, no
     ## animation, no speed/ASAP interaction. Used by `wall` / `floor`
     ## to leave the turtle at the far end of the shape.
+
+template frame_count*(self: Build): int =
+  self.frames_len
+
+proc save*(self: Build, at: int = -1): int {.discardable.} =
+  ## Snapshot the current voxels as an animation frame and return its
+  ## index — appended by default, or overwriting frame `at`. Replace
+  ## workflow: load_frame(3), edit, save(at = 3). Raises past 64
+  ## frames without a clear_frames().
+  self.save_frame_impl(at)
+
+proc play*(self: Build, fps = 8.0, loop = true) =
+  ## Cycle through the saved frames at `fps` (loops by default).
+  self.play_impl(fps, loop)
+
+proc stop*(self: Build) =
+  ## Stop frame playback; the display stays on the current frame.
+  self.stop_impl()
+
+# bare forms for the active unit, matching the drawing API
+proc save*(at: int = -1): int {.discardable.} =
+  Build(active_thing()).save_frame_impl(at)
+
+proc load_frame*(index: int) =
+  Build(active_thing()).load_frame(index)
+
+proc delete_frame*(index: int) =
+  Build(active_thing()).delete_frame(index)
+
+proc clear_frames*() =
+  Build(active_thing()).clear_frames()
+
+proc play*(fps = 8.0, loop = true) =
+  Build(active_thing()).play_impl(fps, loop)
+
+proc stop*() =
+  Build(active_thing()).stop_impl()
+
+# no bare frame_count(): it would collide with the engine's global frame
+# counter in base_bridge — use me.frame_count
 
 proc pending_block_updates*(self: Thing): int =
   ## How many block changes are still being worked on. `0` means
@@ -344,7 +426,7 @@ template can*(
 # ---- wall / floor --------------------------------------------------
 
 template wall*(
-    length: int, height: int = 4, color: Colors = active_thing().color
+    length: int, height: int = 4, color: Color = active_thing().color
 ) =
   ## Draw a wall, `length` blocks long and `height` tall (4 unless you
   ## say), heading the way the turtle faces. The turtle ends up at the
@@ -356,7 +438,7 @@ template wall*(
     me.advance (length - 1).float
 
 template floor*(
-    length: int, width: int = length, color: Colors = active_thing().color
+    length: int, width: int = length, color: Color = active_thing().color
 ) =
   ## Draw a flat slab, `length` deep and `width` wide (square unless
   ## you say). Like `wall`, the turtle ends up at the far edge, ready

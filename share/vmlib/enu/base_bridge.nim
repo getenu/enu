@@ -70,11 +70,11 @@ bridged_to_host:
   proc velocity*(self: Thing): Vector3
     ## How fast (and which way) the thing is moving right now.
 
-  proc color*(self: Thing): Colors
+  proc color*(self: Thing): Color
     ## The thing's color. For a Build this is the drawing color, blocks
     ## you draw after changing it use the new color.
 
-  proc `color=`*(self: Thing, color: Colors)
+  proc `color=`*(self: Thing, color: Color)
   proc show*(self: Thing): bool
     ## Whether the thing is visible. `show = false` makes it vanish.
     ## It's still there. It's just being sneaky.
@@ -179,3 +179,4 @@ bridged_to_host:
   proc create_new*(self: Thing)
   proc frame_count*(): int
   proc signal_test_complete*(exit_code: int)
+

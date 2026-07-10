@@ -38,27 +38,6 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   else:
     self.show_tools = true
 
-proc to_json_hook(self: Color): JsonNode =
-  result =
-    if self == ACTION_COLORS[ERASER]:
-      %""
-    else:
-      for i, color in Colors.enum_fields:
-        if self == ACTION_COLORS[Colors(i)]:
-          return %color
-      %self.to_html_hex
-
-proc from_json_hook(self: var Color, json: JsonNode) =
-  let hex = json.get_str
-  if hex == "":
-    self = ACTION_COLORS[ERASER]
-  else:
-    for i, color in Colors.enum_fields:
-      if color.to_lower == hex.to_lower:
-        self = ACTION_COLORS[Colors(i)]
-        return
-    self = hex.parse_html_hex
-
 proc to_json_hook*(self: VoxelInfo): JsonNode =
   %[%self.kind.ord, self.color.to_json_hook]
 
@@ -104,6 +83,13 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     color = color,
   )
 
+  if "palette" in json:
+    # Restore the static palette in saved order BEFORE anything packs a
+    # color: frame files (and future binary edits) reference palette
+    # indices, so the sequence must match the one they were written with.
+    for entry in json["palette"]:
+      discard pack_color_index(self.shared, entry.json_to(Color))
+
   if load_chunks:
     # Old chunks format - group by chunk and load with EditKey
     # This is a bit inefficient as it creates a big list, but safe for migration
@@ -118,7 +104,17 @@ proc from_json_hook(self: var Build, json: JsonNode) =
       self.shared.pack_and_store_edited_voxels(self.id, all_voxels)
   else:
     # New edits format
-    if "edits" in json:
+    if "edits_file" in json:
+      # big-build sidecar: packed chunks stored directly (palette already
+      # restored above, so the indices inside resolve)
+      let path = self.data_dir / json["edits_file"].json_to(string)
+      if file_exists(path):
+        for thing_id, chunks in decode_edits_file(read_file(path)):
+          for chunk_id, snapshot in chunks:
+            self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
+      else:
+        warn "edits sidecar missing", unit = self.id, path = path
+    elif "edits" in json:
       for id, edits in json["edits"]:
         var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
         for edit in edits:
@@ -130,6 +126,44 @@ proc from_json_hook(self: var Build, json: JsonNode) =
           self.shared.pack_and_store_edited_voxels(id, current_chunk_edits)
 
     self.voxels.rebuild_local_edits()
+
+  if "frames" in json:
+    let meta = json["frames"]
+    let dir = self.data_dir / "frames"
+    let count = meta["count"].get_int
+    var prev = none(FrameData)
+    var loaded = 0
+    for i in 0 ..< count:
+      let path = dir / \"{i:03}.bin"
+      if not file_exists(path):
+        warn "frame sidecar file missing; dropping later frames",
+          unit = self.id, frame = i
+        break
+      try:
+        let frame = decode_frame_file(read_file(path), prev)
+        self.frames[i] = frame
+        prev = some(frame)
+        inc loaded
+      except ValueError as e:
+        warn "frame sidecar file unreadable; dropping later frames",
+          unit = self.id, frame = i, error = e.msg
+        break
+    self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
+    info "frames sidecar loaded",
+      unit = self.id,
+      loaded = loaded,
+      fps = meta["fps"].get_float,
+      current = meta{"current"}.get_int(-1)
+    if loaded > 0:
+      self.frames_loop = meta["loop"].get_bool
+      # Playback is never auto-resumed: it's a runtime action a script
+      # triggers with `play()`. On reload we only restore the displayed
+      # frame so the unit comes back visible (its voxels are TRANSIENT, so
+      # only frames survive) — a script then takes over if it plays.
+      if "current" in meta:
+        let current = meta["current"].get_int
+        if current >= 0 and current < loaded:
+          self.current_frame = current
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared thing serializer), but tolerate
@@ -145,7 +179,19 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
     color = color,
   )
 
-  if not load_chunks and "edits" in json:
+  if "palette" in json:
+    for entry in json["palette"]:
+      discard pack_color_index(self.shared, entry.json_to(Color))
+
+  if not load_chunks and "edits_file" in json:
+    let path = self.data_dir / json["edits_file"].json_to(string)
+    if file_exists(path):
+      for thing_id, chunks in decode_edits_file(read_file(path)):
+        for chunk_id, snapshot in chunks:
+          self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
+    else:
+      warn "edits sidecar missing", unit = self.id, path = path
+  elif not load_chunks and "edits" in json:
     for id, edits in json["edits"]:
       var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
       for edit in edits:
@@ -165,12 +211,12 @@ proc `$`(self: VoxelInfo): string =
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
   \"[{$[self.voxel.x, self.voxel.y, self.voxel.z]}, [{int self.info.kind}, {self.info.color}]]"
 
-proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
+proc edits_to_string(shared: Shared): string =
   ## Serialize edit_snapshots to JSON format for backwards compatibility
   # Group edits by thing_id
   var by_thing: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
 
-  for key, packed in edit_snapshots.value:
+  for key, packed in shared.edit_snapshots.value:
     let thing_id = key.id
     let chunk_id = key.loc
 
@@ -186,7 +232,7 @@ proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
           chunk_id.y * ChunkDim + local_pos.y,
           chunk_id.z * ChunkDim + local_pos.z,
         )
-        let info = (VoxelKind(kind_ord), ACTION_COLORS[Colors(color_idx)])
+        let info = (VoxelKind(kind_ord), resolve_color(shared, color_idx))
         if thing_id notin by_thing:
           by_thing[thing_id] = @[]
         by_thing[thing_id].add((world_pos, info))
@@ -200,11 +246,106 @@ proc edits_to_string(edit_snapshots: EdTable[EditKey, SnapshotData]): string =
         \"\"{thing_id}\": [\n{elements}\n]"
   result = edits.join(",\n")
 
+proc save_frames(self: Build) =
+  ## Frame animation sidecar: data/<id>/frames/NNN.bin, keyframes every
+  ## FRAME_KEYFRAME_INTERVAL frames and per-chunk deltas between. The unit
+  ## JSON carries the metadata (count, fps, loop) and the static palette
+  ## the packed values reference.
+  let dir = self.data_dir / "frames"
+  if self.frames.len == 0:
+    if dir_exists(dir):
+      remove_dir(dir)
+    return
+  create_dir dir
+  var prev = none(FrameData)
+  for i in 0 ..< self.frames.len:
+    let frame = self.frames[i]
+    let key = i mod FRAME_KEYFRAME_INTERVAL == 0
+    let data = encode_frame_file(
+      frame,
+      if key: none(FrameData) else: prev
+    )
+    write_file_if_changed(dir / \"{i:03}.bin", data)
+    prev = some(frame)
+  for kind, path in walk_dir(dir):
+    if kind == pcFile and path.ends_with(".bin"):
+      let name = path.extract_filename
+      var stale = true
+      try:
+        let idx = parse_int(name[0 ..^ 5])
+        stale = idx < 0 or idx >= self.frames.len
+      except ValueError:
+        discard
+      if stale:
+        remove_file path
+
+proc extras_json(self: Thing): string =
+  ## Optional trailing sections for the unit JSON: frame-animation metadata
+  ## and the static color palette (frame files reference palette indices,
+  ## so the palette must restore in the same order on load).
+  if self of Build and Build(self).frames.len > 0:
+    let build = Build(self)
+    result.add \""",
+  "frames": {{
+    "version": {FRAME_FILE_VERSION},
+    "count": {build.frames.len},
+    "fps": {build.frames_fps},
+    "loop": {build.frames_loop},
+    "current": {build.current_frame},
+    "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
+  }}"""
+  if ?self.shared and self.shared.palette.len > 0:
+    # One color per line: a gradient build's palette runs to hundreds of
+    # entries, and a single wrapped line is unreadable / undiffable.
+    let entries = collect:
+      for color in self.shared.palette:
+        \"    {$color}"
+    result.add \""",
+  "palette": [
+{entries.join(",\n")}
+  ]"""
+
+proc edited_voxel_count(shared: Shared): int =
+  for _, packed in shared.edit_snapshots.value:
+    let decoded = decode_chunk(packed)
+    for linear in 0 ..< CHUNK_VOLUME:
+      if decoded[linear] != EMPTY_VOXEL:
+        inc result
+
+proc save_edits_sidecar(self: Thing): bool =
+  ## Big builds persist their hand edits as packed chunks in
+  ## data/<id>/edits.bin instead of the per-voxel JSON list (~30-40x
+  ## smaller before compression). Returns whether the sidecar was written
+  ## — the JSON then records "edits_file" instead of inline edits.
+  if state.is_nil or not state.config_value.loaded:
+    # No level dir (bare `$unit`, e.g. a unit test with no game state) —
+    # there's nowhere to write a sidecar, so keep edits inline and touch no
+    # files. `data_dir` dereferences `state.config`, absent here.
+    return false
+  if edited_voxel_count(self.shared) <= EDITS_SIDECAR_THRESHOLD:
+    let stale = self.data_dir / "edits.bin"
+    if file_exists(stale):
+      remove_file stale
+    return false
+  var edits: Table[string, Table[Vector3, SnapshotData]]
+  for key, packed in self.shared.edit_snapshots.value:
+    edits.mget_or_put(key.id, Table[Vector3, SnapshotData]())[key.loc] = packed
+  create_dir self.data_dir
+  write_file_if_changed(self.data_dir / "edits.bin", encode_edits_file(edits))
+  true
+
 proc `$`(self: Thing): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
-  let edits = edits_to_string(self.shared.edit_snapshots)
+  let edits_section =
+    if self.save_edits_sidecar():
+      "\"edits_file\": \"edits.bin\""
+    else:
+      let edits = edits_to_string(self.shared)
+      \""""edits": {{
+{edits.indent(4)}
+  }}"""
   result = \"""
 {{
   "id": "{self.id}",
@@ -215,9 +356,7 @@ proc `$`(self: Thing): string =
     "origin": {$[origin.x, origin.y, origin.z]}
   }},
   "start_color": {self.start_color},
-  "edits": {{
-{edits.indent(4)}
-  }}
+  {edits_section}{self.extras_json}
 }}
     """
 
@@ -237,6 +376,8 @@ proc save*(thing: Thing) =
     # watching the same level dir.
     create_dir thing.data_dir
     write_file_if_changed(thing.data_file, data)
+    if thing of Build:
+      Build(thing).save_frames()
 
     for thing in thing.things:
       thing.save
