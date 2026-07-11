@@ -562,8 +562,14 @@ proc init*(
     edit_deltas: edit_deltas,
     # Main only runs interactive point queries (targeting, floor-follow,
     # draw), so its decoded working set is a small LRU. The worker's scripts,
-    # saves and frame packs touch everything -- unbounded (0).
-    cache_cap: if use_ctx.metrics_label == "main": MAIN_CHUNK_CACHE_CAP else: 0,
+    # saves and frame packs touch everything -- unbounded (0). A build-less
+    # store (tests, tools) is never capped: with no synced tables behind it,
+    # its cache is authoritative and eviction would lose data.
+    cache_cap:
+      if ?build and use_ctx.metrics_label == "main":
+        MAIN_CHUNK_CACHE_CAP
+      else:
+        0,
   )
 
 proc compose_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
@@ -599,13 +605,20 @@ proc cached_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
   result = self.compose_chunk(chunk_id)
   result.tick = self.cache_tick
   if self.cache_cap > 0 and self.chunk_cache.len >= self.cache_cap:
+    # Eviction invariant: never evict a chunk with unflushed writes — a
+    # recompose reads the synced tables, so anything still in
+    # `pending_chunks` would be silently lost. Main flushes every write in
+    # the same call today, but that's a cross-file coincidence; enforce it
+    # here. If every entry is dirty, skip eviction and run over cap until
+    # the next flush.
     var oldest_id: Vector3
     var oldest_tick = int.high
     for id, entry in self.chunk_cache:
-      if entry.tick < oldest_tick:
+      if entry.tick < oldest_tick and id notin self.pending_chunks:
         oldest_tick = entry.tick
         oldest_id = id
-    self.chunk_cache.del(oldest_id)
+    if oldest_tick < int.high:
+      self.chunk_cache.del(oldest_id)
   self.chunk_cache[chunk_id] = result
 
 iterator chunk_ids*(self: VoxelStore): Vector3 =
@@ -639,8 +652,8 @@ proc unpack_info(self: VoxelStore, packed: PackedVoxel): VoxelInfo =
   (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
 
 proc contains*(self: VoxelStore, position: Vector3): bool =
-  let chunk = self.cached_chunk(position.buffer)
-  chunk.count > 0 and chunk.cells[linear_position(position)] != EMPTY_VOXEL
+  self.cached_chunk(position.buffer).cells[linear_position(position)] !=
+    EMPTY_VOXEL
 
 proc voxel_info*(self: VoxelStore, position: Vector3): VoxelInfo =
   self.unpack_info(
