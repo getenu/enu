@@ -2,6 +2,8 @@
   "enu_version": "v0.2.2-322-gd09c4c7d",
   "format_version": "v0.9.2",
   "load_order": [
+    "bot_alias_test",
+    "bot_alias_class",
     "bot_test_runner",
     "build_block_tests",
     "build_serialization_test"
