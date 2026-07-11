@@ -237,44 +237,113 @@ proc pop_name_node(ast: NimNode): tuple[start: NimNode, name_node: NimNode] =
   for i, node in result.start:
     ast.del(i)
 
-proc visit_tree(
-    parent: NimNode,
-    convert: open_array[string],
-    receiver: string,
-    alias: ptr seq[NimNode],
-) =
-  for i, node in parent:
-    if node.kind in [nnkProcDef, nnkBlockStmt, nnkIfExpr, nnkIfStmt]:
-      # The alias list should only live as long as a scope. We need to make a
-      # new copy each time a scope is opened. The above list needs to be
-      # expanded.
-      var alias = alias[]
-      visit_tree(node, convert, receiver, addr alias)
-    else:
-      if node.kind == nnkIdent:
-        if $node in convert and parent.kind == nnkIdentDefs:
-          if i == 0:
-            alias[].add node
-          elif i == 2 and node notin alias[]:
-            parent[i] = new_dot_expr(ident(receiver), node).with_line_info(node)
-        elif $node in convert and node notin alias[] and
-            parent.kind != nnk_expr_eq_expr and
-            not (parent.kind == nnk_dot_expr and i == 1):
-          parent[i] = new_dot_expr(ident(receiver), node).with_line_info(node)
-      visit_tree(node, convert, receiver, alias)
+# Property access uses Nim's own scoping instead of AST rewriting. Each
+# property gets a parenless template (`template speed: untyped =
+# enu_target.speed`), so a bare `speed` read expands through normal symbol
+# lookup — and a user variable named `speed` shadows it wherever Nim says
+# it should, with no alias tracking. `dirty` makes the receiver bind where
+# the template is expanded rather than where it's defined, which is what
+# retargets `enu_target` after `move`/`build` and picks up run_script's
+# `me` parameter for instances.
+#
+# Writes can't go through the templates alone: Nim only rewrites `a.b = c`
+# to a setter call when the assignment is syntactically a dot expression,
+# so `speed = 1` with a template-expanded lhs fails to compile. Instead
+# `rewrite_prop_writes` turns bare-ident assignments to property names
+# into `enu_assign(speed, 1)` calls, unconditionally — by the time
+# `enu_assign` runs, Nim has already resolved what `speed` means here.
 
-# Converts variable access to property access. Ex. `speed = 1` -> `me.speed = 1`
-# Anything for `enu_target` must work for all things. `me` can be class specific.
-# This tries to take aliasing into account. If a variable called `speed` is
-# created, anywhere it's in scope won't get `me` prefixed.
-proc auto_insert_receiver(
-    ast: NimNode, class_specific_props: open_array[string]
-): NimNode =
-  var alias: seq[NimNode] = @[]
-  visit_tree(ast, class_specific_props, "me", addr alias)
-  visit_tree(ast, private_props, "me", addr alias)
-  visit_tree(ast, public_props, "enu_target", addr alias)
-  result = ast
+proc prop_template(prop, receiver: string): NimNode =
+  let prop_ident = ident(prop)
+  let recv = ident(receiver)
+  result = quote do:
+    template `prop_ident`: untyped {.dirty.} =
+      `recv`.`prop_ident`
+
+macro enu_assign*(lhs: typed, rhs: typed): untyped =
+  ## `speed = 1` in a script is rewritten to `enu_assign(speed, 1)`. A
+  ## user variable arrives here as a plain symbol and stays a plain
+  ## assignment; a property template arrives expanded (a getter call, or
+  ## a field access for same-module class params) and becomes a setter
+  ## call.
+  # sem wraps a `ref` receiver in a hidden deref for field access; the
+  # setter wants the ref back
+  proc unwrap(node: NimNode): NimNode =
+    result = node
+    while result.kind in {nnkHiddenDeref, nnkHiddenAddr, nnkHiddenStdConv}:
+      result = result[^1]
+
+  if lhs.kind == nnkSym:
+    result = nnkAsgn.new_tree(lhs, rhs)
+  elif lhs.kind in CallNodes:
+    result = new_call(ident(lhs[0].str_val & "="), unwrap(lhs[1]), rhs)
+  elif lhs.kind == nnkDotExpr:
+    result = new_call(ident(lhs[1].str_val & "="), unwrap(lhs[0]), rhs)
+  elif lhs.kind in {nnkClosedSymChoice, nnkOpenSymChoice}:
+    # ambiguous, e.g. a parenless prop template vs a unary accessor with
+    # the same name. Find the prop template and rebuild
+    # `receiver.prop = rhs` from its body.
+    for choice in lhs:
+      let impl = choice.get_impl
+      if impl.kind == nnkTemplateDef and impl.params.len == 1:
+        var body = impl.body
+        while body.kind == nnkStmtList:
+          body = body[^1]
+        body.expect_kind nnkDotExpr
+        result =
+          new_call(ident(body[1].str_val & "="), ident(body[0].str_val), rhs)
+        break
+    if result.is_nil:
+      error("'" & lhs.repr & "' cannot be assigned to", lhs)
+  else:
+    error("'" & lhs.repr & "' cannot be assigned to", lhs)
+  result.copy_line_info(lhs)
+
+const COMPARISON_OPS = ["==", "!=", "<=", ">="]
+
+proc decl_name(node: NimNode): string =
+  var node = node
+  while node.kind in {nnkPostfix, nnkPragmaExpr}:
+    node = node[if node.kind == nnkPostfix: 1 else: 0]
+  if node.kind == nnkAccQuoted:
+    node = node[0]
+  $node
+
+proc declared_top_level_names(ast: NimNode): seq[string] =
+  ## Names declared at a script's top level. These share the module scope
+  ## with the property templates, where Nim reports a redefinition instead
+  ## of shadowing — so templates for these names aren't generated at all.
+  for node in ast:
+    case node.kind
+    of nnkVarSection, nnkLetSection, nnkConstSection:
+      for def in node:
+        if def.kind in {nnkIdentDefs, nnkConstDef, nnkVarTuple}:
+          for j in 0 .. def.len - 3:
+            result.add decl_name(def[j])
+    of nnkProcDef, nnkFuncDef, nnkTemplateDef, nnkMacroDef, nnkIteratorDef,
+        nnkConverterDef:
+      result.add decl_name(node[0])
+    else:
+      discard
+
+proc rewrite_prop_writes(parent: NimNode, props: open_array[string]) =
+  for i, node in parent:
+    rewrite_prop_writes(node, props)
+    if node.kind == nnkAsgn and node[0].kind == nnkIdent and
+        $node[0] in props:
+      parent[i] =
+        new_call(ident"enu_assign", node[0], node[1]).with_line_info(node)
+    elif node.kind == nnkInfix and node[0].kind == nnkIdent and
+        node[1].kind == nnkIdent and $node[1] in props:
+      # `speed += 1` -> `enu_assign(speed, speed + 1)`
+      let op = $node[0]
+      if op.len > 1 and op.ends_with("=") and op[0] notin {'=', '<', '>', '!'} and
+          op notin COMPARISON_OPS:
+        let base_op = ident(op[0 ..^ 2]).with_line_info(node[0])
+        let read =
+          nnkInfix.new_tree(base_op, node[1], node[2]).with_line_info(node)
+        parent[i] =
+          new_call(ident"enu_assign", node[1], read).with_line_info(node)
 
 proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
   let (name, params, vars) = sig.parse_sig(return_type)
@@ -327,18 +396,40 @@ macro load_enu_script*(
   var (script_start, name_node) = pop_name_node(ast)
   result = new_stmt_list()
   var inner = new_stmt_list()
-  script_start = script_start.auto_insert_receiver(class_specific_props)
+
+  # a parenless read template per property, most specific receiver first —
+  # duplicate names keep the first receiver
+  let user_top_level_names = declared_top_level_names(script_start)
+  var prop_names: seq[string]
+  for (props, receiver) in [
+    (class_specific_props, "me"),
+    (@private_props, "me"),
+    (@public_props, "enu_target"),
+  ]:
+    for prop in props:
+      if prop notin prop_names and prop notin user_top_level_names:
+        prop_names.add prop
+        result.add prop_template(prop, receiver)
+
+  rewrite_prop_writes(script_start, prop_names)
+  # templates for `name foo(health = 3)` params, injected inside
+  # run_script so they're more local than the module-level accessors
+  var param_templates = new_stmt_list()
   if name_node.kind != nnkNilLit:
     let (name, params) = extract_class_info(name_node)
+    var all_props = prop_names
     for param in params:
-      class_specific_props.add($param[0])
-    ast = ast.auto_insert_receiver(class_specific_props)
+      let param_name = $param[0]
+      if param_name notin all_props:
+        all_props.add param_name
+      param_templates.add prop_template(param_name, "me")
+    rewrite_prop_writes(ast, all_props)
     result.add build_class(name_node, base_type)
     let assignments = params_to_assignments(params)
     inner.add quote do:
       `assignments`
   else:
-    ast = ast.auto_insert_receiver(class_specific_props)
+    rewrite_prop_writes(ast, prop_names)
     result.add quote do:
       let me {.inject.} = `base_type`()
       var enu_target {.inject.} = me
@@ -354,7 +445,11 @@ macro load_enu_script*(
       let home {.inject.} = PositionOffset(position: me.local_position)
       var move_mode {.inject.} = 1
       include loops
-      `inner`
+      `param_templates`
+      # user code goes in a block so `var health = ...` shadows the
+      # templates above instead of colliding with them
+      block:
+        `inner`
       # If a new instance doesn't ever yield the interpreter can crash. Unsure
       # why, but probably fixable. Sleep before exit as a workaround.
       sleep 0.0

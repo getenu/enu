@@ -24,7 +24,8 @@ template test*(name: string, body: untyped) =
   inc total_tests
   test_failed = false
   failure_msg = ""
-  body
+  block:
+    body
   if test_failed:
     inc failed_tests
     echo "  [FAIL] ", name
