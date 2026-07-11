@@ -74,7 +74,10 @@ const
   MAIN_CHUNK_CACHE_CAP* = 256
     ## Max decoded chunks resident on the main thread (~2 MB at u16 cells).
     ## Main only runs interactive point queries, so a bounded LRU suffices;
-    ## the worker is unbounded (see VoxelStore.cache_cap).
+    ## the worker is unbounded (see VoxelStore.cache_cap). Eviction is an
+    ## O(cap) scan per miss-at-cap (see cached_chunk) — fine at this size,
+    ## but rethink it (a real LRU list, or sampled eviction) before growing
+    ## past ~512.
 
 type
   PackedVoxel* = uint16
