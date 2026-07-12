@@ -181,10 +181,7 @@ let
 
 # --- generation ----------------------------------------------------------------
 
-Enu.client.connect
-discard Enu.client.tick_until(3.seconds, Enu.client.connected)
-# connected != synced: wait for the root collection before adding units
-discard Enu.client.tick_until(10.seconds, "root_units" in Enu.client.ctx)
+Enu.client.connect # PARTIAL mode: blocks until the root collection is synced
 
 var
   wave = new_seq[float32](DIM * DIM) # sea surface, metres
@@ -336,8 +333,6 @@ proc new_sea_build(): Build =
   result.scale = SCALE
   # the sea's underside is never visible; SEA_CULL=0 keeps it for A/B tests
   result.cull_down_faces = get_env("SEA_CULL", "1") == "1"
-  # greedy meshing: merge coplanar uniform faces (default on; SEA_GREEDY=0 for A/B)
-  result.greedy = get_env("SEA_GREEDY", "1") == "1"
   # self-contained frame bakes (no cross-frame seams); SEA_SEAL=0 for A/B
   result.sealed_frames = get_env("SEA_SEAL", "1") == "1"
   Enu.client.tick
@@ -396,10 +391,8 @@ else:
       # animating without the save format carrying playback/scale. The
       # generator authors it by setting the unit's code with the server as
       # the runner (a client doesn't run scripts itself).
-      let greedy_line =
-        if get_env("SEA_GREEDY", "1") == "1": "" else: "greedy = false\n"
       build.code = Code.init(
-        "scale = " & $SCALE & "\n" & greedy_line & "play(" & $fps & ")\n",
+        "scale = " & $SCALE & "\nplay(" & $fps & ")\n",
         runner = Enu.server_ctx_id,
       )
       echo "sea saved with a script (scale + play) — reload animates it"
