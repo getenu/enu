@@ -113,12 +113,6 @@ bridged_to_host:
     ## the whole animation stays in lockstep.
   proc `sealed_frames=`*(self: Build, value: bool)
 
-  proc greedy*(self: Build): bool
-    ## Greedy meshing: merge coplanar, uniformly-shaded cube faces into
-    ## larger quads. On by default (identical render, less geometry);
-    ## `greedy = false` opts a build out.
-  proc `greedy=`*(self: Build, value: bool)
-
   proc cull_down_faces*(self: Build): bool
     ## Sheet hint: skip downward faces when meshing — an ocean slab's
     ## underside is never visible but costs ~a third of its geometry.

@@ -761,10 +761,6 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         self.set_cull_down_faces(change.item)
 
-    self.model.greedy_value.watch:
-      if added:
-        self.set_greedy_meshing(change.item)
-
     self.model.scale_value.watch:
       if added:
         # Scale lives in the model's transform.basis (set synchronously by
@@ -967,8 +963,10 @@ gdobj BuildNode of VoxelTerrain:
     if self.model.cull_down_faces:
       self.set_cull_down_faces(true)
 
-    if self.model.greedy:
-      self.set_greedy_meshing(true)
+    # Greedy meshing is always on (identical render, far fewer vertices). The
+    # engine keeps the toggle in case we ever want to expose it again, but it
+    # isn't a script- or model-level option.
+    self.set_greedy_meshing(true)
 
     self.model.sight_ray = self.get_node("SightRay") as RayCast
     self.prepare_materials()
