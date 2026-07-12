@@ -438,10 +438,6 @@ type
       ## Sheet hint: skip downward faces when meshing. An ocean slab's
       ## underside is never visible but costs ~a third of its geometry.
       ## Set it before drawing/playing — cached frame meshes don't rebake.
-    greedy_value*: EdValue[bool]
-      ## Greedy meshing: merge coplanar, same-voxel, uniformly-shaded cube
-      ## faces into larger quads. Identical render, 30-70% fewer vertices;
-      ## on by default (scripts opt out with `greedy = false`).
 
   Config* = object
     font_size*: int

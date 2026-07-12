@@ -553,8 +553,6 @@ proc init*(
         EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       cull_down_faces_value:
         EdValue[bool].init(false, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      greedy_value:
-        EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       voxels: voxels,
       start_transform: transform,
       draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),

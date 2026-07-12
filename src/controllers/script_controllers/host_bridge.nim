@@ -1647,13 +1647,6 @@ proc cull_down_faces_set(self: Build, value: bool) =
   self.cull_down_faces = value
   self.global_flags += DIRTY
 
-proc greedy(self: Build): bool =
-  self.greedy
-
-proc greedy_set(self: Build, value: bool) =
-  self.greedy = value
-  self.global_flags += DIRTY
-
 proc frames_len(self: Build): int =
   self.frame_count
 
@@ -1744,7 +1737,7 @@ proc bridge_to_vm*(worker: Worker) =
     cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
     save_frame_impl, load_frame, delete_frame, clear_frames, frame,
     `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
-    cull_down_faces_set, sealed_frames, sealed_frames_set, greedy, greedy_set
+    cull_down_faces_set, sealed_frames, sealed_frames_set
 
   result.bridged_from_vm "builds_private", place_block
 
