@@ -43,8 +43,9 @@ const
 # --- deterministic noise ----------------------------------------------------
 
 proc hash01(ix, iz: int, salt: uint32): float =
-  var h = cast[uint32](ix) * 0x85ebca6b'u32 xor
-    cast[uint32](iz) * 0xc2b2ae35'u32 xor (salt * 0x9e3779b9'u32 + SEED)
+  var h =
+    cast[uint32](ix) * 0x85ebca6b'u32 xor cast[uint32](iz) * 0xc2b2ae35'u32 xor
+    (salt * 0x9e3779b9'u32 + SEED)
   h = h xor (h shr 13)
   h = h * 0x27d4eb2f'u32
   h = h xor (h shr 16)
@@ -143,7 +144,9 @@ proc island_elev(x, z: float): float =
     if t > -0.6:
       let e =
         if t > 0:
-          isl.tall * pow(t, 1.6) + 1.5 * t * (fbm(x / 9.0, z / 9.0, 70, 3) - 0.4)
+          isl.tall * pow(t, 1.6) + 1.5 * t * (
+            fbm(x / 9.0, z / 9.0, 70, 3) - 0.4
+          )
         else:
           # underwater skirt, for shallow-water shading
           t * 3.0
@@ -181,12 +184,12 @@ let
 
 # --- generation ----------------------------------------------------------------
 
-Enu.client.connect # PARTIAL mode: blocks until the root collection is synced
+Enu.client.connect
 
 var
-  wave = new_seq[float32](DIM * DIM) # sea surface, metres
-  elev = new_seq[float32](DIM * DIM) # island elevation, metres vs sea level
-  top = new_seq[int16](DIM * DIM) # column top, voxels
+  wave = new_seq[float32](DIM * DIM)
+  elev = new_seq[float32](DIM * DIM)
+  top = new_seq[int16](DIM * DIM)
   land = new_seq[bool](DIM * DIM)
   elev_ready = false
 
@@ -208,10 +211,12 @@ proc fill_grids() =
       let h = wave_height(mx, mz)
       wave[idx(ix, iz)] = h
       if land[idx(ix, iz)]:
-        top[idx(ix, iz)] =
-          int16(clamp(int(round((SEA_BASE + elev[idx(ix, iz)]) / SCALE)), 0, 120))
+        top[idx(ix, iz)] = int16(
+          clamp(int(round((SEA_BASE + elev[idx(ix, iz)]) / SCALE)), 0, 120)
+        )
       else:
-        top[idx(ix, iz)] = int16(clamp(int(round((SEA_BASE + h) / SCALE)), 0, 120))
+        top[idx(ix, iz)] =
+          int16(clamp(int(round((SEA_BASE + h) / SCALE)), 0, 120))
   elev_ready = true
 
 proc draw_sea(build: Build): int =
@@ -248,9 +253,13 @@ proc draw_sea(build: Build): int =
           else:
             var slope = 0.0
             if ix > 0 and ix < DIM - 1:
-              slope = max(slope, abs(elev[idx(ix + 1, iz)] - elev[idx(ix - 1, iz)]).float)
+              slope = max(
+                slope, abs(elev[idx(ix + 1, iz)] - elev[idx(ix - 1, iz)]).float
+              )
             if iz > 0 and iz < DIM - 1:
-              slope = max(slope, abs(elev[idx(ix, iz + 1)] - elev[idx(ix, iz - 1)]).float)
+              slope = max(
+                slope, abs(elev[idx(ix, iz + 1)] - elev[idx(ix, iz - 1)]).float
+              )
             if slope > 1.15 and e > 2.5:
               surface = mix(rock, high_grass, 0.15)
             else:
@@ -317,9 +326,19 @@ proc draw_sea(build: Build): int =
             build.draw(vec3(px, float(base + y), pz), (KIND, trunk_col))
           let ty = float(base + tall)
           for (dx, dy, dz) in [
-            (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1),
-            (2, 0, 0), (-2, 0, 0), (0, 0, 2), (0, 0, -2),
-            (2, -1, 0), (-2, -1, 0), (0, -1, 2), (0, -1, -2),
+            (0, 1, 0),
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 0, 1),
+            (0, 0, -1),
+            (2, 0, 0),
+            (-2, 0, 0),
+            (0, 0, 2),
+            (0, 0, -2),
+            (2, -1, 0),
+            (-2, -1, 0),
+            (0, -1, 2),
+            (0, -1, -2),
           ]:
             build.draw(
               vec3(px + dx.float, ty + dy.float, pz + dz.float),
@@ -398,7 +417,8 @@ else:
       echo "sea saved with a script (scale + play) — reload animates it"
     else:
       build.play(fps = fps)
-    echo "BUILD=", build.id, " playing ", FRAMES, " frames at ", fps,
+    echo "BUILD=",
+      build.id, " playing ", FRAMES, " frames at ", fps,
       "fps — kill me to reap it"
     Enu.client.every(1.second):
       discard
