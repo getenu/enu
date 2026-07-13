@@ -136,12 +136,6 @@ proc local_pos_in_chunk*(position: Vector3): Vector3 =
     position.z - chunk_id.z * ChunkDim,
   )
 
-proc chunk_to_local*(chunk_id: Vector3, pos: Vector3): int =
-  let local_x = floor_mod(pos.x.int - (chunk_id.x.int * 16), 16)
-  let local_y = floor_mod(pos.y.int - (chunk_id.y.int * 16), 16)
-  let local_z = floor_mod(pos.z.int - (chunk_id.z.int * 16), 16)
-  linear_position(local_x, local_y, local_z)
-
 proc write_varint*(s: var string, value: uint64) =
   var buf: array[max_var_int_len, byte]
   let len = write_vu64(buf, value)
