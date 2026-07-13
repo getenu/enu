@@ -108,10 +108,12 @@ template wait(body: untyped) =
   while self.action_running and self.advance_state_machine():
     self.yield_script()
 
-proc sleep*(seconds = 0.0) =
-  ## Do nothing for this many seconds. With no argument (or 0), naps
-  ## for up to half a second, but wakes up early if something bumps
-  ## into the thing, perfect for a loop that mostly waits around.
+proc sleep*(seconds = -1.0) =
+  ## Do nothing for this many seconds. With no argument, naps for up to
+  ## half a second but wakes up early if something bumps into the thing —
+  ## perfect for a loop that mostly waits around. `sleep 0` yields a
+  ## single tick (hand control back to the engine for one frame, then
+  ## carry on).
   wait sleep_impl(seconds)
 
 proc forward*(self: Thing, steps: float, move_mode: int) =
