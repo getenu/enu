@@ -1,6 +1,9 @@
 import testing
 
-name alias_bot(counter = 3)
+# The file id (build_alias_class) matches `to_thing_id("alias_class")`, so
+# this prototype loads under its own name and is never renamed. See
+# build_rename_check for the deliberate-mismatch case.
+name alias_class(counter = 3)
 
 suite "Class Param Aliasing":
   test "bare param read":

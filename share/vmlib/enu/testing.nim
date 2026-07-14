@@ -12,12 +12,6 @@ var
   failed_tests: int
   test_failed: bool
   failure_msg: string
-  # Totals already reported to the host. test_summary reports the delta since
-  # its last call, so each script contributes its own tally even though these
-  # counters are module-global and shared across every script in the VM.
-  reported_total: int
-  reported_passed: int
-  reported_failed: int
 
 template suite*(name: string, body: untyped) =
   ## A group of related tests: `suite "gravity": ...`.
@@ -54,17 +48,18 @@ template require*(cond: untyped) =
 
 proc test_summary*() =
   ## Print how many tests passed and failed. Call it at the end.
-  let
-    total = total_tests - reported_total
-    passed = passed_tests - reported_passed
-    failed = failed_tests - reported_failed
+  #
+  # The counters are module-global and shared across every script in the VM,
+  # and scripts interleave (one that yields on `move`/`sleep` lets the next
+  # run before it finishes), so these are running totals for the whole run so
+  # far, not this script alone. We report the cumulative figures; the host
+  # takes the max across reports, which is robust to interleaving and to a
+  # script that never reaches its own test_summary.
   echo ""
   echo "=== Summary ==="
-  echo total, " tests run: ", passed, " passed, ", failed, " failed"
-  report_test_results(passed, failed, total)
-  reported_total = total_tests
-  reported_passed = passed_tests
-  reported_failed = failed_tests
+  echo total_tests, " tests run: ", passed_tests, " passed, ", failed_tests,
+    " failed"
+  report_test_results(passed_tests, failed_tests, total_tests)
 
 proc tests_failed*(): bool =
   ## `true` if any test has failed so far.
