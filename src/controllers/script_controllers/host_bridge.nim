@@ -967,8 +967,12 @@ proc coding(self: Worker, thing: Thing): Thing =
 proc `coding=`(self: Thing, value: Thing) =
   state.open_thing = value
 
-proc signal_test_complete(self: Worker, exit_code: int) =
-  state.test_exit_code = exit_code
+proc report_test_results(self: Worker, passed: int, failed: int, total: int) =
+  self.test_pass_count += passed
+  self.test_fail_count += failed
+  self.test_run_count += total
+  inc self.test_report_count
+  self.test_last_activity = get_mono_time()
 
 proc find_block_at(position: Vector3): Option[VoxelInfo] =
   # local_into is the FULL inverse transform (scale + rotation), unlike
@@ -1718,7 +1722,7 @@ proc bridge_to_vm*(worker: Worker) =
     `lock=`, reset, press_action, release_action, load_level, level_name,
     world_name,
     reset_level, current_colliders, added_things, all_players, all_builds,
-    all_bots, all_signs, all_things, signal_test_complete, now_seconds,
+    all_bots, all_signs, all_things, report_test_results, now_seconds,
     dump_stats, find_voxel_overlaps, things_in_box, floor_at, clear_box, bounds,
     overlaps, things_overlapping, box_is_free, bounds_at, adopt, release
 

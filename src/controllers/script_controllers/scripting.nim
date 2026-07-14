@@ -60,12 +60,12 @@ proc script_error*(self: Worker, thing: Thing, e: ref VMQuit) =
           u.global_flags += HIGHLIGHT_ERROR
           u.ensure_visible
 
-  # In test mode, track script errors for exit code
+  # In test mode, a script that fails to load/run (after retries) counts
+  # toward the run's failure total. Accumulated on the worker and folded into
+  # the exit code when the run finishes — see the test-mode block in worker.nim.
   if TEST_MODE in state.local_flags:
-    if state.test_exit_code < 0:
-      state.test_exit_code = 1
-    else:
-      state.test_exit_code = state.test_exit_code + 1
+    inc self.test_error_count
+    self.test_last_activity = get_mono_time()
 
 proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   private_access ScriptCtx

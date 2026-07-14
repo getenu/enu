@@ -178,5 +178,6 @@ bridged_to_host:
   proc wake*(self: Thing)
   proc create_new*(self: Thing)
   proc frame_count*(): int
-  proc signal_test_complete*(exit_code: int)
-
+  proc report_test_results*(passed: int, failed: int, total: int)
+    ## Report one script's test tally to the host. The host sums these
+    ## across every script for the run's exit code and final summary.

@@ -367,6 +367,25 @@ proc watch_code(self: Worker, thing: Thing) =
     except OSError:
       discard
 
+proc finish_test_run(self: Worker, timed_out: bool) =
+  ## End the test run: fold the tallies scripts reported into the process
+  ## exit code and print one summary for the whole run. Idempotent — the
+  ## worker keeps looping until QUITTING propagates, so guard against
+  ## reporting twice.
+  if QUITTING in state.local_flags:
+    return
+  let exit_code = self.test_fail_count + self.test_error_count
+  notice "test run complete",
+    scripts = self.test_report_count,
+    tests = self.test_run_count,
+    passed = self.test_pass_count,
+    failed = self.test_fail_count,
+    errors = self.test_error_count,
+    timed_out = timed_out,
+    exit_code = exit_code
+  state.test_exit_code = exit_code
+  state.push_flag QUITTING
+
 proc watch_things(
     self: Worker,
     things: EdSeq[Thing],
@@ -469,6 +488,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   var worker = Worker()
 
   worker.for_all_things:
+    # A thing appearing or leaving counts as test-mode activity: it resets the
+    # quiescence timer so the run doesn't declare itself finished while scripts
+    # are still loading or being reaped.
+    if TEST_MODE in state.local_flags:
+      worker.test_last_activity = get_mono_time()
     if added:
       if TRANSFERRING in thing.global_flags:
         # Relink (adopt/release): the thing is already joined and its script is
@@ -690,6 +714,11 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   const auto_save_interval = 30.seconds
   const backup_interval = 15.minutes
   const test_timeout = 5.minutes
+  # How long the run must stay idle (nothing running, retrying, or being
+  # added/removed) before we call it done. Long enough to bridge the gaps
+  # while scripts load and finished test things are reaped, short enough to
+  # keep the suite quick.
+  const test_quiesce_grace = initDuration(milliseconds = 750)
   const stats_log_interval = 5.seconds
   const asap_flush_interval = 2.seconds
   var save_at = get_mono_time() + auto_save_interval
@@ -841,10 +870,19 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         last_tick_count = tick_count
         max_tick_time = Duration.default
 
-      # In test mode, exit when all scripts have finished
+      # In test mode, finish once the run goes quiet: no script running, no
+      # script queued for retry, and nothing added/removed for a grace window.
+      # We deliberately do NOT treat "state.things has no running scripts" as
+      # done on its own — scripts run and report during load (before this loop
+      # even starts), and the ed sync layer then removes the finished test
+      # things, so an instantaneous "nothing running" is normal mid-run. The
+      # exit code and summary come from the tallies scripts reported, not from
+      # walking the tree.
       if TEST_MODE in state.local_flags:
+        let now = get_mono_time()
         if test_started_at == MonoTime.high:
-          test_started_at = get_mono_time()
+          test_started_at = now
+          worker.test_last_activity = now
           notice "test mode started"
 
         var any_running = false
@@ -854,24 +892,25 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             any_running = true
             running_scripts.add thing.id
 
-        let elapsed = get_mono_time() - test_started_at
+        if any_running or worker.failed.len > 0:
+          worker.test_last_activity = now
+
+        let elapsed = now - test_started_at
         # Log progress every 30 seconds
         if elapsed.in_seconds.int mod 30 == 0 and elapsed.in_seconds.int > 0 and
             elapsed.in_milliseconds.int mod 1000 < 100:
           notice "test mode running",
             elapsed = elapsed, scripts = running_scripts
 
-        if not any_running:
-          let exit_code =
-            if state.test_exit_code < 0: 0 else: state.test_exit_code
-          notice "test mode finished", exit_code = exit_code, elapsed = elapsed
-          state.test_exit_code = exit_code
-          state.push_flag QUITTING
+        if QUITTING in state.local_flags:
+          discard # already finishing; wait for it to propagate
         elif elapsed > test_timeout:
           notice "test mode timeout",
             elapsed = elapsed, scripts = running_scripts
-          state.test_exit_code = 1
-          state.push_flag QUITTING
+          inc worker.test_error_count
+          worker.finish_test_run(timed_out = true)
+        elif now - worker.test_last_activity > test_quiesce_grace:
+          worker.finish_test_run(timed_out = false)
 
       inc state.frame_count
 
