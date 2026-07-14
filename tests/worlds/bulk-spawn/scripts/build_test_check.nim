@@ -17,7 +17,7 @@ const expected = 27
 const max_allowed = expected + 10  # generous tolerance
 if n > max_allowed:
   echo "FAIL: too many things (", n, " > ", max_allowed, ")"
-  signal_test_complete(1)
+  report_test_results(passed = 0, failed = 1, total = 1)
 else:
   echo "OK"
-  signal_test_complete(0)
+  report_test_results(passed = 1, failed = 0, total = 1)

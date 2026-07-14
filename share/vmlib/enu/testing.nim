@@ -3,7 +3,7 @@
 
 import std/strutils
 import base_bridge
-export signal_test_complete
+export report_test_results
 
 var
   current_suite: string
@@ -12,6 +12,12 @@ var
   failed_tests: int
   test_failed: bool
   failure_msg: string
+  # Totals already reported to the host. test_summary reports the delta since
+  # its last call, so each script contributes its own tally even though these
+  # counters are module-global and shared across every script in the VM.
+  reported_total: int
+  reported_passed: int
+  reported_failed: int
 
 template suite*(name: string, body: untyped) =
   ## A group of related tests: `suite "gravity": ...`.
@@ -48,10 +54,17 @@ template require*(cond: untyped) =
 
 proc test_summary*() =
   ## Print how many tests passed and failed. Call it at the end.
+  let
+    total = total_tests - reported_total
+    passed = passed_tests - reported_passed
+    failed = failed_tests - reported_failed
   echo ""
   echo "=== Summary ==="
-  echo total_tests, " tests run: ", passed_tests, " passed, ", failed_tests, " failed"
-  signal_test_complete(failed_tests)
+  echo total, " tests run: ", passed, " passed, ", failed, " failed"
+  report_test_results(passed, failed, total)
+  reported_total = total_tests
+  reported_passed = passed_tests
+  reported_failed = failed_tests
 
 proc tests_failed*(): bool =
   ## `true` if any test has failed so far.

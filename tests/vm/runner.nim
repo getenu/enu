@@ -94,13 +94,17 @@ proc setup_mock_functions(interp: Interpreter) =
     proc(args: VmArgs) =
       discard
 
-  # Mock signal_test_complete - called by testing framework
+  # Mock report_test_results - called by testing framework
   interp.implement_routine pkg,
     "base_bridge",
-    "signal_test_complete_impl",
+    "report_test_results_impl",
     proc(args: VmArgs) =
-      let exit_code = args.get_int(0)
-      echo "  [VM] Test complete with exit code: ", exit_code
+      let
+        passed = args.get_int(0)
+        failed = args.get_int(1)
+        total = args.get_int(2)
+      echo "  [VM] Test results: ", passed, " passed, ", failed, " failed of ",
+        total
 
   # Mock has_block_at - returns false (no blocks in test environment)
   interp.implement_routine pkg,

@@ -603,6 +603,17 @@ type
       code: string, top_level: bool, thing_id: string
     ): tuple[result: string, error: string] {.gcsafe.}
     update_files_proc*: proc() {.gcsafe.}
+    # Test-mode result accounting, aggregated across all scripts as they
+    # report (see report_test_results). Membership of state.things is not a
+    # reliable "are we done" signal in test mode — the ed sync layer removes
+    # finished test things — so completion is inferred from quiescence
+    # (test_last_activity) and the exit code from these running totals.
+    test_pass_count*: int
+    test_fail_count*: int
+    test_run_count*: int
+    test_error_count*: int # scripts that failed to load/run (permanent)
+    test_report_count*: int # scripts that reported a summary
+    test_last_activity*: MonoTime
 
   NodeController* = ref object
     # Things that arrived before their data (narrow partial replica): the scene
