@@ -968,9 +968,13 @@ proc `coding=`(self: Thing, value: Thing) =
   state.open_thing = value
 
 proc report_test_results(self: Worker, passed: int, failed: int, total: int) =
-  self.test_pass_count += passed
-  self.test_fail_count += failed
-  self.test_run_count += total
+  # Scripts report cumulative, VM-module-global running totals (they share the
+  # testing module and interleave), so take the max rather than summing. The
+  # highest report is the whole run's tally, and a failure counted by any
+  # script can't be lowered by a later one.
+  self.test_pass_count = max(self.test_pass_count, passed)
+  self.test_fail_count = max(self.test_fail_count, failed)
+  self.test_run_count = max(self.test_run_count, total)
   inc self.test_report_count
   self.test_last_activity = get_mono_time()
 

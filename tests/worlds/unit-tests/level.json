@@ -3,7 +3,9 @@
   "format_version": "v0.9.2",
   "load_order": [
     "bot_alias_test",
-    "bot_alias_class",
+    "build_alias_class",
+    "build_misnamed",
+    "build_rename_check",
     "bot_test_runner",
     "build_block_tests",
     "build_serialization_test",

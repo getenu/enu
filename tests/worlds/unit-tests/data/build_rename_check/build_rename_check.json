@@ -1,12 +1,12 @@
 {
-  "id": "bot_alias_class",
+  "id": "build_rename_check",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
       [0.0, 0.0, 1.0]
     ],
-    "origin": [15.0, 0.0, 0.0]
+    "origin": [25.0, 0.0, 0.0]
   },
   "start_color": "BLACK",
   "edits": {
