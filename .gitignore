@@ -42,7 +42,11 @@ nimble.paths
 
 *.previous
 .claude/
-deps/
+# Ignore Atlas-managed dep checkouts + machine caches, but track atlas.config --
+# it carries the portable resolution policy (fork nameOverrides). Contents-glob
+# so the exception can re-include a child (a bare `deps/` ignore can't be negated).
+deps/*
+!deps/atlas.config
 nimbledeps/
 nim.cfg
 .build_arch
