@@ -1,0 +1,13 @@
+{
+  "id": "build_swap_color_test",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [20.0, 0.0, 0.0]
+  },
+  "start_color": "GREEN",
+  "edits": {}
+}
