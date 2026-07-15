@@ -32,16 +32,18 @@ water / inside the play area. The aim target never appears on it.
   `invisible` (`share/vmlib/enu/types.nim`), host is `ACTION_COLORS[INVISIBLE]`
   (`src/models/colors.nim`).
 
-- **Rendering = geometry + a dedicated ALPHA=0 material.** There is no engine
-  "collision but no mesh" path (`set_geometry_type` couples them:
-  `GEOMETRY_CUBE` ⇒ collision, `GEOMETRY_NONE` ⇒ none). So INVISIBLE's library
-  voxel (`BuildNode.tscn` slot 7, `SubResource(18)`) is a normal collidable cube
-  whose `material_id = 7` points at a new material
-  (`terrain_voxel_invisible.shader`) that forces `ALPHA = 0.0` — geometry meshes
-  (collision generates) but nothing draws. The shader declares the `emission` /
-  `emission_energy` uniforms `BuildNode` pokes so material setup doesn't hit a
-  missing param. `set_visibility` was changed to **skip slot 7** so it doesn't
-  overwrite the invisible shader when toggling build visibility.
+- **Rendering = a collision-only surface (meshes, but is never drawn).**
+  Collision is built from the meshed surfaces (`apply_mesh_update` →
+  `create_concave_polygon_shape`), so an invisible voxel still has to mesh
+  geometry. INVISIBLE's library voxel (`BuildNode.tscn` slot 7,
+  `SubResource(18)`) is a collidable cube with `material_id = 7`, and **no
+  `material/7` is assigned** on the terrain. The terrain treats a meshed surface
+  with a null material as **collision-only**: it goes into the collision shape
+  but is skipped in the visual mesh entirely (`voxel_terrain.cpp`, both
+  `apply_mesh_update` loops). So there's **no draw call and no overdraw** — the
+  invisible geometry never reaches the GPU — and no shader, no `set_visibility`
+  special-case. (Earlier revisions used an ALPHA=0 material; that worked but paid
+  transparent-pass overdraw every frame the wall was on screen.)
 
   **Meshing: emit its own shell, but don't occlude neighbours.** The blocky
   mesher (`is_face_visible`, `voxel_mesher_blocky.cpp`) emits voxel A's face
