@@ -43,17 +43,22 @@ water / inside the play area. The aim target never appears on it.
   missing param. `set_visibility` was changed to **skip slot 7** so it doesn't
   overwrite the invisible shader when toggling build visibility.
 
-  **`transparency_index` MUST be 0 (opaque for culling).** The blocky mesher
-  (`voxel_mesher_blocky.cpp:30`) emits a face only when the neighbor is empty or
-  has a *higher* transparency_index. The `air` voxel (slot 0) is a non-empty cube
-  with `transparency_index = 1`; a first attempt gave INVISIBLE the same index,
-  so every face against air was culled → **zero geometry → no collision and
-  nothing to draw** (looked invisible, but you fell/walked straight through).
-  With index 0, faces against air (index 1 > 0) emit, so the wall has a real
-  collision shell. Invisibility comes entirely from the ALPHA=0 material, not the
-  culling class. (Tradeoff: a *visible* block drawn directly against an invisible
-  one culls its shared face — a gap — so keep invisible walls as their own builds
-  / not interleaved with visible geometry.)
+  **Meshing: emit its own shell, but don't occlude neighbours.** The blocky
+  mesher (`is_face_visible`, `voxel_mesher_blocky.cpp`) emits voxel A's face
+  toward neighbour B only when B is empty or more transparent — a single
+  comparison that can't be both "INVISIBLE emits its own shell" (needs a low
+  index) and "neighbours emit toward INVISIBLE" (needs a high index). So a new
+  engine flag **`Voxel.occludes_neighbors`** (default true) decouples them: when
+  false, other voxels mesh their faces toward this one as if it were air, while
+  it still meshes its own faces normally. INVISIBLE sets `occludes_neighbors =
+  false` (+ default `transparency_index = 0`), so:
+  - it emits its shell toward air → a full collision mesh (players stop);
+  - a solid block flush against it keeps its face → **no gap**;
+  - the ALPHA=0 material means none of that geometry is drawn.
+
+  The flag is additive: every other voxel defaults to `true`, so existing
+  meshing is unchanged. (Engine change in `voxel.{h,cpp}` +
+  `voxel_mesher_blocky.cpp`; the `godot_voxel` submodule must be rebuilt.)
 
 - **Collision = normal layer (mask bit 1), same as solid blocks.** The player
   collides with invisible walls exactly like any wall. (I did *not* use the
