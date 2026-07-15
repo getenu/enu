@@ -92,6 +92,27 @@ proc cached_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
       self.chunk_cache.del(oldest_id)
   self.chunk_cache[chunk_id] = result
 
+proc prefill_bytes*(self: VoxelStore, chunk_id: Vector3): string =
+  ## The packed bytes a paged-in engine block is prefilled with so it renders
+  ## complete on its first (and only) mesh. A snapshot-only chunk hands back its
+  ## stored blob verbatim (a memcpy). A chunk carrying unflushed deltas or
+  ## pending writes is composed (packed ⊕ deltas ⊕ pending) and re-encoded, so
+  ## the block arrives whole instead of snapshot-then-delta-repaint (which would
+  ## cost a second mesh). Returns "" when the chunk holds nothing.
+  if not ?self.build:
+    return ""
+  let has_deltas =
+    chunk_id in self.chunk_deltas and self.chunk_deltas[chunk_id].len > 0
+  let has_pending = chunk_id in self.pending_chunks
+  if not has_deltas and not has_pending:
+    if chunk_id in self.packed_chunks:
+      return self.packed_chunks[chunk_id].data
+    return ""
+  let chunk = self.compose_chunk(chunk_id)
+  if chunk.count == 0:
+    return ""
+  encode_chunk(chunk.cells).data
+
 iterator chunk_ids*(self: VoxelStore): Vector3 =
   ## Every chunk that may hold voxels, deduped across the synced tables, the
   ## write buffer, and the cache (which is authoritative on a standalone

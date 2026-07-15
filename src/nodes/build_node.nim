@@ -34,6 +34,12 @@ var hidden_shader {.threadvar.}: Shader
 var rgb_shader {.threadvar.}: Shader
 var hidden_rgb_shader {.threadvar.}: Shader
 
+proc to_pool_byte_array(s: string): PoolByteArray =
+  result = new_pool_byte_array()
+  result.set_len(s.len)
+  for i in 0 ..< s.len:
+    result[i] = s[i].byte
+
 gdobj BuildNode of VoxelTerrain:
   var
     model* {.cursor.}: Build
@@ -50,6 +56,11 @@ gdobj BuildNode of VoxelTerrain:
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
     loaded_chunks: HashSet[Vector3]
+    prefilled_chunks: HashSet[Vector3]
+      ## Chunks the request-time hook (enu_chunk_bytes) answered with real bytes,
+      ## so the streaming thread prefilled the engine block with them. Consumed by
+      ## on_block_loaded to skip the now-redundant snapshot + delta paints. See
+      ## docs/notes/voxel-stream-loading.md.
     tracked_delta_seqs: Table[Vector3, EID]
     renderer: VoxelRenderer
     paging_logged: bool
@@ -93,17 +104,23 @@ gdobj BuildNode of VoxelTerrain:
       return
 
     let zid = delta_seq.watch:
-      if added and chunk_id in self.loaded_chunks:
-        var painted = 0
-        if ASAP_MODE in self.model.global_flags:
-          painted = self.renderer.buffer_delta(chunk_id, change.item)
-        elif ?self.renderer.voxel_tool:
-          painted = render_delta_direct(
-            self.renderer.voxel_tool, chunk_id, change.item, self.resolver
-          )
-          flush_registry()
-        self.model.rendered_voxel_count =
-          self.model.rendered_voxel_count + painted
+      if added:
+        if chunk_id in self.loaded_chunks:
+          var painted = 0
+          if ASAP_MODE in self.model.global_flags:
+            painted = self.renderer.buffer_delta(chunk_id, change.item)
+          elif ?self.renderer.voxel_tool:
+            painted = render_delta_direct(
+              self.renderer.voxel_tool, chunk_id, change.item, self.resolver
+            )
+            flush_registry()
+          self.model.rendered_voxel_count =
+            self.model.rendered_voxel_count + painted
+        else:
+          # Delta appended while the chunk is still paging in: the prefilled
+          # buffer was composed at request time and predates it, so drop the hint
+          # and let on_block_loaded repaint the fresh state instead of skipping.
+          self.prefilled_chunks.excl chunk_id
 
     self.tracked_delta_seqs[chunk_id] = zid
 
@@ -151,10 +168,38 @@ gdobj BuildNode of VoxelTerrain:
     if ?self.frames:
       self.frames.on_mesh_baked(chunk_id, tag, mesh)
 
+  proc publish_palette_slots() =
+    ## Push the build's static-palette-index -> engine voxel slot mapping to the
+    ## terrain so the streaming thread can resolve paged-in chunks off-main. The
+    ## palette (shared with the unit) lists every static color the build renders,
+    ## in static-index order; named colors resolve as identity in the engine.
+    if not ?self.model.shared:
+      return
+    let slots = new_pool_int_array()
+    for color in self.model.shared.palette:
+      slots.add slot_for(color).cint
+    self.set_enu_palette_slots(slots)
+
+  proc enu_chunk_bytes*(block_position: Vector3): PoolByteArray {.gdExport.} =
+    ## Request-time hook (main thread, Ed-safe): hand the streaming pool this
+    ## block's packed bytes so it's prefilled with real data and meshes once. An
+    ## empty result means "not resident" — the engine falls back to an empty
+    ## block and today's paint-after-load path carries it.
+    result = new_pool_byte_array()
+    if not ?self.model or SERVER in state.local_flags:
+      return
+    let bytes = self.model.voxels.prefill_bytes(block_position)
+    if bytes.len > 0:
+      self.prefilled_chunks.incl block_position
+      result = to_pool_byte_array(bytes)
+
   method on_block_loaded(chunk_id: Vector3) =
     let start = get_mono_time()
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
+      # Consume the request-time hint: was this block prefilled with its data?
+      let prefilled = chunk_id in self.prefilled_chunks
+      self.prefilled_chunks.excl chunk_id
 
       if SERVER notin state.local_flags:
         # Voxel paging: the engine's view streaming is the demand signal. A
@@ -185,6 +230,12 @@ gdobj BuildNode of VoxelTerrain:
         var painted = 0
         if ASAP_MODE in self.model.global_flags:
           painted = self.renderer.buffer_snapshot(chunk_id, snapshot)
+        elif prefilled:
+          # Prefilled: the streaming thread already expanded this content into the
+          # engine block, which meshed once. Skip the redundant paint — this is the
+          # flash/double-mesh the whole change removes. (Not added to
+          # rendered_voxel_count: the engine, not build_node, drew it.)
+          discard
         elif ?self.renderer.voxel_tool:
           painted = render_snapshot_direct(
             self.renderer.voxel_tool, chunk_id, snapshot, self.resolver
@@ -200,7 +251,9 @@ gdobj BuildNode of VoxelTerrain:
             for delta in delta_seq:
               if ASAP_MODE in self.model.global_flags:
                 painted = painted + self.renderer.buffer_delta(chunk_id, delta)
-              elif ?self.renderer.voxel_tool:
+              elif not prefilled and ?self.renderer.voxel_tool:
+                # prefilled blocks already carry these deltas (prefill_bytes
+                # composed them in) — repainting would force a second mesh.
                 painted = painted + render_delta_direct(
                   self.renderer.voxel_tool, chunk_id, delta, self.resolver
                 )
@@ -266,6 +319,11 @@ gdobj BuildNode of VoxelTerrain:
                 self.renderer.voxel_tool, change.item.key, change.item.value,
                 self.resolver,
               )
+        else:
+          # Snapshot changed while the chunk is still loading: the prefilled
+          # buffer was captured from the previous bytes, so drop the hint and let
+          # on_block_loaded paint the fresh snapshot instead of skipping it.
+          self.prefilled_chunks.excl change.item.key
       elif removed and not modified:
         # Paged out or cleared (a rewrite is REMOVED+MODIFIED and skipped) —
         # clear it from the terrain, and from the ASAP buffer's terrain
@@ -303,6 +361,11 @@ gdobj BuildNode of VoxelTerrain:
                   self.renderer.voxel_tool, chunk_id, delta, self.resolver
                 )
             flush_registry()
+          else:
+            # Deltas changed before the chunk finished loading: the prefilled
+            # buffer predates them, so drop the hint and let on_block_loaded
+            # repaint the fresh state rather than skipping it.
+            self.prefilled_chunks.excl chunk_id
           # Watch for future deltas
           self.watch_delta_seq(chunk_id, delta_seq)
       elif removed:
@@ -501,9 +564,13 @@ gdobj BuildNode of VoxelTerrain:
     if ?self.model.shared:
       for color in self.model.shared.palette:
         discard slot_for(color)
+      # Publish the resolved palette to the engine before any block streams in,
+      # so the streaming thread can expand paged-in chunks. Republish on growth.
+      self.publish_palette_slots()
       self.model.shared.palette.watch:
         if added:
           discard slot_for(change.item)
+          self.publish_palette_slots()
       flush_registry() # no-op while an ephemeral stream holds bakes
 
     # Create renderer for ASAP mode buffer operations
