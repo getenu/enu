@@ -40,6 +40,11 @@ bridged_to_host:
     ## persistent placement (eg. user edits via eval, holes for windows) use
     ## place_block from builds_private, which marks the voxel PERSISTED.
 
+  proc swap_color*(self: Build, from_color: Color, to_color: Color)
+    ## Recolour every block of `from_color` to `to_color` in this build —
+    ## computed and manual alike. To make an invisible wall, draw it in a
+    ## spare colour, then `swap_color(that_colour, invisible)`.
+
   proc save_level_now*()
     ## Triggers an immediate level save. Used for testing persistence.
 
@@ -215,6 +220,10 @@ proc place*(self: Build, x, y, z: int, color = self.color) =
 
 template place*(x, y, z: int, color = active_thing().color) =
   Build(active_thing()).place(x, y, z, color)
+
+template swap_color*(from_color: Color, to_color: Color) =
+  ## Recolour every block of `from_color` to `to_color` in the active build.
+  Build(active_thing()).swap_color(from_color, to_color)
 
 # === Turtle-aware shape primitives ==================================
 #
