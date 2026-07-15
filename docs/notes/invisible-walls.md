@@ -48,10 +48,13 @@ water / inside the play area. The aim target never appears on it.
   toward neighbour B only when B is empty or more transparent — a single
   comparison that can't be both "INVISIBLE emits its own shell" (needs a low
   index) and "neighbours emit toward INVISIBLE" (needs a high index). So a new
-  engine flag **`Voxel.occludes_neighbors`** (default true) decouples them: when
-  false, other voxels mesh their faces toward this one as if it were air, while
-  it still meshes its own faces normally. INVISIBLE sets `occludes_neighbors =
-  false` (+ default `transparency_index = 0`), so:
+  engine flag **`Voxel.occludes_neighbors`** (default true) decouples them: an
+  *occluding* voxel meshes its face toward a non-occluding neighbour as if that
+  neighbour were air (so a solid block keeps its face — no gap), while two
+  non-occluding voxels cull their shared face like any interior face (so a stack
+  of invisible voxels doesn't mesh interior horizontal ledges you could climb).
+  INVISIBLE sets `occludes_neighbors = false` (+ default `transparency_index =
+  0`), so:
   - it emits its shell toward air → a full collision mesh (players stop);
   - a solid block flush against it keeps its face → **no gap**;
   - the ALPHA=0 material means none of that geometry is drawn.
