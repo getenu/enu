@@ -561,6 +561,41 @@ proc load_frame*(self: VoxelStore, frame: FrameData) =
       self.chunk_deltas[chunk_id].clear
   self.pending_chunks.clear
 
+proc swap_color*(self: VoxelStore, from_color, to_color: Color) =
+  ## Recolour every voxel of `from_color` to `to_color`, across both the
+  ## computed chunk state and the persisted (manual) edits. Pending writes are
+  ## flushed first so they can't re-apply the old colour after the swap. Used to
+  ## build invisible walls: draw in a spare colour, then swap it to `invisible`.
+  let shared = self.shared_of
+  let from_idx = pack_color_index(shared, from_color)
+  let to_idx = pack_color_index(shared, to_color)
+  if from_idx == to_idx:
+    return
+
+  self.flush_dirty_chunks()
+  for chunk_id in self.chunk_ids.to_seq:
+    let chunk = self.cached_chunk(chunk_id)
+    var changed = false
+    for linear in 0 ..< CHUNK_VOLUME:
+      let packed = chunk.cells[linear]
+      if packed != EMPTY_VOXEL:
+        let (color_idx, kind_ord) = unpack_voxel(packed)
+        if color_idx == from_idx:
+          chunk.cells[linear] = pack_voxel(to_idx, kind_ord)
+          changed = true
+    if changed:
+      self.flush_chunk_snapshot(chunk_id)
+
+  self.flush_dirty_edits()
+  for chunk_id in self.local_edits.keys.to_seq:
+    var changed = false
+    for local_pos, info in self.local_edits[chunk_id].mpairs:
+      if info.color == from_color:
+        info.color = to_color
+        changed = true
+    if changed:
+      self.flush_edit_snapshot(chunk_id)
+
 proc clear*(self: VoxelStore, all = false) =
   self.chunk_cache.clear
   let packed = self.packed_chunks.value

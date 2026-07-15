@@ -7,7 +7,8 @@
     "bot_test_runner",
     "build_block_tests",
     "build_serialization_test",
-    "build_frame_test"
+    "build_frame_test",
+    "build_swap_color_test"
   ],
   "show_prototypes": true
 }

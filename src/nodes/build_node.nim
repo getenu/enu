@@ -16,6 +16,10 @@ const
   rgb_material_index = 6
     ## material/6: the shared vertex-color material static RGB voxels render
     ## with (materials 0..5 stay the uniform-tinted named colors).
+  invisible_material_index = 7
+    ## material/7: the ALPHA=0 material INVISIBLE voxels render with — geometry
+    ## still meshes (so collision generates) but nothing draws. Its shader must
+    ## survive set_visibility, which reassigns every other slot's shader.
 
 # Material iteration reads the terrain node's own slots (bounded by the
 # engine's MAX_MATERIALS = 8), never the (dynamically growing) library and
@@ -151,14 +155,22 @@ gdobj BuildNode of VoxelTerrain:
       self.visible = true
 
       self.each_material(i, material):
-        material.shader =
-          if i == rgb_material_index: rgb_shader else: shader
+        if i == invisible_material_index:
+          discard # keep the ALPHA=0 shader; INVISIBLE voxels never draw
+        elif i == rgb_material_index:
+          material.shader = rgb_shader
+        else:
+          material.shader = shader
     elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
 
       self.each_material(i, material):
-        material.shader =
-          if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
+        if i == invisible_material_index:
+          discard
+        elif i == rgb_material_index:
+          material.shader = hidden_rgb_shader
+        else:
+          material.shader = hidden_shader
     else:
       self.visible = false
 

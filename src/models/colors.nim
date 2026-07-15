@@ -28,6 +28,12 @@ type
     BLACK
     WHITE
     BROWN
+    INVISIBLE
+      ## Renders as nothing but still collides (invisible walls). Its sentinel
+      ## RGBA uses alpha 0.5 — distinct from ERASER (alpha 0) and the opaque
+      ## named colors, and not something a normal opaque draw can produce, so it
+      ## never hijacks a user's color. Kept last so the 0..6 slot mapping in
+      ## BuildNode.tscn is unchanged; INVISIBLE takes library slot 7.
 
   Theme* = enum
     NORMAL
@@ -66,6 +72,7 @@ const ACTION_COLORS* = [
   BLACK: col"000000",
   WHITE: col"d9eed8",
   BROWN: col"3f302b",
+  INVISIBLE: chroma.Color(r: 0.0, g: 0.0, b: 0.0, a: 0.5),
 ]
 
 proc action_index*(self: Color): Colors =

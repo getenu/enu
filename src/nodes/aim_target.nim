@@ -1,4 +1,4 @@
-import std/[strutils, wrapnils]
+import std/[strutils, wrapnils, options]
 import pkg/[godot]
 import godotapi/[sprite_3d, ray_cast, spatial]
 import gdutils, core, nodes/helpers, models
@@ -34,6 +34,28 @@ gdobj AimTarget of Sprite3D:
         nil
 
     let thing = ?.collider.model
+
+    # Invisible walls collide (so they block the ray) but must not show the aim
+    # target. Sample the voxel just inside the hit face; if it's INVISIBLE, treat
+    # the hit as untargetable — hide the sprite and don't hover/target it.
+    var hit_invisible = false
+    if collider != nil and thing of Build:
+      let inside = collider.to_local(
+        ray.get_collision_point() - ray.get_collision_normal() * 0.5
+      )
+      let info = Build(thing).find_voxel(inside.floor)
+      hit_invisible = info.is_some and info.get.color == ACTION_COLORS[INVISIBLE]
+
+    if hit_invisible:
+      if self.target_model != nil:
+        self.target_model.local_flags -= HOVER
+        self.target_model.target_point = vec3()
+        self.target_model.target_normal = vec3()
+        state.pop_flag BLOCK_TARGET_VISIBLE
+        self.target_model = nil
+      self.visible = false
+      return
+
     if ?self.target_model:
       # :(
       if ?self.target_model.global_flags and
