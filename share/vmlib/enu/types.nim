@@ -142,6 +142,9 @@ const
   black* = color_from_hex(0x000000)
   white* = color_from_hex(0xd9eed8)
   brown* = color_from_hex(0x3f302b)
+  invisible*: Color = (0.0'f32, 0.0'f32, 0.0'f32, 0.5'f32)
+    ## An invisible-but-solid block color: renders as nothing, still collides.
+    ## Build a wall in a spare color, then `swap_color(that, invisible)`.
 # Timing types - simple wrappers that don't require posix
 
 type

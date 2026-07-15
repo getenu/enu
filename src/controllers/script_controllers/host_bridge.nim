@@ -1387,6 +1387,12 @@ proc draw_voxel(self: Build, position: Vector3, color: Color) =
   let info: VoxelInfo = (TRANSIENT, color)
   self.draw(position, info)
 
+proc swap_color(self: Build, from_color: Color, to_color: Color) =
+  ## Recolour every block of `from_color` to `to_color` — computed (drawn) and
+  ## manual (hand-placed) alike. The store re-flushes the affected chunks, so
+  ## the change syncs and re-renders like any other voxel edit.
+  self.voxels.swap_color(from_color, to_color)
+
 const
   BOX_PIVOT_CORNER = 0
   BOX_PIVOT_CENTRE = 1
@@ -1732,7 +1738,7 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "builds",
     drawing, `drawing=`, initial_position, pen, pen_set, draw_position,
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
-    draw_voxel, save_level_now, reload_thing, box_impl, sphere_impl,
+    draw_voxel, swap_color, save_level_now, reload_thing, box_impl, sphere_impl,
     cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
     save_frame_impl, load_frame, delete_frame, clear_frames, frame,
     `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
