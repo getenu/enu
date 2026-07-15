@@ -433,6 +433,14 @@ type
     turtle_transform_value*: EdValue[Transform]
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
+    # `speed = auto` ramp state (see builds.nim). `active` while the draw rate
+    # is ramping up, `started` once the first block anchors the clock, `done`
+    # after it has handed off to ASAP — so a later `speed = auto` (e.g. an
+    # `asap:` block restoring the speed) doesn't restart a finished ramp.
+    auto_ramp_active*: bool
+    auto_ramp_started*: bool
+    auto_ramp_done*: bool
+    auto_ramp_start*: MonoTime
     drawing*: bool
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool

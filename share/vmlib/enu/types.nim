@@ -8,6 +8,11 @@ const ASAP* = 0.0
   ## Magic speed value. `speed = ASAP` makes a build draw everything at
   ## once instead of block by block.
 
+const auto* = float.high
+  ## The default build speed. `speed = auto` starts slow and speeds the
+  ## drawing up over a few seconds, then finishes the rest all at once
+  ## (`ASAP`). Set a plain number for a steady speed instead.
+
 type
   Vector3* = tuple[x, y, z: float]
     ## A spot (or a direction) in the world. `x` is left/right, `y` is

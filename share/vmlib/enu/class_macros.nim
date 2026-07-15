@@ -115,7 +115,10 @@ proc build_ctors(
 
   var speed = "speed".ident
   if "speed" notin var_names:
-    params &= new_ident_defs(speed, new_empty_node(), new_float_lit_node(1.0))
+    # Instances default to ASAP: a spawned copy appears at once (you already
+    # watched the prototype draw itself). Prototypes and standalone script
+    # builds keep the `auto` ramp from their base default.
+    params &= new_ident_defs(speed, new_empty_node(), ident"ASAP")
   ctor_body.add quote do:
     result.speed = `speed`
 
