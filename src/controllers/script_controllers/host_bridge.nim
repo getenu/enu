@@ -643,12 +643,26 @@ proc speed(self: Thing): float =
 const ASAP_VALUE = 0
 
 proc `speed=`(self: Thing, speed: float) =
-  if self of Build and speed == ASAP_VALUE:
-    Build(self).begin_asap()
-    types.`speed=`(self, 0.0)
+  if self of Build:
+    let build = Build(self)
+    if speed == ASAP_VALUE:
+      build.auto_ramp_active = false
+      build.begin_asap()
+      types.`speed=`(self, 0.0)
+    elif speed == AUTO:
+      types.`speed=`(self, AUTO)
+      # Don't restart a ramp that already finished — e.g. an `asap:` block
+      # captures `auto`, sets ASAP, then restores `auto` when it exits.
+      if build.auto_ramp_done:
+        build.begin_asap()
+        build.voxels_per_frame = float.high
+      else:
+        build.arm_auto_ramp()
+    else:
+      build.auto_ramp_active = false
+      build.end_asap()
+      types.`speed=`(self, speed)
   else:
-    if self of Build:
-      Build(self).end_asap()
     types.`speed=`(self, speed)
 
 proc scale(self: Thing): float =

@@ -465,7 +465,7 @@ template move*[T: Thing](new_enu_target: T) =
     enu_target.end_asap()
   enu_target = new_enu_target
   move_mode = 2
-  if enu_target.speed == 0:
+  if enu_target.speed == 0 or enu_target.speed == auto:
     enu_target.speed = 1
 
 template build*(new_enu_target: Thing) =

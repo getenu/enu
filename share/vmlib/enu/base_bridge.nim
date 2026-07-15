@@ -42,7 +42,9 @@ bridged_to_host:
 
   proc speed*(self: Thing): float
     ## How fast the thing moves or builds. `1` is normal, bigger is
-    ## faster, and `0` means "all at once" for building.
+    ## faster, and `ASAP` (`0`) means "all at once" for building. Builds
+    ## default to `auto`, which starts slow and speeds up before finishing
+    ## ASAP.
 
   proc `speed=`*(self: Thing, speed: float)
   proc scale*(self: Thing): float

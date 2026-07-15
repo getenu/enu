@@ -46,6 +46,7 @@ proc advance_thing(self: Worker, thing: Thing, timeout: MonoTime): bool =
       thing.current_line = ctx.current_line.line.int
     if thing of Build:
       let thing = Build(thing)
+      thing.update_auto_ramp()
       thing.voxels_remaining_this_frame += thing.voxels_per_frame
     try:
       assert self.active_thing.is_nil
@@ -164,6 +165,12 @@ proc change_code(self: Worker, thing: Thing, code: Code) =
       discard
   elif code.nim.strip != "":
     debug "loading thing", thing_id = thing.id
+    # A live run (the editor or a file-watch save, never a level/reload which
+    # sets LOADING_SCRIPT) arms the auto-speed ramp so the build visibly draws
+    # itself. Loads stay in ASAP and just appear.
+    if thing of Build and LOADING_SCRIPT notin state.local_flags and
+        Build(thing).speed == AUTO:
+      Build(thing).arm_auto_ramp()
     if LOADING_SCRIPT notin state.local_flags and not self.retry_failures:
       thing.write_script_file(code.nim)
       if not self.interpreter.is_nil:

@@ -1,7 +1,7 @@
 import
   std/[
-    tables, sets, options, sequtils, math, monotimes, sugar, macros, strformat,
-    strutils, os,
+    tables, sets, options, sequtils, math, monotimes, times, sugar, macros,
+    strformat, strutils, os,
   ]
 import godotapi/spatial
 import core, models/[states, bots, colors, things, voxels]
@@ -16,6 +16,17 @@ export things
 include "build_code_template.nim.nimf"
 
 const default_color = ACTION_COLORS[BLUE]
+
+const
+  AUTO* = float.high
+    ## The default build speed. Must match `auto` in the VM's `enu/types`
+    ## (both `float.high`) so a script's `speed = auto` round-trips to the
+    ## same value the host tests here.
+  AUTO_RAMP_SECONDS = 3.0
+    ## How long the auto ramp takes to reach full speed before handing off
+    ## to ASAP.
+  AUTO_RAMP_START_SPEED = 1.0
+  AUTO_RAMP_END_SPEED = 50.0
 
 var
   current_build* {.threadvar.}: Build
@@ -149,6 +160,37 @@ proc end_asap*(self: Build) {.gcsafe.} =
     self.voxels.flush_dirty_chunks()
     self.reset_bounds()
     self.global_flags -= ASAP_MODE
+
+proc arm_auto_ramp*(self: Build) {.gcsafe.} =
+  ## Start a fresh `speed = auto` ramp: leave ASAP so blocks appear as they're
+  ## drawn, and begin at the slow end. The clock starts on the first drawn
+  ## block (`on_begin_move`), the rate climbs each frame (`update_auto_ramp`),
+  ## and after `AUTO_RAMP_SECONDS` it hands the rest to ASAP.
+  self.auto_ramp_active = true
+  self.auto_ramp_started = false
+  self.auto_ramp_done = false
+  self.voxels_per_frame = AUTO_RAMP_START_SPEED
+  self.voxels_remaining_this_frame = 0
+  self.end_asap()
+
+proc update_auto_ramp*(self: Build) {.gcsafe.} =
+  ## Advance the auto ramp one frame: set the per-frame voxel budget from an
+  ## ease-in curve (slow at first) between the start and end speeds, then flip
+  ## to ASAP once the ramp's time is up. A no-op unless a ramp is running and
+  ## the first block has anchored the clock.
+  if not (self.auto_ramp_active and self.auto_ramp_started):
+    return
+  let elapsed =
+    (get_mono_time() - self.auto_ramp_start).in_microseconds.float / 1_000_000.0
+  if elapsed >= AUTO_RAMP_SECONDS:
+    self.auto_ramp_active = false
+    self.auto_ramp_done = true
+    self.begin_asap()
+    self.voxels_per_frame = float.high
+  else:
+    let t = elapsed / AUTO_RAMP_SECONDS
+    self.voxels_per_frame =
+      AUTO_RAMP_START_SPEED + (AUTO_RAMP_END_SPEED - AUTO_RAMP_START_SPEED) * t * t
 
 template buffer*(self: Build, body: untyped) =
   ## Batch many draws into a single flush. `draw` normally syncs each voxel,
@@ -397,7 +439,14 @@ method on_begin_move*(
           self.transform.origin + (moving * self.speed * delta)
         return RUNNING
   else:
-    if self.speed == 0:
+    if self.speed == AUTO and self.auto_ramp_active:
+      # Anchor the ramp clock to the first drawn block; update_auto_ramp drives
+      # voxels_per_frame from here on.
+      if not self.auto_ramp_started:
+        self.auto_ramp_started = true
+        self.auto_ramp_start = get_mono_time()
+    elif self.speed == 0 or self.speed == AUTO:
+      # ASAP, or auto with no ramp armed (e.g. a level load): draw it all.
       self.voxels_per_frame = float.high
     else:
       self.voxels_remaining_this_frame = self.speed
@@ -474,7 +523,10 @@ method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
-  self.speed = 0 # draw ASAP unless the script sets a speed
+  self.speed = AUTO # ramp up then finish ASAP, unless the script sets a speed
+  self.auto_ramp_active = false
+  self.auto_ramp_started = false
+  self.auto_ramp_done = false
   self.begin_asap()
   self.scale = 1
 
