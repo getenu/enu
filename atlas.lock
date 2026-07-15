@@ -15,7 +15,7 @@
     "ed.getenu.github.com": {
       "dir": "$deps/ed",
       "url": "https://github.com/getenu/ed",
-      "commit": "7b564cf1c1e07d732b7ce149154ba467c8155dae",
+      "commit": "510091add93560d113634729990c04e4383aa19d",
       "version": ""
     },
     "nanoid.nim.getenu.github.com": {
@@ -120,10 +120,10 @@
       "commit": "c5a39a039f24d48ba9503dcb9a0aee68a0fbb36d",
       "version": ""
     },
-    "flatty": {
+    "flatty.getenu.github.com": {
       "dir": "$deps/flatty",
-      "url": "https://github.com/treeform/flatty",
-      "commit": "07f6ba8ab96238e5bd1264cf0cea1d1746abb00c",
+      "url": "https://github.com/getenu/flatty",
+      "commit": "3f76ca47c9f42185cbf563af4fd298cd72c05bf4",
       "version": ""
     },
     "netty": {
@@ -327,21 +327,21 @@
       "src_dir = \"src\"",
       "",
       "requires \"https://github.com/getenu/Nim#bea4c144\",",
-      "  \"https://github.com/getenu/godot-nim 0.8.6\",",
-      "  \"https://github.com/getenu/ed 0.30.3\",",
-      "  \"https://github.com/getenu/nanoid.nim >= 0.2.1\",",
-      "  \"https://github.com/treeform/pretty >= 0.2.0\", \"cligen\", \"chroma\", \"markdown\",",
+      "  \"godot 0.8.6\",",
+      "  \"ed 0.31.0\",",
+      "  \"nanoid >= 0.2.1\",",
+      "  \"pretty\", \"cligen\", \"chroma\", \"markdown\",",
       "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#a1296ca\", \"zippy\", \"unittest2\",",
-      "  \"https://github.com/getenu/nph#948b933\", \"regex\",",
-      "  \"https://github.com/getenu/nimcp 0.10.0\",",
-      "  \"https://github.com/gokr/mummyx#32f0ef97\",",
-      "  \"https://github.com/dsrw/nim-libbacktrace\"",
+      "  \"nph#948b933\", \"regex\",",
+      "  \"nimcp 0.10.0\",",
+      "  \"mummy#32f0ef97\",",
+      "  \"libbacktrace\"",
       ""
     ]
   },
   "hostOS": "macosx",
   "hostCPU": "arm64",
-  "nimVersion": "2.2.10 bfeb3146d1638b39f69007a4ae5a23e23ae4e5ef",
+  "nimVersion": "2.2.10",
   "gccVersion": "",
   "clangVersion": ""
 }
