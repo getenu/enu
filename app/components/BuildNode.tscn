@@ -117,6 +117,7 @@ cube_tiles/front = Vector2( 0, 0 )
 [sub_resource type="Voxel" id=18]
 voxel_name = "invisible"
 material_id = 7
+occludes_neighbors = false
 geometry_type = 1
 collision_aabbs = [ AABB( 0, 0, 0, 1, 1, 1 ) ]
 collision_mask = 2
