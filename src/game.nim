@@ -21,6 +21,7 @@ var next_perf_log {.threadvar.}: MonoTime
 var next_voxmem_log {.threadvar.}: MonoTime
 var last_frame_at {.threadvar.}: MonoTime
 var slow_frame_log {.threadvar.}: int ## 0 unread, 1 on, -1 off
+var slow_frame_ms {.threadvar.}: float ## threshold; ENU_SLOW_FRAME_MS
 
 # Immediate process exit that runs no atexit handlers, C++ destructors, or Nim
 # GC teardown. Used to end test-mode runs without triggering Godot's headless
@@ -107,10 +108,17 @@ gdobj Game of Node:
     # 2s PERF sampling undercounts short hitches. One clock compare per frame.
     if slow_frame_log == 0:
       slow_frame_log = if get_env("ENU_PERF_LOG") != "": 1 else: -1
+      slow_frame_ms = 100.0
+      try:
+        let t = get_env("ENU_SLOW_FRAME_MS")
+        if t != "":
+          slow_frame_ms = t.parse_float
+      except ValueError:
+        discard
     if slow_frame_log == 1:
       if last_frame_at != MonoTime():
         let gap = (time - last_frame_at).in_milliseconds.float
-        if gap > 100.0:
+        if gap > slow_frame_ms:
           info "SLOW_FRAME", ms = gap
       last_frame_at = time
 
