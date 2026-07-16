@@ -66,6 +66,13 @@ type FramePlayer* = ref object
     ## computation inside the drain budget. Pruned each flip to the indexes still
     ## being applied.
   keys: Table[int, Table[Vector3, Hash]] ## per frame, lazily built
+  frame_data: Table[int, ref FrameData]
+    ## one deep copy of each active frame: the synced EdTable returns
+    ## FrameData BY VALUE, so reading `model.frames[index]` copies every
+    ## chunk's packed string (MBs). The drain and key paths were doing that
+    ## per chunk access — hundreds of MB copied per flip, the dominant
+    ## main-thread cost of paging hitches on release builds. Pruned with
+    ## `decoded` each flip; invalidated whenever frames change.
   bytes: PoolByteArray ## reusable set_block_voxel_data payload
   payloads: Table[Hash, PoolByteArray]
     ## resolved set_block_voxel_data payloads per content key. Steady-state
@@ -139,6 +146,15 @@ proc cached_key(self: FramePlayer, index: int, chunk_id: Vector3): Option[Hash] 
   else:
     none(Hash)
 
+proc frame_at(self: FramePlayer, index: int): ref FrameData =
+  ## The frame's data via the local copy — one deep copy per active index,
+  ## never per access.
+  self.frame_data.with_value(index, cached):
+    return cached[]
+  result = new FrameData
+  result[] = self.model.frames[index]
+  self.frame_data[index] = result
+
 proc key_for(self: FramePlayer, index: int, chunk_id: Vector3): Hash =
   ## The chunk's content key, computed on first use inside the drain budget and
   ## memoized. Sealed builds key on the chunk's own bytes (borders always bake);
@@ -147,15 +163,16 @@ proc key_for(self: FramePlayer, index: int, chunk_id: Vector3): Hash =
   if index in self.keys and chunk_id in self.keys[index]:
     return self.keys[index][chunk_id]
   if self.model.sealed_frames:
+    let frame = self.frame_at(index)
     result =
-      if chunk_id in self.model.frames[index].chunks:
-        hash(self.model.frames[index].chunks[chunk_id].data)
+      if chunk_id in frame.chunks:
+        hash(frame.chunks[chunk_id].data)
       else:
         Hash(0)
   else:
     result = chunk_frame_key(
       self.decoded.mget_or_put(index, DecodedChunks()),
-      self.model.frames[index],
+      self.frame_at(index)[],
       chunk_id,
     )
   self.keys.mget_or_put(index, Table[Vector3, Hash]())[chunk_id] = result
@@ -202,7 +219,7 @@ proc drain(self: FramePlayer) =
       continue
     let target = self.key_for(chunk_index, chunk_id)
     if chunk_id notin self.display or self.display[chunk_id] != target:
-      let frame = frames[chunk_index]
+      let frame = self.frame_at(chunk_index)
       self.missing.del chunk_id
       if chunk_id notin frame.chunks:
         self.write_chunk(chunk_id, SnapshotData(), remesh = false, key = target)
@@ -225,7 +242,7 @@ proc drain(self: FramePlayer) =
         fill_padded_chunk_bytes(
           self.padded_bytes,
           self.decoded.mget_or_put(chunk_index, DecodedChunks()),
-          frame,
+          frame[],
           chunk_id,
           self.resolver,
           sealed = self.model.sealed_frames,
@@ -306,6 +323,9 @@ proc show*(self: FramePlayer, index: int) =
   for cached_index in self.decoded.keys.to_seq:
     if cached_index notin active:
       self.decoded.del cached_index
+  for cached_index in self.frame_data.keys.to_seq:
+    if cached_index notin active:
+      self.frame_data.del cached_index
   let flip_took = (get_mono_time() - flip_start).in_milliseconds
   if flip_took > 100:
     info "frame flip slow",
@@ -371,6 +391,7 @@ proc hide*(self: FramePlayer) =
   self.queue.clear()
   self.staged.clear()
   self.decoded.clear()
+  self.frame_data.clear()
   if self.dirty.len > 0 and ?self.renderer.voxel_tool:
     for chunk_id in self.dirty:
       if chunk_id notin self.loaded_chunks[]:
@@ -411,6 +432,7 @@ proc on_frames_changed*(self: FramePlayer) =
   ## but per-frame key tables must recompute.
   self.keys.clear()
   self.decoded.clear()
+  self.frame_data.clear()
   self.display.clear()
   self.render(self.model.current_frame)
 

@@ -19,6 +19,8 @@ import libs/fd_tracking
 
 var next_perf_log {.threadvar.}: MonoTime
 var next_voxmem_log {.threadvar.}: MonoTime
+var last_frame_at {.threadvar.}: MonoTime
+var slow_frame_log {.threadvar.}: int ## 0 unread, 1 on, -1 off
 
 # Immediate process exit that runs no atexit handlers, C++ destructors, or Nim
 # GC teardown. Used to end test-mode runs without triggering Godot's headless
@@ -99,6 +101,18 @@ gdobj Game of Node:
       if self.update_metrics_at < time:
         update_thread_metrics()
         self.update_metrics_at = time + 10.seconds
+
+    # Opt-in hitch log (same env as PERF): every frame gap over 100 ms is a
+    # stutter the player felt — log each one with its true length, since the
+    # 2s PERF sampling undercounts short hitches. One clock compare per frame.
+    if slow_frame_log == 0:
+      slow_frame_log = if get_env("ENU_PERF_LOG") != "": 1 else: -1
+    if slow_frame_log == 1:
+      if last_frame_at != MonoTime():
+        let gap = (time - last_frame_at).in_milliseconds.float
+        if gap > 100.0:
+          info "SLOW_FRAME", ms = gap
+      last_frame_at = time
 
     # Opt-in perf sampling (ENU_PERF_LOG=1): one "PERF" line every ~2s with
     # render-side metrics for before/after comparisons (e.g. greedy meshing).
