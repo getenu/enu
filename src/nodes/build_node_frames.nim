@@ -56,13 +56,6 @@ type FramePlayer* = ref object
     ## prepared mesh swaps, held until the whole flip is ready. Data writes and
     ## key work drain incrementally, but the visible change is one atomic pass —
     ## chunks never flip at different times.
-  staged_keys: Table[Vector3, Hash]
-    ## the content key each staged mesh represents. `display` is only updated
-    ## at commit, and only when the install lands (or there was nothing to
-    ## show): set_block_mesh silently fails for unpaired mesh blocks, and
-    ## recording those as displayed left chunks blank-but-"shown" — the drain
-    ## skipped them until their target key changed (rivers vanishing for
-    ## seconds while walking pairing fringes).
   padded_bytes: PoolByteArray ## request_frame_mesh payload scratch
   commit_index: int
     ## which flip `staged` was prepared for. Prepare-ahead builds the NEXT flip
@@ -231,12 +224,12 @@ proc drain(self: FramePlayer) =
       if chunk_id notin frame.chunks:
         self.write_chunk(chunk_id, SnapshotData(), remesh = false, key = target)
         self.staged[chunk_id] = nil
-        self.staged_keys[chunk_id] = target
+        self.display[chunk_id] = target
       elif target in self.mesh_cache:
         self.touch_cached(target)
         self.write_chunk(chunk_id, frame.chunks[chunk_id], remesh = false, key = target)
         self.staged[chunk_id] = self.mesh_cache[target]
-        self.staged_keys[chunk_id] = target
+        self.display[chunk_id] = target
       else:
         # bake from data: the padded payload carries the frame's own neighbor
         # shell (or air when sealed), so the bake is valid no matter what any
@@ -378,13 +371,8 @@ proc commit_meshes(self: FramePlayer) =
       self.commit_index != self.model.current_frame:
     return
   for chunk_id, mesh in self.staged:
-    if self.terrain.set_block_mesh(chunk_id, mesh) or mesh.is_nil:
-      self.staged_keys.with_value(chunk_id, key):
-        self.display[chunk_id] = key[]
-    # a failed install (mesh block not paired) leaves the chunk un-displayed,
-    # so the next flip re-queues it and it installs once the block pairs
+    discard self.terrain.set_block_mesh(chunk_id, mesh)
   self.staged.clear()
-  self.staged_keys.clear()
   # prepare the NEXT flip now: its keys and data writes spread over the rest of
   # the interval, so the flip itself is just the swap pass above
   if self.model.frames_fps > 0 and self.model.frames.len > 1:
@@ -402,7 +390,6 @@ proc hide*(self: FramePlayer) =
   self.display.clear()
   self.queue.clear()
   self.staged.clear()
-  self.staged_keys.clear()
   self.decoded.clear()
   self.frame_data.clear()
   if self.dirty.len > 0 and ?self.renderer.voxel_tool:
@@ -460,7 +447,6 @@ proc drop_chunk*(self: FramePlayer, chunk_id: Vector3) =
   self.missing.del chunk_id
   self.queue.del chunk_id
   self.staged.del chunk_id
-  self.staged_keys.del chunk_id
   self.dirty.excl chunk_id
 
 proc tick*(self: FramePlayer) =
