@@ -408,6 +408,15 @@ proc is_empty*(packed: PackedChunk): bool =
   packed.data.len == 0 or
     (packed.data.len == 1 and packed.data[0].byte == FMT_EMPTY.byte)
 
+proc voxel_count*(packed: PackedChunk): int =
+  ## Non-empty cells in an encoded chunk — what painting this content
+  ## would report as painted (see render_snapshot_direct).
+  if packed.is_empty:
+    return 0
+  for voxel in decode_chunk(packed):
+    if voxel != EMPTY_VOXEL:
+      inc result
+
 proc encode_delta*(
     changes: openArray[tuple[pos: Vector3, voxel: PackedVoxel]]
 ): DeltaUpdate =
