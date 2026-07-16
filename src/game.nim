@@ -129,13 +129,18 @@ gdobj Game of Node:
     # tick, never per frame.
     if time > next_perf_log and get_env("ENU_PERF_LOG") != "":
       next_perf_log = time + 2.seconds
+      let vtasks = get_stats()["tasks"].as_dictionary
       info "PERF",
         fps = get_monitor(TIME_FPS),
         frame_ms = get_monitor(TIME_PROCESS) * 1000.0,
         vertex_mem_kb = (get_monitor(RENDER_VERTEX_MEM_USED) / 1024.0).int,
         objects = get_monitor(RENDER_OBJECTS_IN_FRAME).int,
         draw_calls = get_monitor(RENDER_DRAW_CALLS_IN_FRAME).int,
-        video_mem_mb = (get_monitor(RENDER_VIDEO_MEM_USED) / 1048576.0).int
+        video_mem_mb = (get_monitor(RENDER_VIDEO_MEM_USED) / 1048576.0).int,
+        # VoxelServer in-flight task gauges (live counts, not cumulative —
+        # for totals, sum the per-terrain TERRAIN `meshed` counter instead).
+        mesh_queue = parse_int($vtasks["meshing"]),
+        gen_queue = parse_int($vtasks["generation"])
 
     # Opt-in resident voxel memory sampling (ENU_VOXEL_MEM_LOG=1): thread-heap
     # occupancy + per-store counters, for before/after comparisons of the

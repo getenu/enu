@@ -31,11 +31,7 @@ template each_material(self, i, m, body: untyped) =
 let prefill_disabled = get_env("ENU_NO_PREFILL") == "1"
   ## A/B switch: disable the enu_chunk_bytes prefill so paged-in blocks take
   ## the old paint-after-load path (perf comparison).
-let server_prefill = get_env("ENU_SERVER_PREFILL") == "1"
-  ## Experiment: let the SERVER (and therefore solo play) prefill paged-in
-  ## blocks too. Prefill shipped client-only; solo sessions still decode and
-  ## paint every chunk per voxel on main at page-in. Structurally the hook is
-  ## side-agnostic — flip this on to measure before changing the default.
+let perf_log = get_env("ENU_PERF_LOG") != ""
 
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
@@ -64,12 +60,15 @@ gdobj BuildNode of VoxelTerrain:
     default_view_distance: int
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
+    next_stats_log: MonoTime
+    prefill_hits, prefill_misses: int
     loaded_chunks: HashSet[Vector3]
-    prefilled_chunks: HashSet[Vector3]
+    prefilled_chunks: Table[Vector3, int]
       ## Chunks the request-time hook (enu_chunk_bytes) answered with real bytes,
-      ## so the streaming thread prefilled the engine block with them. Consumed by
-      ## on_block_loaded to skip the now-redundant snapshot + delta paints. See
-      ## docs/notes/voxel-stream-loading.md.
+      ## so the streaming thread prefilled the engine block with them, mapped to
+      ## the served content's voxel count. Consumed by on_block_loaded to skip
+      ## the now-redundant snapshot + delta paints while still crediting
+      ## rendered_voxel_count. See docs/notes/voxel-stream-loading.md.
     tracked_delta_seqs: Table[Vector3, EID]
     renderer: VoxelRenderer
     paging_logged: bool
@@ -129,7 +128,7 @@ gdobj BuildNode of VoxelTerrain:
           # Delta appended while the chunk is still paging in: the prefilled
           # buffer was composed at request time and predates it, so drop the hint
           # and let on_block_loaded repaint the fresh state instead of skipping.
-          self.prefilled_chunks.excl chunk_id
+          self.prefilled_chunks.del chunk_id
 
     self.tracked_delta_seqs[chunk_id] = zid
 
@@ -205,12 +204,11 @@ gdobj BuildNode of VoxelTerrain:
     ## block and today's paint-after-load path carries it.
     ## ENU_NO_PREFILL=1 disables the hook for prefill-vs-paint A/B measurement.
     result = new_pool_byte_array()
-    if not ?self.model or prefill_disabled or
-        (SERVER in state.local_flags and not server_prefill):
+    if not ?self.model or prefill_disabled:
       return
     let bytes = self.model.voxels.prefill_bytes(block_position)
     if bytes.len > 0:
-      self.prefilled_chunks.incl block_position
+      self.prefilled_chunks[block_position] = PackedChunk(data: bytes).voxel_count
       result = to_pool_byte_array(bytes)
 
   method on_block_loaded(chunk_id: Vector3) =
@@ -218,8 +216,17 @@ gdobj BuildNode of VoxelTerrain:
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
       # Consume the request-time hint: was this block prefilled with its data?
-      let prefilled = chunk_id in self.prefilled_chunks
-      self.prefilled_chunks.excl chunk_id
+      var prefill_credit = 0
+      let prefilled = self.prefilled_chunks.pop(chunk_id, prefill_credit)
+      if prefilled:
+        inc self.prefill_hits
+        # The engine expanded the served bytes into this block; the paints
+        # below are skipped for prefilled blocks, so credit their voxels here
+        # or rendered_voxel_count never converges on the model count.
+        self.model.rendered_voxel_count =
+          self.model.rendered_voxel_count + prefill_credit
+      else:
+        inc self.prefill_misses
 
       if SERVER notin state.local_flags:
         # Voxel paging: the engine's view streaming is the demand signal. A
@@ -253,8 +260,8 @@ gdobj BuildNode of VoxelTerrain:
         elif prefilled:
           # Prefilled: the streaming thread already expanded this content into the
           # engine block, which meshed once. Skip the redundant paint — this is the
-          # flash/double-mesh the whole change removes. (Not added to
-          # rendered_voxel_count: the engine, not build_node, drew it.)
+          # flash/double-mesh the whole change removes. (Counted above via
+          # prefill_credit, not here.)
           discard
         elif ?self.renderer.voxel_tool:
           painted = render_snapshot_direct(
@@ -342,7 +349,7 @@ gdobj BuildNode of VoxelTerrain:
           # Snapshot changed while the chunk is still loading: the prefilled
           # buffer was captured from the previous bytes, so drop the hint and let
           # on_block_loaded paint the fresh snapshot instead of skipping it.
-          self.prefilled_chunks.excl change.item.key
+          self.prefilled_chunks.del change.item.key
       elif removed and not modified:
         # Paged out or cleared (a rewrite is REMOVED+MODIFIED and skipped) —
         # clear it from the terrain, and from the ASAP buffer's terrain
@@ -384,7 +391,7 @@ gdobj BuildNode of VoxelTerrain:
             # Deltas changed before the chunk finished loading: the prefilled
             # buffer predates them, so drop the hint and let on_block_loaded
             # repaint the fresh state rather than skipping it.
-            self.prefilled_chunks.excl chunk_id
+            self.prefilled_chunks.del chunk_id
           # Watch for future deltas
           self.watch_delta_seq(chunk_id, delta_seq)
       elif removed:
@@ -540,6 +547,18 @@ gdobj BuildNode of VoxelTerrain:
         self.error_highlight_on = not self.error_highlight_on
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
+
+      # Opt-in perf sampling (ENU_PERF_LOG): per-terrain cumulative counters.
+      # `meshed` counts pipeline meshes actually applied — the number prefill
+      # is meant to halve (born-with-data = 1 mesh vs empty + paint + remesh).
+      if perf_log and get_mono_time() > self.next_stats_log:
+        self.next_stats_log = get_mono_time() + init_duration(seconds = 2)
+        let stats = self.get_statistics()
+        info "TERRAIN", unit = self.model.id,
+          meshed = parse_int($stats["updated_blocks"]),
+          dropped_meshes = parse_int($stats["dropped_block_meshs"]),
+          prefill_hits = self.prefill_hits,
+          prefill_misses = self.prefill_misses
 
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side. Each side runs its
