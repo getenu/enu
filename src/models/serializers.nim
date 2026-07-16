@@ -149,6 +149,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
           unit = self.id, frame = i, error = e.msg
         break
     self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
+    self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
     info "frames sidecar loaded",
       unit = self.id,
       loaded = loaded,
@@ -246,6 +247,11 @@ proc edits_to_string(shared: Shared): string =
         \"\"{thing_id}\": [\n{elements}\n]"
   result = edits.join(",\n")
 
+proc count_frame_files(dir: string): int =
+  for kind, path in walk_dir(dir):
+    if kind == pcFile and path.ends_with(".bin"):
+      inc result
+
 proc save_frames(self: Build) =
   ## Frame animation sidecar: data/<id>/frames/NNN.bin, keyframes every
   ## FRAME_KEYFRAME_INTERVAL frames and per-chunk deltas between. The unit
@@ -255,6 +261,14 @@ proc save_frames(self: Build) =
   if self.frames.len == 0:
     if dir_exists(dir):
       remove_dir(dir)
+    return
+  if not self.frames_dirty and dir_exists(dir) and
+      count_frame_files(dir) == self.frames.len:
+    # Untouched since load/last save: skip 24 frame re-encodes per save.
+    # (Local frame mutations set frames_dirty; client-synced frames are
+    # covered by the dir/count checks — a same-count in-place replacement
+    # from a remote client is the one uncovered case, and the generator
+    # workflow always starts from a deleted data dir.)
     return
   create_dir dir
   var prev = none(FrameData)
@@ -278,6 +292,7 @@ proc save_frames(self: Build) =
         discard
       if stale:
         remove_file path
+  self.frames_dirty = false
 
 proc extras_json(self: Thing): string =
   ## Optional trailing sections for the unit JSON: frame-animation metadata
@@ -748,7 +763,16 @@ proc unload_level*(worker: Worker) =
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
 
+var level_loading* = false
+  ## True while load_level populates things. watch_code's autosave consults
+  ## this: the loader assigning each unit's code was triggering a full
+  ## save_level (frame re-encodes included) synchronously inside the load —
+  ## most of a debug build's 5-10s boot penalty.
+
 proc load_level*(worker: Worker, level_dir: string) =
+  level_loading = true
+  defer:
+    level_loading = false
   state.global_flags += LOADING_LEVEL
   state.push_flag LOADING_SCRIPT
   if not state.player.is_nil:

@@ -217,6 +217,7 @@ proc save*(self: Build, at: int = -1): int {.discardable.} =
   ## `load_frame(3)`, edit, `save(at = 3)`). Keyed table writes make
   ## both cases a single synced op.
   self.global_flags += DIRTY
+  self.frames_dirty = true
   if at >= 0 and at < self.frames.len:
     self.frames[at] = self.voxels.pack_frame
     at
@@ -245,6 +246,7 @@ proc clear_frames*(self: Build) =
   ## Scripts that build an animation programmatically call this first;
   ## otherwise save keeps appending across script re-runs.
   self.global_flags += DIRTY
+  self.frames_dirty = true
   self.frames_fps = 0.0
   self.current_frame = -1
   self.frames.clear
@@ -253,6 +255,7 @@ proc delete_frame*(self: Build, index: int) =
   ## Remove a saved frame; later frames shift down one index (keys stay
   ## dense: each higher frame rewrites down by one keyed op).
   self.global_flags += DIRTY
+  self.frames_dirty = true
   if index >= 0 and index < self.frames.len:
     let last = self.frames.len - 1
     for i in index ..< last:
