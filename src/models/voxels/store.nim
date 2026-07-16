@@ -85,7 +85,8 @@ proc cached_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
     var oldest_id: Vector3
     var oldest_tick = int.high
     for id, entry in self.chunk_cache:
-      if entry.tick < oldest_tick and id notin self.pending_chunks:
+      if entry.tick < oldest_tick and id notin self.pending_chunks and
+          id notin self.pending_snapshots:
         oldest_tick = entry.tick
         oldest_id = id
     if oldest_tick < int.high:
@@ -238,6 +239,17 @@ iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
       self.flush_chunk_delta(chunk_id, changes)
     self.pending_chunks.del chunk_id
     yield chunk_id
+  for chunk_id in self.pending_snapshots.keys.to_seq:
+    let blob = self.pending_snapshots[chunk_id]
+    if blob.data.len > 0:
+      self.packed_chunks[chunk_id] = blob # bulk-adopted, publish verbatim
+      if chunk_id in self.chunk_deltas:
+        self.chunk_deltas[chunk_id].clear
+      inc self.snapshots_flushed
+    else:
+      self.flush_chunk_snapshot(chunk_id)
+    self.pending_snapshots.del chunk_id
+    yield chunk_id
 
 proc flush_dirty_chunks*(self: VoxelStore) =
   ## Flush every dirty chunk (save / end_asap). The worker uses the iterator form
@@ -341,10 +353,14 @@ proc adopt_chunk(
   inc self.cache_tick
   chunk.tick = self.cache_tick
   self.chunk_cache[chunk_id] = chunk
-  if dropped:
-    self.flush_chunk_snapshot(chunk_id)
-  else:
-    self.packed_chunks[chunk_id] = snapshot
+  # Stage for the paced flusher rather than publishing here: load adopts
+  # thousands of chunks, and pushing them all through sync in one burst
+  # overwhelms the channel right when boot is busiest.
+  self.pending_snapshots[chunk_id] =
+    if dropped:
+      SnapshotData()
+    else:
+      snapshot
 
 proc adopt_edit_chunks*(self: VoxelStore): bool =
   ## Bulk restore for a store with no live content — the fresh-load path of a
@@ -356,7 +372,8 @@ proc adopt_edit_chunks*(self: VoxelStore): bool =
   ## from a base; with no base they are no-ops and are skipped. Returns false
   ## when live content already exists (script rerun/reset) — the caller keeps
   ## the per-voxel overlay semantics.
-  if self.chunk_cache.len > 0 or self.pending_chunks.len > 0:
+  if self.chunk_cache.len > 0 or self.pending_chunks.len > 0 or
+      self.pending_snapshots.len > 0:
     return false
   var handled = init_hash_set[Vector3]()
   if ?self.edit_snapshots:

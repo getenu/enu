@@ -824,7 +824,8 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           # Flush if not in ASAP mode, or if in ASAP mode and we can flush
           let should_flush = not in_asap or can_flush_asap
           if should_flush:
-            if build.voxels.pending_chunks.len > 0:
+            if build.voxels.pending_chunks.len > 0 or
+                build.voxels.pending_snapshots.len > 0:
               # Flush chunk-by-chunk, backing off once the channel hits the gate
               # (the rest stay in pending_chunks and coalesce next frame).
               for _ in build.voxels.flush_dirty_chunks():
