@@ -441,6 +441,13 @@ proc reset*(self: FramePlayer) =
   self.hide()
   self.keys.clear()
 
+proc forget_display*(self: FramePlayer, chunk_id: Vector3) =
+  ## The chunk's mesh block was (re)created by pairing: whatever we recorded
+  ## as displayed belonged to the previous block instance. Clearing the entry
+  ## makes the next flip re-queue and re-install from the cache. In-flight
+  ## bakes stay valid (they're pure functions of content).
+  self.display.del chunk_id
+
 proc drop_chunk*(self: FramePlayer, chunk_id: Vector3) =
   ## A chunk paged out: forget its frame bookkeeping.
   self.display.del chunk_id
