@@ -314,6 +314,82 @@ proc flush_edits_for_save*(self: VoxelStore) =
   for chunk_id in self.local_edits.keys:
     self.flush_edit_snapshot(chunk_id)
 
+proc adopt_chunk(
+    self: VoxelStore, chunk_id: Vector3,
+    cells: array[CHUNK_VOLUME, PackedVoxel], snapshot: SnapshotData,
+    changed: bool,
+) =
+  ## Install one bulk-restored chunk: cells into the read cache, and the
+  ## packed form into the synced table (the stored blob verbatim when the
+  ## cells match it exactly).
+  let chunk = CachedChunk()
+  var dropped = changed
+  for linear in 0 ..< CHUNK_VOLUME:
+    let v = cells[linear]
+    if v == EMPTY_VOXEL:
+      continue
+    let (_, kind_ord) = unpack_voxel(v)
+    if VoxelKind(kind_ord) == HOLE:
+      dropped = true # erases nothing with no base; excluded from live state
+      continue
+    chunk.cells[linear] = v
+    inc chunk.count
+  if chunk.count == 0:
+    return
+  if not self.on_chunk_created.is_nil:
+    self.on_chunk_created(chunk_id)
+  inc self.cache_tick
+  chunk.tick = self.cache_tick
+  self.chunk_cache[chunk_id] = chunk
+  if dropped:
+    self.flush_chunk_snapshot(chunk_id)
+  else:
+    self.packed_chunks[chunk_id] = snapshot
+
+proc adopt_edit_chunks*(self: VoxelStore): bool =
+  ## Bulk restore for a store with no live content — the fresh-load path of a
+  ## persisted build, where the edits ARE the content. Each edit chunk's
+  ## packed cells are adopted directly as the live chunk and published as one
+  ## snapshot, instead of round-tripping every voxel through
+  ## unpack/resolve_color -> add_voxel/pack_color_index (seconds per million
+  ## voxels at load, plus a redundant set_edit per voxel). HOLE edits erase
+  ## from a base; with no base they are no-ops and are skipped. Returns false
+  ## when live content already exists (script rerun/reset) — the caller keeps
+  ## the per-voxel overlay semantics.
+  if self.chunk_cache.len > 0 or self.pending_chunks.len > 0:
+    return false
+  var handled = init_hash_set[Vector3]()
+  if ?self.edit_snapshots:
+    for key, snapshot in self.edit_snapshots:
+      if key.id != self.thing_id:
+        continue
+      let chunk_id = key.loc
+      var cells = decode_chunk(snapshot)
+      var changed = false
+      if ?self.edit_deltas and key in self.edit_deltas:
+        let delta_seq = self.edit_deltas[key]
+        if ?delta_seq:
+          for delta in delta_seq:
+            for (local_pos, packed_voxel) in decode_delta(delta):
+              cells[
+                linear_position(local_pos.x.int, local_pos.y.int, local_pos.z.int)
+              ] = packed_voxel
+              changed = true
+      handled.incl chunk_id
+      self.adopt_chunk(chunk_id, cells, snapshot, changed)
+  if ?self.edit_deltas:
+    for key, delta_seq in self.edit_deltas:
+      if key.id != self.thing_id or key.loc in handled or not ?delta_seq:
+        continue
+      var cells: array[CHUNK_VOLUME, PackedVoxel]
+      for delta in delta_seq:
+        for (local_pos, packed_voxel) in decode_delta(delta):
+          cells[
+            linear_position(local_pos.x.int, local_pos.y.int, local_pos.z.int)
+          ] = packed_voxel
+      self.adopt_chunk(key.loc, cells, SnapshotData(), changed = true)
+  true
+
 proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   let chunk_id = position.buffer
   let chunk = self.cached_chunk(chunk_id)
