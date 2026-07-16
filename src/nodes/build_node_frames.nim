@@ -292,6 +292,23 @@ proc effective_frame(
   else:
     0
 
+proc show_chunk*(self: FramePlayer, chunk_id: Vector3, index: int) =
+  ## Queue frame content for ONE freshly loaded chunk — on_block_loaded's
+  ## entry point. It used to run a full show() per paged-in chunk, and show()
+  ## walks every loaded chunk: O(loaded x incoming) on main made each 16m row
+  ## crossing a 250-550ms debug hitch (and boot O(n^2)). The chunk drains on
+  ## the next tick.
+  let frames = self.model.frames
+  if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
+    return
+  let viewers = self.viewer_positions()
+  let chunk_index = self.effective_frame(chunk_id, index, frames.len, viewers)
+  let known = self.cached_key(chunk_index, chunk_id)
+  if known.is_some and chunk_id in self.display and
+      self.display[chunk_id] == known.get:
+    return
+  self.queue[chunk_id] = chunk_index
+
 proc show*(self: FramePlayer, index: int) =
   ## Queue the chunk work for frame `index`. Each loaded chunk picks an
   ## effective frame by distance (temporal LOD), then either matches what it
