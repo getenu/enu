@@ -323,6 +323,12 @@ type
     local_edits*: Table[Vector3, Table[Vector3, VoxelInfo]]
     pending_chunks*:
       Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
+    pending_snapshots*: Table[Vector3, SnapshotData]
+      ## Whole chunks staged by the bulk load path (adopt_edit_chunks),
+      ## published by the same paced flush_dirty_chunks the per-voxel buffer
+      ## uses. Value = the stored blob to publish verbatim, or empty to
+      ## re-encode from the cache (holes/deltas changed it). Publishing all
+      ## chunks eagerly at load overshot the sync channel in one burst.
     pending_edits*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
     snapshots_flushed*: int
