@@ -1,4 +1,4 @@
-import std/[tables, bitops, times, options, sets, hashes]
+import std/[tables, bitops, times, options, sets, hashes, os]
 import pkg/godot except print, Color
 import
   godotapi/[
@@ -27,6 +27,10 @@ template each_material(self, i, m, body: untyped) =
     if not ?m:
       break
     body
+
+let prefill_disabled = get_env("ENU_NO_PREFILL") == "1"
+  ## A/B switch: disable the enu_chunk_bytes prefill so paged-in blocks take
+  ## the old paint-after-load path (perf comparison).
 
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
@@ -185,8 +189,9 @@ gdobj BuildNode of VoxelTerrain:
     ## block's packed bytes so it's prefilled with real data and meshes once. An
     ## empty result means "not resident" — the engine falls back to an empty
     ## block and today's paint-after-load path carries it.
+    ## ENU_NO_PREFILL=1 disables the hook for prefill-vs-paint A/B measurement.
     result = new_pool_byte_array()
-    if not ?self.model or SERVER in state.local_flags:
+    if not ?self.model or SERVER in state.local_flags or prefill_disabled:
       return
     let bytes = self.model.voxels.prefill_bytes(block_position)
     if bytes.len > 0:
