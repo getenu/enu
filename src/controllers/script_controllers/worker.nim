@@ -330,7 +330,10 @@ proc watch_code(self: Worker, thing: Thing) =
   thing.code_value.changes:
     if added or touched:
       if change.item.runner == Ed.thread_ctx.id:
-        save_level(state.config.level_dir)
+        if not level_loading:
+          # the loader assigns every unit's code; saving the level it is
+          # mid-loading re-encoded everything back to disk for nothing
+          save_level(state.config.level_dir)
         self.change_code(thing, change.item)
         if change.item.nim == "":
           remove_file thing.script_ctx.script
