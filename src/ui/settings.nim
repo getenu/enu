@@ -63,12 +63,31 @@ gdobj Settings of PanelContainer:
 
   proc update_level_list() =
     self.levels.clear()
-    if not ?state.config.connect_address:
-      self.levels.add_item("New...")
-      for file in walk_dirs(state.config.world_dir / "*"):
-        let world = file.split_file.name
-        if world != "backups":
-          self.levels.add_item(world)
+    if ?state.config.connect_address:
+      return
+    self.levels.add_item("New...")
+
+    # The picker is a deduped union of the levels created locally and the
+    # levels Enu ships for the current world. A shipped level that hasn't been
+    # opened yet has no local copy — loading it copies it in (see load_level) —
+    # but it should still be selectable here. World can't change in the UI, so
+    # we only ever list the current world's levels.
+    var names: seq[string]
+    for dir in walk_dirs(state.config.world_dir / "*"):
+      let name = dir.split_file.name
+      if name notin ["backups", "template"]:
+        names.add name
+
+    let shipped_dir = state.config.lib_dir / "worlds" / state.config.world
+    for dir in walk_dirs(shipped_dir / "*"):
+      let name = dir.split_file.name
+      # Only real levels: skip the world template and non-level dirs (course
+      # authoring projects, backups) that lack a level.json.
+      if name notin ["backups", "template"] and file_exists(dir / "level.json"):
+        names.add name
+
+    for name in names.sorted.deduplicate(is_sorted = true):
+      self.levels.add_item(name)
 
   method ready*() =
     with self:
