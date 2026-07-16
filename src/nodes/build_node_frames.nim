@@ -67,6 +67,12 @@ type FramePlayer* = ref object
     ## being applied.
   keys: Table[int, Table[Vector3, Hash]] ## per frame, lazily built
   bytes: PoolByteArray ## reusable set_block_voxel_data payload
+  payloads: Table[Hash, PoolByteArray]
+    ## resolved set_block_voxel_data payloads per content key. Steady-state
+    ## playback rewrites the same frame contents per chunk forever; decoding
+    ## and resolving on every write was ~20% of main during paging. ~8 KB per
+    ## key (sealed builds dedupe hard; unsealed shell-aware keys fragment
+    ## this cache but stay correct).
   dirty: HashSet[Vector3] ## terrain data differs from live state
   mesh_lru: Table[Hash, int] ## last-touched tick per cached mesh
   lru_tick: int
@@ -154,11 +160,26 @@ proc key_for(self: FramePlayer, index: int, chunk_id: Vector3): Hash =
     )
   self.keys.mget_or_put(index, Table[Vector3, Hash]())[chunk_id] = result
 
+proc payload_for(
+    self: FramePlayer, key: Hash, snapshot: SnapshotData
+): PoolByteArray =
+  ## The resolved u16 payload for a content key, decoded and resolved once.
+  self.payloads.with_value(key, cached):
+    return cached[]
+  result = new_pool_byte_array()
+  result.set_len(CHUNK_VOLUME * 2)
+  fill_chunk_type_bytes(result, snapshot, self.resolver)
+  if self.payloads.len >= 8192: # ~64 MB; rebuilding is cheap, unlike meshes
+    self.payloads.clear()
+  self.payloads[key] = result
+
 proc write_chunk(
-    self: FramePlayer, chunk_id: Vector3, snapshot: SnapshotData, remesh: bool
+    self: FramePlayer, chunk_id: Vector3, snapshot: SnapshotData, remesh: bool,
+    key: Hash,
 ) =
-  fill_chunk_type_bytes(self.bytes, snapshot, self.resolver)
-  discard self.terrain.set_block_voxel_data(chunk_id, self.bytes, remesh)
+  discard self.terrain.set_block_voxel_data(
+    chunk_id, self.payload_for(key, snapshot), remesh
+  )
   self.dirty.incl chunk_id
 
 proc drain(self: FramePlayer) =
@@ -184,12 +205,12 @@ proc drain(self: FramePlayer) =
       let frame = frames[chunk_index]
       self.missing.del chunk_id
       if chunk_id notin frame.chunks:
-        self.write_chunk(chunk_id, SnapshotData(), remesh = false)
+        self.write_chunk(chunk_id, SnapshotData(), remesh = false, key = target)
         self.staged[chunk_id] = nil
         self.display[chunk_id] = target
       elif target in self.mesh_cache:
         self.touch_cached(target)
-        self.write_chunk(chunk_id, frame.chunks[chunk_id], remesh = false)
+        self.write_chunk(chunk_id, frame.chunks[chunk_id], remesh = false, key = target)
         self.staged[chunk_id] = self.mesh_cache[target]
         self.display[chunk_id] = target
       else:
@@ -200,7 +221,7 @@ proc drain(self: FramePlayer) =
         # path): if the engine destroys and recreates this mesh block (viewer
         # churn), pairing remeshes it from data — empty data would blank a chunk
         # the display map already counts as shown, forever.
-        self.write_chunk(chunk_id, frame.chunks[chunk_id], remesh = false)
+        self.write_chunk(chunk_id, frame.chunks[chunk_id], remesh = false, key = target)
         fill_padded_chunk_bytes(
           self.padded_bytes,
           self.decoded.mget_or_put(chunk_index, DecodedChunks()),

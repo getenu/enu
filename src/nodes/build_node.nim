@@ -560,8 +560,15 @@ gdobj BuildNode of VoxelTerrain:
     # named indices pass through untouched (identity below STATIC_COLOR_BASE).
     set_registry_library(self.mesher.as(VoxelMesherBlocky).library)
     let model = self.model
+    # Memoized: palette indices never re-map (the palette is append-only),
+    # and slot_for hashes a Color per call — far too hot for per-voxel
+    # resolution in the frame drain (profiled at ~13% of main during paging).
+    var slot_memo = init_table[int, int64]()
     self.resolver = proc(color_index: int): int64 =
-      slot_for(resolve_color(model.shared, color_index))
+      slot_memo.with_value(color_index, memoized):
+        return memoized[]
+      result = slot_for(resolve_color(model.shared, color_index))
+      slot_memo[color_index] = result
 
     # Pre-register the build's whole palette (it syncs with the unit and
     # lists every static color the build will ever render), so a block
