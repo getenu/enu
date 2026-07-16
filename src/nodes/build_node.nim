@@ -31,6 +31,11 @@ template each_material(self, i, m, body: untyped) =
 let prefill_disabled = get_env("ENU_NO_PREFILL") == "1"
   ## A/B switch: disable the enu_chunk_bytes prefill so paged-in blocks take
   ## the old paint-after-load path (perf comparison).
+let server_prefill = get_env("ENU_SERVER_PREFILL") == "1"
+  ## Experiment: let the SERVER (and therefore solo play) prefill paged-in
+  ## blocks too. Prefill shipped client-only; solo sessions still decode and
+  ## paint every chunk per voxel on main at page-in. Structurally the hook is
+  ## side-agnostic — flip this on to measure before changing the default.
 
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
@@ -200,7 +205,8 @@ gdobj BuildNode of VoxelTerrain:
     ## block and today's paint-after-load path carries it.
     ## ENU_NO_PREFILL=1 disables the hook for prefill-vs-paint A/B measurement.
     result = new_pool_byte_array()
-    if not ?self.model or SERVER in state.local_flags or prefill_disabled:
+    if not ?self.model or prefill_disabled or
+        (SERVER in state.local_flags and not server_prefill):
       return
     let bytes = self.model.voxels.prefill_bytes(block_position)
     if bytes.len > 0:
