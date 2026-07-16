@@ -285,6 +285,8 @@ proc del_voxel(self: Build, position: Vector3) =
   self.voxels.del_voxel(position)
 
 proc restore_edits*(self: Build) =
+  if self.voxels.adopt_edit_chunks():
+    return
   self.voxels.for_all_edits:
     assert info.kind in {PERSISTED, HOLE}
     if info.kind != HOLE:
