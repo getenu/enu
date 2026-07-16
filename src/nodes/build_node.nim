@@ -278,9 +278,8 @@ gdobj BuildNode of VoxelTerrain:
           self.watch_delta_seq(chunk_id, delta_seq)
       flush_registry()
       if displaying_frame:
-        # give the fresh chunk its frame content (cheap for the rest:
-        # display-key checks make the loop a no-op elsewhere)
-        self.frames.show(self.model.current_frame)
+        # give the fresh chunk its frame content on the next drain
+        self.frames.show_chunk(chunk_id, self.model.current_frame)
       let took = (get_mono_time() - start).in_milliseconds
       if took > 10:
         warn "on_block_loaded slow", ms = took, unit = self.model.id
