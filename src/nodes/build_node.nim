@@ -78,7 +78,7 @@ gdobj BuildNode of VoxelTerrain:
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded",
-      "frame_mesh_baked"
+      "frame_mesh_baked", "mesh_block_created"
     self.default_view_distance = self.max_view_distance.int
 
   proc prepare_materials() =
@@ -165,6 +165,15 @@ gdobj BuildNode of VoxelTerrain:
           if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
     else:
       self.visible = false
+
+  method on_mesh_block_created(chunk_id: Vector3) =
+    ## A mesh block was (re)created by viewer pairing. Any display state the
+    ## frame player recorded for it belonged to the previous block instance —
+    ## forget it, so the next flip re-queues and re-installs. Without this,
+    ## chunks re-entering pairing range keep a stale "shown" entry and render
+    ## whatever the pipeline meshed from data until their LOD target changes.
+    if ?self.frames:
+      self.frames.forget_display(chunk_id)
 
   method on_frame_mesh_baked(chunk_id: Vector3, tag: int, mesh: Mesh) =
     ## Godot signal callback (bind_signals "frame_mesh_baked") — hand the bake
