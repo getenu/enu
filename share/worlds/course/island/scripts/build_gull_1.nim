@@ -57,6 +57,10 @@ play(7.0)
 move me
 speed = 7
 
+# the glide segments accumulate drift, so re-centre after each lap
+let nest = position
 forever:
-  forward 18
-  turn 20.0
+  18.times:
+    forward 18
+    turn 20.0
+  position = nest
