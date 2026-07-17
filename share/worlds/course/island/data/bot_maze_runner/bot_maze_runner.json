@@ -1,0 +1,15 @@
+{
+  "id": "bot_maze_runner",
+  "start_transform": {
+    "basis": [
+      [0.0, 0.0, -1.0],
+      [0.0, 1.0, 0.0],
+      [1.0, 0.0, 0.0]
+    ],
+    "origin": [-62.0, 6.0, 2.0]
+  },
+  "start_color": "BLUE",
+  "edits": {
+    
+  }
+}
