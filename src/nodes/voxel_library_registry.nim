@@ -18,6 +18,7 @@ const
 # Main-thread only; threadvars keep watch bodies (compiled gcsafe) happy.
 var
   registry_library {.threadvar.}: VoxelLibrary
+  registry_library_id {.threadvar.}: int64
   slots {.threadvar.}: Table[Color, int64]
   next_slot {.threadvar.}: int64
   dirty {.threadvar.}: bool
@@ -68,10 +69,16 @@ proc flush_registry*() =
 
 proc set_registry_library*(library: VoxelLibrary) =
   ## Adopt the (scene-shared, so process-wide) library. If a fresh library
-  ## instance ever shows up, re-register the known colors into it.
-  if registry_library == library:
+  ## instance ever shows up, re-register the known colors into it. Identity
+  ## is the Godot instance id — wrapper equality reports a fresh object for
+  ## every getter call, which made each spawning BuildNode re-register and
+  ## re-bake the whole library (~540 ms of main-thread stall per unit at
+  ## level load).
+  let library_id = library.get_instance_id
+  if library_id == registry_library_id:
     return
   registry_library = library
+  registry_library_id = library_id
   for color, slot in slots:
     register(color, slot)
   flush_registry()

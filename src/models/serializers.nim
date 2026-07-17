@@ -458,11 +458,17 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
 
   var sorted_scripts = load_order
 
-  # Add any scripts that might have been missed by the saved list
-  # and players.nim if it exists in loaded_data
-  for (id, _, _, script) in loaded_data:
+  # Things missing from the saved list get slotted in: script-less data
+  # units (the terrain and other pure-JSON builds) load FIRST — they have
+  # no dependencies and they're the ground the player needs under their
+  # feet — while unlisted scripted things append at the end as before.
+  for (id, dir, _, script) in loaded_data:
     if script notin sorted_scripts:
-      sorted_scripts.add script
+      if not file_exists(state.config.script_dir / script & ".nim") and
+          not file_exists(dir / script & ".nim"):
+        sorted_scripts.insert(script, 0)
+      else:
+        sorted_scripts.add script
 
   for script_name in sorted_scripts:
     if script_name notin script_to_data:
