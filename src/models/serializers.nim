@@ -511,6 +511,16 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
     except Exception as e:
       error "Failed to load thing", thing_id, error = e
 
+  # Record the order the level actually loaded in — including script-less
+  # units slotted in above — so save_level preserves it instead of
+  # regenerating from scratch. Only real, loaded units, in order.
+  if parent.is_nil:
+    var final_order: seq[string]
+    for script_name in sorted_scripts:
+      if script_name in script_to_data and script_name notin final_order:
+        final_order.add script_name
+    state.load_order = final_order
+
 const
   # Distinctive token present in every managed file's marker, in any format.
   # A file is Enu-managed if it contains this (or doesn't exist yet); the user
@@ -615,37 +625,43 @@ proc save_ide_support(level_dir: string, sorted_scripts: seq[string]) =
 
 proc save_level*(level_dir: string, save_all = false, force = false) =
   if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
+    # The whole level is in load_order now — script-less units (terrain and
+    # other pure-JSON builds) included, keyed by id. Build the dependency
+    # graph and the error set (scripted units only), then order every
+    # non-ephemeral unit: keep the order they currently have (state.load_order,
+    # set at load), append genuinely new units at the end, and let topo_sort
+    # pull dependencies earlier where a script requires it.
     var graph = initTable[string, seq[string]]()
-    var sort_nodes = newSeq[string]()
     var error_nodes = newSeq[string]()
+    var present: seq[string] # every non-ephemeral unit id, in things order
+    var is_error = initHashSet[string]()
     for thing in state.things:
       if EPHEMERAL in thing.global_flags:
         continue
+      let name = thing.id
+      if name notin present:
+        present.add name
       if thing.script_ctx != nil:
-        let filename = thing.script_ctx.file_name.extract_filename
-        if filename != "":
-          let name =
-            if filename.ends_with(".nim"):
-              filename[0 .. ^5]
-            else:
-              filename
-          if thing.errors.value.len > 0:
-            if name notin error_nodes:
-              error_nodes.add(name)
-          else:
-            if name notin sort_nodes:
-              sort_nodes.add(name)
-            if thing.script_ctx.dependencies.len > 0:
-              var deps: seq[string] = @[]
-              for dep in thing.script_ctx.dependencies:
-                let dep_name = dep.extract_filename
-                deps.add(
-                  if dep_name.ends_with(".nim"):
-                    dep_name[0 .. ^5]
-                  else:
-                    dep_name
-                )
-              graph[name] = deps
+        if thing.errors.value.len > 0:
+          if name notin is_error:
+            is_error.incl name
+            error_nodes.add name
+        elif thing.script_ctx.dependencies.len > 0:
+          var deps: seq[string] = @[]
+          for dep in thing.script_ctx.dependencies:
+            let dep_name = dep.extract_filename
+            deps.add(
+              if dep_name.ends_with(".nim"): dep_name[0 .. ^5] else: dep_name
+            )
+          graph[name] = deps
+
+    # Preserve the existing order; new units go to the end.
+    var sort_nodes = newSeq[string]()
+    var seen = initHashSet[string]()
+    for name in state.load_order & present:
+      if name notin seen and name in present and name notin is_error:
+        seen.incl name
+        sort_nodes.add name
 
     var sorted_scripts: seq[string]
     try:
@@ -655,6 +671,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       error "Cannot save level script order due to circular dependency",
         error = e.msg
       sorted_scripts = error_nodes & sort_nodes # fallback: save unordered
+    state.load_order = sorted_scripts
 
     if sorted_scripts.len > 0:
       debug "load_order content", load_order = sorted_scripts
