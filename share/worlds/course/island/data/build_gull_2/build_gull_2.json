@@ -15,9 +15,6 @@
   "frames": {
     "version": 1,
     "count": 4,
-    "fps": 9.0,
-    "loop": true,
-    "current": 3,
     "keyframe_interval": 8
   }
 }
