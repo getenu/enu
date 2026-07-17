@@ -24,6 +24,13 @@ proc wings_up(col: Color) =
   place(7, 9, 8, col); place(6, 10, 8, col); place(5, 10, 8, col)
   place(9, 9, 8, col); place(10, 10, 8, col); place(11, 10, 8, col)
 
+# the voxels sit at offset (8,8,8) to stay inside one chunk; move the
+# rotation pivot there so the bird turns around its body, not the corner
+anchor:
+  right 8
+  up 8
+  back 8
+
 place(0, 0, 0, eraser)  # cover the origin default block
 clear_frames()
 body(); wings_down(white); save()
