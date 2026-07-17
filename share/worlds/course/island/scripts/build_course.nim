@@ -27,6 +27,9 @@ if abs(player.position.x) < 5 and abs(player.position.z) < 5:
     else:
       break
     inc tries
+  # input is gated while the level loads, but re-assert the facing once
+  # the ground settles in case anything drifted it
+  player.rotation = -7.5
 
 # ----- world locks -----
 # The player edits exactly the exercise units; everything else is furniture.
@@ -137,12 +140,23 @@ proc check_fireworks(): bool =
 # ----- tool staging -----
 # 0: nothing (walk to the sign) / 1: code tool (the whole mainland)
 # 2: + block tools (mainland done) / 3: flight (finale reward)
+# Gating is OFF until final acceptance testing (user call): everyone gets
+# the full toolbar and flight; detection and beacons keep running so the
+# course can still be reviewed end to end.
+const ENFORCE_PROGRESSION = false
 var stage = -1
 
 proc apply_stage(s: int) =
   if s == stage:
     return
   stage = s
+  if not ENFORCE_PROGRESSION:
+    player.tools = {
+      CodeMode, BlueBlock, RedBlock, GreenBlock, BlackBlock, WhiteBlock,
+      BrownBlock, PlaceBot,
+    }
+    player.can_fly = true
+    return
   if s == 0:
     player.tools = {}
   elif s == 1:

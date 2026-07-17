@@ -1,15 +1,25 @@
 lock = true
 speed = 0
 
-# Small white gull circling the river mouth. Same shape as build_gull_1
-# but a bigger, slower-flapping circle at a different altitude/speed so
-# the two gulls don't read as synchronized.
+# Gull circling the strait. Wing flap is a 4-frame animation (down, mid,
+# up, mid) played continuously in the background; the script only flies
+# the circle. Drawing while playback runs raises, so all frame authoring
+# happens before play().
 
-place(0, 0, 0, white)   # body
-place(0, 0, 1, white)   # tail
-place(0, 0, -1, black)  # beak
+proc body() =
+  place(0, 0, 0, white)
+  place(0, 0, 1, white)
+  place(0, 0, -1, black)
 
-proc wings_flat(col: Color) =
+proc wings_down(col: Color) =
+  place(-1, 0, 0, col)
+  place(-2, -1, 0, col)
+  place(-3, -1, 0, col)
+  place(1, 0, 0, col)
+  place(2, -1, 0, col)
+  place(3, -1, 0, col)
+
+proc wings_mid(col: Color) =
   place(-1, 0, 0, col)
   place(-2, 0, 0, col)
   place(-3, 0, 0, col)
@@ -25,20 +35,28 @@ proc wings_up(col: Color) =
   place(2, 2, 0, col)
   place(3, 2, 0, col)
 
-wings_flat(white)
+clear_frames()
+body()
+wings_down(white)
+save()
+wings_down(eraser)
+body()
+wings_mid(white)
+save()
+wings_mid(eraser)
+body()
+wings_up(white)
+save()
+wings_up(eraser)
+body()
+wings_mid(white)
+save()
+
+play(9.0)
 
 move me
-speed = 10
-
-var wing_up = false
+speed = 9
 
 forever:
-  if wing_up:
-    wings_flat(eraser)
-    wings_up(white)
-  else:
-    wings_up(eraser)
-    wings_flat(white)
-  wing_up = not wing_up
-  forward 9.5
-  turn right, 15.0
+  forward 12
+  turn 24.0
