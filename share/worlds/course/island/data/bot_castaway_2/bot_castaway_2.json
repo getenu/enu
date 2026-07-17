@@ -1,0 +1,15 @@
+{
+  "id": "bot_castaway_2",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [197.0, 7.0, -196.0]
+  },
+  "start_color": "RED",
+  "edits": {
+    
+  }
+}

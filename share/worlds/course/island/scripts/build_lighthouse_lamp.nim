@@ -7,3 +7,4 @@ box(vec3(-1, -1, -1), vec3(1, 1, 1), color = black)
 # The lamp is dead and the strait is dark. Bring it back to life!
 # hint: `color = white` then redraw me... or just set my `glow`
 # hint: `glow = 1` makes any build shine
+

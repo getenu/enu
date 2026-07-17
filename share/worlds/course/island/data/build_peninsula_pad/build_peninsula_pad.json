@@ -1,0 +1,15 @@
+{
+  "id": "build_peninsula_pad",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [124.0, 2.0, -128.0]
+  },
+  "start_color": "BROWN",
+  "edits": {
+    
+  }
+}

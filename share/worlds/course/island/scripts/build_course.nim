@@ -111,12 +111,13 @@ proc check_ferry(): bool =
         inc delivered
   delivered >= 2
 
-# E6/E7 constants come from the north-mainland build reports.
-# BREACH/RACK PLACEHOLDERS — north detections stay off until these are real.
-let north_wired = false
-let breach_min = vec3(0, 0, 0)
-let breach_max = vec3(0, 0, 0)
-let rack_top = 0.0
+# E6/E7 constants derived from the shipped north-mainland builds: the
+# cottage's storm breach is the east-wall core (local x8, z2..4, y1..4 on
+# origin (40,4,-131)); the fireworks rack top is the shell unit's origin y.
+let north_wired = true
+let breach_min = vec3(48.0, 5.0, -129.0)
+let breach_max = vec3(48.0, 8.0, -127.0)
+let rack_top = 7.0
 
 proc check_cottage(): bool =
   north_wired and
