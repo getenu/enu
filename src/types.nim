@@ -235,6 +235,11 @@ type
     paused*: bool
     show_prototypes*: bool
     show_tools*: bool # level.json: false starts with no tools (script adds them)
+    load_order*: seq[string]
+      ## The unit ids in level.json's load_order, as read at load. save_level
+      ## regenerates the list but preserves this order where dependencies
+      ## allow, appending genuinely new units at the end — so the order the
+      ## level loads in (and, later, streams in) stays stable and authorable.
     frame_count*: int
     skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format
