@@ -212,6 +212,16 @@ gdobj Game of Node:
     if SCENE_READY notin state.local_flags:
       state.push_flag SCENE_READY
 
+    # Measurement hook (ENU_NO_RENDER_ON_LOAD=1): stop drawing the main
+    # viewport while the level loads. Quantifies what a real loading screen
+    # (splash over a disabled 3D viewport) would save vs the current
+    # load-in-view behaviour.
+    if get_env("ENU_NO_RENDER_ON_LOAD") != "" and not self.scaled_viewport.is_nil:
+      let want =
+        if LOADING_LEVEL in state.global_flags: UPDATE_DISABLED else: UPDATE_ALWAYS
+      if self.scaled_viewport.render_target_update_mode != want:
+        self.scaled_viewport.render_target_update_mode = want
+
   proc rescale*() =
     let vp = self.get_viewport().size
     let megapixels =
