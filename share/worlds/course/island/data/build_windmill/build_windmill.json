@@ -1,0 +1,15 @@
+{
+  "id": "build_windmill",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-172.0, 2.0, -32.0]
+  },
+  "start_color": "BROWN",
+  "edits": {
+    
+  }
+}

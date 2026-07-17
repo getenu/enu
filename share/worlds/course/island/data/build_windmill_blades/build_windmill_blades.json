@@ -1,0 +1,15 @@
+{
+  "id": "build_windmill_blades",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-167.5, 11.0, -32.0]
+  },
+  "start_color": "WHITE",
+  "edits": {
+    
+  }
+}

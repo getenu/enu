@@ -1,0 +1,15 @@
+{
+  "id": "build_beacon_maze",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-52.0, 5.0, -14.0]
+  },
+  "start_color": "WHITE",
+  "edits": {
+    
+  }
+}

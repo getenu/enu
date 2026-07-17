@@ -3,7 +3,18 @@
   "format_version": "v0.9.2",
   "load_order": [
     "build_water",
-    "build_course"
+    "build_windmill",
+    "build_windmill_blades",
+    "bot_miller",
+    "build_course",
+    "build_maze",
+    "build_beacon_lighthouse",
+    "build_beacon_maze",
+    "build_beacon_tower",
+    "build_beacon_windmill",
+    "bot_maze_runner",
+    "build_welcome_sign",
+    "build_lighthouse"
   ],
   "show_prototypes": true,
   "show_tools": true
