@@ -41,7 +41,7 @@ place(-5, 1, -1, white)
 const DECK_Y = 0
 box(vec3(-1, DECK_Y, -1), vec3(1, DECK_Y, -11), color = brown)
 
-for z in countup(2, 10):
-  if z mod 3 == 0:
+for z in countup(2, 11):
+  if z mod 3 == 0 or z == 11:
     box(vec3(-1, DECK_Y - 1, -z), vec3(-1, DECK_Y - 3, -z), color = brown)
     box(vec3(1, DECK_Y - 1, -z), vec3(1, DECK_Y - 3, -z), color = brown)
