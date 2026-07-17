@@ -44,7 +44,7 @@ proc fill_chunk_type_bytes*(
   var ids: array[CHUNK_VOLUME, uint16]
   for linear in 0 ..< CHUNK_VOLUME:
     let packed_voxel = voxels[linear]
-    if packed_voxel != EMPTY_VOXEL:
+    if not packed_voxel.renders_as_air:
       let (color_idx, _) = unpack_voxel(packed_voxel)
       ids[linear] = uint16(resolver.library_slot(color_idx, slot_cache))
       inc result
@@ -120,11 +120,13 @@ proc chunk_frame_key*(
       let ly = axis_local[yi] * ChunkDim
       for zi in 0 ..< ChunkDim + 2:
         let arr = neighbors[cx + cy + axis_chunk[zi]]
-        let v =
+        var v =
           if arr.is_nil:
             EMPTY_VOXEL
           else:
             arr[lx + ly + axis_local[zi]]
+        if v.renders_as_air:
+          v = EMPTY_VOXEL
         h = h !& v.int
   !$h
 
@@ -189,7 +191,7 @@ proc fill_padded_chunk_bytes*(
         let arr = neighbors[cx + cy + axis_chunk[zi]]
         if not arr.is_nil:
           let packed_voxel = arr[lx + ly + axis_local[zi]]
-          if packed_voxel != EMPTY_VOXEL:
+          if not packed_voxel.renders_as_air:
             let (color_idx, _) = unpack_voxel(packed_voxel)
             ids[i] = uint16(resolver.library_slot(color_idx, slot_cache))
         inc i
