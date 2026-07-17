@@ -150,21 +150,14 @@ proc from_json_hook(self: var Build, json: JsonNode) =
         break
     self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
     self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
-    info "frames sidecar loaded",
-      unit = self.id,
-      loaded = loaded,
-      fps = meta["fps"].get_float,
-      current = meta{"current"}.get_int(-1)
+    info "frames sidecar loaded", unit = self.id, loaded = loaded
     if loaded > 0:
-      self.frames_loop = meta["loop"].get_bool
-      # Playback is never auto-resumed: it's a runtime action a script
-      # triggers with `play()`. On reload we only restore the displayed
-      # frame so the unit comes back visible (its voxels are TRANSIENT, so
-      # only frames survive) — a script then takes over if it plays.
-      if "current" in meta:
-        let current = meta["current"].get_int
-        if current >= 0 and current < loaded:
-          self.current_frame = current
+      # Playback is never auto-resumed — it's a runtime action a script
+      # triggers with `play()`. Show the first frame so the unit comes back
+      # visible (its voxels are TRANSIENT, so only frames survive on
+      # reload); a script then takes over if it plays. fps/loop/current are
+      # no longer persisted (script-driven state — see extras_json).
+      self.current_frame = 0
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared thing serializer), but tolerate
@@ -300,13 +293,14 @@ proc extras_json(self: Thing): string =
   ## so the palette must restore in the same order on load).
   if self of Build and Build(self).frames.len > 0:
     let build = Build(self)
+    # Format metadata only. Playback state — fps, loop, and the current
+    # frame — is driven by the script's `play()` and must not persist: the
+    # live playhead churned the JSON on every save, and re-running the
+    # script re-establishes how the animation plays.
     result.add \""",
   "frames": {{
     "version": {FRAME_FILE_VERSION},
     "count": {build.frames.len},
-    "fps": {build.frames_fps},
-    "loop": {build.frames_loop},
-    "current": {build.current_frame},
     "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:
