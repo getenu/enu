@@ -408,13 +408,24 @@ proc is_empty*(packed: PackedChunk): bool =
   packed.data.len == 0 or
     (packed.data.len == 1 and packed.data[0].byte == FMT_EMPTY.byte)
 
+proc renders_as_air*(packed: PackedVoxel): bool {.inline.} =
+  ## A cell that contributes no geometry: true air, or a HOLE. `eraser`
+  ## records a HOLE (not true emptiness) so it can subtract from a base
+  ## layer, but a hole must always render as nothing — never a solid block.
+  ## Frame snapshots captured after an eraser draw carry HOLEs; without this
+  ## they'd paint the erased cells as solid voxels (see fill_chunk_type_bytes).
+  if packed == EMPTY_VOXEL:
+    return true
+  let (_, kind_ord) = unpack_voxel(packed)
+  VoxelKind(kind_ord) == HOLE
+
 proc voxel_count*(packed: PackedChunk): int =
   ## Non-empty cells in an encoded chunk — what painting this content
   ## would report as painted (see render_snapshot_direct).
   if packed.is_empty:
     return 0
   for voxel in decode_chunk(packed):
-    if voxel != EMPTY_VOXEL:
+    if not voxel.renders_as_air:
       inc result
 
 proc encode_delta*(

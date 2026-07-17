@@ -287,6 +287,11 @@ proc effective_frame(
   let dist = nearest * scale # local voxels -> world metres
   if dist <= frame_lod_near:
     index
+  elif count <= 8:
+    # short loops read as broken when decimated (a 4-frame flap quantized
+    # by 4 is permanently frame 0): play them whole to mid distance, then
+    # stop entirely
+    if dist <= frame_lod_mid: index else: 0
   elif dist <= frame_lod_mid:
     index - index mod frame_lod_mid_step
   else:
