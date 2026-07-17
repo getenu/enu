@@ -154,7 +154,7 @@ gdobj PlayerNode of KinematicBody:
         else:
           float_time
       let floating =
-        self.jump_down and ?self.jump_time and
+        not self.boosting and self.jump_down and ?self.jump_time and
         self.jump_time.get + float_time > get_mono_time()
 
       let gravity =
