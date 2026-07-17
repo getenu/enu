@@ -22,6 +22,12 @@ bridged_to_host:
     ## double-jump needed.
 
   proc `flying=`*(self: Player, value: bool)
+  proc can_fly*(self: Player): bool
+    ## Whether the player is allowed to fly. Set to `false` to ground
+    ## them: flight ends and double-jump stays walking until it's
+    ## turned back on.
+
+  proc `can_fly=`*(self: Player, value: bool)
   proc running*(self: Player): bool
     ## Whether the player is running.
 

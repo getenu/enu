@@ -839,6 +839,14 @@ proc flying(self: Thing): bool =
 proc `flying=`*(self: Thing, value: bool) =
   state.set_flag FLYING, value
 
+proc can_fly(self: Thing): bool =
+  FLY_DISABLED notin state.local_flags
+
+proc `can_fly=`*(self: Thing, value: bool) =
+  state.set_flag FLY_DISABLED, not value
+  if not value:
+    state.set_flag FLYING, false
+
 proc running(self: Thing): bool =
   ALT_WALK_SPEED in state.local_flags
 
@@ -1767,7 +1775,8 @@ proc bridge_to_vm*(worker: Worker) =
     size, `size=`, open, `open=`, billboard, `billboard=`
 
   result.bridged_from_vm "players",
-    playing, `playing=`, god, `god=`, flying, `flying=`, tool, `tool=`,
+    playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,
+    `can_fly=`, tool, `tool=`,
     tools_has, tools_incl, tools_excl, tools_clear, coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log
