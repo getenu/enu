@@ -1,66 +1,44 @@
 lock = true
 speed = 0
 
-# Gull circling the strait. Wing flap is a 4-frame animation (down, mid,
-# up, mid) played continuously in the background; the script only flies
-# the circle. Drawing while playback runs raises, so all frame authoring
-# happens before play().
+# Gull circling the strait. The flap is a 4-frame animation (down, mid,
+# up, mid) played continuously in the background while the script flies
+# the circle. All voxels are drawn inside a single chunk (offsets 5..11)
+# on purpose: a pose that vacates a chunk leaves a stale mesh there, so
+# keeping every frame in one chunk avoids it.
 
 proc body() =
-  place(0, 0, 0, white)
-  place(0, 0, 1, white)
-  place(0, 0, -1, black)
+  place(8, 8, 8, white)
+  place(8, 8, 9, white)
+  place(8, 8, 7, black)
 
 proc wings_down(col: Color) =
-  place(-1, 0, 0, col)
-  place(-2, -1, 0, col)
-  place(-3, -1, 0, col)
-  place(1, 0, 0, col)
-  place(2, -1, 0, col)
-  place(3, -1, 0, col)
+  place(7, 8, 8, col); place(6, 7, 8, col); place(5, 7, 8, col)
+  place(9, 8, 8, col); place(10, 7, 8, col); place(11, 7, 8, col)
 
 proc wings_mid(col: Color) =
-  place(-1, 0, 0, col)
-  place(-2, 0, 0, col)
-  place(-3, 0, 0, col)
-  place(1, 0, 0, col)
-  place(2, 0, 0, col)
-  place(3, 0, 0, col)
+  place(7, 8, 8, col); place(6, 8, 8, col); place(5, 8, 8, col)
+  place(9, 8, 8, col); place(10, 8, 8, col); place(11, 8, 8, col)
 
 proc wings_up(col: Color) =
-  place(-1, 1, 0, col)
-  place(-2, 2, 0, col)
-  place(-3, 2, 0, col)
-  place(1, 1, 0, col)
-  place(2, 2, 0, col)
-  place(3, 2, 0, col)
+  place(7, 9, 8, col); place(6, 10, 8, col); place(5, 10, 8, col)
+  place(9, 9, 8, col); place(10, 10, 8, col); place(11, 10, 8, col)
 
+place(0, 0, 0, eraser)  # cover the origin default block
 clear_frames()
-body()
-wings_down(white)
-save()
-wings_down(eraser)
-body()
-wings_mid(white)
-save()
-wings_mid(eraser)
-body()
-wings_up(white)
-save()
-wings_up(eraser)
-body()
-wings_mid(white)
-save()
+body(); wings_down(white); save()
+wings_down(eraser); body(); wings_mid(white); save()
+wings_mid(eraser); body(); wings_up(white); save()
+wings_up(eraser); body(); wings_mid(white); save()
 
 play(7.0)
 
 move me
-speed = 7
+speed = 9
 
-# the glide segments accumulate drift, so re-centre after each lap
 let nest = position
 forever:
-  18.times:
-    forward 18
-    turn 20.0
+  15.times:
+    forward 12
+    turn 24.0
   position = nest
