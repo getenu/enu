@@ -15,12 +15,27 @@ if abs(player.position.x) < 5 and abs(player.position.z) < 5:
     inc tries
   player.position = vec3(-219.5, 7.0, -30.5)
   player.rotation = -7.5
+  # floor_at reads voxel data, which streams in ahead of collision meshes —
+  # an early teleport can sink through the still-meshing hill onto the world
+  # ground plane. Lift the player back until they rest on top.
+  tries = 0
+  while tries < 30:
+    sleep 1
+    let ground = floor_at(-219.0, -30.0).float
+    if player.position.y < ground - 0.5:
+      player.position = vec3(-219.5, ground + 2.0, -30.5)
+    else:
+      break
+    inc tries
 
 # ----- world locks -----
 # The player edits exactly the exercise units; everything else is furniture.
 let locked_ids = [
   "build_terrain", "build_water", "build_welcome_sign", "build_windmill",
-  "build_maze", "build_lighthouse", "build_dock",
+  "build_maze", "build_lighthouse", "build_dock", "build_boat",
+  "build_tower_plot", "build_isle_pad", "build_peninsula_pad",
+  "build_launcher", "build_cottage_shell", "build_firework_stand",
+  "build_summit_gate", "build_fisher_hut",
 ]
 for b in all_builds():
   for id in locked_ids:
@@ -43,6 +58,9 @@ var
   tower_done = false
   maze_done = false
   lighthouse_done = false
+  ferry_done = false
+  cottage_done = false
+  fireworks_done = false
   windmill_total = 0.0
   windmill_prev = float.high
 
@@ -82,9 +100,42 @@ proc check_lighthouse(): bool =
     return false
   lamp.glow > 0.5
 
+proc check_ferry(): bool =
+  # castaways delivered to the peninsula camp
+  var delivered = 0
+  for id in ["bot_castaway_1", "bot_castaway_2", "bot_castaway_3"]:
+    let castaway = Bot(find_by_id(id))
+    if ?castaway:
+      let p = castaway.position
+      if p.x > 60 and p.x < 150 and p.z > -150 and p.z < -108 and p.y > 1:
+        inc delivered
+  delivered >= 2
+
+# E6/E7 constants come from the north-mainland build reports.
+# BREACH/RACK PLACEHOLDERS — north detections stay off until these are real.
+let north_wired = false
+let breach_min = vec3(0, 0, 0)
+let breach_max = vec3(0, 0, 0)
+let rack_top = 0.0
+
+proc check_cottage(): bool =
+  north_wired and
+    not clear_box(
+      breach_min.x, breach_min.y, breach_min.z, breach_max.x, breach_max.y,
+      breach_max.z,
+    )
+
+proc check_fireworks(): bool =
+  if not north_wired:
+    return false
+  let shells = Build(find_by_id("build_fireworks"))
+  if not ?shells:
+    return false
+  shells.bounds.max.y >= rack_top + 8
+
 # ----- tool staging -----
 # 0: nothing (walk to the sign) / 1: code tool (the whole mainland)
-# 2: + block tools (boarding the boat) / 3: flight (finale reward)
+# 2: + block tools (mainland done) / 3: flight (finale reward)
 var stage = -1
 
 proc apply_stage(s: int) =
@@ -102,6 +153,50 @@ proc apply_stage(s: int) =
     }
   player.can_fly = s >= 3
 
+# ----- live progress on the welcome sign -----
+# The board's say-sign reports a pre-scale position (~(-223, 19, -35));
+# the player's own coding sign can also hover nearby at spawn — skip
+# anything that tracks the player.
+var welcome_sign: Sign
+for s in all_signs():
+  if (s.position - player.position).length < 6:
+    continue
+  if (s.position - vec3(-219.0, 12.0, -35.0)).length < 15:
+    welcome_sign = s
+
+proc mark(done: bool): string =
+  if done: "[x]" else: "[ ]"
+
+proc progress_page(): string =
+  \"""
+# Welcome to Enu
+
+Enu is a world you reprogram from the inside — everything you see is
+running on code you can open and change. Poke at it. Break it. Fix it.
+
+## Your objective
+
+Wake the sleeping boat by fixing up the mainland:
+
+- {mark(windmill_done)} Get the **windmill** blades turning
+- {mark(tower_done)} Raise the **lookout tower**
+- {mark(maze_done)} Guide the **maze bot** to its exit
+- {mark(lighthouse_done)} Light the **dark lighthouse**
+
+Then sail out and help the **castaways** stranded on the isle beyond:
+
+- {mark(ferry_done)} Ferry the castaways to their camp
+- {mark(cottage_done)} Patch the storm-torn cottage
+- {mark(fireworks_done)} Wake the fireworks battery
+
+A progress **beacon** lights up green each time you finish a task.
+
+---
+
+[Reset this level](<nim://reset_level()>)
+"""
+
+var last_page = ""
 var sign_read = false
 
 forever:
@@ -123,15 +218,32 @@ forever:
   if not lighthouse_done and check_lighthouse():
     lighthouse_done = true
     light_beacon("build_beacon_lighthouse")
+  if not ferry_done and check_ferry():
+    ferry_done = true
+    light_beacon("build_beacon_ferry")
+  if not cottage_done and check_cottage():
+    cottage_done = true
+  if not fireworks_done and check_fireworks():
+    fireworks_done = true
 
   let mainland_done =
     windmill_done and tower_done and maze_done and lighthouse_done
+  let finale_done = cottage_done and fireworks_done
 
-  # TODO(next wave): boat activation when mainland_done; ferry detection;
-  # finale => stage 3.
+  if finale_done:
+    light_beacon("build_beacon_finale")
+
   if not sign_read:
     apply_stage(0)
   elif not mainland_done:
     apply_stage(1)
-  else:
+  elif not finale_done:
     apply_stage(2)
+  else:
+    apply_stage(3)
+
+  if ?welcome_sign:
+    let page = progress_page()
+    if page != last_page:
+      last_page = page
+      welcome_sign.more = page

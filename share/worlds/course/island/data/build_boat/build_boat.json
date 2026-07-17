@@ -1,0 +1,15 @@
+{
+  "id": "build_boat",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [198.0, 1.0, -106.0]
+  },
+  "start_color": "BROWN",
+  "edits": {
+    
+  }
+}
