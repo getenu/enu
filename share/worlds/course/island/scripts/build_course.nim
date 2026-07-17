@@ -203,6 +203,14 @@ var sign_read = false
 forever:
   sleep 1
 
+  # fresh-boot safety: collision meshes can lag the spawn carry by more
+  # than the settle window on a heavy boot — anyone buried at the spawn
+  # hill gets lifted back on top, whenever it happens.
+  if abs(player.position.x + 219.5) < 4 and abs(player.position.z + 30.5) < 4:
+    let ground = floor_at(-219.0, -30.0).float
+    if ground > 0 and player.position.y < ground - 0.5:
+      player.position = vec3(-219.5, ground + 2.0, -30.5)
+
   if not sign_read and ?player.open_sign and
       (player.position - vec3(-215.0, 3.0, -37.0)).length < 10:
     sign_read = true

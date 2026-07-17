@@ -49,18 +49,36 @@ move me
 speed = 6
 var at_dock = true
 
+proc land_rider(spot: Vector3) =
+  # a rider who ended the crossing swimming beside the hull steps ashore
+  if (player.position - position).length < 12 and player.position.y < 2.2:
+    player.position = spot
+
+proc sail() =
+  # Glide in short segments and keep the rider glued: physics platform-
+  # riding can't be trusted to hold at sail speed on every client, so any
+  # rider who drifts off the deck mid-crossing is snapped back to their
+  # spot. Riders standing on a well-behaved client never notice.
+  let offset = player.position - position
+  36.times:
+    forward 2
+    if (player.position - (position + offset)).length > 2.5:
+      player.position = position + offset
+
 forever:
   if player_aboard():
     say ""
     sleep 1.5
     if at_dock:
-      forward 72
+      sail()
       at_dock = false
+      land_rider(vec3(194.0, 4.0, -172.0)) # the island beach
     else:
       turn 180
-      forward 72
+      sail()
       turn 180
       at_dock = true
+      land_rider(vec3(198.5, 4.5, -99.0)) # the dock T-head
     # wait for the rider to disembark before arming the next trip
     while player_aboard():
       sleep 0.5
