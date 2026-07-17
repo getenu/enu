@@ -28,6 +28,11 @@ bridged_to_host:
     ## turned back on.
 
   proc `can_fly=`*(self: Player, value: bool)
+  proc boost*(self: Player, impulse: Vector3)
+    ## Launch the player: an instant velocity impulse in world space.
+    ## `player.boost vec3(0, 30, 0)` pops them straight up; give it x/z
+    ## to throw them somewhere. The throw carries until they land.
+
   proc running*(self: Player): bool
     ## Whether the player is running.
 

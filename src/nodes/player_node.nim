@@ -53,6 +53,13 @@ gdobj PlayerNode of KinematicBody:
     # calculate_velocity for the hold-to-float reduced gravity.
     jump_down*: bool
     jump_time*: Option[MonoTime]
+    pending_boost: Option[Vector3]
+    boost_carry: Vector3
+      ## Horizontal launch velocity carried until landing — calculate_velocity
+      ## rebuilds x/z from input every frame, so a boost's throw is re-added
+      ## on top until the flight ends.
+    boosting: bool
+    boost_start: MonoTime
 
     aim_ray, world_ray, down_ray: RayCast
     run_time, crouch_time: Option[MonoTime]
@@ -201,6 +208,10 @@ gdobj PlayerNode of KinematicBody:
       if added:
         self.velocity = change.item
 
+    self.model.boost_value.watch:
+      if added or touched:
+        self.pending_boost = some(change.item)
+
   method process*(delta: float) =
     if not ?self.model:
       return
@@ -259,6 +270,21 @@ gdobj PlayerNode of KinematicBody:
     var velocity = self.calculate_velocity(
       self.velocity, move_direction, delta, self.flying, self.alt_speed
     )
+
+    if self.pending_boost.is_some:
+      let b = self.pending_boost.get
+      self.pending_boost = none(Vector3)
+      self.boost_carry = vec3(b.x, 0, b.z)
+      velocity.y = b.y
+      self.boosting = true
+      self.boost_start = get_mono_time()
+    if self.boosting:
+      velocity.x += self.boost_carry.x
+      velocity.z += self.boost_carry.z
+      if self.is_on_floor() and
+          get_mono_time() > self.boost_start + 300.milliseconds:
+        self.boosting = false
+        self.boost_carry = vec3()
 
     self.model.input_direction = input_direction
     self.velocity = self.move_and_slide(velocity, UP)

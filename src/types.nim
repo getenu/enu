@@ -408,6 +408,11 @@ type
   Player* = ref object of Thing
     colliders*: HashSet[Model]
     rotation_value*: EdValue[float]
+    boost_value*: EdValue[Vector3]
+      ## Script-driven launch impulse (player.boost). Touched, not set, so
+      ## identical repeat boosts still fire; the player node consumes it in
+      ## its physics step (the walk controller rebuilds horizontal velocity
+      ## from input every frame, so a plain velocity write can't launch).
     input_direction_value*: EdValue[Vector3]
     cursor_position_value*: EdValue[tuple[line: int, col: int]]
     block_log_entries*: EdSeq[BlockLogEntry]
