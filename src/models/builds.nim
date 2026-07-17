@@ -502,16 +502,26 @@ method on_begin_turn*(
     var duration = 0.0
     let axis = self.transform.basis.orthonormalized.xform(axis)
     let scale = self.scale
+    # Rotate about the anchor pivot, not the transform origin — a build
+    # drawn off its origin (e.g. one kept inside a single chunk) would
+    # otherwise swing its body around the corner instead of turning in
+    # place. With no anchor set, the pivot IS the origin, so this is a
+    # no-op for the common case.
+    let pivot = self.pivot_local
+    let offset = self.anchor.origin
     var final_transform = self.transform
     final_transform.basis = final_transform.basis
       .rotated(axis, deg_to_rad(degrees)).orthonormalized
       .scaled(vec3(scale, scale, scale))
+    final_transform.origin = pivot - final_transform.basis.xform(offset)
 
     result = proc(delta: float, _: MonoTime): TaskStates =
       duration += delta
-      self.transform_value.basis = self.transform.basis.rotated(
+      let basis = self.transform.basis.rotated(
         axis, deg_to_rad(degrees * delta * self.speed)
       )
+      self.transform_value.basis = basis
+      self.transform_value.origin = pivot - basis.xform(offset)
 
       if duration <= 1.0 / self.speed:
         RUNNING

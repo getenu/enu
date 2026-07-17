@@ -844,8 +844,12 @@ proc load_level*(worker: Worker, level_dir: string) =
   worker.retry_failures = false
   dont_join = false
 
-  # Save after retry so all deps (including those from retried scripts) are captured
-  save_level(state.config.level_dir, save_all = true)
+  # Save after retry so the load_order and any script-resolved deps are
+  # captured. save_all=false: only things dirtied during the load are
+  # rewritten, not every unit unconditionally. (thing.save already skips
+  # unchanged files by content, so this is a small win — but forcing writes
+  # churned mtimes and disk on every clean boot for no reason.)
+  save_level(state.config.level_dir, save_all = false)
 
   for thing in state.things:
     thing.global_flags -= DIRTY
