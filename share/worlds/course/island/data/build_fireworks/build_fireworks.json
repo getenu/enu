@@ -1,0 +1,15 @@
+{
+  "id": "build_fireworks",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-8.0, 7.0, -138.0]
+  },
+  "start_color": "RED",
+  "edits": {
+    
+  }
+}
