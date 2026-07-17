@@ -299,6 +299,13 @@ proc restore_edits*(self: Build) =
         self.voxels.del_voxel(pos)
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
+  if self.frames_fps > 0:
+    # playback runs in the background and scripts may keep moving the unit,
+    # but drawing into a build whose display is animating would silently
+    # fight the frames — surface it instead
+    raise EnuError.init(
+      "can't draw while an animation is playing — call `stop()` first"
+    )
   if voxel.kind == TRANSIENT:
     if self.voxels.has_edit(position):
       var edit = self.voxels.get_edit(position)

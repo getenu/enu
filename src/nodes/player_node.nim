@@ -223,7 +223,9 @@ gdobj PlayerNode of KinematicBody:
 
     var look_direction = self.get_look_direction()
 
-    if self.input_relative.length() > 0:
+    if LOADING_LEVEL in state.global_flags:
+      self.input_relative = vec2()
+    elif self.input_relative.length() > 0:
       self.update_rotation(self.input_relative * mouse_sensitivity)
       self.input_relative = vec2()
     elif look_direction.length() > 0:
@@ -247,7 +249,12 @@ gdobj PlayerNode of KinematicBody:
 
     const forward_rotation = deg_to_rad(-90.0)
     let
-      process_input = VIEWPORT_FOCUSED in state.local_flags
+      # no movement or look input while the level loads: the player is
+      # about to be carried to the start, and early mouse/stick motion
+      # would leave them facing somewhere random
+      process_input =
+        VIEWPORT_FOCUSED in state.local_flags and
+        LOADING_LEVEL notin state.global_flags
       input_direction =
         if process_input:
           self.get_input_direction()
