@@ -147,6 +147,7 @@ type
     EDITOR_OPENING
     EDITOR_CLOSING
     TEST_MODE
+    FLY_DISABLED
 
   GlobalStateFlags* = enum
     LOADING_LEVEL

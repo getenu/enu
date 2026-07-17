@@ -149,7 +149,8 @@ gdobj GUI of Control:
       player.jump_down = true
       let toggle = ?player.jump_time and time < player.jump_time.get + fly_toggle
 
-      if toggle and PLAYING notin state.local_flags:
+      if toggle and PLAYING notin state.local_flags and
+          FLY_DISABLED notin state.local_flags:
         player.jump_time = nil_time
         state.toggle_flag(FLYING)
       elif player.is_on_floor():
