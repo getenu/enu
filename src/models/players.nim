@@ -8,6 +8,7 @@ proc init*(_: type Player): Player =
     let self = Player(
       id: player_id,
       rotation_value: ed(0.0),
+      boost_value: EdValue[Vector3].init(),
       start_transform: Transform.init(origin = vec3(0, 1, 0)),
       input_direction_value: EdValue[Vector3].init(),
       cursor_position_value: ed((0, 0)),
