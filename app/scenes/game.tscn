@@ -38,10 +38,9 @@ collision_mask = 524309
 collide_with_areas = true
 
 [node name="LoadScreen" type="ColorRect" parent="."]
-visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color( 0.101961, 0.117647, 0.156863, 1 )
+color = Color( 0, 0, 0, 1 )
 
 [node name="Label" type="Label" parent="LoadScreen"]
 anchor_right = 1.0

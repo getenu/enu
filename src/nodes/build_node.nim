@@ -62,6 +62,13 @@ gdobj BuildNode of VoxelTerrain:
     error_highlight_on: bool
     next_stats_log: MonoTime
     prefill_hits, prefill_misses: int
+    palette_published: bool
+      ## setup() has published the palette->slot map to the engine. Until then
+      ## the streaming thread can't resolve a served chunk's static colors, so
+      ## prefill holds off (returns empty) — a block that pages in during the
+      ## add_child->setup window takes the paint-after-load path instead of
+      ## meshing from an unresolvable blob (which renders empty and, because the
+      ## edit_prefilled hint suppresses the later repaint, would stay empty).
     loaded_chunks: HashSet[Vector3]
     edit_prefilled: HashSet[Vector3]
       ## Chunks prefilled from edit_snapshots because packed_chunks hadn't
@@ -211,7 +218,7 @@ gdobj BuildNode of VoxelTerrain:
     ## block and today's paint-after-load path carries it.
     ## ENU_NO_PREFILL=1 disables the hook for prefill-vs-paint A/B measurement.
     result = new_pool_byte_array()
-    if not ?self.model or prefill_disabled:
+    if not ?self.model or prefill_disabled or not self.palette_published:
       return
     let bytes = self.model.voxels.prefill_bytes(block_position)
     if bytes.len > 0:
@@ -636,6 +643,8 @@ gdobj BuildNode of VoxelTerrain:
           discard slot_for(change.item)
           self.publish_palette_slots()
       flush_registry() # no-op while an ephemeral stream holds bakes
+    # Palette + slots are live; prefill may now serve resolvable chunks.
+    self.palette_published = true
 
     # Create renderer for ASAP mode buffer operations
     self.renderer = VoxelRenderer.init(self.get_voxel_tool(), self.resolver)
