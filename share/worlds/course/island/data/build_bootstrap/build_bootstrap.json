@@ -1,0 +1,15 @@
+{
+  "id": "build_bootstrap",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-219.0, 0.0, -22.0]
+  },
+  "start_color": "WHITE",
+  "edits": {
+    
+  }
+}

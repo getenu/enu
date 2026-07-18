@@ -1,35 +1,8 @@
 lock = true
 show = false
 
-# ----- spawn -----
-# The course starts on the rise east of the waterfall. A fresh spawn lands
-# at the world origin; carry them to the start. Reloads leave anyone who
-# has already moved on alone.
-if abs(player.position.x) < 5 and abs(player.position.z) < 5:
-  # On a fresh boot the terrain streams in for a few seconds; teleporting
-  # before the destination ground is meshed drops the player through the
-  # floor. Wait until it reports solid.
-  var tries = 0
-  while floor_at(-219.0, -30.0) < 0 and tries < 60:
-    sleep 0.5
-    inc tries
-  player.position = vec3(-219.5, 7.0, -30.5)
-  player.rotation = -7.5
-  # floor_at reads voxel data, which streams in ahead of collision meshes —
-  # an early teleport can sink through the still-meshing hill onto the world
-  # ground plane. Lift the player back until they rest on top.
-  tries = 0
-  while tries < 30:
-    sleep 1
-    let ground = floor_at(-219.0, -30.0).float
-    if player.position.y < ground - 0.5:
-      player.position = vec3(-219.5, ground + 2.0, -30.5)
-    else:
-      break
-    inc tries
-  # input is gated while the level loads, but re-assert the facing once
-  # the ground settles in case anything drifted it
-  player.rotation = -7.5
+# (spawn/positioning moved to build_bootstrap, which loads early so the
+# player is placed and interactive while the rest of the level streams in)
 
 # ----- world locks -----
 # The player edits exactly the exercise units; everything else is furniture.
