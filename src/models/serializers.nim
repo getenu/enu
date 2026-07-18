@@ -534,6 +534,12 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
         Build(thing).reset_bounds
         Build(thing).restore_edits
         Build(thing).voxels.flush_dirty_chunks()
+      if thing of Build:
+        debug "unit data restored",
+          thing_id,
+          snapshots = Build(thing).shared.edit_snapshots.len,
+          shared_id = Build(thing).shared.id,
+          snap_table_id = Build(thing).shared.edit_snapshots.id
       if parent.is_nil:
         state.things.add(thing)
       else:
