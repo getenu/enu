@@ -848,6 +848,11 @@ proc `spawning=`*(self: Thing, value: bool) =
   else:
     state.global_flags -= SPAWNING
 
+proc clear_load_screen(self: Thing) =
+  ## Drop the loading splash (level.json `loading_screen`) — a bootstrap script
+  ## calls this the instant the framed view is ready. No-op if it isn't up.
+  state.global_flags -= LOAD_SCREEN
+
 proc boost(self: Thing, impulse: Vector3) =
   Player(self).boost_value.touch(impulse)
 
@@ -1788,7 +1793,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,
-    `can_fly=`, spawning, `spawning=`, boost, tool, `tool=`,
+    `can_fly=`, spawning, `spawning=`, clear_load_screen, boost, tool, `tool=`,
     tools_has, tools_incl, tools_excl, tools_clear, coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log

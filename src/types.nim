@@ -158,6 +158,14 @@ type
       ## so they're interactive while the rest of the level still streams in.
       ## Falls back to clearing when LOADING_LEVEL clears, so a level with no
       ## bootstrap behaves as before.
+    LOAD_SCREEN
+      ## An opaque splash covers the viewport so the messy load (chunks
+      ## streaming, one-time bakes) isn't seen. Opt-in per level
+      ## (level.json `loading_screen`, off by default); set with LOADING_LEVEL
+      ## at load start when enabled. A bootstrap script clears it
+      ## (clear_load_screen) the instant the framed view is ready. Falls back
+      ## to clearing when LOADING_LEVEL clears, so a level that never calls the
+      ## proc still reveals when the load finishes.
 
   LocalModelFlags* = enum
     HOVER
@@ -242,6 +250,7 @@ type
     paused*: bool
     show_prototypes*: bool
     show_tools*: bool # level.json: false starts with no tools (script adds them)
+    loading_screen*: bool # level.json: true covers the load with a splash
     load_order*: seq[string]
       ## The unit ids in level.json's load_order, as read at load. save_level
       ## regenerates the list but preserves this order where dependencies

@@ -14,7 +14,10 @@ if abs(player.position.x) < 5 and abs(player.position.z) < 5:
   player.position = vec3(-219.5, 7.0, -30.5)
   player.rotation = -7.5
 
-# Hand control to the player now — no need to wait for the whole level.
+# Let the framed waterfall view mesh, then drop the loading splash and hand
+# control over — no need to wait for the whole level to finish streaming in.
+sleep 0.4
+player.clear_load_screen()
 player.spawning = false
 
 # Collision meshes lag the voxel data, so a just-teleported player can sink
