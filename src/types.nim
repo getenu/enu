@@ -148,6 +148,13 @@ type
     EDITOR_CLOSING
     TEST_MODE
     FLY_DISABLED
+    SPAWN_HELD
+      ## LOCAL (never synced): this main thread is holding its player at the
+      ## spawn — frozen (no gravity/movement/look) with the splash up — until
+      ## its own copy of the units ahead of the PLAYERS step has rendered. Each
+      ## client releases independently; the server can't know a remote client's
+      ## render state. game.process computes it from the synced LOAD_SCREEN
+      ## signal plus the local render readiness of the gate units.
 
   GlobalStateFlags* = enum
     LOADING_LEVEL
