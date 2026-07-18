@@ -81,6 +81,11 @@ gdobj Game of Node:
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
+    booted: bool
+      ## The LoadScreen covers the viewport from the first frame; once a load
+      ## actually starts (or a boot timeout fires) we hand control of the splash
+      ## to the synced LOAD_SCREEN flag. See process().
+    boot_deadline: MonoTime
     screenshot_camera_node: Camera
     screenshot_viewport_node: Viewport
 
@@ -213,23 +218,29 @@ gdobj Game of Node:
     if SCENE_READY notin state.local_flags:
       state.push_flag SCENE_READY
 
-    # Loading splash: mirror the synced LOAD_SCREEN flag (opt-in per level,
-    # raised over the whole load, dropped by a bootstrap script or the
-    # load-complete backstop — see serializers/host_bridge).
+    # Loading splash. The LoadScreen node ships visible, so the boot goes
+    # straight from Godot's own splash into ours — no flash of empty scene +
+    # UI. It stays up unconditionally until a load actually starts (or an 8s
+    # safety timeout), then follows the synced LOAD_SCREEN flag: a level that
+    # opts in (level.json loading_screen) keeps it up until a bootstrap script
+    # drops it; one that doesn't reveals right away. The flag is dropped by
+    # clear_load_screen or the load-complete backstop (serializers/host_bridge).
     if not self.load_screen.is_nil:
-      let want = LOAD_SCREEN in state.global_flags
-      if self.load_screen.visible != want:
-        self.load_screen.visible = want
-
-    # Measurement hook (ENU_NO_RENDER_ON_LOAD=1): stop drawing the main
-    # viewport while the level loads. Quantifies what a real loading screen
-    # (splash over a disabled 3D viewport) would save vs the current
-    # load-in-view behaviour.
-    if get_env("ENU_NO_RENDER_ON_LOAD") != "" and not self.scaled_viewport.is_nil:
-      let want =
-        if LOADING_LEVEL in state.global_flags: UPDATE_DISABLED else: UPDATE_ALWAYS
-      if self.scaled_viewport.render_target_update_mode != want:
-        self.scaled_viewport.render_target_update_mode = want
+      if not self.booted and (
+        LOADING_LEVEL in state.global_flags or
+        LOAD_SCREEN in state.global_flags or time > self.boot_deadline
+      ):
+        self.booted = true
+      let show =
+        if self.booted: LOAD_SCREEN in state.global_flags else: true
+      if self.load_screen.visible != show:
+        self.load_screen.visible = show
+      # The splash is opaque, so don't spend the GPU drawing the 3D viewport
+      # behind it while it's up.
+      if not self.scaled_viewport.is_nil:
+        let mode = if show: UPDATE_DISABLED else: UPDATE_ALWAYS
+        if self.scaled_viewport.render_target_update_mode != mode:
+          self.scaled_viewport.render_target_update_mode = mode
 
   proc rescale*() =
     let vp = self.get_viewport().size
@@ -597,6 +608,10 @@ gdobj Game of Node:
       info "config", config = state.config
       self.reticle = self.find_node("Reticle").as(Control)
       self.load_screen = self.find_node("LoadScreen").as(Control)
+      # Hand the splash over to the LOAD_SCREEN flag once a load starts, or
+      # after this timeout so it can never stick (e.g. a client that never runs
+      # a local load).
+      self.boot_deadline = get_mono_time() + 8.seconds
       self.stats = self.find_node("stats").as(Label)
       self.left_stick = find("LeftStick", VirtualJoystick)
       self.stats.visible = state.config.show_stats
