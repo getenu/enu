@@ -12,6 +12,11 @@ import controllers/script_controllers/vars
 import libs/eval
 
 var load_chunks {.threadvar.}: bool
+var defer_frames {.threadvar.}: bool
+  ## Set by load_things around its data phase: frame sidecars (24 x ~1MB for
+  ## the island's water) decode in the script phase instead, so the spawn
+  ## gate's PLAYERS step isn't stuck behind animation data no script has
+  ## asked to play yet.
 
 proc to_json_hook(self: Vector3): JsonNode =
   %[self.x, self.y, self.z]
@@ -99,6 +104,38 @@ proc from_json_hook(
       let info = chunk[1].json_to(VoxelInfo)
       self[location] = info
 
+proc load_frames_sidecar*(self: Build, json: JsonNode) =
+  let meta = json["frames"]
+  let dir = self.data_dir / "frames"
+  let count = meta["count"].get_int
+  var prev = none(FrameData)
+  var loaded = 0
+  for i in 0 ..< count:
+    let path = dir / \"{i:03}.bin"
+    if not file_exists(path):
+      warn "frame sidecar file missing; dropping later frames",
+        unit = self.id, frame = i
+      break
+    try:
+      let frame = decode_frame_file(read_file(path), prev)
+      self.frames[i] = frame
+      prev = some(frame)
+      inc loaded
+    except ValueError as e:
+      warn "frame sidecar file unreadable; dropping later frames",
+        unit = self.id, frame = i, error = e.msg
+      break
+  self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
+  self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
+  info "frames sidecar loaded", unit = self.id, loaded = loaded
+  if loaded > 0:
+    # Playback is never auto-resumed — it's a runtime action a script
+    # triggers with `play()`. Show the first frame so the unit comes back
+    # visible (its voxels are TRANSIENT, so only frames survive on
+    # reload); a script then takes over if it plays. fps/loop/current are
+    # no longer persisted (script-driven state — see extras_json).
+    self.current_frame = 0
+
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
   self = Build.init(
@@ -151,37 +188,8 @@ proc from_json_hook(self: var Build, json: JsonNode) =
 
     self.voxels.rebuild_local_edits()
 
-  if "frames" in json:
-    let meta = json["frames"]
-    let dir = self.data_dir / "frames"
-    let count = meta["count"].get_int
-    var prev = none(FrameData)
-    var loaded = 0
-    for i in 0 ..< count:
-      let path = dir / \"{i:03}.bin"
-      if not file_exists(path):
-        warn "frame sidecar file missing; dropping later frames",
-          unit = self.id, frame = i
-        break
-      try:
-        let frame = decode_frame_file(read_file(path), prev)
-        self.frames[i] = frame
-        prev = some(frame)
-        inc loaded
-      except ValueError as e:
-        warn "frame sidecar file unreadable; dropping later frames",
-          unit = self.id, frame = i, error = e.msg
-        break
-    self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
-    self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
-    info "frames sidecar loaded", unit = self.id, loaded = loaded
-    if loaded > 0:
-      # Playback is never auto-resumed — it's a runtime action a script
-      # triggers with `play()`. Show the first frame so the unit comes back
-      # visible (its voxels are TRANSIENT, so only frames survive on
-      # reload); a script then takes over if it plays. fps/loop/current are
-      # no longer persisted (script-driven state — see extras_json).
-      self.current_frame = 0
+  if "frames" in json and not defer_frames:
+    self.load_frames_sidecar(json)
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared thing serializer), but tolerate
@@ -491,8 +499,14 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
   # Two-phase load, same load_order: all unit DATA first, then all scripts.
   # Scripts run against a complete world (no "can't see a not-yet-loaded
   # proto" retries), and the spawn/reveal is fully script-independent — a
-  # script that sleeps mid-load can't starve the gate.
-  var deferred: seq[Thing]
+  # script that sleeps mid-load can't starve the gate. Frame sidecars are
+  # deferred with the scripts: only playback (a script action) needs them,
+  # and decoding them inline stalled the PLAYERS step for tens of seconds
+  # on a frame-heavy unit. Each unit's frames load just before its script.
+  var deferred: seq[tuple[thing: Thing, frames_json: JsonNode]]
+  defer_frames = true
+  defer:
+    defer_frames = false
 
   for script_name in sorted_scripts:
     if script_name == PLAYERS_SENTINEL:
@@ -503,7 +517,13 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
       # start_transform at load start, so the spawn area has been streaming
       # at top viewer priority the whole time.)
       if parent.is_nil:
+        info "spawn gate: PLAYERS step, clearing LOAD_SCREEN"
         state.global_flags -= LOAD_SCREEN
+        # Ship the removal now: load_level runs synchronously inside one
+        # worker tick, so ed's local send buffer (used once the channel
+        # backs up) wouldn't otherwise drain until the whole load returns —
+        # main would sit idle and reveal at load-end regardless of the gate.
+        Ed.thread_ctx.flush_buffers()
       continue
 
     if script_name notin script_to_data:
@@ -511,6 +531,7 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
 
     let idx = script_to_data[script_name]
     let (thing_id, dir, data_file, _) = loaded_data[idx]
+    let unit_started = get_mono_time()
 
     try:
       var thing: Thing
@@ -545,11 +566,13 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
       else:
         parent.things.add(thing)
 
-      if file_exists(thing.script_ctx.script):
+      let has_script = file_exists(thing.script_ctx.script)
+      let has_frames = thing of Build and "frames" in data_file
+      if has_script:
         # Data is in; the script (and its initial draw) waits for phase 2.
         # The build stays in ASAP_MODE until then, so the spawn gate counts
         # it as not-yet-rendered.
-        deferred.add thing
+        discard
       else:
         thing.global_flags -= SCRIPT_INITIALIZING
         # A scripted build renders its restored edits when its code loads
@@ -559,12 +582,26 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
         if thing of Build:
           Build(thing).reset()
           Build(thing).end_asap()
+      if has_script or has_frames:
+        deferred.add (thing, (if has_frames: data_file else: nil))
+      let took = (get_mono_time() - unit_started).in_milliseconds
+      if took > 100:
+        info "slow unit data load", thing_id, ms = took
+      # Keep the stream to main flowing while the load holds the worker
+      # (see the PLAYERS step above): drain whatever the channel has room
+      # for after each unit instead of dumping everything at load-end.
+      Ed.thread_ctx.flush_buffers()
     except Exception as e:
       error "Failed to load thing", thing_id, error = e
 
-  for thing in deferred:
+  defer_frames = false
+  for (thing, frames_json) in deferred:
     try:
-      thing.code = Code.init(read_file(thing.script_ctx.script))
+      if ?frames_json:
+        Build(thing).load_frames_sidecar(frames_json)
+      if file_exists(thing.script_ctx.script):
+        thing.code = Code.init(read_file(thing.script_ctx.script))
+      Ed.thread_ctx.flush_buffers()
     except Exception as e:
       error "Failed to load thing script", thing_id = thing.id, error = e
 

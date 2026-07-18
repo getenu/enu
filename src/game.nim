@@ -261,26 +261,33 @@ gdobj Game of Node:
 
     # Spawn gate, second half: LOAD_SCREEN has cleared (the ready() watch
     # snapshotted the pre-PLAYERS builds into gate_ids), so release this
-    # machine's player once every snapshot build has rendered locally:
+    # machine's player once every snapshot build's DATA has rendered locally:
     #
-    # - out of ASAP mode with no pending block updates for a few consecutive
-    #   frames, the settle test wait_for_script uses. Not sufficient alone —
-    #   the count reads zero in the lulls between page-in batches, so a
-    #   reload can produce a zero streak while the terrain is still forming.
+    # - no pending block updates for a few consecutive frames, the settle
+    #   test wait_for_script uses. Not sufficient alone — the count reads
+    #   zero in the lulls between page-in batches, so a reload can produce
+    #   a zero streak while the terrain is still forming.
     # - collision under the player. Collision meshes trail the voxel data,
     #   and a player released early sinks into the still-forming spawn hill
     #   and wedges there. Runs here rather than in process() because space
     #   queries are only valid in the physics step.
     #
-    # The deadline backstop covers a build that never settles (an animated
-    # `loop:` script) and a spawn with genuinely nothing below it.
+    # Deliberately NOT gated on scripts (ASAP_MODE): a persisted gate unit's
+    # voxels render in the data phase via prefill, while its script — usually
+    # decoration or animation (the island's water is `play(8.0)`, the gull an
+    # endless flap loop) — doesn't run until every unit's data has loaded,
+    # and an animated one never finishes at all. Waiting on that held the
+    # reveal to the gate timeout. `load_player_with_scripts` is reserved for
+    # levels that do want the reveal to wait for gate-unit scripts.
+    #
+    # The deadline backstop covers a build that never settles and a spawn
+    # with genuinely nothing below it.
     if self.gate_waiting:
       let time = get_mono_time()
       var rendered = true
       state.things.value.walk_tree proc(thing: Thing) =
         if thing of Build and thing.id in self.gate_ids:
-          if ASAP_MODE in thing.global_flags or
-              thing.pending_block_updates != 0:
+          if thing.pending_block_updates != 0:
             rendered = false
       if rendered and ?state.player and not state.nodes.player.is_nil:
         # Short ray: the spawn pose stands the player ~1.5m above the ground,
