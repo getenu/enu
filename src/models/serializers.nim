@@ -13,12 +13,44 @@ import libs/eval
 
 var load_chunks {.threadvar.}: bool
 
+proc to_json_hook(self: Vector3): JsonNode =
+  %[self.x, self.y, self.z]
+
+proc from_json_hook(self: var Vector3, json: JsonNode) =
+  self.x = json[0].get_float
+  self.y = json[1].get_float
+  self.z = json[2].get_float
+
+proc from_json_hook(self: var Transform, json: JsonNode) =
+  self = Transform.init(origin = json["origin"].json_to(Vector3))
+  let elements =
+    if json["basis"].kind == JObject:
+      # old way
+      json["basis"]["elements"]
+    else:
+      # new way
+      json["basis"]
+  self.basis.elements.from_json(elements)
+
+proc to_json_hook(self: Transform): JsonNode =
+  %*{
+    "basis": self.basis.elements.map_it(%[it.x, it.y, it.z]),
+    "origin": self.origin.to_json_hook,
+  }
+
+const PLAYERS_SENTINEL* = "PLAYERS"
+  ## load_order sentinel, not a unit: the units before it must render before
+  ## players are handed control (the spawn gate). Always present — auto
+  ## inserted at the front when missing, which means "nothing to wait for":
+  ## immediate physics at start_transform, no splash.
+
 type LevelInfo = object
   enu_version*, format_version*: string
   load_order*: seq[string]
   show_prototypes*: bool
   show_tools*: bool
-  loading_screen*: bool
+  start_transform*: Transform
+  load_player_with_scripts*: bool
 
 proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   self.enu_version = json{"enu_version"}.get_str
@@ -39,10 +71,15 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   else:
     self.show_tools = true
 
-  if "loading_screen" in json:
-    self.loading_screen = json["loading_screen"].get_bool
+  if "start_transform" in json:
+    self.start_transform = json["start_transform"].json_to(Transform)
   else:
-    self.loading_screen = false
+    self.start_transform = Transform.init(origin = vec3(0, 1, 0))
+
+  if "load_player_with_scripts" in json:
+    self.load_player_with_scripts = json["load_player_with_scripts"].get_bool
+  else:
+    self.load_player_with_scripts = false
 
 proc to_json_hook*(self: VoxelInfo): JsonNode =
   %[%self.kind.ord, self.color.to_json_hook]
@@ -50,14 +87,6 @@ proc to_json_hook*(self: VoxelInfo): JsonNode =
 proc from_json_hook*(self: var VoxelInfo, json: JsonNode) =
   self.kind = VoxelKind(json[0].get_int)
   self.color = json[1].json_to(Color)
-
-proc to_json_hook(self: Vector3): JsonNode =
-  %[self.x, self.y, self.z]
-
-proc from_json_hook(self: var Vector3, json: JsonNode) =
-  self.x = json[0].get_float
-  self.y = json[1].get_float
-  self.z = json[2].get_float
 
 proc from_json_hook(
     self: var EdTable[Vector3, VoxelInfo], json: JsonNode
@@ -69,17 +98,6 @@ proc from_json_hook(
       let location = chunk[0].json_to(Vector3)
       let info = chunk[1].json_to(VoxelInfo)
       self[location] = info
-
-proc from_json_hook(self: var Transform, json: JsonNode) =
-  self = Transform.init(origin = json["origin"].json_to(Vector3))
-  let elements =
-    if json["basis"].kind == JObject:
-      # old way
-      json["basis"]["elements"]
-    else:
-      # new way
-      json["basis"]
-  self.basis.elements.from_json(elements)
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
@@ -470,7 +488,24 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
       else:
         sorted_scripts.add script
 
+  # Two-phase load, same load_order: all unit DATA first, then all scripts.
+  # Scripts run against a complete world (no "can't see a not-yet-loaded
+  # proto" retries), and the spawn/reveal is fully script-independent — a
+  # script that sleeps mid-load can't starve the gate.
+  var deferred: seq[Thing]
+
   for script_name in sorted_scripts:
+    if script_name == PLAYERS_SENTINEL:
+      # The gate step, not a unit: everything before this point must render
+      # before players are handed control. Clear the synced splash-phase
+      # signal — each main thread reveals once its own copy of the
+      # pre-PLAYERS units renders. (The players were already carried to
+      # start_transform at load start, so the spawn area has been streaming
+      # at top viewer priority the whole time.)
+      if parent.is_nil:
+        state.global_flags -= LOAD_SCREEN
+      continue
+
     if script_name notin script_to_data:
       continue
 
@@ -505,7 +540,10 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
         parent.things.add(thing)
 
       if file_exists(thing.script_ctx.script):
-        thing.code = Code.init(read_file(thing.script_ctx.script))
+        # Data is in; the script (and its initial draw) waits for phase 2.
+        # The build stays in ASAP_MODE until then, so the spawn gate counts
+        # it as not-yet-rendered.
+        deferred.add thing
       else:
         thing.global_flags -= SCRIPT_INITIALIZING
         # A scripted build renders its restored edits when its code loads
@@ -518,13 +556,20 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
     except Exception as e:
       error "Failed to load thing", thing_id, error = e
 
+  for thing in deferred:
+    try:
+      thing.code = Code.init(read_file(thing.script_ctx.script))
+    except Exception as e:
+      error "Failed to load thing script", thing_id = thing.id, error = e
+
   # Record the order the level actually loaded in — including script-less
-  # units slotted in above — so save_level preserves it instead of
-  # regenerating from scratch. Only real, loaded units, in order.
+  # units slotted in above and the PLAYERS sentinel — so save_level preserves
+  # it instead of regenerating from scratch.
   if parent.is_nil:
     var final_order: seq[string]
     for script_name in sorted_scripts:
-      if script_name in script_to_data and script_name notin final_order:
+      if script_name == PLAYERS_SENTINEL or
+          (script_name in script_to_data and script_name notin final_order):
         final_order.add script_name
     state.load_order = final_order
 
@@ -662,11 +707,13 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
             )
           graph[name] = deps
 
-    # Preserve the existing order; new units go to the end.
+    # Preserve the existing order; new units go to the end. The PLAYERS
+    # sentinel isn't a unit but its position is the spawn gate — keep it.
     var sort_nodes = newSeq[string]()
     var seen = initHashSet[string]()
     for name in state.load_order & present:
-      if name notin seen and name in present and name notin is_error:
+      if name notin seen and name notin is_error and
+          (name == PLAYERS_SENTINEL or name in present):
         seen.incl name
         sort_nodes.add name
 
@@ -678,6 +725,8 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       error "Cannot save level script order due to circular dependency",
         error = e.msg
       sorted_scripts = error_nodes & sort_nodes # fallback: save unordered
+    if PLAYERS_SENTINEL notin sorted_scripts:
+      sorted_scripts.insert(PLAYERS_SENTINEL, 0)
     state.load_order = sorted_scripts
 
     if sorted_scripts.len > 0:
@@ -689,7 +738,8 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       load_order: sorted_scripts,
       show_prototypes: state.show_prototypes,
       show_tools: state.show_tools,
-      loading_screen: state.loading_screen,
+      start_transform: state.start_transform,
+      load_player_with_scripts: state.load_player_with_scripts,
     )
     write_file_if_changed level_dir / "level.json",
       jsonutils.to_json(level).pretty
@@ -793,7 +843,6 @@ proc unload_level*(worker: Worker) =
   state.things.clear_all
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
-  state.global_flags -= SPAWNING
   state.global_flags -= LOAD_SCREEN
 
 var level_loading* = false
@@ -807,7 +856,6 @@ proc load_level*(worker: Worker, level_dir: string) =
   defer:
     level_loading = false
   state.global_flags += LOADING_LEVEL
-  state.global_flags += SPAWNING
   state.push_flag LOADING_SCRIPT
   if not state.player.is_nil:
     state.player.block_log_entries.clear
@@ -842,7 +890,8 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   state.show_prototypes = true
   state.show_tools = true
-  state.loading_screen = false
+  state.start_transform = Transform.init(origin = vec3(0, 1, 0))
+  state.load_player_with_scripts = false
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
@@ -852,15 +901,34 @@ proc load_level*(worker: Worker, level_dir: string) =
         load_order = level.load_order
       state.show_prototypes = level.show_prototypes
       state.show_tools = level.show_tools
-      state.loading_screen = level.loading_screen
+      state.start_transform = level.start_transform
+      state.load_player_with_scripts = level.load_player_with_scripts
     except Exception as e:
       error "Failed to load level", error = e
 
-  # Raise the splash for the whole load when the level opts in; a bootstrap
-  # script drops it early with clear_load_screen, otherwise the backstop below
-  # (LOADING_LEVEL clear) reveals the finished level.
-  if state.loading_screen:
+  # The spawn gate: everything before PLAYERS in load_order must render
+  # before players get control. Missing sentinel = front = nothing to wait
+  # for (immediate physics, no splash). Raise the splash-phase signal only
+  # when there really are units ahead of the gate; load_things clears it at
+  # the PLAYERS step.
+  if PLAYERS_SENTINEL notin load_order:
+    load_order.insert(PLAYERS_SENTINEL, 0)
+  if load_order.find(PLAYERS_SENTINEL) > 0:
     state.global_flags += LOAD_SCREEN
+
+  # Carry every player to the spawn pose now, not at the PLAYERS step: they
+  # are frozen behind the splash anyway, and the voxel viewer follows them —
+  # so the chunks around the spawn stream at top priority for the whole load
+  # instead of racing the reveal from 200m away.
+  block:
+    let t = state.start_transform
+    let rotation =
+      rad_to_deg(arctan2(t.basis.elements[0].z, t.basis.elements[0].x))
+    for thing in state.things:
+      if thing of Player:
+        let player = Player(thing)
+        player.transform = t
+        player.rotation = rotation
 
   # Seed the available tools before scripts run and the player can interact:
   # full set by default, empty when the level opts out (its script adds back
@@ -891,6 +959,6 @@ proc load_level*(worker: Worker, level_dir: string) =
     thing.global_flags -= DIRTY
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
-  # Backstop: reveal the level once loading finishes, even if no script dropped
-  # the splash itself.
+  # Normally cleared at the PLAYERS step in load_things; this is a safety net
+  # for a load that died before reaching it, so the splash can't stick.
   state.global_flags -= LOAD_SCREEN
