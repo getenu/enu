@@ -247,6 +247,17 @@ gdobj PlayerNode of KinematicBody:
       if self.command_timer <= 0:
         state.pop_flag COMMAND_MODE
 
+    # Held at the spawn while this machine loads in the units ahead of the
+    # PLAYERS step (see the load_order gate). No gravity, no movement — a player
+    # who can't move can't fall through the spawn ground's collision while it's
+    # still forming. SPAWN_HELD is LOCAL, not synced: each client releases its
+    # own player once its own copy of those units has rendered, which the server
+    # can't know for a remote client. game.process computes it.
+    if SPAWN_HELD in state.local_flags:
+      self.velocity = vec3()
+      self.model.input_direction = vec3()
+      return
+
     const forward_rotation = deg_to_rad(-90.0)
     let
       # no movement or look input while the level loads: the player is
