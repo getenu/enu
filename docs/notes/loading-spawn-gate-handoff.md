@@ -3,6 +3,16 @@
 Branch: **`island-load-perf`** (PR #88 → `course-island`). Working level:
 `share/worlds/course/island`.
 
+**Status: IMPLEMENTED (solo/server path).** The design below is built and
+verified on the island level — boot and mid-session reload both reveal at the
+waterfall with no sink. Two deviations from the plan as written: players are
+carried to `start_transform` at load *start* (not the PLAYERS step) so the
+voxel viewer streams the spawn area at top priority for the whole load, and
+the reveal gate additionally requires collision under the player (a short
+downward ray in `game.physics_process`) because the pending-block-updates
+settle streak reads zero in the lulls between page-in batches. The
+multiplayer extension (remote clients running the same local gate) remains.
+
 This note carries the full design from a long design session so a fresh agent
 can continue. Read it top to bottom before touching code.
 

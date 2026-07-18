@@ -28,19 +28,6 @@ bridged_to_host:
     ## turned back on.
 
   proc `can_fly=`*(self: Player, value: bool)
-  proc spawning*(self: Player): bool
-    ## True while a fresh load is still positioning the player: their
-    ## look/move input is held. A bootstrap script sets `player.spawning =
-    ## false` once it has placed them, so they're interactive while the rest
-    ## of the level streams in.
-
-  proc `spawning=`*(self: Player, value: bool)
-  proc clear_load_screen*(self: Player)
-    ## Drop the loading splash covering the viewport (shown when the level's
-    ## level.json sets `loading_screen`). A bootstrap script calls this the
-    ## instant its framed view is ready, so the player sees that instead of the
-    ## raw load. Harmless if no splash is up.
-
   proc boost*(self: Player, impulse: Vector3)
     ## Launch the player: an instant velocity impulse in world space.
     ## `player.boost vec3(0, 30, 0)` pops them straight up; give it x/z

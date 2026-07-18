@@ -159,20 +159,15 @@ type
   GlobalStateFlags* = enum
     LOADING_LEVEL
     SPAWNING
-      ## Input (look/move/raycast) is held while a fresh load positions the
-      ## player. Set with LOADING_LEVEL at load start; a bootstrap script
-      ## clears it (player.spawning = false) the instant the player is placed,
-      ## so they're interactive while the rest of the level still streams in.
-      ## Falls back to clearing when LOADING_LEVEL clears, so a level with no
-      ## bootstrap behaves as before.
+      ## Unused; superseded by the local SPAWN_HELD spawn gate. Kept because
+      ## these ordinals are on the wire — append, never reorder/remove.
     LOAD_SCREEN
-      ## An opaque splash covers the viewport so the messy load (chunks
-      ## streaming, one-time bakes) isn't seen. Opt-in per level
-      ## (level.json `loading_screen`, off by default); set with LOADING_LEVEL
-      ## at load start when enabled. A bootstrap script clears it
-      ## (clear_load_screen) the instant the framed view is ready. Falls back
-      ## to clearing when LOADING_LEVEL clears, so a level that never calls the
-      ## proc still reveals when the load finishes.
+      ## Server-authored "splash phase" signal: an opaque splash covers the
+      ## viewport while the units ahead of the PLAYERS load_order step load.
+      ## Set at load start when there are pre-PLAYERS units, cleared at the
+      ## PLAYERS step — meaning "splash phase over; reveal once your local
+      ## copy of those units has rendered." Each main thread turns it into
+      ## its own local SPAWN_HELD (see game.process).
 
   LocalModelFlags* = enum
     HOVER
@@ -257,7 +252,15 @@ type
     paused*: bool
     show_prototypes*: bool
     show_tools*: bool # level.json: false starts with no tools (script adds them)
-    loading_screen*: bool # level.json: true covers the load with a splash
+    start_transform*: Transform
+      ## level.json: the spawn pose applied to every player at the PLAYERS
+      ## load_order step (and, later, to mid-session joins).
+    load_player_with_scripts*: bool
+      ## level.json: reserved override for the persisted-unit-with-decoration-
+      ## script edge case (reveal after the fast data render instead of
+      ## waiting for the script). The gate currently always waits for
+      ## ASAP-ended + settled; parsed and persisted so levels can opt in
+      ## when the trim lands.
     load_order*: seq[string]
       ## The unit ids in level.json's load_order, as read at load. save_level
       ## regenerates the list but preserves this order where dependencies

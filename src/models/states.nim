@@ -169,7 +169,7 @@ proc init*(_: type GameState): GameState =
     gravity: -80.0,
     show_prototypes: true,
     show_tools: true,
-    loading_screen: false,
+    start_transform: Transform.init(origin = vec3(0, 1, 0)),
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
     open_sign_value: EdValue[Sign].init(flags = flags),
     wants: EdSeq[LocalStateFlags].init(flags = flags),
