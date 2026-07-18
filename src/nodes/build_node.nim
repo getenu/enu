@@ -662,6 +662,17 @@ gdobj BuildNode of VoxelTerrain:
       flush_registry() # no-op while an ephemeral stream holds bakes
     # Palette + slots are live; prefill may now serve resolvable chunks.
     self.palette_published = true
+    block:
+      # The store must wrap the *current* shared's edit tables — a stale
+      # wrapper on a revived replica serves prefill from destroyed tables
+      # (see init_voxels_if_needed).
+      let snap_table = self.model.voxels.edit_snapshots
+      debug "node voxels ready",
+        unit = self.model.id,
+        shared_id = self.model.shared.id,
+        store_table_id = snap_table.id,
+        store_table_valid = snap_table.valid,
+        snapshots = (if snap_table.valid: snap_table.len else: -1)
 
     # Create renderer for ASAP mode buffer operations
     self.renderer = VoxelRenderer.init(self.get_voxel_tool(), self.resolver)

@@ -721,6 +721,14 @@ proc init_voxels_if_needed*(self: Build, rebuild_edits = true) =
     # past that gate — bail rather than deref nil. A later join pass heals it.
     notice "init_voxels_if_needed: shared not ready, deferring", thing = self.id
     return
+  if ?self.voxels and self.voxels.edit_snapshots != self.shared.edit_snapshots:
+    # A reload revives this replica in place (same thing id), keeping plain
+    # fields — including this wrapper, whose edit-table refs were captured at
+    # init and now dangle on the previous generation's destroyed tables (so
+    # prefill serves nothing and never heals). packed_chunks survives only
+    # because it's read live through `build`. Rebuild against the current
+    # shared.
+    self.voxels = nil
   if not ?self.voxels:
     self.voxels = VoxelStore.init(
       ctx = Ed.thread_ctx,

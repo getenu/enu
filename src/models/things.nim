@@ -22,10 +22,13 @@ proc init_shared*(self: Thing) =
     elif self.shared_value.loaded:
       # Construction: the root mints its tree's `Shared`, owns the edit tables
       # under it, and *publishes* it so the singleton syncs everywhere.
-      debug "init_shared minting fresh shared", thing = self.id
       var shared = Shared(id: generate_id())
       shared.id.own:
         shared.init_ed_fields
+      debug "init_shared minted fresh shared",
+        thing = self.id,
+        shared_id = shared.id,
+        snap_table_id = shared.edit_snapshots.id
       self.shared_value.value = shared
       self.shared = shared
     # else: narrow replica — `shared_value` is an unloaded placeholder; the
