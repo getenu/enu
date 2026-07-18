@@ -108,6 +108,30 @@ proc prefill_bytes*(self: VoxelStore, chunk_id: Vector3): string =
   if not has_deltas and not has_pending:
     if chunk_id in self.packed_chunks:
       return self.packed_chunks[chunk_id].data
+    # Race-free fallback for persisted builds. packed_chunks is a field on the
+    # thing and can lag the thing's own arrival on the display side (the engine
+    # starts paging blocks the instant the node is set up, before the synced
+    # chunk stream drains). edit_snapshots rides `shared`, which sync_ready
+    # guarantees present before add_to_scene — and for a persisted chunk the
+    # snapshot is the same encoded blob packed_chunks would carry. Serve it so
+    # the block prefills and meshes off-main immediately. The node marks these
+    # chunks so the later packed_chunks sync doesn't repaint them on the main
+    # thread (build_node: edit_prefilled).
+    if ?self.edit_snapshots:
+      let key: EditKey = (self.thing_id, chunk_id)
+      if key in self.edit_snapshots:
+        let has_edit_deltas =
+          ?self.edit_deltas and key in self.edit_deltas and
+          ?self.edit_deltas[key] and self.edit_deltas[key].len > 0
+        if not has_edit_deltas:
+          return self.edit_snapshots[key].data
+        var cells = decode_chunk(self.edit_snapshots[key])
+        for delta in self.edit_deltas[key]:
+          for (local_pos, packed_voxel) in decode_delta(delta):
+            cells[
+              linear_position(local_pos.x.int, local_pos.y.int, local_pos.z.int)
+            ] = packed_voxel
+        return encode_chunk(cells).data
     return ""
   let chunk = self.compose_chunk(chunk_id)
   if chunk.count == 0:

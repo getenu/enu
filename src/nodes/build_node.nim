@@ -63,6 +63,13 @@ gdobj BuildNode of VoxelTerrain:
     next_stats_log: MonoTime
     prefill_hits, prefill_misses: int
     loaded_chunks: HashSet[Vector3]
+    edit_prefilled: HashSet[Vector3]
+      ## Chunks prefilled from edit_snapshots because packed_chunks hadn't
+      ## synced yet (see store.prefill_bytes). The persisted snapshot equals the
+      ## packed one for these, so when packed_chunks finally streams in its watch
+      ## must NOT repaint them on the main thread — that redundant paint was the
+      ## load-time bog-down. Cleared on the first (non-modified) packed arrival
+      ## and on page-out.
     prefilled_chunks: Table[Vector3, int]
       ## Chunks the request-time hook (enu_chunk_bytes) answered with real bytes,
       ## so the streaming thread prefilled the engine block with them, mapped to
@@ -209,6 +216,10 @@ gdobj BuildNode of VoxelTerrain:
     let bytes = self.model.voxels.prefill_bytes(block_position)
     if bytes.len > 0:
       self.prefilled_chunks[block_position] = PackedChunk(data: bytes).voxel_count
+      # Served from edit_snapshots (packed_chunks hadn't synced yet): remember
+      # it so the later packed_chunks sync doesn't repaint it on the main thread.
+      if block_position notin self.model.voxels.packed_chunks:
+        self.edit_prefilled.incl block_position
       result = to_pool_byte_array(bytes)
 
   method on_block_loaded(chunk_id: Vector3) =
@@ -300,6 +311,7 @@ gdobj BuildNode of VoxelTerrain:
   method on_block_unloaded(chunk_id: Vector3) =
     if ?self.model:
       self.loaded_chunks.excl(chunk_id)
+      self.edit_prefilled.excl(chunk_id)
       if SERVER notin state.local_flags:
         # Out of view: page out. Evicts locally (the excl above keeps the
         # REMOVED watch from erasing an already-dropped block) and retracts
@@ -325,7 +337,14 @@ gdobj BuildNode of VoxelTerrain:
         if not self.data_logged:
           self.data_logged = true
           info "voxel data arriving", thing = self.model.id
-        if change.item.key in self.loaded_chunks:
+        if change.item.key in self.edit_prefilled and not modified:
+          # This chunk was already prefilled+meshed from its (identical)
+          # edit_snapshot before packed_chunks synced. The arriving snapshot is
+          # the same content, so skip the main-thread repaint entirely — that
+          # redundant paint over every terrain chunk was the load bog-down. A
+          # genuine later change arrives as `modified` and is not skipped.
+          self.edit_prefilled.excl change.item.key
+        elif change.item.key in self.loaded_chunks:
           # A rewrite (REMOVED+MODIFIED, e.g. voxels.clear() + redraw
           # coalescing in one sync batch) must REPLACE the chunk: painting
           # it additively leaves voxels the new content doesn't cover —
@@ -587,7 +606,7 @@ gdobj BuildNode of VoxelTerrain:
     let was_skipping_join = dont_join
     dont_join = true
 
-    self.model.init_voxels_if_needed()
+    self.model.init_voxels_if_needed(rebuild_edits = false)
 
     # Static RGB colors resolve through the process-global library registry;
     # named indices pass through untouched (identity below STATIC_COLOR_BASE).
