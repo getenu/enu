@@ -28,6 +28,13 @@ bridged_to_host:
     ## turned back on.
 
   proc `can_fly=`*(self: Player, value: bool)
+  proc spawning*(self: Player): bool
+    ## True while a fresh load is still positioning the player: their
+    ## look/move input is held. A bootstrap script sets `player.spawning =
+    ## false` once it has placed them, so they're interactive while the rest
+    ## of the level streams in.
+
+  proc `spawning=`*(self: Player, value: bool)
   proc boost*(self: Player, impulse: Vector3)
     ## Launch the player: an instant velocity impulse in world space.
     ## `player.boost vec3(0, 30, 0)` pops them straight up; give it x/z

@@ -483,13 +483,20 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
         continue
 
       thing.global_flags += SCRIPT_INITIALIZING
+      if thing of Build:
+        # Restore the persisted voxels and publish them to the synced chunk
+        # table BEFORE the build joins root_things. Then main holds the data
+        # the instant it sees the build, so the engine prefills each paged-in
+        # block (meshed off the main thread) instead of painting it after the
+        # block loads empty — the terrain's thousands of chunks were painting
+        # on the main thread and spiking the load to <1fps.
+        Build(thing).reset_bounds
+        Build(thing).restore_edits
+        Build(thing).voxels.flush_dirty_chunks()
       if parent.is_nil:
         state.things.add(thing)
       else:
         parent.things.add(thing)
-      if thing of Build:
-        Build(thing).reset_bounds
-        Build(thing).restore_edits
 
       if file_exists(thing.script_ctx.script):
         thing.code = Code.init(read_file(thing.script_ctx.script))
@@ -779,6 +786,7 @@ proc unload_level*(worker: Worker) =
   state.things.clear_all
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
+  state.global_flags -= SPAWNING
 
 var level_loading* = false
   ## True while load_level populates things. watch_code's autosave consults
@@ -791,6 +799,7 @@ proc load_level*(worker: Worker, level_dir: string) =
   defer:
     level_loading = false
   state.global_flags += LOADING_LEVEL
+  state.global_flags += SPAWNING
   state.push_flag LOADING_SCRIPT
   if not state.player.is_nil:
     state.player.block_log_entries.clear

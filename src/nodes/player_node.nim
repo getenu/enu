@@ -223,7 +223,7 @@ gdobj PlayerNode of KinematicBody:
 
     var look_direction = self.get_look_direction()
 
-    if LOADING_LEVEL in state.global_flags:
+    if SPAWNING in state.global_flags:
       self.input_relative = vec2()
     elif self.input_relative.length() > 0:
       self.update_rotation(self.input_relative * mouse_sensitivity)
@@ -238,7 +238,7 @@ gdobj PlayerNode of KinematicBody:
     self.model.rotation_value.pause(self.rotation_zid):
       self.model.rotation = rad_to_deg r.y
 
-    if LOADING_LEVEL notin state.global_flags:
+    if SPAWNING notin state.global_flags:
       self.update_raycast()
 
   method physics_process*(delta: float) =
@@ -254,7 +254,7 @@ gdobj PlayerNode of KinematicBody:
       # would leave them facing somewhere random
       process_input =
         VIEWPORT_FOCUSED in state.local_flags and
-        LOADING_LEVEL notin state.global_flags
+        SPAWNING notin state.global_flags
       input_direction =
         if process_input:
           self.get_input_direction()
