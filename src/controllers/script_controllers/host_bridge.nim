@@ -839,6 +839,15 @@ proc flying(self: Thing): bool =
 proc `flying=`*(self: Thing, value: bool) =
   state.set_flag FLYING, value
 
+proc spawning(self: Thing): bool =
+  SPAWNING in state.global_flags
+
+proc `spawning=`*(self: Thing, value: bool) =
+  if value:
+    state.global_flags += SPAWNING
+  else:
+    state.global_flags -= SPAWNING
+
 proc boost(self: Thing, impulse: Vector3) =
   Player(self).boost_value.touch(impulse)
 
@@ -1779,7 +1788,7 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,
-    `can_fly=`, boost, tool, `tool=`,
+    `can_fly=`, spawning, `spawning=`, boost, tool, `tool=`,
     tools_has, tools_incl, tools_excl, tools_clear, coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log

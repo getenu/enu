@@ -151,6 +151,13 @@ type
 
   GlobalStateFlags* = enum
     LOADING_LEVEL
+    SPAWNING
+      ## Input (look/move/raycast) is held while a fresh load positions the
+      ## player. Set with LOADING_LEVEL at load start; a bootstrap script
+      ## clears it (player.spawning = false) the instant the player is placed,
+      ## so they're interactive while the rest of the level still streams in.
+      ## Falls back to clearing when LOADING_LEVEL clears, so a level with no
+      ## bootstrap behaves as before.
 
   LocalModelFlags* = enum
     HOVER

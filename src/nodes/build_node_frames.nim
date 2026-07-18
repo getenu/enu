@@ -525,6 +525,12 @@ proc advance_playback*(self: FramePlayer) =
   if SERVER notin state.local_flags or self.model.frames_fps <= 0 or
       self.model.frames.len <= 1:
     return
+  # Hold the animation on its first frame until the level has finished
+  # loading. Cycling frames mid-load floods the mesher (every flip rebakes
+  # the animated build's chunks) and spiked the frame time to >1s while the
+  # rest of the level was still streaming in. Playback starts once loaded.
+  if LOADING_LEVEL in state.global_flags:
+    return
   let now = get_mono_time()
   if now >= self.next_at:
     # absolute schedule: adding the interval to the previous deadline (not to
