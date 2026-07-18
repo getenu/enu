@@ -169,6 +169,7 @@ proc init*(_: type GameState): GameState =
     gravity: -80.0,
     show_prototypes: true,
     show_tools: true,
+    loading_screen: false,
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
     open_sign_value: EdValue[Sign].init(flags = flags),
     wants: EdSeq[LocalStateFlags].init(flags = flags),

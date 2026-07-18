@@ -68,6 +68,7 @@ var environment_cache {.threadvar.}: Table[string, Environment]
 gdobj Game of Node:
   var
     reticle: Control
+    load_screen: Control
     scaled_viewport: Viewport
     triggered = false
     saved_mouse_captured_state = false
@@ -211,6 +212,14 @@ gdobj Game of Node:
 
     if SCENE_READY notin state.local_flags:
       state.push_flag SCENE_READY
+
+    # Loading splash: mirror the synced LOAD_SCREEN flag (opt-in per level,
+    # raised over the whole load, dropped by a bootstrap script or the
+    # load-complete backstop — see serializers/host_bridge).
+    if not self.load_screen.is_nil:
+      let want = LOAD_SCREEN in state.global_flags
+      if self.load_screen.visible != want:
+        self.load_screen.visible = want
 
     # Measurement hook (ENU_NO_RENDER_ON_LOAD=1): stop drawing the main
     # viewport while the level loads. Quantifies what a real loading screen
@@ -587,6 +596,7 @@ gdobj Game of Node:
       self.load_environment(state.config.environment)
       info "config", config = state.config
       self.reticle = self.find_node("Reticle").as(Control)
+      self.load_screen = self.find_node("LoadScreen").as(Control)
       self.stats = self.find_node("stats").as(Label)
       self.left_stick = find("LeftStick", VirtualJoystick)
       self.stats.visible = state.config.show_stats

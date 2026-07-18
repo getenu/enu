@@ -18,6 +18,7 @@ type LevelInfo = object
   load_order*: seq[string]
   show_prototypes*: bool
   show_tools*: bool
+  loading_screen*: bool
 
 proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   self.enu_version = json{"enu_version"}.get_str
@@ -37,6 +38,11 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
     self.show_tools = json["show_tools"].get_bool
   else:
     self.show_tools = true
+
+  if "loading_screen" in json:
+    self.loading_screen = json["loading_screen"].get_bool
+  else:
+    self.loading_screen = false
 
 proc to_json_hook*(self: VoxelInfo): JsonNode =
   %[%self.kind.ord, self.color.to_json_hook]
@@ -683,6 +689,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       load_order: sorted_scripts,
       show_prototypes: state.show_prototypes,
       show_tools: state.show_tools,
+      loading_screen: state.loading_screen,
     )
     write_file_if_changed level_dir / "level.json",
       jsonutils.to_json(level).pretty
@@ -787,6 +794,7 @@ proc unload_level*(worker: Worker) =
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
   state.global_flags -= SPAWNING
+  state.global_flags -= LOAD_SCREEN
 
 var level_loading* = false
   ## True while load_level populates things. watch_code's autosave consults
@@ -834,6 +842,7 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   state.show_prototypes = true
   state.show_tools = true
+  state.loading_screen = false
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
@@ -843,8 +852,15 @@ proc load_level*(worker: Worker, level_dir: string) =
         load_order = level.load_order
       state.show_prototypes = level.show_prototypes
       state.show_tools = level.show_tools
+      state.loading_screen = level.loading_screen
     except Exception as e:
       error "Failed to load level", error = e
+
+  # Raise the splash for the whole load when the level opts in; a bootstrap
+  # script drops it early with clear_load_screen, otherwise the backstop below
+  # (LOADING_LEVEL clear) reveals the finished level.
+  if state.loading_screen:
+    state.global_flags += LOAD_SCREEN
 
   # Seed the available tools before scripts run and the player can interact:
   # full set by default, empty when the level opts out (its script adds back
@@ -875,3 +891,6 @@ proc load_level*(worker: Worker, level_dir: string) =
     thing.global_flags -= DIRTY
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
+  # Backstop: reveal the level once loading finishes, even if no script dropped
+  # the splash itself.
+  state.global_flags -= LOAD_SCREEN
