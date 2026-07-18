@@ -62,6 +62,12 @@ gdobj BuildNode of VoxelTerrain:
     error_highlight_on: bool
     next_stats_log: MonoTime
     prefill_hits, prefill_misses: int
+    prefill_gated, prefill_miss_with_data: int
+      ## Perf-log breakdown of misses: requests refused before the store was
+      ## consulted (no model yet / palette unpublished), and requests the
+      ## store answered empty although it holds data for that chunk. Both
+      ## should be 0; nonzero means paged-in blocks took the slow
+      ## paint-after-load path they didn't have to.
     palette_published: bool
       ## setup() has published the palette->slot map to the engine. Until then
       ## the streaming thread can't resolve a served chunk's static colors, so
@@ -219,8 +225,17 @@ gdobj BuildNode of VoxelTerrain:
     ## ENU_NO_PREFILL=1 disables the hook for prefill-vs-paint A/B measurement.
     result = new_pool_byte_array()
     if not ?self.model or prefill_disabled or not self.palette_published:
+      if not prefill_disabled:
+        inc self.prefill_gated
       return
     let bytes = self.model.voxels.prefill_bytes(block_position)
+    if bytes.len == 0:
+      let key: EditKey = (self.model.id, block_position)
+      if block_position in self.model.voxels.packed_chunks or (
+        ?self.model.voxels.edit_snapshots and
+        key in self.model.voxels.edit_snapshots
+      ):
+        inc self.prefill_miss_with_data
     if bytes.len > 0:
       self.prefilled_chunks[block_position] = PackedChunk(data: bytes).voxel_count
       # Served from edit_snapshots (packed_chunks hadn't synced yet): remember
@@ -584,7 +599,9 @@ gdobj BuildNode of VoxelTerrain:
           meshed = parse_int($stats["updated_blocks"]),
           dropped_meshes = parse_int($stats["dropped_block_meshs"]),
           prefill_hits = self.prefill_hits,
-          prefill_misses = self.prefill_misses
+          prefill_misses = self.prefill_misses,
+          prefill_gated = self.prefill_gated,
+          prefill_miss_with_data = self.prefill_miss_with_data
 
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side. Each side runs its
