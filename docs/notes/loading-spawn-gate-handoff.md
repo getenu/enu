@@ -5,13 +5,25 @@ Branch: **`island-load-perf`** (PR #88 → `course-island`). Working level:
 
 **Status: IMPLEMENTED (solo/server path).** The design below is built and
 verified on the island level — boot and mid-session reload both reveal at the
-waterfall with no sink. Two deviations from the plan as written: players are
-carried to `start_transform` at load *start* (not the PLAYERS step) so the
-voxel viewer streams the spawn area at top priority for the whole load, and
-the reveal gate additionally requires collision under the player (a short
-downward ray in `game.physics_process`) because the pending-block-updates
-settle streak reads zero in the lulls between page-in batches. The
-multiplayer extension (remote clients running the same local gate) remains.
+waterfall with no sink. Deviations from the plan as written:
+
+- Players are carried to `start_transform` at load *start* (not the PLAYERS
+  step) so the voxel viewer streams the spawn area at top priority.
+- The gate does NOT wait for scripts (ASAP_MODE): gate units' persisted data
+  renders in the data phase via prefill; their scripts are usually animation
+  and an animated one never finishes. Frame meshes are held under SPAWN_HELD
+  and bake right after the reveal.
+- "Rendered" is exact, not a settle streak: pending_block_updates == 0 per
+  gate build, which is trustworthy because the engine exposes
+  has_stream_started (vendor change) and build_node floors the counter at 1
+  until streaming has actually begun — plus collision under the player (short
+  downward ray in game.physics_process) and a de-embed lift at release.
+- load_things pumps ed's flush_buffers per unit — the synchronous load
+  otherwise parks every op (including the LOAD_SCREEN clear) in the local
+  send buffer until the whole load returns.
+
+The multiplayer extension (remote clients running the same local gate)
+remains.
 
 This note carries the full design from a long design session so a fresh agent
 can continue. Read it top to bottom before touching code.
