@@ -617,14 +617,32 @@ gdobj BuildNode of VoxelTerrain:
       if tick_took > 10:
         warn "renderer tick slow", ms = tick_took, unit = self.model.id
 
-      if is_local:
+      if is_local or self.publishes_pending:
         # Terrain pipeline backlog, plus 1 while the ASAP renderer holds a
         # buffered paste the terrain hasn't seen yet.
         var pending = int(self.get_pending_block_updates())
         if self.renderer.dirty:
           pending.inc
+        if not self.has_stream_started():
+          # The engine reads 0 pending before the required-block set has
+          # been computed for a viewer — "not started" would be published
+          # as "done", and loading-completion checks (the spawn gate,
+          # wait_for_script) would release early.
+          pending = max(pending, 1)
         if pending != self.model.pending_block_updates:
           self.model.pending_block_updates = pending
+
+  proc publishes_pending(): bool =
+    ## Whether this machine's node is the authority for the build's synced
+    ## pending_block_updates. Script-owned builds publish where the script
+    ## runs (is_local). A build with no code owner — script-less units like
+    ## the terrain, and every loaded unit before its script phase — belongs
+    ## to the level, so the server instance publishes for it. Without this,
+    ## such builds never publish at all and their pending sits at the init 0:
+    ## every loading-completion check reads "done" for terrains that haven't
+    ## requested a single block.
+    self.model.code.owner == "" and
+      state.server_ctx_name == state.worker_ctx_name
 
   proc setup*() =
     let was_skipping_join = dont_join
@@ -662,6 +680,13 @@ gdobj BuildNode of VoxelTerrain:
       flush_registry() # no-op while an ephemeral stream holds bakes
     # Palette + slots are live; prefill may now serve resolvable chunks.
     self.palette_published = true
+
+    if self.model.code.owner == state.worker_ctx_name or self.publishes_pending:
+      # Publish the not-yet-started floor immediately: the model initializes
+      # pending_block_updates to 0, and a loading-completion check can run
+      # between this add and the node's first process() publish — reading
+      # "done" for a terrain that hasn't requested a single block.
+      self.model.pending_block_updates = 1
     block:
       # The store must wrap the *current* shared's edit tables — a stale
       # wrapper on a revived replica serves prefill from destroyed tables

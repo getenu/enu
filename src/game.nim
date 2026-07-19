@@ -69,12 +69,6 @@ const SPAWN_GATE_TIMEOUT = 30.seconds
   ## after LOAD_SCREEN clears — an animated build never settles, and a slow
   ## mesh must not hold the load hostage.
 
-const SPAWN_GATE_QUIET = 500.milliseconds
-  ## How long the gate builds must be renderly idle before the reveal. An
-  ## instantaneous pending==0 check releases in the lulls between page-in
-  ## batches (physics frames also bunch after a slow frame), unveiling a
-  ## half-streamed ocean; requiring a quiet window catches the whole
-  ## stream-in as activity.
 
 var environment_cache {.threadvar.}: Table[string, Environment]
 
@@ -106,10 +100,6 @@ gdobj Game of Node:
     gate_waiting: bool
     gate_deadline: MonoTime
     gate_started: MonoTime
-    gate_last_activity: MonoTime
-    gate_counts: Table[string, int]
-      ## Last observed rendered_voxel_count per gate build — growth means
-      ## its data is still streaming in, which resets the quiet window.
     screenshot_camera_node: Camera
     screenshot_viewport_node: Viewport
 
@@ -273,10 +263,12 @@ gdobj Game of Node:
     # snapshotted the pre-PLAYERS builds into gate_ids), so release this
     # machine's player once every snapshot build's DATA has rendered locally:
     #
-    # - no pending block updates for a few consecutive frames, the settle
-    #   test wait_for_script uses. Not sufficient alone — the count reads
-    #   zero in the lulls between page-in batches, so a reload can produce
-    #   a zero streak while the terrain is still forming.
+    # - pending_block_updates == 0 for every gate build. This is exact, not
+    #   a settle heuristic: the engine counts required-but-unloaded blocks,
+    #   queued mesh updates, and in-flight meshes, and build_node publishes
+    #   a floor of 1 until the terrain's streaming has actually started
+    #   (has_stream_started) — so 0 can only mean "everything the viewer
+    #   needs is loaded and meshed", never "nothing requested yet".
     # - collision under the player. Collision meshes trail the voxel data,
     #   and a player released early sinks into the still-forming spawn hill
     #   and wedges there. Runs here rather than in process() because space
@@ -286,25 +278,19 @@ gdobj Game of Node:
     # voxels render in the data phase via prefill, while its script — usually
     # decoration or animation (the island's water is `play(8.0)`, the gull an
     # endless flap loop) — doesn't run until every unit's data has loaded,
-    # and an animated one never finishes at all. Waiting on that held the
-    # reveal to the gate timeout. `load_player_with_scripts` is reserved for
-    # levels that do want the reveal to wait for gate-unit scripts.
+    # and an animated one never finishes at all. Frame meshes are likewise
+    # held (FramePlayer defers renders under SPAWN_HELD) so playback can't
+    # churn the counters mid-gate; they bake right after the reveal.
     #
     # The deadline backstop covers a build that never settles and a spawn
     # with genuinely nothing below it.
     if self.gate_waiting:
       let time = get_mono_time()
-      var active = false
+      var rendered = true
       state.things.value.walk_tree proc(thing: Thing) =
         if thing of Build and thing.id in self.gate_ids:
-          let count = thing.rendered_voxel_count
-          if thing.pending_block_updates != 0 or
-              self.gate_counts.get_or_default(thing.id, -1) != count:
-            self.gate_counts[thing.id] = count
-            active = true
-      if active:
-        self.gate_last_activity = time
-      var rendered = time - self.gate_last_activity > SPAWN_GATE_QUIET
+          if thing.pending_block_updates != 0:
+            rendered = false
       if rendered and ?state.player and not state.nodes.player.is_nil:
         # Short ray: the spawn pose stands the player ~1.5m above the ground,
         # so support must be close below. A long ray can hit the sea-level
@@ -760,10 +746,8 @@ gdobj Game of Node:
           if thing of Build:
             ids.add thing.id
         self.gate_ids = ids
-        self.gate_counts.clear()
         self.gate_waiting = true
         self.gate_started = get_mono_time()
-        self.gate_last_activity = self.gate_started
         self.gate_deadline = self.gate_started + SPAWN_GATE_TIMEOUT
         info "spawn gate: waiting for local render", gate_ids = ids
 

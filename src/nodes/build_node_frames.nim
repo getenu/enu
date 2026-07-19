@@ -57,6 +57,12 @@ type FramePlayer* = ref object
     ## key work drain incrementally, but the visible change is one atomic pass —
     ## chunks never flip at different times.
   padded_bytes: PoolByteArray ## request_frame_mesh payload scratch
+  held_render: bool
+    ## A render was requested while this machine's spawn gate held the
+    ## reveal (SPAWN_HELD). Frame DATA loads like any other build data, but
+    ## baking frame meshes waits — it must not compete with, or churn, the
+    ## initial world render the gate is timing. tick() replays the render
+    ## once the gate releases.
   commit_index: int
     ## which flip `staged` was prepared for. Prepare-ahead builds the NEXT flip
     ## during the current interval; the commit waits until current_frame catches
@@ -444,7 +450,11 @@ proc render*(self: FramePlayer, index: int) =
   ## current_frame, and skipping the hide there would leave stale frame content
   ## behind after the rerun.
   if index >= 0 and index < self.model.frames.len:
-    if ASAP_MODE notin self.model.global_flags:
+    if SPAWN_HELD in state.local_flags:
+      # Spawn gate up: defer the show (see held_render). Hiding below stays
+      # ungated — it only removes content.
+      self.held_render = true
+    elif ASAP_MODE notin self.model.global_flags:
       self.show(index)
   else:
     self.hide()
@@ -481,6 +491,11 @@ proc drop_chunk*(self: FramePlayer, chunk_id: Vector3) =
 proc tick*(self: FramePlayer) =
   ## Per-frame playback work: expire dropped bakes, drain the queue, commit a
   ## ready flip, and log stats. Called every process tick.
+  if SPAWN_HELD in state.local_flags:
+    return
+  if self.held_render:
+    self.held_render = false
+    self.render(self.model.current_frame)
   if self.missing.len > 0:
     # a cancelled/dropped bake never signals; expire it so the chunk re-queues on
     # the next flip instead of staying stale forever
@@ -529,7 +544,7 @@ proc advance_playback*(self: FramePlayer) =
   # loading. Cycling frames mid-load floods the mesher (every flip rebakes
   # the animated build's chunks) and spiked the frame time to >1s while the
   # rest of the level was still streaming in. Playback starts once loaded.
-  if LOADING_LEVEL in state.global_flags:
+  if LOADING_LEVEL in state.global_flags or SPAWN_HELD in state.local_flags:
     return
   let now = get_mono_time()
   if now >= self.next_at:
