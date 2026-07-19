@@ -69,6 +69,13 @@ const SPAWN_GATE_TIMEOUT = 30.seconds
   ## after LOAD_SCREEN clears — an animated build never settles, and a slow
   ## mesh must not hold the load hostage.
 
+const SPAWN_GATE_QUIET = 500.milliseconds
+  ## How long the gate builds must be renderly idle before the reveal. An
+  ## instantaneous pending==0 check releases in the lulls between page-in
+  ## batches (physics frames also bunch after a slow frame), unveiling a
+  ## half-streamed ocean; requiring a quiet window catches the whole
+  ## stream-in as activity.
+
 var environment_cache {.threadvar.}: Table[string, Environment]
 
 gdobj Game of Node:
@@ -97,9 +104,12 @@ gdobj Game of Node:
       ## ed ordering, exactly this machine's copy of the pre-PLAYERS units.
       ## SPAWN_HELD stays on until every one has rendered here.
     gate_waiting: bool
-    gate_streak: int
     gate_deadline: MonoTime
     gate_started: MonoTime
+    gate_last_activity: MonoTime
+    gate_counts: Table[string, int]
+      ## Last observed rendered_voxel_count per gate build — growth means
+      ## its data is still streaming in, which resets the quiet window.
     screenshot_camera_node: Camera
     screenshot_viewport_node: Viewport
 
@@ -284,11 +294,17 @@ gdobj Game of Node:
     # with genuinely nothing below it.
     if self.gate_waiting:
       let time = get_mono_time()
-      var rendered = true
+      var active = false
       state.things.value.walk_tree proc(thing: Thing) =
         if thing of Build and thing.id in self.gate_ids:
-          if thing.pending_block_updates != 0:
-            rendered = false
+          let count = thing.rendered_voxel_count
+          if thing.pending_block_updates != 0 or
+              self.gate_counts.get_or_default(thing.id, -1) != count:
+            self.gate_counts[thing.id] = count
+            active = true
+      if active:
+        self.gate_last_activity = time
+      var rendered = time - self.gate_last_activity > SPAWN_GATE_QUIET
       if rendered and ?state.player and not state.nodes.player.is_nil:
         # Short ray: the spawn pose stands the player ~1.5m above the ground,
         # so support must be close below. A long ray can hit the sea-level
@@ -302,12 +318,22 @@ gdobj Game of Node:
         )
         if hit.len == 0:
           rendered = false
-      if rendered:
-        inc self.gate_streak
-      else:
-        self.gate_streak = 0
-      if self.gate_streak >= 3 or time > self.gate_deadline:
-        if self.gate_streak < 3:
+        else:
+          # De-embed before unfreezing: a start_transform that sits the
+          # capsule inside the surface leaves move_and_slide unable to
+          # depenetrate — the player is wedged until they fly out. The
+          # capsule rests with its origin ~0.9 above the surface, so lift
+          # anything closer than that to a safe height and let gravity
+          # settle the last few centimetres.
+          let surface_y = hit["position"].as_vector3.y
+          if origin.y < surface_y + 0.9:
+            var t = state.player.transform
+            t.origin.y = surface_y + 1.2
+            state.player.transform = t
+            info "spawn gate: lifted player clear of the surface",
+              from_y = origin.y, to_y = t.origin.y
+      if rendered or time > self.gate_deadline:
+        if not rendered:
           error "spawn gate timed out; revealing anyway",
             gate_ids = self.gate_ids
         else:
@@ -734,9 +760,10 @@ gdobj Game of Node:
           if thing of Build:
             ids.add thing.id
         self.gate_ids = ids
-        self.gate_streak = 0
+        self.gate_counts.clear()
         self.gate_waiting = true
         self.gate_started = get_mono_time()
+        self.gate_last_activity = self.gate_started
         self.gate_deadline = self.gate_started + SPAWN_GATE_TIMEOUT
         info "spawn gate: waiting for local render", gate_ids = ids
 
