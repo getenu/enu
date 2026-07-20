@@ -6,6 +6,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enu is a 3D sandbox environment for creating and exploring voxel worlds using a Logo-inspired programming API. It's built with Nim and the Godot game engine (v3.5), enabling users to program interactive 3D environments using Nim scripts that run in the Nim VM.
 
+## Voice of Official Content
+
+This applies to bots, signs, and narration in the levels *we* ship (the course,
+tutorials, demos) — not to player projects, which have their own voice.
+
+The bots of Enu are **friendly, earnest, and — put kindly — not very bright.**
+They mean well, they're glad you're here, and they get things charmingly wrong:
+mangling a story they love, muddling their own plan, chasing a goal that makes
+no sense, always with total sincerity. Write them that way on purpose.
+
+- **Confidently wrong beats blandly correct.** Let them misremember, over-explain,
+  and contradict themselves between lines. An occasional flash of accidental
+  insight is welcome; keep most of it fond and foolish.
+- **Vary the understanding a lot.** Across a bot's lines its grasp of the
+  situation should swing wildly — that variance is the joke.
+- **Kind, never mean.** The player is the competent one; the bots are the
+  endearing mess they're helping. The joke is never at the player's expense.
+- **Own the mistakes.** Non sequiturs and confident nonsense are the charm, not
+  bugs to sand off.
+
+Why this is the house style, not an accident: it keeps the world warm and
+low-stakes so a new player feels safe poking at things; increasingly these bots
+will be driven by small local language models we shouldn't expect too much from,
+so rather than hide the seams we lean into them; and, frankly, it makes us happy.
+Overall theme: broken-but-well-intentioned robots and AI, helpful in spite of
+themselves.
+
 ## Build Commands
 
 ### Do it the normal way
