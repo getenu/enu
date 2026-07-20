@@ -141,47 +141,34 @@ proc apply_stage(s: int) =
     }
   player.can_fly = s >= 3
 
-# ----- live progress on the welcome sign -----
-# The board's say-sign reports a pre-scale position (~(-223, 19, -35));
-# the player's own coding sign can also hover nearby at spawn — skip
-# anything that tracks the player.
-var welcome_sign: Sign
+# ----- live progress on the standalone progress sign -----
+# The tall progress board sits off to the player's right; its say-sign hangs
+# near (-207, 27, -32.5). We keep its always-on message in sync with world
+# state. (The welcome sign owns its own page now — we don't touch it.)
+var progress_sign: Sign
 for s in all_signs():
-  if (s.position - player.position).length < 6:
-    continue
-  if (s.position - vec3(-219.0, 12.0, -35.0)).length < 15:
-    welcome_sign = s
+  if (s.position - vec3(-207.0, 27.0, -32.5)).length < 10:
+    progress_sign = s
 
 proc mark(done: bool): string =
   if done: "[x]" else: "[ ]"
 
-proc progress_page(): string =
+proc checklist(): string =
   \"""
-# Welcome to Enu
+# Objectives
 
-Enu is a world you reprogram from the inside — everything you see is
-running on code you can open and change. Poke at it. Break it. Fix it.
+**Mainland**
 
-## Your objective
+- {mark(windmill_done)} Windmill blades turning
+- {mark(tower_done)} Lookout tower raised
+- {mark(maze_done)} Maze bot at its exit
+- {mark(lighthouse_done)} Lighthouse lit
 
-Wake the sleeping boat by fixing up the mainland:
+**The isle**
 
-- {mark(windmill_done)} Get the **windmill** blades turning
-- {mark(tower_done)} Raise the **lookout tower**
-- {mark(maze_done)} Guide the **maze bot** to its exit
-- {mark(lighthouse_done)} Light the **dark lighthouse**
-
-Then sail out and help the **castaways** stranded on the isle beyond:
-
-- {mark(ferry_done)} Ferry the castaways to their camp
-- {mark(cottage_done)} Patch the storm-torn cottage
-- {mark(fireworks_done)} Wake the fireworks battery
-
-A progress **beacon** lights up green each time you finish a task.
-
----
-
-[Reset this level](<nim://reset_level()>)
+- {mark(ferry_done)} Castaways ferried
+- {mark(cottage_done)} Cottage patched
+- {mark(fireworks_done)} Fireworks woken
 """
 
 var last_page = ""
@@ -238,8 +225,9 @@ forever:
   else:
     apply_stage(3)
 
-  if ?welcome_sign:
-    let page = progress_page()
+  if ?progress_sign:
+    let page = checklist()
     if page != last_page:
       last_page = page
-      welcome_sign.more = page
+      progress_sign.more = page
+      progress_sign.open = true
