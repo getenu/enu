@@ -1665,6 +1665,23 @@ proc place_block(self: Build, position: Vector3, color: Color) =
   self.voxels.set_edit(position, info)
   self.global_flags += DIRTY # hand-style edit: persist on the next save
 
+proc persist(self: Build) =
+  ## Promote every voxel the script has drawn (TRANSIENT) into a PERSISTED edit,
+  ## so it's written to the unit's data file and survives even after the drawing
+  ## code is removed from the script. Like place_block, but for the whole build
+  ## at once. An authoring tool: draw a build, `persist()` it, then delete the
+  ## drawing code and the voxels stay. Collect first, then edit — set_edit must
+  ## not mutate the tables all_voxels is streaming.
+  var promoted: seq[tuple[pos: Vector3, info: VoxelInfo]]
+  for (pos, info) in self.voxels.all_voxels:
+    if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
+      continue
+    promoted.add (pos, (PERSISTED, info.color))
+  for (pos, info) in promoted:
+    self.voxels.set_edit(pos, info)
+  if promoted.len > 0:
+    self.global_flags += DIRTY
+
 proc sealed_frames(self: Build): bool =
   self.sealed_frames
 
@@ -1771,7 +1788,7 @@ proc bridge_to_vm*(worker: Worker) =
     `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
     cull_down_faces_set, sealed_frames, sealed_frames_set
 
-  result.bridged_from_vm "builds_private", place_block
+  result.bridged_from_vm "builds_private", place_block, persist
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,
