@@ -427,11 +427,29 @@ gdobj BotNode of KinematicBody:
           let top = bnode.global_transform.xform_vector3(
             vec3(hi.x, cy + 1.0, hi.z)
           ).y
-          if not found or top > best_top:
-            found = true
-            best_top = top
-            best_node = bnode
-          break # highest solid in this build's column
+          # A step the bot has walked into (its top sits above the feet, only
+          # possible with reach_up) is climbable only if it's a SINGLE block:
+          # clear standing room above it. Otherwise a wall would be climbed one
+          # cell at a time — the bot bumped up onto the first block, then the
+          # next becomes a fresh step, all the way to the top. Measured in WORLD
+          # units, like climb_step, so a fine-scaled build (a 1m step spanning
+          # several cells) isn't mistaken for a stack. The floor already
+          # underfoot (top <= feet) is never gated.
+          var blocked = false
+          if reach_up > 0.0 and top > feet + 0.05:
+            var y = top + 0.3
+            while y < top + 1.6:
+              let c = inv.xform_vector3(vec3(pos.x, y, pos.z))
+              if build.solid_at(vec3(floor(c.x), floor(c.y), floor(c.z))):
+                blocked = true
+                break
+              y += 0.3
+          if not blocked:
+            if not found or top > best_top:
+              found = true
+              best_top = top
+              best_node = bnode
+            break # highest solid in this build's column
         cy -= 1.0
     if ?state.ground and feet - reach <= 0.0 and (not found or best_top < 0.0):
       found = true
