@@ -20,6 +20,7 @@ import libs/fd_tracking
 
 var next_perf_log {.threadvar.}: MonoTime
 var next_voxmem_log {.threadvar.}: MonoTime
+var next_stats_update {.threadvar.}: MonoTime
 var last_frame_at {.threadvar.}: MonoTime
 var slow_frame_log {.threadvar.}: int ## 0 unread, 1 on, -1 off
 var slow_frame_ms {.threadvar.}: float ## threshold; ENU_SLOW_FRAME_MS
@@ -186,39 +187,50 @@ gdobj Game of Node:
         full_screen = not state.config.full_Screen
 
     if state.config.show_stats:
-      let fps = get_monitor(TIME_FPS)
+      # Refresh the overlay at ~10 Hz, not every frame: the tree walk and full
+      # string interpolation below are a per-frame main-thread cost, and the
+      # label re-emitting its whole text every frame is a canvas upload the
+      # render thread doesn't need — a stats readout reads identically to the
+      # eye at 10 Hz. The 300-frame leak log keeps its own cadence, so only
+      # walk the tree when at least one consumer is due.
+      let stats_due = time > next_stats_update
+      let log_due = state.frame_count mod 300 == 0
+      if stats_due or log_due:
+        var thing_count = 0
+        # Loaded chunk entries across all builds — the number voxel paging
+        # actually moves (chunk values live inside their tables, so the object
+        # count doesn't reflect page-in/out).
+        var chunk_count = 0
+        state.things.value.walk_tree proc(thing: Thing) =
+          inc thing_count
+          if thing of Build and ?Build(thing).voxels:
+            chunk_count += Build(thing).voxels.packed_chunks.len
+            chunk_count += Build(thing).voxels.chunk_deltas.len
 
-      let vram = get_monitor(RENDER_VIDEO_MEM_USED)
-      var thing_count = 0
-      # Loaded chunk entries across all builds — the number voxel paging
-      # actually moves (chunk values live inside their tables, so the object
-      # count doesn't reflect page-in/out).
-      var chunk_count = 0
-      state.things.value.walk_tree proc(thing: Thing) =
-        inc thing_count
-        if thing of Build and ?Build(thing).voxels:
-          chunk_count += Build(thing).voxels.packed_chunks.len
-          chunk_count += Build(thing).voxels.chunk_deltas.len
+        if stats_due:
+          next_stats_update = time + 100.milliseconds
+          let fps = get_monitor(TIME_FPS)
+          let vram = get_monitor(RENDER_VIDEO_MEM_USED)
+          self.stats.text =
+            \"""
+            FPS: {fps}
+            scale_factor: {state.scale_factor}
+            vram: {vram}
+            things: {thing_count}
+            ed objects: {Ed.thread_ctx.len}
+            chunks: {chunk_count}
+            ed mem: {state.ed_mem div 1024} KiB
+            level: {state.level_name}
+            {get_network_stats()}
+            {get_stats()}
+            """
 
-      self.stats.text =
-        \"""
-        FPS: {fps}
-        scale_factor: {state.scale_factor}
-        vram: {vram}
-        things: {thing_count}
-        ed objects: {Ed.thread_ctx.len}
-        chunks: {chunk_count}
-        ed mem: {state.ed_mem div 1024} KiB
-        level: {state.level_name}
-        {get_network_stats()}
-        {get_stats()}
-        """
-      # Periodic main-thread counterpart of "worker stats": ed object growth
-      # here is how reload/sync leaks surface (see docs/notes on the reload
-      # leaks) — keep it greppable.
-      if state.frame_count mod 300 == 0:
-        info "main stats", ed_objects = Ed.thread_ctx.len, things = thing_count,
-          chunks = chunk_count
+        # Periodic main-thread counterpart of "worker stats": ed object growth
+        # here is how reload/sync leaks surface (see docs/notes on the reload
+        # leaks) — keep it greppable.
+        if log_due:
+          info "main stats", ed_objects = Ed.thread_ctx.len, things = thing_count,
+            chunks = chunk_count
     state.voxel_tasks =
       parse_int($get_stats()["tasks"].as_dictionary["main_thread"])
 
