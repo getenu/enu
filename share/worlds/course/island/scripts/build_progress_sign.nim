@@ -19,8 +19,9 @@ turn left        # face -X, toward the player / spawn side
 up 20
 forward 2
 # The checklist is a multi-line markdown panel (renders far cleaner than a
-# multi-line bubble). Keep it open so it shows without a click; the director
-# fills in `.more` with live world state.
-let board = say("### Objectives", "Loading progress...", width = 7.0,
-  height = 6.0, size = 260)
-board.open = true
+# multi-line bubble). It lives in the sign's in-world message (param 1) so it
+# reads on the board itself — opening the sign would eat half the screen. The
+# director keeps `.message` in sync with live world state; this is just the
+# placeholder until it does.
+say("### Objectives\n\n_Loading progress..._", width = 7.0, height = 6.0,
+  size = 260)
