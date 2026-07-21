@@ -143,12 +143,10 @@ proc apply_stage(s: int) =
 
 # ----- live progress on the standalone progress sign -----
 # The tall progress board sits off to the player's right; its say-sign hangs
-# near (-207, 27, -32.5). We keep its always-on message in sync with world
-# state. (The welcome sign owns its own page now — we don't touch it.)
+# near (-207, 27, -32.5). We keep its in-world message in sync with world state.
+# (The welcome sign owns its own page now — we don't touch it.) The sign loads
+# after us, so the scan below runs in the loop until it resolves.
 var progress_sign: Sign
-for s in all_signs():
-  if (s.position - vec3(-207.0, 27.0, -32.5)).length < 10:
-    progress_sign = s
 
 proc mark(done: bool): string =
   if done: "[x]" else: "[ ]"
@@ -225,9 +223,12 @@ forever:
   else:
     apply_stage(3)
 
+  if progress_sign.is_nil:
+    for s in all_signs():
+      if (s.position - vec3(-207.0, 27.0, -32.5)).length < 10:
+        progress_sign = s
   if ?progress_sign:
     let page = checklist()
     if page != last_page:
       last_page = page
-      progress_sign.more = page
-      progress_sign.open = true
+      progress_sign.message = page
