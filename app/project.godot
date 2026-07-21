@@ -328,5 +328,5 @@ limits/multithreaded_server/rid_pool_prealloc=500
 
 threads/thread_model=2
 quality/depth_prepass/enable=false
-batching/options/use_batching=false
-batching/options/use_batching_in_editor=false
+batching/options/use_batching=true
+batching/options/use_batching_in_editor=true
