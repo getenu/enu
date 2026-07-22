@@ -634,6 +634,10 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             worker.load_level(level_dir)
 
   if SERVER in state.local_flags:
+    # Snapshot the level BEFORE Enu's first write — the load saves at its
+    # end, and a load-path bug must not get baked into the "backup". The
+    # read is quick; the compression overlaps the load on its own thread.
+    backup_level(state.config.level_dir)
     load_level()
   else:
     var timeout_at = get_mono_time() + 30.seconds
@@ -732,7 +736,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   const stats_log_interval = 5.seconds
   const asap_flush_interval = 2.seconds
   var save_at = get_mono_time() + auto_save_interval
-  var backup_at = MonoTime.low
+  # The boot backup already ran (pre-load, see launch); first periodic one
+  # comes a full interval later.
+  var backup_at = get_mono_time() + backup_interval
   var test_started_at = MonoTime.high
   var last_stats_log = MonoTime.low
   var last_asap_flush = MonoTime.low
@@ -997,6 +1003,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       state.pop_flag NEEDS_RESTART
 
     Ed.thread_ctx.tick
+
+    # A quit must not truncate an in-flight level backup.
+    finish_backup()
 
     # The worker thread is exiting (quit or NEEDS_RESTART → relaunch). Release
     # the context's bodies + buffers; without this every restart leaks the whole

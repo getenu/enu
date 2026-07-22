@@ -242,7 +242,10 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
       if not script_dir.starts_with(state.config.lib_dir / "vmlib"):
         let generated_dir = script_dir.parentDir / "generated"
         create_dir(generated_dir)
-        write_file(generated_dir / module_name & ".nim", code)
+        # if_changed: a plain write touched every unit's stub mtime on every
+        # boot, defeating change detection over the level dir (the backup
+        # manifest) and churning file-watcher tooling.
+        write_file_if_changed(generated_dir / module_name & ".nim", code)
 
       ctx.fuel = fuel
       ctx.file_index = -1
