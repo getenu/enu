@@ -42,7 +42,7 @@ box(at = vec3(23, 0, 4), to = vec3(25, 0, 6), color = green)
 
 # --- Scrolling signs (tutorial-1's scroller pattern) ---
 proc make_sign(): Sign =
-  say("` `", width = 6.0, height = 2.5, size = 1400)
+  say("` `", width = 6.0, height = 2.5, size = 1.17)
 
 proc scroller(sign: Sign, msg: string, pause = 0, len = msg.len): proc() =
   var current = msg

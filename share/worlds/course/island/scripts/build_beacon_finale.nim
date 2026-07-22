@@ -9,7 +9,7 @@ box(vec3(-1, 0, -1), vec3(0, 9, 0), color = brown)      # 2x2 post, 10 tall
 box(vec3(-2, 10, -2), vec3(1, 12, 1), color = white)    # 4x4 lantern cage
 
 say "Beacons all lit. The sky is yours -- double-jump to fly.",
-  width = 6.0, height = 1.0, size = 900
+  width = 6.0, height = 1.0, size = 0.75
 
 forever:
   if glow > 0.05:

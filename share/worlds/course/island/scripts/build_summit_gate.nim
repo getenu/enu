@@ -40,7 +40,7 @@ box(vec3(2, 1, -3), vec3(6, 1, 1), color = white)      # beacon pedestal riser
 drawing = false
 up 15
 right 4
-let teaser = say("` `", width = 11.0, height = 2.0, size = 1500)
+let teaser = say("` `", width = 11.0, height = 2.0, size = 1.25)
 let scroll = teaser.scroller(" NEXT LEVEL... SOON ", 0, 12)
 
 forever:

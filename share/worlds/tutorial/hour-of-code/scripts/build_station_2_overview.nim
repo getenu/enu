@@ -25,7 +25,7 @@ Bot that walks and spins with random movements!
 Bot that follows the player!
 """
 
-say overview, details, width = 10, height = 4, size = 520
+say overview, details, width = 10, height = 4, size = 0.43
 
 move me
 forever:

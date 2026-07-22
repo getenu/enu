@@ -9,7 +9,7 @@ proc init*(
     transform = Transform.init,
     width = 1.0,
     height = 1.0,
-    size = 32,
+    size = 250 / 1200, # text height in blocks; ≈0.208 == the pre-blocks default
     billboard = false,
     text_only = false,
 ): Sign =

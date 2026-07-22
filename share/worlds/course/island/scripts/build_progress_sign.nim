@@ -16,12 +16,14 @@ box(vec3(-2, 13, -5), vec3(-1, 26, 5), color = white)    # white face on -X
 
 # hang the checklist sign on the white face, always facing the player
 turn left        # face -X, toward the player / spawn side
-up 20
+up 13
 forward 2
+right 5          # shift the anchor left so the panel centres on the face
 # The checklist is a multi-line markdown panel (renders far cleaner than a
 # multi-line bubble). It lives in the sign's in-world message (param 1) so it
 # reads on the board itself — opening the sign would eat half the screen. The
 # director keeps `.message` in sync with live world state; this is just the
-# placeholder until it does.
-say("### Objectives\n\n_Loading progress..._", width = 7.0, height = 6.0,
-  size = 260)
+# placeholder until it does. Panel slightly overfills the 10×13 white face so it
+# reaches every border; text height is in blocks (≈0.55 of a block per line).
+say("### Objectives\n\n_Loading progress..._", width = 11.0, height = 14.0,
+  size = 0.55)

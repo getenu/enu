@@ -924,7 +924,7 @@ proc new_markdown_sign(
     more: string,
     width: float,
     height: float,
-    size: int,
+    size: float,
     billboard: bool,
 ): Thing =
   result = Sign.init(
@@ -949,7 +949,7 @@ proc update_markdown_sign(
     more: string,
     width: float,
     height: float,
-    size: int,
+    size: float,
     billboard: bool,
 ) =
   thing.width = width
@@ -967,7 +967,7 @@ proc `height=`(self: Sign, value: float) =
   types.`height=`(self, value)
   self.message_value.touch self.message
 
-proc `size=`(self: Sign, value: int) =
+proc `size=`(self: Sign, value: float) =
   types.`size=`(self, value)
   self.message_value.touch self.message
 

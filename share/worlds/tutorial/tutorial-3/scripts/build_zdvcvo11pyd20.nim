@@ -29,13 +29,13 @@ proc level_menu*(me: Build, show_restart = true) =
 
   me.right 3
 
-  let sign1 = me.say(copy, width = 4, height = 2, size = 200)
+  let sign1 = me.say(copy, width = 4, height = 2, size = 0.17)
   me.up 1
   me.left 3
   me.turn 180
   me.down 1
 
-  let sign2 = me.say(copy, width = 4, height = 2, size = 200)
+  let sign2 = me.say(copy, width = 4, height = 2, size = 0.17)
   me.left 3
 
   loop:

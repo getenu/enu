@@ -28,7 +28,7 @@ bridged_to_host:
     more = "",
     width = 1.0,
     height = 1.0,
-    size = 32,
+    size = 250 / 1200, # text height in blocks; ≈0.208 == the pre-blocks default
     billboard = false,
   )
 
@@ -38,6 +38,6 @@ bridged_to_host:
     more = "",
     width = 1.0,
     height = 1.0,
-    size = 32,
+    size = 250 / 1200, # text height in blocks; ≈0.208 == the pre-blocks default
     billboard = false,
   )

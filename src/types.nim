@@ -448,7 +448,7 @@ type
   Sign* = ref object of Thing
     message_value*, more_value*: EdValue[string]
     width_value*, height_value*: EdValue[float]
-    size_value*: EdValue[int]
+    size_value*: EdValue[float] ## text height in blocks (see sign_node)
     billboard_value*: EdValue[bool]
     owner_value*: EdValue[Thing]
     text_only*: bool

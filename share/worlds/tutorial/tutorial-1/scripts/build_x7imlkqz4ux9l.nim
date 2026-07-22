@@ -36,7 +36,7 @@ let details =
   - [Load default world](<nim://load_level("default-1", "default")>).
   """
 
-say overview, details, height = 3, width = 3, size = 320
+say overview, details, height = 3, width = 3, size = 0.27
 
 move me
 
