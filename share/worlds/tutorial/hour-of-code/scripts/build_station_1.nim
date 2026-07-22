@@ -36,7 +36,7 @@ up 1
 - More colors: Add `, black, brown` after `white`
 """
 
-let main_sign = say(main_overview, exercise_a, width = 10, height = 4, size = 520)
+let main_sign = say(main_overview, exercise_a, width = 10, height = 4, size = 0.43)
 main_sign.position = main_sign.position + (UP * 5) + (FORWARD * 0.5)
 
 # Exercise B sign
@@ -60,7 +60,7 @@ color = blue
 - Multiple staircases side by side
 """
 
-let sign_b = say("# B", exercise_b_content, width = 2.0, height = 2.0, size = 1000)
+let sign_b = say("# B", exercise_b_content, width = 2.0, height = 2.0, size = 0.83)
 sign_b.position = me.position + (UP * 4) + (LEFT * 1) + (FORWARD * 0.5)
 
 # Exercise C sign
@@ -75,7 +75,7 @@ Combine everything you've learned!
 - Use your imagination!
 """
 
-let sign_c = say("# C", exercise_c_content, width = 2.0, height = 2.0, size = 1000)
+let sign_c = say("# C", exercise_c_content, width = 2.0, height = 2.0, size = 0.83)
 sign_c.position = me.position + (UP * 4) + (LEFT * 5) + (FORWARD * 0.5)
 
 # Help sign
@@ -88,7 +88,7 @@ let help_content = """
 4. ✓ Still stuck? Raise your hand!
 """
 
-let help_sign = say("# Help", help_content, width = 2.0, height = 1.0, size = 520)
+let help_sign = say("# Help", help_content, width = 2.0, height = 1.0, size = 0.43)
 help_sign.position = me.position + (UP * 1.5) + (LEFT * 3) + (FORWARD * 0.5)
 
 move me

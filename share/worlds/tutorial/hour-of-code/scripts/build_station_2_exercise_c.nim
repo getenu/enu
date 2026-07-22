@@ -34,7 +34,7 @@ forever:
 [Previous: Exercise B](<nim://show_exercise("station_2_b")>)
 """
 
-say overview, details, width = 10, height = 4, size = 520
+say overview, details, width = 10, height = 4, size = 0.43
 
 move me
 forever:

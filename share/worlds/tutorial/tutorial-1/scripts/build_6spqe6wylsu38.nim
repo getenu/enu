@@ -2,7 +2,7 @@ name Maze(finished = false, won = false)
 lock = true
 
 proc make_sign(): Sign =
-  say("` `", width = 10.0, height = 3.0, size = 2600)
+  say("` `", width = 10.0, height = 3.0, size = 2.17)
 
 drawing = true
 if not is_instance:

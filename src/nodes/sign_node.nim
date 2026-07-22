@@ -10,6 +10,12 @@ import core
 const
   viewport_x = 1200
   viewport_y = 1200
+  # The sign renders its markdown into a fixed `viewport_x`-wide texture mapped
+  # across `width` blocks, so a block spans `viewport_x / width` px. `size` (the
+  # model field) is the text height in blocks, so its font size in texture px is
+  # `size * viewport_x / width`. This constant is the whole bridge between the
+  # block-space API and the pixel-space label.
+  text_px_per_block = viewport_x.float
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
@@ -40,14 +46,26 @@ gdobj SignNode of Spatial:
 
     # The markdown label has extra padding at the bottom. There's probably a
     # good reason for this and a way to remove it properly, but this gets
-    # the job done for now.
-    let padding = self.model.size.float / (0.9 * self.model.width)
+    # the job done for now. (`size` is blocks; scale to texture px like the
+    # font does, so the trim tracks the text size.)
+    let padding =
+      self.model.size * text_px_per_block / (0.9 * self.model.width)
     let rect = vec2(self.label.rect_size.x, self.label.rect_size.y - padding)
 
     let ratio = rect.y / rect.x
+    let sign_height = self.model.width * ratio
     self.viewport.size = rect
-    self.quad.size = vec2(self.model.width, self.model.width * ratio)
-    self.shape.scale = vec3(self.model.width, self.model.width * ratio, 1)
+    self.quad.size = vec2(self.model.width, sign_height)
+    self.shape.scale = vec3(self.model.width, sign_height, 1)
+
+    # Auto-sized signs (bots, mainly) anchor their bottom edge and grow upward,
+    # so a long message climbs into the air instead of clipping down through the
+    # speaker's head. The quad is centred on the mesh origin, so lifting the mesh
+    # by half its height pins the bottom edge at the sign's origin.
+    let mesh = self.get_node("MeshInstance") as MeshInstance
+    var t = mesh.transform
+    t.origin.y = sign_height / 2
+    mesh.transform = t
 
   proc setup*() =
     debug "sign setup", sign = self.model.id
@@ -95,7 +113,7 @@ gdobj SignNode of Spatial:
       var stylebox = self.label.og_label.get_stylebox("normal") as StyleBoxFlat
 
       stylebox.content_margin_left = 80 / self.model.width
-      self.label.size = int(float(self.model.size) / self.model.width)
+      self.label.size = int(self.model.size * text_px_per_block / self.model.width)
 
       text_edit.visible = self.model.text_only
       self.label.visible = not self.model.text_only

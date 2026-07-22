@@ -23,13 +23,14 @@ say "Hello, world!"
 say "- Click me", "# Title\n\nMarkdown content."
 
 # Named parameters
-say "text", "more", width = 2.0, height = 3.0, size = 32
+say "text", "more", width = 2.0, height = 3.0, size = 0.4
 ```
 
-Parameters:
-- `width` — panel width multiplier (default 1.0)
-- `height` — panel height multiplier (default 1.0)
-- `size` — font size in pixels (default 32)
+Parameters (all in blocks — the same unit as `box`/turtle moves):
+- `width` — panel width in blocks (default 2.0)
+- `height` — panel height in blocks (default 2.0; `0` = auto-fit to the text)
+- `size` — text height in blocks (default ≈0.2). `size = 1.0` is one-block-tall
+  text; `size = 0.4` is a readable sign caption
 - `billboard = true` — always face the player
 
 ## Stationary Info Sign (Build)
@@ -178,7 +179,7 @@ let details = \"""
 turn 180
 up 5
 lean forward, 20
-say overview, details, height = 2, width = 6, size = 610
+say overview, details, height = 2, width = 6, size = 0.5
 
 forever:
   turn player

@@ -23,10 +23,12 @@ bridged_to_host:
     ## How tall the sign is, in blocks.
 
   proc `height=`*(self: Sign, value: float)
-  proc size*(self: Sign): int
-    ## The text size. Bigger numbers, bigger letters.
+  proc size*(self: Sign): float
+    ## The text height, in blocks — the same unit as `width` and `height`. So
+    ## `size = 1.0` is text one block tall; the default is about a fifth of a
+    ## block. Bigger numbers, bigger letters.
 
-  proc `size=`*(self: Sign, value: int)
+  proc `size=`*(self: Sign, value: float)
   proc open*(self: Sign): bool
     ## Whether the sign is open full-screen for reading. Set it to pop
     ## the sign open (or slam it shut).
@@ -38,32 +40,36 @@ bridged_to_host:
 
   proc `billboard=`*(self: Sign, value: bool)
 
+const DEFAULT_TEXT_SIZE = 250 / 1200
+  ## Default text height in blocks (≈0.208). The odd literal reproduces the
+  ## pre-blocks default (font px == 250 / sign width) exactly.
+
 proc say*(
     self: Thing,
     message: string,
     more = "",
     width = float.high,
     height = float.high,
-    size = int.high,
+    size = float.high,
     billboard = none(bool),
 ): Sign {.discardable.} =
   ## Show a message on a sign above the thing: `say "Hello!"`. Call it
   ## again to change the message, or `say ""` to put the sign away.
   ## Markdown works, `more` adds extra text for when the sign is
   ## opened, and `width`/`height`/`size` control the shape if you're
-  ## picky.
-  let defaults: tuple[width: float, height: float, size: int, billboard: bool] =
+  ## picky. `width`, `height` and `size` are all in blocks.
+  let defaults: tuple[width: float, height: float, size: float, billboard: bool] =
     if ?self.sign:
       (self.sign.width, self.sign.height, self.sign.size, self.sign.billboard)
     elif self of Bot:
-      (2.0, 0.0, 250, true)
+      (2.0, 0.0, DEFAULT_TEXT_SIZE, true)
     else:
-      (2.0, 2.0, 250, false)
+      (2.0, 2.0, DEFAULT_TEXT_SIZE, false)
 
   let
     width = if width == float.high: defaults.width else: width
     height = if height == float.high: defaults.height else: height
-    size = if size == int.high: defaults.size else: size
+    size = if size == float.high: defaults.size else: size
     billboard = billboard.get(defaults.billboard)
 
   if message == "":
@@ -91,7 +97,7 @@ template say*(
     more = "",
     width = float.high,
     height = float.high,
-    size = int.high,
+    size = float.high,
     billboard = none(bool),
 ): Sign =
   enu_target.say(message, more, width, height, size, billboard)
