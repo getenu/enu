@@ -1245,27 +1245,68 @@ proc things_overlapping(box: WorldBox): seq[Thing] =
 
 proc voxels_in_box*(box: WorldBox): bool =
   ## True if any visible voxel (any Build's data) intersects `box`.
-  ## Walks only builds whose own bounds overlap the query, then tests
-  ## each of those builds' voxels — cost scales with the voxel count
-  ## of nearby builds, not with the query volume.
+  ## Builds are pruned by bounds; an unrotated, unscaled build (nearly all
+  ## of them) is then probed per QUERY CELL against its chunk-indexed
+  ## voxels, so cost scales with the box volume. Rotated/scaled builds —
+  ## and degenerately huge query boxes — fall back to scanning the build's
+  ## voxels, since their voxel-to-world mapping isn't a grid translation.
+  ## (The old always-scan path made a 12-cell `clear_box` next to the
+  ## island terrain walk its ~850K voxels: >1s per call in debug.)
+  const CELL_PROBE_CAP = 32768
+
+  proc scan_voxels(build: Build): bool =
+    let
+      t = build.transform
+      offset = build.world_offset
+    for (pos, info) in build.voxels.all_voxels:
+      if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
+        continue
+      let
+        a = t.basis.xform(pos) + t.origin + offset
+        b = t.basis.xform(pos + vec3(1, 1, 1)) + t.origin + offset
+        vlo = vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z))
+        vhi = vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z))
+      if box_intersects((vlo, vhi), box):
+        return true
+    false
+
+  proc probe_cells(build: Build): bool =
+    # Identity mapping: local voxel [p, p+1) sits at world p + origin +
+    # offset. It intersects the half-open box iff p > lo - 1 and p < hi.
+    let origin = build.transform.origin + build.world_offset
+    let lo = box.min - origin
+    let hi = box.max - origin
+    for x in (int(floor(lo.x - 1.0)) + 1) ..< int(ceil(hi.x)):
+      for y in (int(floor(lo.y - 1.0)) + 1) ..< int(ceil(hi.y)):
+        for z in (int(floor(lo.z - 1.0)) + 1) ..< int(ceil(hi.z)):
+          let info = build.find_voxel(vec3(x.float, y.float, z.float))
+          if info.is_some and info.get.kind != HOLE and
+              info.get.color != ACTION_COLORS[ERASER]:
+            return true
+    false
+
   proc walk(thing: Thing): bool =
     if thing of Build:
       let build = Build(thing)
-      # Explicit Thing() so we dispatch through the WorldBox-returning
-      # `bounds` above, not Build's local-AABB field accessor.
-      if box_intersects(Thing(build).bounds, box):
-        let
-          t = build.transform
-          offset = build.world_offset
-        for (pos, info) in build.voxels.all_voxels:
-          if info.kind == HOLE or info.color == ACTION_COLORS[ERASER]:
-            continue
-          let
-            a = t.basis.xform(pos) + t.origin + offset
-            b = t.basis.xform(pos + vec3(1, 1, 1)) + t.origin + offset
-            vlo = vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z))
-            vhi = vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z))
-          if box_intersects((vlo, vhi), box):
+      # Prune with the MAINTAINED chunk-granular model AABB (a conservative
+      # superset), not the voxel-tight `bounds` above — that one recomputes
+      # from every voxel of every build per query, which was most of the
+      # cost this rewrite removes. Exactness comes from the probe below.
+      let local = build.bounds
+      if local.size.x >= 0:
+        let wb = world_aabb(build, local.position, local.position + local.size)
+        if box_intersects(wb, box):
+          let euler = build.transform.basis.get_euler()
+          let grid_aligned =
+            abs(euler.x) < 0.001 and abs(euler.y) < 0.001 and
+            abs(euler.z) < 0.001 and abs(build.scale - 1.0) < 0.001
+          let cells =
+            (box.max.x - box.min.x + 1) * (box.max.y - box.min.y + 1) *
+            (box.max.z - box.min.z + 1)
+          if grid_aligned and cells < CELL_PROBE_CAP.float:
+            if build.probe_cells:
+              return true
+          elif build.scan_voxels:
             return true
     for c in thing.things.value:
       if walk(c): return true
