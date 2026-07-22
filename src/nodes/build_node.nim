@@ -288,7 +288,15 @@ gdobj BuildNode of VoxelTerrain:
       if chunk_id in self.model.voxels.packed_chunks and not displaying_frame:
         let snapshot = self.model.voxels.packed_chunks[chunk_id]
         var painted = 0
-        if ASAP_MODE in self.model.global_flags:
+        if prefilled and ASAP_MODE in self.model.global_flags:
+          # Prefilled: the engine block already holds this exact content — an
+          # ASAP buffer copy would be a redundant repaint AND double-count the
+          # voxels (prefill_credit above already counted them). Worse, the
+          # buffered paste only flushes when the script side runs (is_local /
+          # end_asap), so it left renderer.dirty stuck at 1 for pre-script
+          # builds — deadlocking any load gate waiting on pending == 0.
+          discard
+        elif ASAP_MODE in self.model.global_flags:
           painted = self.renderer.buffer_snapshot(chunk_id, snapshot)
         elif prefilled:
           # Prefilled: the streaming thread already expanded this content into the
@@ -309,9 +317,14 @@ gdobj BuildNode of VoxelTerrain:
           if not displaying_frame:
             var painted = 0
             for delta in delta_seq:
-              if ASAP_MODE in self.model.global_flags:
+              if prefilled:
+                # prefill_bytes composed these deltas into the served bytes —
+                # the engine block already shows them (see the snapshot skip
+                # above for why buffering them anyway would deadlock a gate).
+                discard
+              elif ASAP_MODE in self.model.global_flags:
                 painted = painted + self.renderer.buffer_delta(chunk_id, delta)
-              elif not prefilled and ?self.renderer.voxel_tool:
+              elif ?self.renderer.voxel_tool:
                 # prefilled blocks already carry these deltas (prefill_bytes
                 # composed them in) — repainting would force a second mesh.
                 painted = painted + render_delta_direct(
@@ -629,6 +642,14 @@ gdobj BuildNode of VoxelTerrain:
           # as "done", and loading-completion checks (the spawn gate,
           # wait_for_script) would release early.
           pending = max(pending, 1)
+        if ?self.frames and SPAWN_HELD in state.local_flags and
+            self.frames.display_pending:
+          # A frame display in flight (bakes bypass the terrain pipeline, so
+          # the engine counter can't see them). Only counted while the spawn
+          # gate is up: during it the displayed frame is static, so this
+          # drains; during playback it would oscillate and confuse
+          # wait_for_script-style checks.
+          pending.inc
         if pending != self.model.pending_block_updates:
           self.model.pending_block_updates = pending
 

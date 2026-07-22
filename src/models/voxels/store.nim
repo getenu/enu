@@ -108,30 +108,12 @@ proc prefill_bytes*(self: VoxelStore, chunk_id: Vector3): string =
   if not has_deltas and not has_pending:
     if chunk_id in self.packed_chunks:
       return self.packed_chunks[chunk_id].data
-    # Race-free fallback for persisted builds. packed_chunks is a field on the
-    # thing and can lag the thing's own arrival on the display side (the engine
-    # starts paging blocks the instant the node is set up, before the synced
-    # chunk stream drains). edit_snapshots rides `shared`, which sync_ready
-    # guarantees present before add_to_scene — and for a persisted chunk the
-    # snapshot is the same encoded blob packed_chunks would carry. Serve it so
-    # the block prefills and meshes off-main immediately. The node marks these
-    # chunks so the later packed_chunks sync doesn't repaint them on the main
-    # thread (build_node: edit_prefilled).
-    if ?self.edit_snapshots:
-      let key: EditKey = (self.thing_id, chunk_id)
-      if key in self.edit_snapshots:
-        let has_edit_deltas =
-          ?self.edit_deltas and key in self.edit_deltas and
-          ?self.edit_deltas[key] and self.edit_deltas[key].len > 0
-        if not has_edit_deltas:
-          return self.edit_snapshots[key].data
-        var cells = decode_chunk(self.edit_snapshots[key])
-        for delta in self.edit_deltas[key]:
-          for (local_pos, packed_voxel) in decode_delta(delta):
-            cells[
-              linear_position(local_pos.x.int, local_pos.y.int, local_pos.z.int)
-            ] = packed_voxel
-        return encode_chunk(cells).data
+    # No packed chunk resident yet: a lazy `packed_chunks` entry the worker
+    # published (restore_edits on load) but this side hasn't pulled. Report the
+    # miss — the block loads empty and repaints when the request lands (see
+    # build_node's packed_chunks.watch). We deliberately do NOT read
+    # `edit_snapshots` here: that table is the persistence/restore format and is
+    # not what main renders from; packed_chunks is the render truth.
     return ""
   let chunk = self.compose_chunk(chunk_id)
   if chunk.count == 0:
@@ -430,6 +412,39 @@ proc adopt_edit_chunks*(self: VoxelStore): bool =
           ] = packed_voxel
       self.adopt_chunk(key.loc, cells, SnapshotData(), changed = true)
   true
+
+proc restore_needed*(self: VoxelStore): bool =
+  ## Whether reset() must rebuild the voxel state (clear + restore_edits).
+  ## Kind is the ground truth — persisted edits restore as PERSISTED cells,
+  ## scripts draw TRANSIENT ones — so:
+  ## - any TRANSIENT cell → a script drew since the last restore: rebuild
+  ##   (early exit on the first one found; a unit that completed a reset
+  ##   before carries at least the TRANSIENT default origin block).
+  ## - no cells at all → nothing restored yet (or a genuinely empty unit,
+  ##   where the rebuild is a cheap no-op): rebuild.
+  ## - non-empty and all PERSISTED → the live state is already exactly the
+  ##   restored edits: skip. Without this, a load's phase 2 cleared and
+  ##   remeshed identical content in front of the player (the sea rebuilt
+  ##   itself right after the reveal).
+  ## Accepted blind spot: a script whose only effect was erasing persisted
+  ## voxels (drawing nothing, not even keeping the default origin block)
+  ## reads as pristine, so removing that script's erase code and reloading
+  ## won't resurrect the erased voxels — rerunning the script reproduces
+  ## the same state anyway.
+  var has_content = false
+  for chunk_id in self.chunk_ids:
+    let chunk = self.cached_chunk(chunk_id)
+    if chunk.count == 0:
+      continue
+    has_content = true
+    for linear in 0 ..< CHUNK_VOLUME:
+      let v = chunk.cells[linear]
+      if v == EMPTY_VOXEL:
+        continue
+      let (_, kind_ord) = unpack_voxel(v)
+      if VoxelKind(kind_ord) == TRANSIENT:
+        return true
+  not has_content
 
 proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   let chunk_id = position.buffer

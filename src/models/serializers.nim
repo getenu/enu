@@ -12,11 +12,6 @@ import controllers/script_controllers/vars
 import libs/eval
 
 var load_chunks {.threadvar.}: bool
-var defer_frames {.threadvar.}: bool
-  ## Set by load_things around its data phase: frame sidecars (24 x ~1MB for
-  ## the island's water) decode in the script phase instead, so the spawn
-  ## gate's PLAYERS step isn't stuck behind animation data no script has
-  ## asked to play yet.
 
 proc to_json_hook(self: Vector3): JsonNode =
   %[self.x, self.y, self.z]
@@ -55,7 +50,6 @@ type LevelInfo = object
   show_prototypes*: bool
   show_tools*: bool
   start_transform*: Transform
-  load_player_with_scripts*: bool
 
 proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
   self.enu_version = json{"enu_version"}.get_str
@@ -80,11 +74,6 @@ proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
     self.start_transform = json["start_transform"].json_to(Transform)
   else:
     self.start_transform = Transform.init(origin = vec3(0, 1, 0))
-
-  if "load_player_with_scripts" in json:
-    self.load_player_with_scripts = json["load_player_with_scripts"].get_bool
-  else:
-    self.load_player_with_scripts = false
 
 proc to_json_hook*(self: VoxelInfo): JsonNode =
   %[%self.kind.ord, self.color.to_json_hook]
@@ -188,7 +177,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
 
     self.voxels.rebuild_local_edits()
 
-  if "frames" in json and not defer_frames:
+  if "frames" in json:
     self.load_frames_sidecar(json)
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
@@ -496,24 +485,19 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
       else:
         sorted_scripts.add script
 
-  # Two-phase load, same load_order: all unit DATA first, then all scripts.
-  # Scripts run against a complete world (no "can't see a not-yet-loaded
-  # proto" retries), and the spawn/reveal is fully script-independent — a
-  # script that sleeps mid-load can't starve the gate. Frame sidecars are
-  # deferred with the scripts: only playback (a script action) needs them,
-  # and decoding them inline stalled the PLAYERS step for tens of seconds
-  # on a frame-heavy unit. Each unit's frames load just before its script.
-  var deferred: seq[tuple[thing: Thing, frames_json: JsonNode]]
-  defer_frames = true
-  defer:
-    defer_frames = false
-
+  # One-phase load, in load_order: each unit loads COMPLETELY — data, frame
+  # sidecar, script — before the next one starts. Dependencies are the list
+  # order, nothing more: a script that references a later unit's proto fails
+  # into failed_scripts and retries once the level is up, and the recorded
+  # load_order self-heals for the next boot. The PLAYERS sentinel is the
+  # reveal point: everything before it is fully loaded and RUNNING behind
+  # the splash, so the gate (game.nim) releases onto a settled, animating
+  # world while the rest of the list streams in behind the player.
   for script_name in sorted_scripts:
     if script_name == PLAYERS_SENTINEL:
-      # The gate step, not a unit: everything before this point must render
-      # before players are handed control. Clear the synced splash-phase
-      # signal — each main thread reveals once its own copy of the
-      # pre-PLAYERS units renders. (The players were already carried to
+      # The reveal step, not a unit. Clear the synced splash-phase signal —
+      # each main thread reveals once its own copy of the pre-PLAYERS units
+      # reports rendered. (The players were already carried to
       # start_transform at load start, so the spawn area has been streaming
       # at top viewer priority the whole time.)
       if parent.is_nil:
@@ -545,65 +529,51 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
         continue
 
       thing.global_flags += SCRIPT_INITIALIZING
+      # script_ctx isn't populated until the thing joins state.things (a worker
+      # watch mints it), and we need this before the add — derive the path
+      # directly, the same way script_ctx.script does.
+      let has_script = file_exists(script_file_for(thing))
       if thing of Build:
-        # Restore the persisted voxels and publish them to the synced chunk
-        # table BEFORE the build joins root_things. Then main holds the data
-        # the instant it sees the build, so the engine prefills each paged-in
-        # block (meshed off the main thread) instead of painting it after the
-        # block loads empty — the terrain's thousands of chunks were painting
-        # on the main thread and spiking the load to <1fps.
+        # Publish the persisted voxels into the synced chunk table BEFORE the
+        # build joins root_things, so main holds the data the instant it sees
+        # the build and the engine prefills each paged-in block (meshed off the
+        # main thread) instead of painting it after it loads empty — the
+        # terrain's thousands of chunks were painting on main and spiking the
+        # load to <1fps.
         Build(thing).reset_bounds
-        Build(thing).restore_edits
-        Build(thing).voxels.flush_dirty_chunks()
-      if thing of Build:
-        debug "unit data restored",
-          thing_id,
-          snapshots = Build(thing).shared.edit_snapshots.len,
-          shared_id = Build(thing).shared.id,
-          snap_table_id = Build(thing).shared.edit_snapshots.id
+        if has_script:
+          # The script runs right after the add; its change_code -> reset()
+          # finds the live state already equal to these restored edits and
+          # skips the clear+rebuild (see restore_needed).
+          Build(thing).restore_edits
+          Build(thing).voxels.flush_dirty_chunks()
+        else:
+          # A scriptless build has no script pass, so do its full
+          # restore+draw now: reset() restores+draws into the ASAP buffer,
+          # end_asap() flushes it to a mesh. This MUST run BEFORE the add —
+          # reset() clears the voxel tables first (voxels.clear()), so running
+          # it after the join would wipe the already-published packed_chunks out
+          # from under main's prefill (the terrain-goes-missing bug).
+          thing.global_flags -= SCRIPT_INITIALIZING
+          Build(thing).reset()
+          Build(thing).end_asap()
       if parent.is_nil:
         state.things.add(thing)
       else:
         parent.things.add(thing)
 
-      let has_script = file_exists(thing.script_ctx.script)
-      let has_frames = thing of Build and "frames" in data_file
       if has_script:
-        # Data is in; the script (and its initial draw) waits for phase 2.
-        # The build stays in ASAP_MODE until then, so the spawn gate counts
-        # it as not-yet-rendered.
-        discard
-      else:
-        thing.global_flags -= SCRIPT_INITIALIZING
-        # A scripted build renders its restored edits when its code loads
-        # (change_code -> reset, then end_asap when the script finishes). A
-        # build with no script never gets that pass, so do it here: reset()
-        # restores+draws into the ASAP buffer, end_asap() flushes it to a mesh.
-        if thing of Build:
-          Build(thing).reset()
-          Build(thing).end_asap()
-      if has_script or has_frames:
-        deferred.add (thing, (if has_frames: data_file else: nil))
+        thing.code = Code.init(read_file(thing.script_ctx.script))
+
       let took = (get_mono_time() - unit_started).in_milliseconds
       if took > 100:
-        info "slow unit data load", thing_id, ms = took
+        info "slow unit load", thing_id, ms = took
       # Keep the stream to main flowing while the load holds the worker
       # (see the PLAYERS step above): drain whatever the channel has room
       # for after each unit instead of dumping everything at load-end.
       Ed.thread_ctx.flush_buffers()
     except Exception as e:
       error "Failed to load thing", thing_id, error = e
-
-  defer_frames = false
-  for (thing, frames_json) in deferred:
-    try:
-      if ?frames_json:
-        Build(thing).load_frames_sidecar(frames_json)
-      if file_exists(thing.script_ctx.script):
-        thing.code = Code.init(read_file(thing.script_ctx.script))
-      Ed.thread_ctx.flush_buffers()
-    except Exception as e:
-      error "Failed to load thing script", thing_id = thing.id, error = e
 
   # Record the order the level actually loaded in — including script-less
   # units slotted in above and the PLAYERS sentinel — so save_level preserves
@@ -782,7 +752,6 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       show_prototypes: state.show_prototypes,
       show_tools: state.show_tools,
       start_transform: state.start_transform,
-      load_player_with_scripts: state.load_player_with_scripts,
     )
     write_file_if_changed level_dir / "level.json",
       jsonutils.to_json(level).pretty
@@ -934,7 +903,6 @@ proc load_level*(worker: Worker, level_dir: string) =
   state.show_prototypes = true
   state.show_tools = true
   state.start_transform = Transform.init(origin = vec3(0, 1, 0))
-  state.load_player_with_scripts = false
   if file_exists(level_file):
     try:
       let level_json = read_file(level_file)
@@ -945,7 +913,6 @@ proc load_level*(worker: Worker, level_dir: string) =
       state.show_prototypes = level.show_prototypes
       state.show_tools = level.show_tools
       state.start_transform = level.start_transform
-      state.load_player_with_scripts = level.load_player_with_scripts
     except Exception as e:
       error "Failed to load level", error = e
 
