@@ -100,4 +100,9 @@ template say*(
     size = float.high,
     billboard = none(bool),
 ): Sign =
-  enu_target.say(message, more, width, height, size, billboard)
+  # Target the running script's own thing via `active_thing()`, not the
+  # injected `enu_target` local — the latter isn't captured into user-defined
+  # procs in the VM, so `say` from inside a proc would silently target nothing.
+  # `say` belongs to the script's thing (a thing speaks as itself), so this is
+  # also the semantically correct target even mid-`move`/`build`.
+  active_thing().say(message, more, width, height, size, billboard)
