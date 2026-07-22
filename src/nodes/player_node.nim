@@ -89,6 +89,9 @@ gdobj PlayerNode of KinematicBody:
     touch_position: Option[Vector2]
     delete_timer = MonoTime.high
     deleting = false
+    wedge_frames: int
+    wedge_prev_y: float
+      ## Wedge detection state — see check_wedged.
 
   proc is_on_floor*(): bool =
     KinematicBody(self).is_on_floor()
@@ -241,6 +244,52 @@ gdobj PlayerNode of KinematicBody:
     if SPAWN_HELD notin state.local_flags:
       self.update_raycast()
 
+  proc check_wedged() =
+    ## Wedge detection by symptom: gravity keeps accumulating into velocity.y
+    ## while the body doesn't actually fall and is_on_floor is false — an
+    ## invisible support. That's a capsule embedded in collision geometry (a
+    ## low spawn transform, a teleport into a floor, terrain drawn into the
+    ## player) that move_and_slide's own recovery can't separate; the player
+    ## is stuck until they fly. Clean embeds are recovered by the physics
+    ## engine within a frame, so this only ever fires on the wedged
+    ## leftovers. On a sustained wedge, lift toward the surface the down ray
+    ## sees — a partial fix re-detects next step, so deep wedges converge.
+    ##
+    ## Normal play never matches: standing zeroes velocity.y with is_on_floor
+    ## true, and falling has real displacement.
+    let y = self.transform.origin.y
+    let dy = y - self.wedge_prev_y
+    self.wedge_prev_y = y
+    if self.flying or self.is_on_floor or self.velocity.y > -30.0 or
+        abs(dy) > 0.001:
+      self.wedge_frames = 0
+      return
+    inc self.wedge_frames
+    if self.wedge_frames < 10:
+      return
+    self.wedge_frames = 0
+
+    let saved_translation = self.down_ray.translation
+    let saved_cast = self.down_ray.cast_to
+    self.down_ray.translation = vec3()
+    self.down_ray.cast_to = vec3(0, -3, 0)
+    self.down_ray.force_raycast_update()
+    var t = self.transform
+    if self.down_ray.is_colliding() and
+        self.down_ray.get_collision_point().y + 0.9 > t.origin.y:
+      # The capsule rests with its origin ~0.9 above support; land just over
+      # that and let gravity settle the last few centimetres.
+      t.origin.y = self.down_ray.get_collision_point().y + 1.2
+    else:
+      # No visible surface (buried, or wedged sideways): step up blind and
+      # let the next detection pass finish the job.
+      t.origin.y += 1.0
+    self.down_ray.translation = saved_translation
+    self.down_ray.cast_to = saved_cast
+    self.velocity = vec3()
+    info "player wedged; lifting clear", from_y = y, to_y = t.origin.y
+    self.model.transform = t
+
   method physics_process*(delta: float) =
     if COMMAND_MODE in state.local_flags and self.command_timer > 0:
       self.command_timer -= delta
@@ -306,6 +355,7 @@ gdobj PlayerNode of KinematicBody:
 
     self.model.input_direction = input_direction
     self.velocity = self.move_and_slide(velocity, UP)
+    self.check_wedged()
 
     self.model.transform = self.transform
 
