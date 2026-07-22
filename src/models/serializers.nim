@@ -11,8 +11,6 @@ import controllers/script_controllers/scripting
 import controllers/script_controllers/vars
 import libs/eval
 
-var load_chunks {.threadvar.}: bool
-
 proc to_json_hook(self: Vector3): JsonNode =
   %[self.x, self.y, self.z]
 
@@ -82,17 +80,6 @@ proc from_json_hook*(self: var VoxelInfo, json: JsonNode) =
   self.kind = VoxelKind(json[0].get_int)
   self.color = json[1].json_to(Color)
 
-proc from_json_hook(
-    self: var EdTable[Vector3, VoxelInfo], json: JsonNode
-) {.gcsafe.} =
-  assert load_chunks
-  self = EdTable[Vector3, VoxelInfo].init()
-  for chunks in json:
-    for chunk in chunks[1]:
-      let location = chunk[0].json_to(Vector3)
-      let info = chunk[1].json_to(VoxelInfo)
-      self[location] = info
-
 proc load_frames_sidecar*(self: Build, json: JsonNode) =
   let meta = json["frames"]
   let dir = self.data_dir / "frames"
@@ -140,42 +127,28 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     for entry in json["palette"]:
       discard pack_color_index(self.shared, entry.json_to(Color))
 
-  if load_chunks:
-    # Old chunks format - group by chunk and load with EditKey
-    # This is a bit inefficient as it creates a big list, but safe for migration
-    var all_voxels: seq[(Vector3, VoxelInfo)] = @[]
-    for chunk_data in json["chunks"]:
-      for voxel_data in chunk_data[1]:
-        let world_pos = voxel_data[0].json_to(Vector3)
-        let info = voxel_data[1].json_to(VoxelInfo)
-        all_voxels.add((world_pos, info))
+  if "edits_file" in json:
+    # big-build sidecar: packed chunks stored directly (palette already
+    # restored above, so the indices inside resolve)
+    let path = self.data_dir / json["edits_file"].json_to(string)
+    if file_exists(path):
+      for thing_id, chunks in decode_edits_file(read_file(path)):
+        for chunk_id, snapshot in chunks:
+          self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
+    else:
+      warn "edits sidecar missing", unit = self.id, path = path
+  elif "edits" in json:
+    for id, edits in json["edits"]:
+      var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
+      for edit in edits:
+        let world_pos = edit[0].json_to(Vector3)
+        let info = edit[1].json_to(VoxelInfo)
+        current_chunk_edits.add((world_pos, info))
 
-    if all_voxels.len > 0:
-      self.shared.pack_and_store_edited_voxels(self.id, all_voxels)
-  else:
-    # New edits format
-    if "edits_file" in json:
-      # big-build sidecar: packed chunks stored directly (palette already
-      # restored above, so the indices inside resolve)
-      let path = self.data_dir / json["edits_file"].json_to(string)
-      if file_exists(path):
-        for thing_id, chunks in decode_edits_file(read_file(path)):
-          for chunk_id, snapshot in chunks:
-            self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
-      else:
-        warn "edits sidecar missing", unit = self.id, path = path
-    elif "edits" in json:
-      for id, edits in json["edits"]:
-        var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
-        for edit in edits:
-          let world_pos = edit[0].json_to(Vector3)
-          let info = edit[1].json_to(VoxelInfo)
-          current_chunk_edits.add((world_pos, info))
+      if current_chunk_edits.len > 0:
+        self.shared.pack_and_store_edited_voxels(id, current_chunk_edits)
 
-        if current_chunk_edits.len > 0:
-          self.shared.pack_and_store_edited_voxels(id, current_chunk_edits)
-
-    self.voxels.rebuild_local_edits()
+  self.voxels.rebuild_local_edits()
 
   if "frames" in json:
     self.load_frames_sidecar(json)
@@ -198,7 +171,7 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
     for entry in json["palette"]:
       discard pack_color_index(self.shared, entry.json_to(Color))
 
-  if not load_chunks and "edits_file" in json:
+  if "edits_file" in json:
     let path = self.data_dir / json["edits_file"].json_to(string)
     if file_exists(path):
       for thing_id, chunks in decode_edits_file(read_file(path)):
@@ -206,7 +179,7 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
           self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
     else:
       warn "edits sidecar missing", unit = self.id, path = path
-  elif not load_chunks and "edits" in json:
+  elif "edits" in json:
     for id, edits in json["edits"]:
       var current_chunk_edits: seq[(Vector3, VoxelInfo)] = @[]
       for edit in edits:
@@ -528,6 +501,12 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
         error "Unknown thing type", thing_id
         continue
 
+      # Deserialized verbatim from disk: nothing to persist. init_thing
+      # marks every thing DIRTY (a script-created unit must save), which
+      # made the load-end save re-encode the whole level on a clean boot —
+      # seconds of terrain/water encoding in debug for zero changes. A
+      # script that genuinely edits during the load re-adds the flag.
+      thing.global_flags -= DIRTY
       thing.global_flags += SCRIPT_INITIALIZING
       # script_ctx isn't populated until the thing joins state.things (a worker
       # watch mints it), and we need this before the add — derive the path
@@ -903,7 +882,6 @@ proc load_level*(worker: Worker, level_dir: string) =
     try:
       let level_json = read_file(level_file)
       let level = level_json.parse_json.json_to(LevelInfo)
-      load_chunks = level.format_version == "v0.9"
       if level.load_order.len > 0:
         load_order = level.load_order
       state.show_prototypes = level.show_prototypes
