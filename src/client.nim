@@ -139,7 +139,18 @@ proc disconnect*(_: type Enu) =
   terminate_managed()
   if not enu_client.is_nil:
     if not enu_client.ctx.is_nil:
-      enu_client.ctx.close
+      let ctx = enu_client.ctx
+      ctx.close
+      # `ctx` was adopted as this thread's `Ed.thread_ctx` when we connected. A
+      # closed context is spent — ed's own reconnect path mints a fresh context
+      # rather than reuse one — so don't leave it installed: the next `connect`'s
+      # first-connect path re-adopts `Ed.thread_ctx` whenever the pinned ctx id
+      # matches, and re-subscribing on it stands up a fresh reactor while the
+      # stale subscriber connections still carry the old reactor's id, tripping
+      # netty's `reactor.id == conn.reactorId` assert. Drop it so the next connect
+      # starts from a fresh context.
+      if Ed.thread_ctx == ctx:
+        Ed.thread_ctx = EdContext.init()
     enu_client = nil
 
 proc connect*(_: type Enu, address = "", id = ""): bool {.discardable.} =
