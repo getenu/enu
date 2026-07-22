@@ -867,8 +867,6 @@ proc load_level*(worker: Worker, level_dir: string) =
   level_loading = true
   defer:
     level_loading = false
-  state.global_flags += LOADING_LEVEL
-  state.push_flag LOADING_SCRIPT
   if not state.player.is_nil:
     state.player.block_log_entries.clear
   var config = state.config
@@ -895,8 +893,6 @@ proc load_level*(worker: Worker, level_dir: string) =
   create_dir(config.data_dir)
   create_dir(config.script_dir)
 
-  state.config = config
-
   debug "loading ", level_file
   var load_order = newSeq[string]()
 
@@ -921,10 +917,21 @@ proc load_level*(worker: Worker, level_dir: string) =
   # for (immediate physics, no splash). Raise the splash-phase signal only
   # when there really are units ahead of the gate; load_things clears it at
   # the PLAYERS step.
+  #
+  # LOAD_SCREEN must be raised BEFORE LOADING_LEVEL: main hands the splash
+  # to the gate the moment either load flag lands, and holds it only if
+  # SPAWN_HELD is up — which its LOAD_SCREEN watch pushes. Raised in this
+  # order they ship in one batch and apply in order; raised after (the old
+  # entry-time LOADING_LEVEL push, then seconds of level seeding/parsing
+  # before this point) LOADING_LEVEL could land a batch early and flash a
+  # frame of the empty 3D scene between the boot splash and the gate.
   if PLAYERS_SENTINEL notin load_order:
     load_order.insert(PLAYERS_SENTINEL, 0)
   if load_order.find(PLAYERS_SENTINEL) > 0:
     state.global_flags += LOAD_SCREEN
+  state.global_flags += LOADING_LEVEL
+  state.push_flag LOADING_SCRIPT
+  state.config = config
 
   # Carry every player to the spawn pose now, not at the PLAYERS step: they
   # are frozen behind the splash anyway, and the voxel viewer follows them —
