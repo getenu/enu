@@ -34,6 +34,7 @@ These skills auto-load (model-invoked, or call directly):
 - **`/game-mechanics`** — collectibles, triggers, doors, win conditions
 - **`/sign-menu`** — signs, menus, markdown panels
 - **`/reload-verify`** — the edit/verify loop in depth, block annotations
+- **`/capture-animation`** — record a unit's frame animation as a looping video
 
 Verified, working example scripts ship in `.claude/examples/` (towers, castles,
 trees, skyscrapers, doors, furniture, bots, and more); the build skills
