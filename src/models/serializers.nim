@@ -43,14 +43,13 @@ const PLAYERS_SENTINEL* = "PLAYERS"
   ## immediate physics at start_transform, no splash.
 
 type LevelInfo = object
-  enu_version*, format_version*: string
+  format_version*: string
   load_order*: seq[string]
   show_prototypes*: bool
   show_tools*: bool
   start_transform*: Transform
 
 proc from_json_hook*(self: var LevelInfo, json: JsonNode) =
-  self.enu_version = json{"enu_version"}.get_str
   self.format_version = json{"format_version"}.get_str
 
   if "load_order" in json:
@@ -747,8 +746,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       debug "load_order content", load_order = sorted_scripts
 
     let level = LevelInfo(
-      enu_version: enu_version,
-      format_version: "v0.9.2",
+      format_version: "1.0.0",
       load_order: sorted_scripts,
       show_prototypes: state.show_prototypes,
       show_tools: state.show_tools,
