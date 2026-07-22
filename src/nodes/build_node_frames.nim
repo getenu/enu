@@ -57,12 +57,6 @@ type FramePlayer* = ref object
     ## key work drain incrementally, but the visible change is one atomic pass —
     ## chunks never flip at different times.
   padded_bytes: PoolByteArray ## request_frame_mesh payload scratch
-  held_render: bool
-    ## A render was requested while this machine's spawn gate held the
-    ## reveal (SPAWN_HELD). Frame DATA loads like any other build data, but
-    ## baking frame meshes waits — it must not compete with, or churn, the
-    ## initial world render the gate is timing. tick() replays the render
-    ## once the gate releases.
   commit_index: int
     ## which flip `staged` was prepared for. Prepare-ahead builds the NEXT flip
     ## during the current interval; the commit waits until current_frame catches
@@ -450,11 +444,7 @@ proc render*(self: FramePlayer, index: int) =
   ## current_frame, and skipping the hide there would leave stale frame content
   ## behind after the rerun.
   if index >= 0 and index < self.model.frames.len:
-    if SPAWN_HELD in state.local_flags:
-      # Spawn gate up: defer the show (see held_render). Hiding below stays
-      # ungated — it only removes content.
-      self.held_render = true
-    elif ASAP_MODE notin self.model.global_flags:
+    if ASAP_MODE notin self.model.global_flags:
       self.show(index)
   else:
     self.hide()
@@ -473,6 +463,14 @@ proc reset*(self: FramePlayer) =
   self.hide()
   self.keys.clear()
 
+proc display_pending*(self: FramePlayer): bool =
+  ## A frame display is still in flight: chunks queued for their content
+  ## write, bakes outstanding, or staged meshes awaiting the flip commit.
+  ## Frame bakes bypass the terrain pipeline, so the engine's pending counter
+  ## can't see this — build_node folds it into the published
+  ## pending_block_updates while the spawn gate is up.
+  self.queue.len > 0 or self.missing.len > 0 or self.staged.len > 0
+
 proc forget_display*(self: FramePlayer, chunk_id: Vector3) =
   ## The chunk's mesh block was (re)created by pairing: whatever we recorded
   ## as displayed belonged to the previous block instance. Clearing the entry
@@ -490,12 +488,10 @@ proc drop_chunk*(self: FramePlayer, chunk_id: Vector3) =
 
 proc tick*(self: FramePlayer) =
   ## Per-frame playback work: expire dropped bakes, drain the queue, commit a
-  ## ready flip, and log stats. Called every process tick.
-  if SPAWN_HELD in state.local_flags:
-    return
-  if self.held_render:
-    self.held_render = false
-    self.render(self.model.current_frame)
+  ## ready flip, and log stats. Called every process tick. Runs during the
+  ## spawn gate too — the displayed frame is a unit's correct settled state,
+  ## and its bakes are counted by the gate via display_pending — only
+  ## playback ADVANCE holds during load (see advance_playback).
   if self.missing.len > 0:
     # a cancelled/dropped bake never signals; expire it so the chunk re-queues on
     # the next flip instead of staying stale forever

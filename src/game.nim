@@ -9,8 +9,7 @@ import
     viewport, viewport_texture, texture, image, performance, label, theme,
     dynamic_font, resource_loader, main_loop, project_settings, input_map,
     input_event_action, input_event_key, input_event, global_constants,
-    scroll_container, voxel_server, world_environment, camera, world,
-    physics_direct_space_state,
+    scroll_container, voxel_server, world_environment, camera, world, engine,
   ]
 
 import ui/virtual_joystick
@@ -66,9 +65,10 @@ const savable_flags =
   {CONSOLE_VISIBLE, MOUSE_CAPTURED, FLYING, GOD, ALT_WALK_SPEED, ALT_FLY_SPEED}
 
 const SPAWN_GATE_TIMEOUT = 30.seconds
-  ## Cap on how long the reveal waits for the pre-PLAYERS builds to settle
-  ## after LOAD_SCREEN clears — an animated build never settles, and a slow
-  ## mesh must not hold the load hostage.
+  ## Backstop on how long the reveal waits for the pre-PLAYERS builds to
+  ## report rendered after LOAD_SCREEN clears. Never the normal path — a
+  ## wedged mesh task or a build that can't settle must not hold the splash
+  ## forever.
 
 
 var environment_cache {.threadvar.}: Table[string, Environment]
@@ -98,7 +98,21 @@ gdobj Game of Node:
       ## Build ids snapshotted the moment the server cleared LOAD_SCREEN — by
       ## ed ordering, exactly this machine's copy of the pre-PLAYERS units.
       ## SPAWN_HELD stays on until every one has rendered here.
-    gate_waiting: bool
+    gate_active: bool
+      ## LOAD_SCREEN cleared: waiting for every gate unit to report rendered
+      ## (the wait_for_script check — pending_block_updates == 0, honest via
+      ## the engine's not-started floor) for two consecutive frames. The world
+      ## stays fully live: the pre-PLAYERS units are already loaded AND
+      ## running, so their settled state is exactly what the reveal should
+      ## show; later units keep loading and don't gate.
+    gate_warming: bool
+      ## Gate units settled: the 3D viewport now renders behind the opaque
+      ## splash (see the splash block). After two real draws the splash lifts —
+      ## enabling and lifting in the same frame showed a near-empty first
+      ## frame.
+    gate_settle_streak: int
+    gate_warm_drawn_at: int64
+      ## get_frames_drawn() when warming began; lift at +2.
     gate_deadline: MonoTime
     gate_started: MonoTime
     screenshot_camera_node: Camera
@@ -115,6 +129,42 @@ gdobj Game of Node:
       # SIGSEGV observed when a client self-restarted mid-join.
       return
     Ed.thread_ctx.tick
+
+    # Spawn gate: the world stays fully live — the reveal just waits until
+    # every pre-PLAYERS unit reports rendered, then gives the renderer two
+    # real draws behind the splash before lifting it. The deadline is a
+    # loud backstop, never the normal path.
+    if self.gate_active:
+      let time = get_mono_time()
+      if not self.gate_warming:
+        var ready = true
+        state.things.value.walk_tree proc(thing: Thing) =
+          if thing of Build and thing.id in self.gate_ids and
+              thing.pending_block_updates != 0:
+            # Only wait on builds that have content to render: a content-less
+            # build never starts streaming, so its not-started floor of 1
+            # would hold the gate open forever.
+            let b = Build(thing)
+            if b.packed_chunks.len > 0 or b.chunk_deltas.len > 0 or
+                b.frames.len > 0:
+              ready = false
+        if ready:
+          inc self.gate_settle_streak
+        else:
+          self.gate_settle_streak = 0
+        if self.gate_settle_streak >= 2 or time > self.gate_deadline:
+          if self.gate_settle_streak < 2:
+            error "spawn gate: deadline exceeded; revealing anyway",
+              gate_ids = self.gate_ids
+          self.gate_warming = true # the splash block enables the viewport
+          self.gate_warm_drawn_at = get_frames_drawn()
+      elif get_frames_drawn() >= self.gate_warm_drawn_at + 2:
+        info "spawn gate: released",
+          waited_ms = (time - self.gate_started).in_milliseconds
+        self.gate_active = false
+        self.gate_warming = false
+        self.gate_ids = @[]
+        state.pop_flag SPAWN_HELD
     inc state.frame_count
     self.node_controller.drain_pending()
 
@@ -261,85 +311,14 @@ gdobj Game of Node:
       if self.load_screen.visible != show:
         self.load_screen.visible = show
       # The splash is opaque, so don't spend the GPU drawing the 3D viewport
-      # behind it while it's up.
+      # behind it while it's up — except during the gate warm-up, when the
+      # point is to render the finished scene behind the splash before lifting.
       if not self.scaled_viewport.is_nil:
-        let mode = if show: UPDATE_DISABLED else: UPDATE_ALWAYS
+        let mode =
+          if show and not self.gate_warming: UPDATE_DISABLED
+          else: UPDATE_ALWAYS
         if self.scaled_viewport.render_target_update_mode != mode:
           self.scaled_viewport.render_target_update_mode = mode
-
-  method physics_process*(delta: float) =
-    if state.is_nil or state.nodes.game != self:
-      return
-
-    # Spawn gate, second half: LOAD_SCREEN has cleared (the ready() watch
-    # snapshotted the pre-PLAYERS builds into gate_ids), so release this
-    # machine's player once every snapshot build's DATA has rendered locally:
-    #
-    # - pending_block_updates == 0 for every gate build. This is exact, not
-    #   a settle heuristic: the engine counts required-but-unloaded blocks,
-    #   queued mesh updates, and in-flight meshes, and build_node publishes
-    #   a floor of 1 until the terrain's streaming has actually started
-    #   (has_stream_started) — so 0 can only mean "everything the viewer
-    #   needs is loaded and meshed", never "nothing requested yet".
-    # - collision under the player. Collision meshes trail the voxel data,
-    #   and a player released early sinks into the still-forming spawn hill
-    #   and wedges there. Runs here rather than in process() because space
-    #   queries are only valid in the physics step.
-    #
-    # Deliberately NOT gated on scripts (ASAP_MODE): a persisted gate unit's
-    # voxels render in the data phase via prefill, while its script — usually
-    # decoration or animation (the island's water is `play(8.0)`, the gull an
-    # endless flap loop) — doesn't run until every unit's data has loaded,
-    # and an animated one never finishes at all. Frame meshes are likewise
-    # held (FramePlayer defers renders under SPAWN_HELD) so playback can't
-    # churn the counters mid-gate; they bake right after the reveal.
-    #
-    # The deadline backstop covers a build that never settles and a spawn
-    # with genuinely nothing below it.
-    if self.gate_waiting:
-      let time = get_mono_time()
-      var rendered = true
-      state.things.value.walk_tree proc(thing: Thing) =
-        if thing of Build and thing.id in self.gate_ids:
-          if thing.pending_block_updates != 0:
-            rendered = false
-      if rendered and ?state.player and not state.nodes.player.is_nil:
-        # Short ray: the spawn pose stands the player ~1.5m above the ground,
-        # so support must be close below. A long ray can hit the sea-level
-        # ground under a still-unformed spawn hill and release into a sink.
-        let origin = state.player.transform.origin
-        let space = self.get_viewport().find_world().direct_space_state
-        let hit = space.intersect_ray(
-          origin,
-          origin - vec3(0, 3, 0),
-          exclude = new_array(state.nodes.player.to_variant),
-        )
-        if hit.len == 0:
-          rendered = false
-        else:
-          # De-embed before unfreezing: a start_transform that sits the
-          # capsule inside the surface leaves move_and_slide unable to
-          # depenetrate — the player is wedged until they fly out. The
-          # capsule rests with its origin ~0.9 above the surface, so lift
-          # anything closer than that to a safe height and let gravity
-          # settle the last few centimetres.
-          let surface_y = hit["position"].as_vector3.y
-          if origin.y < surface_y + 0.9:
-            var t = state.player.transform
-            t.origin.y = surface_y + 1.2
-            state.player.transform = t
-            info "spawn gate: lifted player clear of the surface",
-              from_y = origin.y, to_y = t.origin.y
-      if rendered or time > self.gate_deadline:
-        if not rendered:
-          error "spawn gate timed out; revealing anyway",
-            gate_ids = self.gate_ids
-        else:
-          info "spawn gate: released",
-            waited_ms = (time - self.gate_started).in_milliseconds
-        self.gate_waiting = false
-        self.gate_ids = @[]
-        state.pop_flag SPAWN_HELD
 
   proc rescale*() =
     let vp = self.get_viewport().size
@@ -744,21 +723,26 @@ gdobj Game of Node:
     state.global_flags.changes:
       if LOAD_SCREEN.added:
         # Splash phase: hold this machine's player frozen at the spawn while
-        # the units ahead of the PLAYERS load_order step stream in.
-        self.gate_waiting = false
+        # the units ahead of the PLAYERS load_order step load and run.
+        self.gate_active = false
+        self.gate_warming = false
+        self.gate_settle_streak = 0
         self.gate_ids = @[]
         state.push_flag SPAWN_HELD
       elif LOAD_SCREEN.removed:
-        # Snapshot the gate set here, in the watch, not from process() a tick
-        # later: ed applied the pre-PLAYERS units ahead of this flag removal
-        # and nothing after it has landed yet, so the builds present right now
-        # are exactly the units the reveal must wait on.
+        # The worker pops this flag at the PLAYERS load_order step: every unit
+        # before it is fully loaded and running. By ed's ordering all of that
+        # is applied locally right now, so the builds present ARE the gate
+        # set — wait for them to report rendered, then reveal (see
+        # gate_active in process()).
         var ids: seq[string]
         state.things.value.walk_tree proc(thing: Thing) =
           if thing of Build:
             ids.add thing.id
         self.gate_ids = ids
-        self.gate_waiting = true
+        self.gate_active = true
+        self.gate_warming = false
+        self.gate_settle_streak = 0
         self.gate_started = get_mono_time()
         self.gate_deadline = self.gate_started + SPAWN_GATE_TIMEOUT
         info "spawn gate: waiting for local render", gate_ids = ids

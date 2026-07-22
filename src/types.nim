@@ -255,12 +255,6 @@ type
     start_transform*: Transform
       ## level.json: the spawn pose applied to every player at the PLAYERS
       ## load_order step (and, later, to mid-session joins).
-    load_player_with_scripts*: bool
-      ## level.json: reserved override for the persisted-unit-with-decoration-
-      ## script edge case (reveal after the fast data render instead of
-      ## waiting for the script). The gate currently always waits for
-      ## ASAP-ended + settled; parsed and persisted so levels can opt in
-      ## when the trim lands.
     load_order*: seq[string]
       ## The unit ids in level.json's load_order, as read at load. save_level
       ## regenerates the list but preserves this order where dependencies

@@ -567,11 +567,18 @@ method reset*(self: Build) =
     self.frames_fps = 0.0
     self.current_frame = -1
 
-  self.voxels.clear()
+  # Rebuild the voxel state only when needed (see restore_needed): a
+  # freshly-loaded unit's live state is already exactly its persisted edits,
+  # and clearing + restoring would erase and remesh identical content — at
+  # load, phase 2 rebuilt the whole sea on screen right after the reveal.
+  let rebuild = self.voxels.restore_needed
+  if rebuild:
+    self.voxels.clear()
 
   self.things.clear()
   self.global_flags -= RESETTING
-  self.restore_edits
+  if rebuild:
+    self.restore_edits
   self.draw(vec3(), (TRANSIENT, self.start_color))
 
 method ensure_visible*(self: Build) =
@@ -602,13 +609,17 @@ proc init*(
   id.own:
     # The synced voxel tables: real Build Ed fields, generated ids (no derived
     # id, so a reload mints fresh ones — no destroy+recreate-same-id race).
-    # LAZY: pull-only on partial replicas (page chunks in/out); full replicas
-    # get the data.
+    # EAGER: the worker seeds these before the unit joins the collection, so ed's
+    # ordered delivery puts every chunk on main before the build's node is set
+    # up — prefill hits and each block meshes with its content the first time (no
+    # empty-then-repaint). (Was LAZY: pull-only paging; that left prefill missing
+    # on load, so blocks meshed empty and repainted, spiking load and flashing
+    # empty at reveal.)
     let packed_chunks = EdTable[Vector3, SnapshotData].init(
-      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
+      flags = {SYNC_LOCAL, SYNC_REMOTE}
     )
     let chunk_deltas = EdTable[Vector3, EdSeq[DeltaUpdate]].init(
-      flags = {SYNC_LOCAL, SYNC_REMOTE, LAZY}
+      flags = {SYNC_LOCAL, SYNC_REMOTE}
     )
     let voxels = VoxelStore.init(thing_id = id)
     let frames = EdTable[int, FrameData].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
