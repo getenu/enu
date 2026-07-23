@@ -300,31 +300,22 @@ gdobj Game of Node:
     if SCENE_READY notin state.local_flags:
       state.push_flag SCENE_READY
 
-    # Loading splash. The LoadScreen node ships visible, so the boot goes
-    # straight from Godot's own splash into ours — no flash of empty scene +
-    # UI. It stays up unconditionally until a load actually starts (or an 8s
-    # safety timeout), then follows this machine's spawn gate: up and 3D
-    # render off while the player is held at the spawn, revealed the frame
-    # the gate releases.
-    if not self.load_screen.is_nil:
-      if not self.gate.booted and (
-        LOADING_LEVEL in state.global_flags or
-        LOAD_SCREEN in state.global_flags or time > self.gate.boot_deadline
-      ):
-        self.gate.booted = true
-      let show =
-        if self.gate.booted: SPAWN_HELD in state.local_flags else: true
-      if self.load_screen.visible != show:
-        self.load_screen.visible = show
-      # The splash is opaque, so don't spend the GPU drawing the 3D viewport
-      # behind it while it's up — except during the gate warm-up, when the
-      # point is to render the finished scene behind the splash before lifting.
-      if not self.scaled_viewport.is_nil:
-        let mode =
-          if show and not self.gate.warming: UPDATE_DISABLED
-          else: UPDATE_ALWAYS
-        if self.scaled_viewport.render_target_update_mode != mode:
-          self.scaled_viewport.render_target_update_mode = mode
+    # Loading screen + spawn gate DISABLED for now: never show the splash, always
+    # draw the viewport, never hold the player. load_level also stops raising
+    # LOAD_SCREEN, so the gate machinery above (and SPAWN_HELD) stays dormant. To
+    # re-enable, restore this block and the LOAD_SCREEN raise in load_level:
+    #
+    #   if not self.gate.booted and (LOADING_LEVEL in state.global_flags or
+    #       LOAD_SCREEN in state.global_flags or time > self.gate.boot_deadline):
+    #     self.gate.booted = true
+    #   let show =
+    #     if self.gate.booted: SPAWN_HELD in state.local_flags else: true
+    #   ...set load_screen.visible = show and the viewport update mode from show.
+    if not self.load_screen.is_nil and self.load_screen.visible:
+      self.load_screen.visible = false
+    if not self.scaled_viewport.is_nil and
+        self.scaled_viewport.render_target_update_mode != UPDATE_ALWAYS:
+      self.scaled_viewport.render_target_update_mode = UPDATE_ALWAYS
 
   proc rescale*() =
     let vp = self.get_viewport().size

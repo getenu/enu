@@ -1113,23 +1113,19 @@ proc load_level*(worker: Worker, level_dir: string) =
     except Exception as e:
       error "Failed to load level", error = e
 
-  # The spawn gate: everything before PLAYERS in load_order must render
-  # before players get control. Missing sentinel = front = nothing to wait
-  # for (immediate physics, no splash). Raise the splash-phase signal only
-  # when there really are units ahead of the gate; load_things clears it at
-  # the PLAYERS step.
+  # The PLAYERS sentinel still partitions load_order (pre-reveal units first),
+  # but the spawn gate is DISABLED for now: we never raise LOAD_SCREEN, so main
+  # never shows the splash, never holds the player at the spawn (SPAWN_HELD), and
+  # never waits for the pre-PLAYERS units to render — the world just streams in
+  # live. To re-enable, restore the gate raise:
   #
-  # LOAD_SCREEN must be raised BEFORE LOADING_LEVEL: main hands the splash
-  # to the gate the moment either load flag lands, and holds it only if
-  # SPAWN_HELD is up — which its LOAD_SCREEN watch pushes. Raised in this
-  # order they ship in one batch and apply in order; raised after (the old
-  # entry-time LOADING_LEVEL push, then seconds of level seeding/parsing
-  # before this point) LOADING_LEVEL could land a batch early and flash a
-  # frame of the empty 3D scene between the boot splash and the gate.
+  #   if load_order.find(PLAYERS_SENTINEL) > 0:
+  #     state.global_flags += LOAD_SCREEN   # must precede LOADING_LEVEL
+  #
+  # (and the splash block in game.process). LOADING_LEVEL still fires — it's the
+  # internal "level loading" state other nodes key off, not the loading screen.
   if PLAYERS_SENTINEL notin load_order:
     load_order.insert(PLAYERS_SENTINEL, 0)
-  if load_order.find(PLAYERS_SENTINEL) > 0:
-    state.global_flags += LOAD_SCREEN
   state.global_flags += LOADING_LEVEL
   state.push_flag LOADING_SCRIPT
   state.config = config
