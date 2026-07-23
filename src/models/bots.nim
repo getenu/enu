@@ -230,6 +230,11 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             q.state = DONE
             info "level query responding", kind = q.kind, id = self.id
             self.query = q
+          of WORLD_DIR:
+            q.result = state.config.world_dir
+            q.state = DONE
+            info "world query responding", kind = q.kind, id = self.id
+            self.query = q
           of PING:
             q.state = DONE
             self.query = q

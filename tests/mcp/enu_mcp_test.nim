@@ -526,7 +526,8 @@ var managed = false
 if not external:
   const repo = current_source_path().parent_dir.parent_dir.parent_dir
   let address = Enu.launch_and_connect(
-    repo / "share" / "worlds" / "tutorial" / "tutorial-1",
+    repo / "share" / "worlds" / "tutorial",
+    "tutorial-1",
     id = "enu_mcp_test",
     temp_workdir = true,
   )

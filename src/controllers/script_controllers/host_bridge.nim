@@ -262,22 +262,23 @@ proc claim_name(self: Worker, requested: string) =
     save_level(state.config.level_dir)
 
 proc load_level(self: Worker, level: string, world: string) =
-  var world = world
-  if not ?world:
-    world = state.config.world
-  # `change_loaded_level` joins world/level under work_dir with no checks, so a
-  # traversing name would point level_dir (and every subsequent load/save/reset)
-  # at an arbitrary directory. Keep both as plain segments so level_dir stays
-  # under work_dir/<world> (the world_dir).
-  if not valid_path_component(world) or not valid_path_component(level):
+  # A script names a level in the current world (world = "") or switches to a
+  # sibling world by name. `change_loaded_level` roots a bare world name under
+  # work_dir, so a traversing name could point level_dir (and every subsequent
+  # load/save/reset) at an arbitrary directory — keep level and any explicit
+  # world to single path segments. An empty world keeps the current world_dir,
+  # which may itself be an explicit out-of-work_dir path the user launched with.
+  if not valid_path_component(level) or
+      (?world and not valid_path_component(world)):
     raise ValueError.init(
       "Invalid level '" & world & "/" & level &
         "'. World and level names must each be a single path segment " &
         "with no '/' or '..'."
     )
+  let target_world = if ?world: world else: state.config.world_dir
   self.exit(self.active_thing.script_ctx, 0)
   after_boop:
-    change_loaded_level(level, world)
+    change_loaded_level(level, target_world)
 
 proc reset_level(self: Worker) =
   # reset_level deletes the level dir and relies on the bundled source being

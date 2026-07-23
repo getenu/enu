@@ -255,6 +255,6 @@ cd /Users/scott/src/enu
 nim build            # rebuild the dylib after .nim edits
 nim prereqs          # rebuild godot (fresh checkout / vendor change)
 cd app && caffeinate -i ../vendor/godot/bin/godot.osx.tools.arm64 \
-  scenes/game.tscn --level-dir /Users/scott/src/enu/share/worlds/course/island \
+  scenes/game.tscn --world /Users/scott/src/enu/share/worlds/course --level island \
   --listen 127.0.0.1:49624
 ```

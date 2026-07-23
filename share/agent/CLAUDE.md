@@ -1,27 +1,35 @@
-# Enu Level — Claude Code Guide
+# Enu World — Claude Code Guide
 
-This directory is an Enu level. Create and modify it with file edits and
-the MCP tools provided by the `enu` server.
+This directory is an Enu **world** — the unit that lives in git. It holds one or
+more **levels** (referred to by name, e.g. `island`), plus this guide, the
+skills, and `world.json` (which names the level Enu opens by default). A level's
+own files live in its subdirectory (`<level>/scripts/`, `<level>/data/`). Create
+and modify things with file edits and the MCP tools provided by the `enu`
+server.
 
 ## Setup
 
-This level ships with the Enu integration preconfigured — it loads
+This world ships with the Enu integration preconfigured — it loads
 automatically when you open Claude here, no install step:
 
 - **MCP server** — `.mcp.json` registers the `enu` server and
   `.claude/settings.local.json` pre-approves it, so the tools are available with
   no prompt. If you don't see them, run `/mcp` to check status.
 - **Attach to an Enu first.** The server starts *without* an Enu — before any
-  other tool, attach to one: `launch_and_connect(level_dir)` to spin up your own
-  private instance (working solo), or `connect()` to attach to one the user is
-  already running (it must have been started with `--listen`). Call `disconnect`
-  when done — that also closes an instance you launched.
+  other tool, attach to one: `launch_and_connect(world, level)` to spin up your
+  own private instance (working solo) — `world` is this directory's path,
+  `level` a level name (omit it for the world's default level) — or `connect()`
+  to attach to one the user is already running (it must have been started with
+  `--listen`). Call `disconnect` when done — that also closes an instance you
+  launched.
 - **Skills & commands** — auto-loaded from `.claude/skills/` and
   `.claude/commands/`. Skills are model-invoked or callable directly as
   `/<skill>`; commands as `/enu:<command>`.
 
 If a tool reports "not connected to Enu", call `launch_and_connect` / `connect`
-first. If the tools don't appear at all, run `/mcp` to check the server.
+first. If the tools don't appear at all, run `/mcp` to check the server. `world`
+is this directory; `get_world_dir` returns its path and `get_level_dir` the
+current level's.
 
 ## Where to look
 
@@ -42,9 +50,10 @@ reference them. **Prefer copying an example over writing from scratch.**
 
 ## Quick Start
 
-1. `launch_and_connect(<this level's dir>)` (solo) or `connect()` (attach to the
+1. `launch_and_connect(<this world's dir>)` (solo) or `connect()` (attach to the
    user's running Enu) → attach before anything else
-2. `get_level_dir` → confirm the level directory path
+2. `get_level_dir` → confirm the level directory path (`get_world_dir` for the
+   world)
 3. `screenshot` → see the current state
 4. Edit or create scripts in `scripts/` and JSON in `data/`
 5. `wait_for_script(unit_id)` → loads/reloads the unit and returns its
@@ -71,6 +80,7 @@ of distinctly-colored bots.
 
 **Querying:**
 - `get_level_dir` — absolute path to the current level directory
+- `get_world_dir` — absolute path to the world (this directory; the level's parent)
 - `units_near(x, y, z, radius)` — sorted nearest-first unit list within an xz-radius; includes spawner clones
 - `get_block_log` — recent blocks the human placed/erased in-game (annotation workflow — see `/reload-verify`)
 - `eval(code, top_level = false, unit_id = "")` — run Nim in the Enu scripting context. Default returns the expression's value from the player's module; `top_level = true` allows `import`/`proc` (no return value); `unit_id` targets a unit's module (spawner clones can't be targeted — use their proto or another root unit).
@@ -110,16 +120,19 @@ of distinctly-colored bots.
 - Colors: `black`, `brown`, `red`, `green`, `blue`, `white` (+ `eraser`
   to remove voxels). `SCREAMING_CASE` in JSON (`"BROWN"`).
 
-## Level Files
+## World & Level Files
 
 ```
-<level-dir>/
-  level.json          — managed by Enu (load order, settings); don't edit
-                        by hand while Enu is running. Settings (e.g.
-                        "show_prototypes") are changed by editing it
-                        while Enu is down.
-  data/<id>/<id>.json — unit position (+ hand-placed block edits)
-  scripts/<id>.nim    — the unit's script
+<world-dir>/            — this directory (the git unit)
+  world.json            — names the default level; hand-editable
+  CLAUDE.md .claude/    — this guide + skills (managed by Enu)
+  <level>/              — a level, referred to by name
+    level.json          — managed by Enu (load order, settings); don't edit
+                          by hand while Enu is running. Settings (e.g.
+                          "show_prototypes") are changed by editing it
+                          while Enu is down.
+    data/<id>/<id>.json — unit position (+ hand-placed block edits)
+    scripts/<id>.nim    — the unit's script
 ```
 
 Build ids start with `build_`, bot ids with `bot_`. A script declaring

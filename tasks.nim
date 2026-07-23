@@ -221,11 +221,15 @@ task test_world,
 
   for test_level in test_levels:
     p &"Running world test: {test_level.split_path.tail}"
+    let
+      world = test_level.parent_dir
+      level = test_level.split_path.tail
+      loc = " --world " & world & " --level " & level
     let cmd =
       if use_dist:
-        bin & " --level-dir " & test_level & " --enu-test --minimized --temp-workdir"
+        bin & loc & " --enu-test --minimized --temp-workdir"
       else:
-        "cd app && " & bin & " --level-dir " & test_level &
+        "cd app && " & bin & loc &
           " --enu-test --minimized scenes/game.tscn --temp-workdir"
     exec cmd
 
@@ -388,11 +392,12 @@ task test_sandbox, "verify scripts can't reach host files/env from the VM":
         else: quit "Headless tests are only supported on Linux"
       else:
         godot_bin()
+    loc = " --world " & level.parent_dir & " --level " & level.split_path.tail
     cmd =
       if use_dist:
-        bin & " --level-dir " & level & " --enu-test --minimized --temp-workdir"
+        bin & loc & " --enu-test --minimized --temp-workdir"
       else:
-        "cd app && " & bin & " --level-dir " & level &
+        "cd app && " & bin & loc &
           " --enu-test --minimized scenes/game.tscn --temp-workdir"
   # The env probe reads this back via `get_env`; a non-empty return there means
   # get_env is bridged to the real host environment (a leak). The child godot/
@@ -550,19 +555,28 @@ task edit, "Edit project in Godot":
 task start, "Run Enu. Open a level by name (nim start loops) or ENU_LEVEL=<dir>":
   # A bare level name is looked up under share/worlds/*/<name>. (Paths can't
   # be passed as task arguments — nim's CLI treats them as project files.)
-  # ENU_LEVEL=<dir> overrides with an explicit directory.
+  # ENU_LEVEL=<dir> overrides with an explicit level directory; its parent is
+  # the world (the world is always the thing with a path, the level a name).
   var extra = ""
-  var level_dir = get_env("ENU_LEVEL")
-  if level_dir == "":
+  var world_dir = ""
+  var level = ""
+  let env_level = get_env("ENU_LEVEL")
+  if env_level != "":
+    var ld = env_level
+    if not ld.is_absolute:
+      ld = this_dir() / ld
+    world_dir = ld.parent_dir
+    level = ld.split_path.tail
+  else:
     for param in command_line_params()[1 ..^ 1]:
       if not param.starts_with("-"):
         for world in list_dirs(this_dir() / "share/worlds"):
           if dir_exists(world / param):
-            level_dir = world / param
-  if level_dir != "":
-    if not level_dir.is_absolute:
-      level_dir = this_dir() / level_dir
-    extra = " --level-dir " & quote_shell(level_dir)
+            world_dir = world
+            level = param
+  if world_dir != "":
+    extra =
+      " --world " & quote_shell(world_dir) & " --level " & quote_shell(level)
   cd "app"
   exec godot_bin() & " --verbose scenes/game.tscn" & extra
 
