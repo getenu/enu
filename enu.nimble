@@ -15,4 +15,5 @@ requires "https://github.com/getenu/Nim#bea4c144",
   "nph#948b933", "regex",
   "nimcp 0.10.0",
   "mummy#32f0ef97",
-  "libbacktrace"
+  "libbacktrace",
+  "osdialog"
