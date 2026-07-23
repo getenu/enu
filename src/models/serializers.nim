@@ -748,6 +748,34 @@ proc save_world_support*(world_dir: string) =
       "*/generated/\n*/nim.cfg\n*/project.nim\n*/project.nimble\n",
   )
 
+proc level_json(self: LevelInfo): string =
+  # Hand-formatted so start_transform matches the thing files — each basis row
+  # and the origin on a single line — rather than std/json's pretty output,
+  # which breaks every vector across one-number-per-line.
+  let order =
+    if self.load_order.len > 0:
+      self.load_order.map_it(it.escape_json).join(",\n").indent(4)
+    else:
+      ""
+  let basis =
+    self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
+  let o = self.start_transform.origin
+  \"""{{
+  "format_version": "{self.format_version}",
+  "load_order": [
+{order}
+  ],
+  "show_prototypes": {self.show_prototypes},
+  "show_tools": {self.show_tools},
+  "start_transform": {{
+    "basis": [
+{basis.indent(6)}
+    ],
+    "origin": {$[o.x, o.y, o.z]}
+  }}
+}}
+"""
+
 proc save_level*(level_dir: string, save_all = false, force = false) =
   if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
     # The whole level is in load_order now — script-less units (terrain and
@@ -836,8 +864,7 @@ proc save_level*(level_dir: string, save_all = false, force = false) =
       show_tools: state.show_tools,
       start_transform: state.start_transform,
     )
-    write_file_if_changed level_dir / "level.json",
-      jsonutils.to_json(level).pretty
+    write_file_if_changed level_dir / "level.json", level.level_json
     save_ide_support(level_dir, sorted_scripts)
     save_world_support(state.config.world_dir)
 
