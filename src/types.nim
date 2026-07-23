@@ -248,7 +248,6 @@ type
     player_value*: EdValue[Player]
     things*: EdSeq[Thing]
     ground*: Ground
-    draw_thing_id*: string
     console*: ConsoleModel
     paused*: bool
     show_prototypes*: bool
@@ -262,7 +261,6 @@ type
       ## allow, appending genuinely new units at the end — so the order the
       ## level loads in (and, later, streams in) stays stable and authorable.
     frame_count*: int
-    skip_block_paint*: bool
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format
     open_sign_value*: EdValue[Sign]
     queued_action_value*: EdValue[string]

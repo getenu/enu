@@ -33,12 +33,105 @@ var
   previous_build* {.threadvar.}: Build
   last_placement_time* {.threadvar.}: MonoTime
   dont_join*: bool
-  skip_point = vec3()
-  last_point: Vector3
-  draw_normal = vec3()
+
+const GROUND_ID* = "ground"
+
+const STROKE_DWELL_MS = 500
+  ## Holding the aim on a target the current stroke can't touch for this
+  ## long re-anchors the stroke there, as if clicking fresh — how a held
+  ## button steps to a new plane or unit.
+
+type
+  StrokeMode* = enum
+    STROKE_PLACE
+    STROKE_REMOVE
+
+  Stroke* = object
+    ## Hold-and-drag voxel painting. The initial click anchors the stroke
+    ## to one unit and one cell plane; while the button stays held, only
+    ## cells on that plane get painted. Everything else is inert until the
+    ## dwell timer re-anchors or the button is released.
+    mode*: StrokeMode
+    unit_id*: string
+    axis*: int
+    plane*: float
+    face*: float
+      ## The aimed face's coordinate along `axis` at anchor. Removal
+      ## continues only while the ray is on this same face plane; anything
+      ## looser lets a grazing ray trench through a layer side face by side
+      ## face while the cursor sits still.
+    painted*: HashSet[Vector3]
+      ## Cells this stroke placed. Placement accepts any face whose outside
+      ## cell is on the plane — aiming angles often hide the anchor plane —
+      ## except faces of these blocks: the ray landing on a just-placed
+      ## block is self-induced, not cursor intent.
+    last_cell*: Option[Vector3]
+      ## The previously painted cell; the next paint interpolates from
+      ## here. Cleared (without ending the stroke) whenever the ray leaves
+      ## the plane, so interpolation never bridges cells the cursor didn't
+      ## actually sweep.
+    dwell_unit*: string
+    dwell_target*: Vector3
+    dwell_since*: MonoTime
+
+var stroke* {.threadvar.}: Stroke
+
+proc active*(self: Stroke): bool =
+  self.unit_id != ""
+
+proc end_stroke*() =
+  stroke = Stroke()
+
+proc stroke_miss*(id = "", target = vec3()): bool =
+  ## The aimed target isn't paintable by the current stroke: break the
+  ## interpolation chain and charge the dwell timer toward re-anchoring
+  ## there (true once the aim has stayed put for the dwell time). With no
+  ## arguments, just break and reset.
+  stroke.last_cell = none(Vector3)
+  if id == "" or (stroke.dwell_unit, stroke.dwell_target) != (id, target):
+    stroke.dwell_unit = id
+    stroke.dwell_target = target
+    stroke.dwell_since = get_mono_time()
+  elif (get_mono_time() - stroke.dwell_since).in_milliseconds >=
+      STROKE_DWELL_MS:
+    stroke.dwell_since = get_mono_time()
+    result = true
+
+proc axis_of(normal: Vector3): int =
+  if normal.x != 0: 0 elif normal.y != 0: 1 else: 2
+
+proc anchor_stroke*(
+    mode: StrokeMode, unit_id: string, cell, normal, face_point: Vector3
+) =
+  if not normal.is_axis_aligned:
+    end_stroke()
+    return
+  let axis = axis_of(normal)
+  stroke = Stroke(
+    mode: mode,
+    unit_id: unit_id,
+    axis: axis,
+    plane: cell[axis],
+    face: face_point[axis],
+    last_cell: some(cell),
+  )
+
+proc continue_stroke*(
+    cell: Vector3, paint: proc(cell: Vector3, endpoint: bool) {.gcsafe.}
+): bool =
+  ## Paint `cell`, interpolating from the stroke's previous cell, unless it
+  ## was the last cell painted.
+  if stroke.last_cell == some(cell):
+    return
+  for mid in plane_cells_between(stroke.last_cell.get(cell), cell, stroke.axis):
+    paint(mid, false)
+  paint(cell, true)
+  stroke.last_cell = some(cell)
+  stroke.dwell_unit = ""
+  true
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
-proc fire_beside(self: Build) {.gcsafe.}
+proc place_beside(self: Build, local_cell: Vector3) {.gcsafe.}
 proc init_voxels_if_needed*(self: Build, rebuild_edits = true) {.gcsafe.}
 
 # =============================================================================
@@ -372,26 +465,42 @@ proc log_block_placement(self: Build, local: Vector3, color: Color) =
   while state.player.block_log_entries.len > BLOCK_LOG_CAP:
     state.player.block_log_entries.del 0
 
+proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
+  ## Paint one cell of the active stroke. Interpolated cells (endpoint =
+  ## false) skip cells already in the desired state; the aimed cell always
+  ## draws, matching a bare click.
+  case stroke.mode
+  of STROKE_REMOVE:
+    if endpoint or cell in self:
+      self.draw(cell, (HOLE, ACTION_COLORS[ERASER]))
+      self.log_block_placement(cell, ACTION_COLORS[ERASER])
+  of STROKE_PLACE:
+    if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
+      stroke.painted.incl cell
+      self.place_beside(cell)
+    elif endpoint or cell notin self:
+      stroke.painted.incl cell
+      self.draw(cell, (PERSISTED, state.selected_color))
+      self.log_block_placement(cell, state.selected_color)
+
+proc remove_if_empty(self: Build) =
+  if self.things.len == 0 and not self.has_visible_voxels:
+    if self.parent.is_nil:
+      state.things -= self
+    else:
+      self.parent.things -= self
+
 proc remove(self: Build) =
   if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
     return
   if state.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
-    state.skip_block_paint = true
-    draw_normal = self.target_normal
-    let point =
-      self.target_point - self.target_normal -
-      (self.target_normal.inverse_normalized * 0.5)
-
-    skip_point = vec3()
-    last_point = self.target_point
-    self.draw(point, (HOLE, ACTION_COLORS[ERASER]))
-    self.log_block_placement(point, ACTION_COLORS[ERASER])
-
-    if self.things.len == 0 and not self.has_visible_voxels:
-      if self.parent.is_nil:
-        state.things -= self
-      else:
-        self.parent.things -= self
+    let cell = (self.target_point - self.target_normal * 0.5).floor
+    anchor_stroke(
+      STROKE_REMOVE, self.id, cell, self.target_normal, self.target_point
+    )
+    if stroke.active:
+      self.paint_cell(cell, endpoint = true)
+      self.remove_if_empty()
 
 proc fire(self: Build) =
   # Full transform, not global_from: on a rotated platform the origin-only sum
@@ -400,16 +509,12 @@ proc fire(self: Build) =
   let locked =
     LOCK in self.find_root.global_flags and GOD notin state.local_flags
   if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
-    if locked:
-      self.fire_beside()
-      return
-    state.skip_block_paint = true
-    draw_normal = self.target_normal
-    let point = (self.target_point + (self.target_normal * 0.5)).floor
-    skip_point = self.target_point + self.target_normal
-    last_point = self.target_point
-    self.draw(point, (PERSISTED, state.selected_color))
-    self.log_block_placement(point, state.selected_color)
+    let cell = (self.target_point + (self.target_normal * 0.5)).floor
+    anchor_stroke(
+      STROKE_PLACE, self.id, cell, self.target_normal, self.target_point
+    )
+    if stroke.active:
+      self.paint_cell(cell, endpoint = true)
   elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
@@ -417,6 +522,37 @@ proc fire(self: Build) =
   elif state.tool == CODE_MODE and not locked:
     let root = self.find_root
     state.open_thing = root
+
+proc stroke_frame*(self: Build) =
+  ## Per-frame stroke continuation while a button is held and the ray is on
+  ## this build: paint the aimed cell if it's on the stroke's plane,
+  ## otherwise charge the dwell timer toward re-anchoring here.
+  if state.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+    return
+  if stroke.unit_id == self.id and self.target_normal.is_axis_aligned:
+    let inside = (self.target_point - self.target_normal * 0.5).floor
+    let (cell, paintable) =
+      if stroke.mode == STROKE_REMOVE:
+        (inside, self.target_point[stroke.axis] == stroke.face)
+      else:
+        (
+          (self.target_point + self.target_normal * 0.5).floor,
+          inside notin stroke.painted,
+        )
+    if paintable and cell[stroke.axis] == stroke.plane:
+      let painted = continue_stroke(
+        cell,
+        proc(cell: Vector3, endpoint: bool) =
+          self.paint_cell(cell, endpoint),
+      )
+      if painted and stroke.mode == STROKE_REMOVE:
+        self.remove_if_empty()
+      return
+  if stroke_miss(self.id, self.target_point):
+    if SECONDARY_DOWN in state.local_flags:
+      self.remove
+    elif PRIMARY_DOWN in state.local_flags:
+      self.fire
 
 proc is_moving(self: Build, move_mode: int): bool =
   move_mode == 2
@@ -682,15 +818,10 @@ proc init*(_: type Build, x, y, z: float, save = false): Build =
   result.end_asap()
   result.voxels.immediate = true
 
-proc fire_beside(self: Build) =
-  ## Ground-style placement for locked builds: the clicked face's outside
-  ## cell goes to an adjacent unlocked build (find_first skips locked
-  ## trees), or starts a new unit — the locked build itself never changes.
-  state.skip_block_paint = true
-  draw_normal = self.target_normal
-  let local_cell = (self.target_point + (self.target_normal * 0.5)).floor
-  skip_point = self.target_point + self.target_normal
-  last_point = self.target_point
+proc place_beside(self: Build, local_cell: Vector3) =
+  ## Ground-style placement for locked builds: the cell goes to an adjacent
+  ## unlocked build (find_first skips locked trees), or starts a new unit —
+  ## the locked build itself never changes.
   let point = local_cell.world_from(self).round
   let now = get_mono_time()
   var add_to =
@@ -838,23 +969,6 @@ method main_thread_joined*(self: Build) =
       let root = self.find_root(true)
       root.walk_tree proc(thing: Thing) =
         thing.local_flags -= HIGHLIGHT
-    if TARGET_MOVED.touched:
-      let length = (
-        self.target_point * self.target_normal - last_point * self.target_normal
-      ).length
-
-      if state.skip_block_paint:
-        state.skip_block_paint = false
-      elif (
-        state.draw_thing_id == self.id and self.target_normal == draw_normal and
-        length <= 5 and self.target_point != skip_point and
-        state.tool != PLACE_BOT
-      ):
-        if SECONDARY_DOWN in state.local_flags:
-          self.remove
-        elif PRIMARY_DOWN in state.local_flags:
-          self.fire
-
     if change.item in {TARGET_MOVED, HOVER} and state.tool == PLACE_BOT:
       if self.target_normal == UP:
         state.push_flag BLOCK_TARGET_VISIBLE
@@ -864,14 +978,11 @@ method main_thread_joined*(self: Build) =
   state.local_flags.watch:
     if HOVER in self.local_flags and VIEWPORT_FOCUSED in state.local_flags:
       if PRIMARY_DOWN.added:
-        state.draw_thing_id = self.id
         self.fire
       elif SECONDARY_DOWN.added:
-        state.draw_thing_id = self.id
         self.remove
     if PRIMARY_DOWN.removed or SECONDARY_DOWN.removed:
-      state.draw_thing_id = ""
-      last_point = vec3()
+      end_stroke()
     if PLAYING.added:
       self.local_flags -= HIGHLIGHT
     elif PLAYING.removed:
