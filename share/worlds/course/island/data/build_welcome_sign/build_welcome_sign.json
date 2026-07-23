@@ -10,6 +10,8 @@
   },
   "start_color": "BROWN",
   "edits": {
-    
+    "build_welcome_sign": [
+      [[-1.0, 22.0, 2.0], [0, "BLUE"]]
+    ]
   }
 }

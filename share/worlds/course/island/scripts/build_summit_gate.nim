@@ -34,7 +34,12 @@ box(vec3(0, 0, -5), vec3(0, 11, 5), color = black)
 box(vec3(-2, 0, -8), vec3(1, 0, -5), color = white)
 box(vec3(-2, 0,  5), vec3(1, 0,  8), color = white)
 box(vec3(1, 0, -5), vec3(7, 0, 4), color = white)      # plaza floor
-box(vec3(2, 1, -3), vec3(6, 1, 1), color = white)      # beacon pedestal riser
+
+# --- skirt: two courses below the base, dropping past the lowest terrain under
+# the footprint so the base plants into the slope instead of floating a lip ---
+box(vec3(-2, -2, -8), vec3(1, -1, -5), color = white)
+box(vec3(-2, -2,  5), vec3(1, -1,  8), color = white)
+box(vec3(1, -2, -5), vec3(7, -1, 4), color = white)
 
 # --- scrolling teaser sign, floating above the portal ---
 drawing = false
