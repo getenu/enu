@@ -1156,6 +1156,14 @@ proc load_level*(worker: Worker, level_dir: string) =
   else:
     state.tools.clear()
 
+  # Ship the load-start decision to main before any unit loads. A gated level
+  # (LOAD_SCREEN up) holds the splash through the gate; an ungated one (PLAYERS
+  # first, no LOAD_SCREEN) has nothing to wait on, so main drops the splash here
+  # — before the first unit — rather than only once it happens to observe
+  # LOADING_LEVEL mid-load. The players are already at the spawn pose above, so
+  # the world simply streams in behind a settled camera.
+  Ed.thread_ctx.flush_buffers()
+
   worker.run_state_initializers()
 
   dont_join = true
