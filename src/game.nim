@@ -407,7 +407,6 @@ gdobj Game of Node:
 
     var connect_address_override = ""
     var listen_address_override = ""
-    var level_dir_override = ""
     var test_mode = false
     var minimized = false
 
@@ -426,11 +425,6 @@ gdobj Game of Node:
           listen_address_override = "0.0.0.0"
           args.delete(i)
     block:
-      let i = args.find("--level-dir")
-      if i > -1 and args.len > i + 1:
-        level_dir_override = args[i + 1]
-        args.delete(i .. i + 1)
-    block:
       let i = args.find("--enu-test")
       if i > -1:
         test_mode = true
@@ -440,12 +434,22 @@ gdobj Game of Node:
       if i > -1:
         minimized = true
         args.delete(i)
+    # --world is a path (the world is the thing with a path); --level is a plain
+    # name for a level inside it. A bare --world name is normalized to a work-dir
+    # path by the config resolution below, same as config.json's `world`. Kept as
+    # explicit overrides (not folded into uc yet) so the resolution can tell an
+    # explicit request from a saved value.
+    var world_override = ""
+    var level_override = ""
+    block:
+      let i = args.find("--world")
+      if i > -1 and args.len > i + 1:
+        world_override = args[i + 1]
+        args.delete(i .. i + 1)
     block:
       let i = args.find("--level")
-      if i > -1:
-        let parts = args[i + 1].split("/")
-        uc.world = some(parts[0])
-        uc.level = some(parts[1])
+      if i > -1 and args.len > i + 1:
+        level_override = args[i + 1]
         args.delete(i .. i + 1)
 
     raise_fd_limit()
@@ -479,13 +483,61 @@ gdobj Game of Node:
       let share =
         join_path(get_executable_path().parent_dir(), "..", "..", "..", "share")
 
+    # The world is the thing with a path; the level is a name inside it.
+    # world_dir is authoritative — resolve it first (an explicit --world path,
+    # else the saved world, else the default world), derive the world name from
+    # it, then pick the level: an explicit --level, else the saved level *only
+    # when we're reopening the same world it was saved with* (so a saved level
+    # never leaks into a different world), else world.json's initial_level, else
+    # "default".
+    template to_world_dir(w: string): string =
+      # An explicit path stays as-is (absolutized); a bare name means a world
+      # under the work dir (config.json's legacy meaning).
+      block:
+        let p = w
+        if is_absolute(p) or p != p.last_path_part:
+          absolute_path(p)
+        else:
+          join_path(work_dir, p)
+
+    let saved_world_dir =
+      if ?uc.world and ?uc.world.get: to_world_dir(uc.world.get) else: ""
+    var resolved_world_dir =
+      if ?world_override:
+        to_world_dir(world_override)
+      elif ?saved_world_dir:
+        saved_world_dir
+      else:
+        join_path(work_dir, "tutorial")
+    let resolved_world = resolved_world_dir.last_path_part
+    let resolved_level =
+      if ?level_override:
+        level_override
+      elif resolved_world_dir == saved_world_dir and ?uc.level and ?uc.level.get:
+        uc.level.get
+      else:
+        let init =
+          read_world_initial_level(resolved_world_dir, share, resolved_world)
+        if ?init: init else: "default"
+
+    if temp_workdir:
+      # Isolate from the source: copy the whole world into the temp work dir and
+      # run against the copy, so a test run never modifies the real world.
+      let temp_world_dir = join_path(work_dir, resolved_world)
+      if dir_exists(resolved_world_dir) and resolved_world_dir != temp_world_dir:
+        copy_dir(resolved_world_dir, temp_world_dir)
+      resolved_world_dir = temp_world_dir
+
+    uc.world = some(resolved_world_dir)
+    uc.level = some(resolved_level)
+
     state.config_value.value:
       screen_scale = screen_scale
       work_dir = work_dir
       font_size = uc.font_size ||= 20
       toolbar_size = uc.toolbar_size ||= 100
-      world = uc.world ||= "tutorial"
-      level = uc.level ||= value.world & "-1"
+      world = resolved_world
+      level = resolved_level
       run_server = uc.run_server ||= false
       show_stats = uc.show_stats ||= false
       megapixels = uc.megapixels ||= 2.0
@@ -495,8 +547,8 @@ gdobj Game of Node:
       connect_address = uc.connect_address ||= ""
       listen_address = uc.listen_address ||= ""
       player_color = uc.player_color ||= color(rand(1.0), rand(1.0), rand(1.0))
-      world_dir = join_path(value.work_dir, value.world)
-      level_dir = join_path(value.world_dir, value.level)
+      world_dir = resolved_world_dir
+      level_dir = join_path(resolved_world_dir, resolved_level)
       walk_speed = uc.walk_speed ||= 500
       fly_speed = uc.fly_speed ||= 1500
       alt_walk_speed = uc.alt_walk_speed ||= 1000
@@ -515,32 +567,6 @@ gdobj Game of Node:
     if ?connect_address_override:
       state.config_value.value:
         connect_address_override = connect_address_override
-
-    if ?level_dir_override:
-      let level_file = level_dir_override / "level.json"
-      if not file_exists(level_file):
-        fail "Level not found: " & level_dir_override & " (no level.json)"
-      let parts = level_dir_override.split_path
-      let world_dir_path = parts.head
-
-      let new_level = parts.tail
-      let new_world = world_dir_path.split_path.tail
-      var final_world_dir = world_dir_path
-      var final_level_dir = level_dir_override
-
-      if temp_workdir:
-        # Isolate from the source: copy the level into the temp work dir and run
-        # against the copy, so a test run never modifies — or deletes scripts
-        # from — the real level.
-        final_world_dir = join_path(work_dir, new_world)
-        final_level_dir = join_path(final_world_dir, new_level)
-        copy_dir(level_dir_override, final_level_dir)
-
-      state.config_value.value:
-        level = new_level
-        world = new_world
-        world_dir = final_world_dir
-        level_dir = final_level_dir
 
     if test_mode:
       notice "test mode enabled"
@@ -867,7 +893,7 @@ gdobj Game of Node:
     if diff != 0:
       change_loaded_level(
         resolve_level_name(state.config.world, state.config.level, diff),
-        state.config.world,
+        state.config.world_dir,
       )
     else:
       # force a reload of the current world

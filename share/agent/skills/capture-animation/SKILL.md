@@ -56,10 +56,11 @@ settle delay is needed.
 
 ## Workflow
 
-### 1. Attach — one Enu per level dir
+### 1. Attach — one Enu per world
 `connect()` to a running instance (started with `--listen`) if the user
-has one; otherwise `launch_and_connect(level_dir)`. **Never run two Enu
-processes on the same level directory** — it causes crashes, a netty
+has one; otherwise `launch_and_connect(world, level)` (world = the world
+dir's path, level = a level name). **Never run two Enu processes on the
+same world** — it causes crashes, a netty
 `reactor.id` assertion on connect, and fighting writes to the level
 files. Prefer attaching to the user's instance so they can watch.
 

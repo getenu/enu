@@ -15,6 +15,7 @@ type
     CONSOLE
     CLEAR_CONSOLE
     LEVEL_DIR
+    WORLD_DIR
     PING
 
   ThingQueryState* = enum

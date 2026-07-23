@@ -179,24 +179,27 @@ proc server_ctx_id*(_: type Enu): string =
 
 proc launch_and_connect*(
     _: type Enu,
-    level_dir: string,
+    world: string,
+    level = "",
     id = "",
     timeout = 30.seconds,
     temp_workdir = false,
 ): string =
-  ## Launch a private Enu opening `level_dir` on a random free port (listening,
+  ## Launch a private Enu opening `world` (a path) at level `level` (a name;
+  ## empty = the world's initial level) on a random free port (listening,
   ## minimized), connect to it, and return its "host:port" address. The instance
-  ## is ours: `disconnect` (or process exit) kills it. `level_dir` is required.
-  ## `temp_workdir` runs against a throwaway copy of the level (for tests) so the
+  ## is ours: `disconnect` (or process exit) kills it. `world` is required.
+  ## `temp_workdir` runs against a throwaway copy of the world (for tests) so the
   ## source is never modified.
-  if level_dir == "":
-    raise ValueError.init("launch_and_connect requires a level_dir")
+  if world == "":
+    raise ValueError.init("launch_and_connect requires a world")
   Enu.disconnect
   let
     address = "127.0.0.1:" & $free_port()
     spec = launch_spec()
     flags =
-      @["--level-dir", level_dir, "--listen", address, "--minimized"] &
+      @["--world", world] & (if ?level: @["--level", level] else: @[]) &
+      @["--listen", address, "--minimized"] &
       (if temp_workdir: @["--temp-workdir"] else: @[])
     log = get_temp_dir() / "enu_managed.log"
   when defined(windows):

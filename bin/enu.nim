@@ -180,6 +180,12 @@ let enu_server = mcp_server("enu", "1.0.0"):
       run ThingQuery(kind: LEVEL_DIR)
 
   mcp_tool:
+    proc get_world_dir(): string =
+      ## Get the directory path of the current world (the level's parent, and
+      ## the git unit that holds world.json, CLAUDE.md, and the skills).
+      run ThingQuery(kind: WORLD_DIR)
+
+  mcp_tool:
     proc get_block_log(): string =
       ## Blocks the player recently placed or erased by hand, oldest first —
       ## the human's way to point the agent at spots ("delete what I marked
@@ -297,12 +303,14 @@ let enu_server = mcp_server("enu", "1.0.0"):
           " — is it running and started with --listen?"
 
   mcp_tool:
-    proc launch_and_connect(level_dir: string): string =
-      ## Launch your own private Enu opening `level_dir` (random free port,
-      ## minimized) and connect to it. Use when working solo. The instance is
-      ## killed on disconnect or when the server exits.
+    proc launch_and_connect(world: string, level: string = ""): string =
+      ## Launch your own private Enu opening `world` (a path — the world is the
+      ## thing with a path) at level `level` (a name; defaults to the world's
+      ## initial level) on a random free port (minimized), and connect to it.
+      ## Use when working solo. The instance is killed on disconnect or when the
+      ## server exits.
       try:
-        "connected to " & Enu.launch_and_connect(level_dir, id = ctx_id)
+        "connected to " & Enu.launch_and_connect(world, level, id = ctx_id)
       except CatchableError as e:
         mark_tool_error()
         "Error: " & e.msg
