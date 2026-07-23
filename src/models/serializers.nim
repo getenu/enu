@@ -694,6 +694,13 @@ proc save_ide_support(level_dir: string, sorted_scripts: seq[string]) =
       "\"\n--path:\"generated\"\n",
   )
 
+proc resolve_world_dir*(work_dir, world: string): string =
+  ## A world is always addressed by an absolute path. A relative path — including
+  ## a bare world name — resolves from the enu data dir (`work_dir`), never the
+  ## process's current directory. The result is normalized and absolute; it's
+  ## what gets stored in config.json.
+  normalized_path(if is_absolute(world): world else: join_path(work_dir, world))
+
 proc read_world_initial_level*(
     world_dir, lib_dir, world_name: string
 ): string =
@@ -925,18 +932,11 @@ proc load_user_config*(dir = ""): UserConfig =
       result.from_json(read_file(config_file).parse_json, opt)
     except Exception as e:
       error "Failed to load user config", error = e
-  # `world` is stored as a path. A bare name is taken to mean a world under the
-  # work dir (the legacy meaning); normalize it to an absolute path so world_dir
-  # is unambiguous from here on.
+  # `world` is stored as an absolute path. Normalize any saved value (and any
+  # legacy bare name, which meant a world under the enu data dir) to an absolute
+  # path so world_dir is unambiguous from here on.
   if ?result.world and ?result.world.get:
-    let w = result.world.get
-    result.world =
-      some(
-        if is_absolute(w) or w != w.last_path_part:
-          absolute_path(w)
-        else:
-          join_path(work_dir, w)
-      )
+    result.world = some(resolve_world_dir(work_dir, result.world.get))
 
 proc build_user_config*(config: Config): UserConfig =
   for config_name, config_field in config.field_pairs:
@@ -954,15 +954,12 @@ proc save_user_config*(config: UserConfig) =
 
 proc change_loaded_level*(level, world: string) =
   var config = state.config
-  # `world` may be a full path (an explicit world dir) or a bare name (a world
-  # under the work dir). Resolve to a path so world_dir stays authoritative —
-  # switching levels must never re-root an out-of-work_dir world back under the
-  # work dir. The world *name* is always the path's final component.
-  let world_dir =
-    if is_absolute(world) or world != world.last_path_part:
-      absolute_path(world)
-    else:
-      join_path(config.work_dir, world)
+  # `world` may be a full path (an explicit world dir) or a relative path / bare
+  # name (resolved from the enu data dir). Resolve to an absolute path so
+  # world_dir stays authoritative — switching levels must never re-root an
+  # out-of-work_dir world back under the work dir. The world *name* is always the
+  # path's final component.
+  let world_dir = resolve_world_dir(config.work_dir, world)
   config.world_dir = world_dir
   config.world = world_dir.last_path_part
   config.level = level
@@ -1025,7 +1022,9 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   if not file_exists(level_file):
     let
-      base = config.lib_dir / "worlds" / config.world
+      # Bundled templates are keyed by the world's last path segment (its name),
+      # so this resolves the source even when the world is an arbitrary path.
+      base = config.lib_dir / "worlds" / config.world_dir.last_path_part
       level = base / config.level
       tmpl = base / "template"
 

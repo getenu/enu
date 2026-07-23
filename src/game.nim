@@ -485,30 +485,24 @@ gdobj Game of Node:
 
     # The world is the thing with a path; the level is a name inside it.
     # world_dir is authoritative — resolve it first (an explicit --world path,
-    # else the saved world, else the default world), derive the world name from
-    # it, then pick the level: an explicit --level, else the saved level *only
-    # when we're reopening the same world it was saved with* (so a saved level
-    # never leaks into a different world), else world.json's initial_level, else
-    # "default".
-    template to_world_dir(w: string): string =
-      # An explicit path stays as-is (absolutized); a bare name means a world
-      # under the work dir (config.json's legacy meaning).
-      block:
-        let p = w
-        if is_absolute(p) or p != p.last_path_part:
-          absolute_path(p)
-        else:
-          join_path(work_dir, p)
-
+    # else the saved world, else the default tutorial world), derive the world
+    # name from it, then pick the level: an explicit --level, else the saved
+    # level *only when we're reopening the same world it was saved with* (so a
+    # saved level never leaks into a different world), else world.json's
+    # initial_level, else "default". A fresh boot lands on the default tutorial
+    # world, whose world.json names "welcome" — no special-casing here.
     let saved_world_dir =
-      if ?uc.world and ?uc.world.get: to_world_dir(uc.world.get) else: ""
+      if ?uc.world and ?uc.world.get:
+        resolve_world_dir(work_dir, uc.world.get)
+      else:
+        ""
     var resolved_world_dir =
       if ?world_override:
-        to_world_dir(world_override)
+        resolve_world_dir(work_dir, world_override)
       elif ?saved_world_dir:
         saved_world_dir
       else:
-        join_path(work_dir, "tutorial")
+        resolve_world_dir(work_dir, "tutorial")
     let resolved_world = resolved_world_dir.last_path_part
     let resolved_level =
       if ?level_override:
