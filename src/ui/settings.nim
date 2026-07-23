@@ -5,6 +5,7 @@ import
     input_event, scene_tree, v_separator, viewport, grid_container,
   ]
 import godot
+import pkg/osdialog
 import core, gdutils, models/[colors, serializers]
 
 type WindowState = enum
@@ -65,6 +66,9 @@ gdobj Settings of PanelContainer:
     self.levels.clear()
     if ?state.config.connect_address:
       return
+    # "Open..." picks any dir (a world, or a level inside one); "New..." makes a
+    # level in the current world; then the current world's levels.
+    self.levels.add_item("Open...")
     self.levels.add_item("New...")
 
     # The picker is a deduped union of the levels created locally and the
@@ -272,7 +276,7 @@ gdobj Settings of PanelContainer:
       state.push_flag NEEDS_RESTART
     elif name == "Save":
       if is_valid_file_name(self.level_name.text):
-        change_loaded_level(self.level_name.text, state.config.world)
+        change_loaded_level(self.level_name.text, state.config.world_dir)
         state.pop_flag SETTINGS_VISIBLE
 
     self.update_values()
@@ -408,6 +412,35 @@ gdobj Settings of PanelContainer:
           ),
       ]
 
+  proc show_open_world() =
+    # A native OS directory picker (osdialog). It's modal and runs on the main
+    # thread, so Enu pauses while it's open — the conventional desktop behavior
+    # for an Open dialog. Default to the current world so its levels are right
+    # there (osdialog falls back gracefully if it somehow doesn't exist).
+    let picked = file_dialog(fdOpenDir, path = state.config.world_dir)
+
+    if not ?picked:
+      # Cancelled — restore the dropdown to the loaded level (same as New...'s
+      # cancel, which routes through on_cancelled -> update_values).
+      self.update_values()
+      return
+
+    # Any directory can be a world. If the pick is actually an Enu *level* (it
+    # has a level.json), open its parent world at that level; otherwise treat the
+    # dir as a world and open its initial level — creating world.json and a
+    # "default" level on load when it has neither.
+    var world_dir, level: string
+    if file_exists(picked / "level.json"):
+      world_dir = picked.parent_dir
+      level = picked.last_path_part
+    else:
+      world_dir = picked
+      let init =
+        read_world_initial_level(picked, state.config.lib_dir, picked.last_path_part)
+      level = if ?init: init else: "default"
+    change_loaded_level(level, world_dir)
+    state.pop_flag SETTINGS_VISIBLE
+
   method on_button_up*(name: string) =
     self.repeat_timers[name] = MonoTime.high
 
@@ -443,10 +476,12 @@ gdobj Settings of PanelContainer:
         environment = self.environments.get_item_text(index)
         environment_override = ""
     elif name == "Levels":
-      if self.levels.text == "New...":
+      if self.levels.text == "Open...":
+        self.show_open_world()
+      elif self.levels.text == "New...":
         self.show_new_level()
       else:
-        change_loaded_level(self.levels.text, state.config.world)
+        change_loaded_level(self.levels.text, state.config.world_dir)
         state.pop_flag SETTINGS_VISIBLE
     elif name == "PlayerColors":
       for color in Colors:
