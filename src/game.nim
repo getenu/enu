@@ -485,7 +485,7 @@ gdobj Game of Node:
       font_size = uc.font_size ||= 20
       toolbar_size = uc.toolbar_size ||= 100
       world = uc.world ||= "tutorial"
-      level = uc.level ||= value.world & "-1"
+      level = uc.level ||= "welcome"
       run_server = uc.run_server ||= false
       show_stats = uc.show_stats ||= false
       megapixels = uc.megapixels ||= 2.0
