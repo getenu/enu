@@ -10,7 +10,7 @@ let locked_ids = [
   "build_terrain", "build_water", "build_welcome_sign", "build_windmill",
   "build_maze", "build_lighthouse", "build_dock", "build_boat",
   "build_tower_plot", "build_isle_pad", "build_peninsula_pad",
-  "build_launcher", "build_cottage_shell", "build_firework_stand",
+  "build_launcher", "build_cottage", "build_firework_stand",
   "build_summit_gate", "build_fisher_hut",
 ]
 for b in all_builds():
@@ -87,20 +87,23 @@ proc check_ferry(): bool =
         inc delivered
   delivered >= 2
 
-# E6/E7 constants derived from the shipped north-mainland builds: the
-# cottage's storm breach is the east-wall core (local x8, z2..4, y1..4 on
-# origin (40,4,-131)); the fireworks rack top is the shell unit's origin y.
+# E6/E7 constants derived from the shipped north-mainland builds: the cottage's
+# storm breach is the east-wall core (local x8, y1..4, z2..4); the fireworks rack
+# top is the shell unit's origin y.
 let north_wired = true
-let breach_min = vec3(48.0, 5.0, -129.0)
-let breach_max = vec3(48.0, 8.0, -127.0)
 let rack_top = 7.0
 
 proc check_cottage(): bool =
-  north_wired and
-    not clear_box(
-      breach_min.x, breach_min.y, breach_min.z, breach_max.x, breach_max.y,
-      breach_max.z,
-    )
+  # Derive the breach box from the cottage's live origin, so it tracks the build
+  # if it's moved (it rests on the terrain, whose height can shift it).
+  let cottage = find_by_id("build_cottage")
+  if not ?cottage:
+    return false
+  let o = cottage.position
+  north_wired and not clear_box(
+    o.x + 8.0, o.y + 1.0, o.z + 2.0,
+    o.x + 8.0, o.y + 4.0, o.z + 4.0,
+  )
 
 proc check_fireworks(): bool =
   if not north_wired:
@@ -109,6 +112,33 @@ proc check_fireworks(): bool =
   if not ?shells:
     return false
   shells.bounds.max.y >= rack_top + 8
+
+# ----- rat-foundation wall monitor (moved off the exercise unit) -----
+# The invisible-rats side quest reports its state through build_rat_foundation's
+# pen colour — green (building), blue (walls up), red (walls hidden) — which the
+# rat-catcher and the rocket read. We drive it here so the exercise unit itself
+# stays clean. Counts WHITE/INVISIBLE blocks at wall height across the footprint
+# in world coords, so whatever unit the player builds the walls on still counts.
+proc update_rat_walls() =
+  let f = find_by_id("build_rat_foundation")
+  if not ?f:
+    return
+  let o = f.position
+  var white_n = 0
+  var invis_n = 0
+  for x in 0 .. 10:
+    for z in 0 .. 12:
+      let c = block_color_at(vec3(o.x + x.float, o.y + 2.0, o.z + z.float))
+      if c == white:
+        inc white_n
+      elif c == invisible:
+        inc invis_n
+  if invis_n >= 15:
+    Build(f).color = red
+  elif white_n >= 15:
+    Build(f).color = blue
+  else:
+    Build(f).color = green
 
 # ----- tool staging -----
 # 0: nothing (walk to the sign) / 1: code tool (the whole mainland)
@@ -142,19 +172,18 @@ proc apply_stage(s: int) =
   player.can_fly = s >= 3
 
 # ----- live progress on the standalone progress sign -----
-# The tall progress board sits off to the player's right; its say-sign hangs
-# near (-207, 27, -32.5). We keep its in-world message in sync with world state.
-# (The welcome sign owns its own page now — we don't touch it.) The sign loads
-# after us, so the scan below runs in the loop until it resolves.
-var progress_sign: Sign
+# The tall progress board sits off to the player's right. We keep its in-world
+# message in sync with world state, reading its say-sign straight off the build
+# (`board.sign`) so it survives the board being moved or hot-reloaded. (The
+# welcome sign owns its own page now — we don't touch it.)
 
 proc mark(done: bool): string =
   if done: "[x]" else: "[ ]"
 
+# The always-on board face: a tight checklist, no title (the board is obviously
+# the objectives) so the text can ride bigger.
 proc checklist(): string =
   \"""
-# Objectives
-
 **Mainland**
 
 - {mark(windmill_done)} Windmill blades turning
@@ -169,7 +198,44 @@ proc checklist(): string =
 - {mark(fireworks_done)} Fireworks woken
 """
 
-var last_page = ""
+proc done_count(): int =
+  for d in [windmill_done, tower_done, maze_done, lighthouse_done, ferry_done,
+      cottage_done, fireworks_done]:
+    if d:
+      inc result
+
+# The click-to-open panel: same checklist, expanded with a line of orientation
+# per task (where to go / what it needs, not the answer) and the one non-obvious
+# rule — the isle only opens once the four mainland beacons are lit.
+proc detail(): string =
+  \"""
+# Progress: {done_count()} of 7
+
+Every bot on the island is stuck on something. Wander over, hear them out, and
+lend a hand — most of it is just a few lines of code.
+
+**Mainland**
+
+- {mark(windmill_done)} **Windmill blades turning** — the miller's mill won't
+  spin. Make its blades turn, over and over.
+- {mark(tower_done)} **Lookout tower raised** — the builder's ring is only two
+  courses tall. Take it up to twelve.
+- {mark(maze_done)} **Maze bot at its exit** — the little bot needs the whole
+  route through the hedge, step by step.
+- {mark(lighthouse_done)} **Lighthouse lit** — the lamp is a cold lump of iron.
+  Bring it back to life.
+
+Light all four and the ferry wakes at the dock — climb aboard to reach the isle.
+
+**The isle**
+
+- {mark(ferry_done)} **Castaways ferried** — sail the stranded folk across.
+- {mark(cottage_done)} **Cottage patched** — a storm tore a hole in the east
+  wall. Fill it back in.
+- {mark(fireworks_done)} **Fireworks woken** — the shell on the rack is a dud.
+  Make it fly.
+"""
+
 var sign_read = false
 
 forever:
@@ -207,6 +273,8 @@ forever:
   if not fireworks_done and check_fireworks():
     fireworks_done = true
 
+  update_rat_walls()
+
   let mainland_done =
     windmill_done and tower_done and maze_done and lighthouse_done
   let finale_done = cottage_done and fireworks_done
@@ -223,12 +291,11 @@ forever:
   else:
     apply_stage(3)
 
-  if progress_sign.is_nil:
-    for s in all_signs():
-      if (s.position - vec3(-207.0, 27.0, -32.5)).length < 10:
-        progress_sign = s
-  if ?progress_sign:
+  let board = find_by_id("build_progress_sign")
+  if ?board and ?board.sign:
     let page = checklist()
-    if page != last_page:
-      last_page = page
-      progress_sign.message = page
+    if board.sign.message != page:
+      board.sign.message = page
+    let more = detail()
+    if board.sign.more != more:
+      board.sign.more = more

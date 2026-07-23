@@ -1,3 +1,4 @@
+# CLAUDE: the brown base is clipping the terrain
 lock = true
 speed = 0
 import math
@@ -7,7 +8,12 @@ import math
 # land path (west), and an open lamp-room cage under a small black roof so
 # the lamp inside shines out to the strait and the island.
 
-# --- Stone plinth (sunk into the slope; low side is toward the water) ---
+# --- Stone plinth (sunk into the slope; low side is toward the water). The two
+# lower courses are a skirt: they step wider and drop below the lowest terrain
+# under the footprint, so the base reads as a planted foundation instead of a
+# ragged plinth clipping the headland. ---
+cylinder(size = 13, height = 1, at = vec3(0, -4, 0), color = brown)
+cylinder(size = 12, height = 1, at = vec3(0, -3, 0), color = brown)
 cylinder(size = 11, height = 1, at = vec3(0, -2, 0), color = brown)
 cylinder(size = 10, height = 1, at = vec3(0, -1, 0), color = brown)
 cylinder(size = 9, height = 1, at = vec3(0, 0, 0), color = brown)

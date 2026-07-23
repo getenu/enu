@@ -35,15 +35,19 @@ proc player_aboard(): bool =
   p.x >= -2.5 and p.x <= 1.5 and p.z >= -4.5 and p.z <= 3.5 and p.y >= -0.5 and
     p.y <= 4.5
 
-say "The boat is asleep. Light the mainland's four beacons to wake it.",
-  width = 6.0, height = 1.5
+let asleep_sign = say(
+  "The boat is asleep. Light the mainland's four beacons to wake it.",
+  width = 6.0, height = 1.5)
+asleep_sign.billboard = true   # face the player on the dock, not out to sea
 
 while not beacons_lit():
   sleep 2
 
 hoist_sail()
 glow = 0.2
-say "All aboard! Step on deck to sail.", width = 6.0, height = 1.5
+let aboard_sign = say("All aboard! Step on deck to sail.",
+  width = 6.0, height = 1.5)
+aboard_sign.billboard = true
 
 move me
 speed = 6
@@ -82,6 +86,7 @@ forever:
     # wait for the rider to disembark before arming the next trip
     while player_aboard():
       sleep 0.5
-    say "Step aboard to sail back.", width = 5.0, height = 1.5
+    let back_sign = say("Step aboard to sail back.", width = 5.0, height = 1.5)
+    back_sign.billboard = true
   else:
     sleep 0.5
