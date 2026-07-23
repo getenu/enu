@@ -80,8 +80,9 @@ type SpawnGate = object
   ## passes to the gate, which holds the player frozen at the spawn (SPAWN_HELD)
   ## until this machine's copy of the pre-PLAYERS units has rendered.
   booted: bool
-    ## Set once a load actually starts (or the boot timeout fires); the splash
-    ## then follows SPAWN_HELD rather than staying up unconditionally.
+    ## Set from the global_flags watch the moment a load begins (LOADING_LEVEL /
+    ## LOAD_SCREEN added), or via boot_deadline as a backstop; the splash then
+    ## follows SPAWN_HELD rather than staying up unconditionally.
   boot_deadline: MonoTime
     ## Hand the splash to the gate no later than this, so it can never stick on
     ## a client that never runs a local load.
@@ -307,10 +308,12 @@ gdobj Game of Node:
     # render off while the player is held at the spawn, revealed the frame
     # the gate releases.
     if not self.load_screen.is_nil:
-      if not self.gate.booted and (
-        LOADING_LEVEL in state.global_flags or
-        LOAD_SCREEN in state.global_flags or time > self.gate.boot_deadline
-      ):
+      # `booted` is set from the global_flags watch the moment a load begins
+      # (LOADING_LEVEL/LOAD_SCREEN added). That's edge-triggered and ordered, so
+      # a fast load — added and removed before this thread next runs — still
+      # flips it; a per-frame `x in state.global_flags` membership test here used
+      # to miss exactly that, leaving the splash up until the deadline below.
+      if not self.gate.booted and time > self.gate.boot_deadline:
         self.gate.booted = true
       let show =
         if self.gate.booted: SPAWN_HELD in state.local_flags else: true
@@ -747,6 +750,11 @@ gdobj Game of Node:
         self.set_font_size(state.config.font_size)
 
     state.global_flags.changes:
+      if LOADING_LEVEL.added or LOAD_SCREEN.added:
+        # A load has begun — the boot splash hands off to the spawn gate. Edge-
+        # triggered (not a per-frame membership test) so a fast load whose flags
+        # are added and removed between this thread's frames still flips it.
+        self.gate.booted = true
       if LOAD_SCREEN.added:
         # Splash phase: hold this machine's player frozen at the spawn while
         # the units ahead of the PLAYERS load_order step load and run.
