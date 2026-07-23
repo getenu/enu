@@ -120,8 +120,18 @@ gdobj AimTarget of Sprite3D:
           thing.local_flags.touch TARGET_MOVED
         else:
           thing.local_flags -= TARGET_MOVED
+
+    if PRIMARY_DOWN notin state.local_flags and
+        SECONDARY_DOWN notin state.local_flags:
+      end_stroke()
+    elif VIEWPORT_FOCUSED notin state.local_flags:
+      discard
+    elif thing of Build:
+      Build(thing).stroke_frame()
+    elif thing of Ground:
+      Ground(thing).stroke_frame()
     else:
-      state.skip_block_paint = false
+      discard stroke_miss()
 
   method on_collider_exiting(collider: Spatial) =
     if collider.model == self.target_model:

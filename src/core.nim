@@ -143,6 +143,37 @@ proc surrounding*(point: Vector3): seq[Vector3] =
         for z in 0 .. 2:
           point + vec3(x - 1, y - 1, z - 1)
 
+proc plane_cells_between*(a, b: Vector3, axis: int): seq[Vector3] =
+  ## The cells crossed between `a` and `b` on the plane perpendicular to
+  ## `axis`, exclusive of both endpoints. 4-connected, so a fast diagonal
+  ## sweep fills with no pinholes.
+  let (ua, va) =
+    case axis
+    of 0: (1, 2)
+    of 1: (0, 2)
+    else: (0, 1)
+  var
+    u = a[ua].int
+    v = a[va].int
+  let
+    du = abs(b[ua].int - u)
+    dv = abs(b[va].int - v)
+    su = cmp(b[ua].int, u)
+    sv = cmp(b[va].int, v)
+  var err = du - dv
+  for i in 1 .. du + dv:
+    if err > 0:
+      u += su
+      err -= 2 * dv
+    else:
+      v += sv
+      err += 2 * du
+    if i < du + dv:
+      var cell = a
+      cell[ua] = u.float32
+      cell[va] = v.float32
+      result.add cell
+
 # math
 
 const CMP_EPSILON = 0.00001
