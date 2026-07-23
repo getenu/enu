@@ -455,14 +455,20 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
 
   var sorted_scripts = load_order
 
-  # Things missing from the saved list get slotted in: script-less data
-  # units (the terrain and other pure-JSON builds) load FIRST — they have
-  # no dependencies and they're the ground the player needs under their
-  # feet — while unlisted scripted things append at the end as before.
+  # Things missing from the saved list get slotted in. Only a gating level —
+  # one whose PLAYERS sentinel sits past the front — pulls script-less data
+  # units (the terrain and other pure-JSON builds the player needs underfoot)
+  # ahead of the gate; unlisted scripted things always append at the end. With
+  # no gate (PLAYERS first, including a level that had no sentinel and got one
+  # forced to the front) everything appends, so PLAYERS stays first and nothing
+  # loads ahead of the reveal.
+  let gating = sorted_scripts.find(PLAYERS_SENTINEL) > 0
   for (id, dir, _, script) in loaded_data:
     if script notin sorted_scripts:
-      if not file_exists(state.config.script_dir / script & ".nim") and
-          not file_exists(dir / script & ".nim"):
+      let script_less =
+        not file_exists(state.config.script_dir / script & ".nim") and
+        not file_exists(dir / script & ".nim")
+      if gating and script_less:
         sorted_scripts.insert(script, 0)
       else:
         sorted_scripts.add script
@@ -745,55 +751,79 @@ proc save_world_support*(world_dir: string) =
 proc save_level*(level_dir: string, save_all = false, force = false) =
   if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
     # The whole level is in load_order now — script-less units (terrain and
-    # other pure-JSON builds) included, keyed by id. Build the dependency
-    # graph and the error set (scripted units only), then order every
-    # non-ephemeral unit: keep the order they currently have (state.load_order,
-    # set at load), append genuinely new units at the end, and let topo_sort
-    # pull dependencies earlier where a script requires it.
+    # other pure-JSON builds) included, keyed by id. Build the dependency graph,
+    # the error set, and the script-less set (all scripted-vs-not decisions key
+    # off script_ctx), then order every non-ephemeral unit.
     var graph = initTable[string, seq[string]]()
-    var error_nodes = newSeq[string]()
     var present: seq[string] # every non-ephemeral unit id, in things order
     var is_error = initHashSet[string]()
+    var script_less = initHashSet[string]()
     for thing in state.things:
       if EPHEMERAL in thing.global_flags:
         continue
       let name = thing.id
       if name notin present:
         present.add name
-      if thing.script_ctx != nil:
-        if thing.errors.value.len > 0:
-          if name notin is_error:
-            is_error.incl name
-            error_nodes.add name
-        elif thing.script_ctx.dependencies.len > 0:
-          var deps: seq[string] = @[]
-          for dep in thing.script_ctx.dependencies:
-            let dep_name = dep.extract_filename
-            deps.add(
-              if dep_name.ends_with(".nim"): dep_name[0 .. ^5] else: dep_name
-            )
-          graph[name] = deps
+      if thing.script_ctx == nil:
+        script_less.incl name
+      elif thing.errors.value.len > 0:
+        is_error.incl name
+      elif thing.script_ctx.dependencies.len > 0:
+        var deps: seq[string] = @[]
+        for dep in thing.script_ctx.dependencies:
+          let dep_name = dep.extract_filename
+          deps.add(
+            if dep_name.ends_with(".nim"): dep_name[0 .. ^5] else: dep_name
+          )
+        graph[name] = deps
 
-    # Preserve the existing order; new units go to the end. The PLAYERS
-    # sentinel isn't a unit but its position is the spawn gate — keep it.
-    var sort_nodes = newSeq[string]()
+    # The PLAYERS sentinel is the spawn gate, and it's a hard partition: units
+    # before it are the pre-reveal set, units after stream in behind the player.
+    # Keep every unit on the side it's already on so the sentinel never drifts —
+    # a non-gating level (PLAYERS first) stays non-gating. New units append to a
+    # side: script-less ones join the gate set only when the level already
+    # gates; scripted ones always land after. Errors and topo ordering happen
+    # within a side, so a transiently-broken unit can't jump ahead of PLAYERS.
+    let gate_idx = state.load_order.find(PLAYERS_SENTINEL)
+    let gating = gate_idx > 0
+    var pre, post: seq[string]
     var seen = initHashSet[string]()
-    for name in state.load_order & present:
-      if name notin seen and name notin is_error and
-          (name == PLAYERS_SENTINEL or name in present):
-        seen.incl name
-        sort_nodes.add name
+    for i, name in state.load_order:
+      if name == PLAYERS_SENTINEL or name notin present or name in seen:
+        continue
+      seen.incl name
+      if gate_idx >= 0 and i < gate_idx:
+        pre.add name
+      else:
+        post.add name
+    for name in present:
+      if name in seen:
+        continue
+      seen.incl name
+      if gating and name in script_less:
+        pre.add name
+      else:
+        post.add name
+
+    proc ordered(side: seq[string]): seq[string] =
+      # Errored units keep their given order — excluded from the graph sort to
+      # dodge circular-dependency blowups — ahead of the topo-sorted rest.
+      var errs, rest: seq[string]
+      for name in side:
+        if name in is_error:
+          errs.add name
+        else:
+          rest.add name
+      errs & topo_sort(rest, graph)
 
     var sorted_scripts: seq[string]
     try:
-      sorted_scripts = error_nodes & topo_sort(sort_nodes, graph)
+      sorted_scripts = ordered(pre) & @[PLAYERS_SENTINEL] & ordered(post)
       debug "saving level sorted scripts", scripts_len = sorted_scripts.len
     except ValueError as e:
       error "Cannot save level script order due to circular dependency",
         error = e.msg
-      sorted_scripts = error_nodes & sort_nodes # fallback: save unordered
-    if PLAYERS_SENTINEL notin sorted_scripts:
-      sorted_scripts.insert(PLAYERS_SENTINEL, 0)
+      sorted_scripts = pre & @[PLAYERS_SENTINEL] & post # fallback: unordered
     state.load_order = sorted_scripts
 
     if sorted_scripts.len > 0:
