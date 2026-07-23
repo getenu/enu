@@ -1,0 +1,15 @@
+{
+  "id": "build_beacon_windmill",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-159.0, 2.0, -26.0]
+  },
+  "start_color": "WHITE",
+  "edits": {
+    
+  }
+}

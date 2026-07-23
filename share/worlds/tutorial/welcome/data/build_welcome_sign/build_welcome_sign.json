@@ -1,0 +1,17 @@
+{
+  "id": "build_welcome_sign",
+  "start_transform": {
+    "basis": [
+      [0.822, 0.0, -0.569],
+      [0.0, 1.0, 0.0],
+      [0.569, 0.0, 0.822]
+    ],
+    "origin": [-215.0, 3.0, -37.0]
+  },
+  "start_color": "BROWN",
+  "edits": {
+    "build_welcome_sign": [
+      [[-1.0, 22.0, 2.0], [0, "BLUE"]]
+    ]
+  }
+}

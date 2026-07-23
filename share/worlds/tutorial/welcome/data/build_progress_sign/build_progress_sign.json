@@ -1,0 +1,15 @@
+{
+  "id": "build_progress_sign",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-203.0, 3.0, -33.0]
+  },
+  "start_color": "BROWN",
+  "edits": {
+    
+  }
+}
