@@ -396,9 +396,17 @@ template after_boop*(body: untyped) =
     body
 
 proc run_deferred*() =
-  for fn in deferred:
+  # A deferred proc may itself `after_boop` more work (e.g. load_level defers
+  # change_loaded_level, whose reload defers scene adds). Snapshot and clear the
+  # queue before running so those additions land in a fresh queue for the next
+  # tick, rather than mutating the seq we're iterating (which trips the
+  # "length changed while iterating" assertion and kills the worker thread).
+  if deferred.len == 0:
+    return
+  let batch = deferred
+  deferred = @[]
+  for fn in batch:
     fn()
-  deferred.set_len(0)
 
 const environments* = {
   "default": 0.0,
