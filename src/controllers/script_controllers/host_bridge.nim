@@ -711,10 +711,11 @@ proc `scale=`(self: Thing, scale: float) =
   # so previously scale only reached the basis asynchronously, via a
   # node→model writeback in build_node/bot_node that raced with — and
   # clobbered — a concurrent `rotation=`. Doing it here removes the race.
-  let degrees = self.rotation
-  let pivot_basis = Transform.init.basis
-    .rotated(UP, deg_to_rad(degrees))
-    .scaled(vec3(scale, scale, scale))
+  # Keep the full current orientation (orthonormalized to strip the old
+  # scale) rather than rebuilding from yaw — reconstructing from
+  # `self.rotation` alone was erasing any pitch/roll set by `lean`.
+  let pivot_basis =
+    self.pivot_basis.orthonormalized.scaled(vec3(scale, scale, scale))
   self.set_pivot_basis(pivot_basis)
 
 proc sees(
