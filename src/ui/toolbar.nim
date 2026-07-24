@@ -73,29 +73,27 @@ gdobj Toolbar of HBoxContainer:
     # Slide the toolbar down and back up, swapping in the updated tool set at the
     # bottom — matching the Settings slide-up look (vertical only).
     #
-    # Derive the resting top-y from the anchored layout every time instead of
-    # caching one read: the toolbar is bottom-anchored with a 5px bottom margin
-    # (GUI.tscn), so its top rests at parent_height - 5 - its own height. Caching
-    # a single early rect_position.y (before the window settled at final size)
-    # was leaving it stranded up-screen after a tools change.
-    let parent = self.get_parent() as Control
-    let rest = parent.rect_size.y - 5.0 - self.rect_size.y
+    # Animate margin_bottom, never rect_position: writing the position of an
+    # anchored control rewrites both margins to pin its current rect, freezing
+    # the container at that height — after which a smaller toolbar_size can only
+    # shrink the buttons' width. Moving the bottom margin keeps the height
+    # anchor-driven, and the rest state is just the scene's 5px bottom margin.
     if ?self.tween:
       self.tween.kill
-    self.rect_position = vec2(self.rect_position.x, rest)
+    self.margin_bottom = -5.0
 
     let drop = self.rect_size.y + 10.0
     self.tween = self.get_tree.create_tween()
     discard self.tween
       .tween_property(
-        self, "rect_position:y", (rest + drop).to_variant, animation_duration
+        self, "margin_bottom", (drop - 5.0).to_variant, animation_duration
       )
       .set_trans(TRANS_EXPO)
       .set_ease(EASE_IN_OUT)
     discard self.tween.tween_callback(self, "_apply_tools")
     discard self.tween
       .tween_property(
-        self, "rect_position:y", rest.to_variant, animation_duration
+        self, "margin_bottom", (-5.0).to_variant, animation_duration
       )
       .set_trans(TRANS_EXPO)
       .set_ease(EASE_IN_OUT)
