@@ -1,14 +1,14 @@
 {
-  "id": "build_askcmmbzad0mu",
+  "id": "build_confetti",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
       [0.0, 0.0, 1.0]
     ],
-    "origin": [-9.0, 0.0, -12.0]
+    "origin": [-7.0, 0.0, -12.0]
   },
-  "start_color": "GREEN",
+  "start_color": "BLUE",
   "edits": {
     
   }
