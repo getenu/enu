@@ -1,4 +1,26 @@
 {
-  "enu_version": "enu-0.3-pre-godot-upgrade-14-gc3cb91e6",
-  "format_version": "v0.9.2"
+  "format_version": "1.0.0",
+  "load_order": [
+    "PLAYERS",
+    "build_3b2u2u887mvsn",
+    "build_6spqe6wylsu38",
+    "build_askcmmbzad0mu",
+    "build_xagc0hqgbyznr",
+    "build_streamer",
+    "build_confetti",
+    "build_win",
+    "build_maze",
+    "build_x7imlkqz4ux9l",
+    "bot_aqslupunw4ndq"
+  ],
+  "show_prototypes": true,
+  "show_tools": true,
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [0.0, 1.0, 0.0]
+  }
 }
