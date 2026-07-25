@@ -12,7 +12,7 @@ picking a block color from the toolbar and dropping a block in the world.
 Then switch to the `Code` tool (key `1`) and click the block to open its code.
 
 Type each step below into that code window, and press left
-`alt/option (⌥)` to run it. Enu re-runs the whole script every time, so you can
+`alt/option` to run it. Enu re-runs the whole script every time, so you can
 keep editing and re-running as you go.
 
 ## Four walls

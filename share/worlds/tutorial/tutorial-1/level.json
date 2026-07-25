@@ -2,16 +2,13 @@
   "format_version": "1.0.0",
   "load_order": [
     "PLAYERS",
-    "build_3b2u2u887mvsn",
-    "build_6spqe6wylsu38",
-    "build_askcmmbzad0mu",
-    "build_xagc0hqgbyznr",
     "build_streamer",
     "build_confetti",
     "build_win",
     "build_maze",
     "build_x7imlkqz4ux9l",
-    "bot_aqslupunw4ndq"
+    "bot_aqslupunw4ndq",
+    "bot_zbze91t70qzjd"
   ],
   "show_prototypes": true,
   "show_tools": true,

@@ -13,7 +13,7 @@ controller.
 
 Close help or code windows with `ESC` on your keyboard or `B` on your
 controller. You can also move without closing the window by using your
-controller, or by holding down left `alt/option (⌥)` on your keyboard.
+controller, or by holding down left `alt/option` on your keyboard.
 
 ## Jumping and Flying
 
@@ -78,9 +78,9 @@ turn left
 forward 20
 ```
 
-Run your code by pressing left `alt/option (⌥)`. Keep left `alt/option (⌥)` held 
-down to move around while you're coding. Flying is a great way to get yourself 
-into position to see what's happening, so try double jumping to get a better 
+Run your code by pressing left `alt/option`. Keep left `alt/option` held
+down to move around while you're coding. Flying is a great way to get yourself
+into position to see what's happening, so try double jumping to get a better
 view.
 
 If your `Bot` is moving too slowly for your tastes, make her run by setting the

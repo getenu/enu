@@ -30,7 +30,7 @@ proc get_bot(): Bot =
   turn player
   sleep 1
 
-  say "- Welcome to **Enu**!", width = 2.0
+  say "- Welcome to **Enu**!", width = 2.1
   sleep 1.5
   say "- Click this text for a short tutorial.", "# Welcome to Enu!"
   while not sign.open:
@@ -59,11 +59,11 @@ proc get_bot(): Bot =
     You can close this window by pressing `ESC` on your keyboard or `B` on your
     controller, and can come back at any time by clicking on the text block next
     to the `Bot`. You can also move without closing the window by using your
-    controller, or by holding down left `alt/option (⌥)` on your keyboard.
+    controller, or by holding down left `alt/option` on your keyboard.
 
     Sneak behind the `Bot` to continue the tutorial.
     """,
-    width = 0.6
+    width = 0.8
 
   menu.show = true
   while me.angle_to(player).abs notin 150 .. 210:
@@ -86,7 +86,7 @@ proc get_bot(): Bot =
 
     Jump, fly, then returning to the ground to continue the tutorial.
     """,
-    width = 1.4
+    width = 1.5
 
   speed = 1
   turn player
@@ -220,7 +220,7 @@ proc get_bot(): Bot =
 
     Please finish the code to get the `Bot` get to the end of the course.
 
-    Run your code by pressing left `alt/option (⌥)`. Keep left `alt/option (⌥)`
+    Run your code by pressing left `alt/option`. Keep left `alt/option`
     held down to move around while you're coding. Flying is a great way to get
     yourself into position to see what's happening, so try double jumping to get
     a better view.
