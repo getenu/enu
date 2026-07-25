@@ -1,5 +1,5 @@
 {
-  "id": "build_q44ng8hzm25a5",
+  "id": "build_tower",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
@@ -8,7 +8,7 @@
     ],
     "origin": [-10.0, 0.0, 57.0]
   },
-  "start_color": "Red",
+  "start_color": "RED",
   "edits": {
     
   }
