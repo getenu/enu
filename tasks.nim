@@ -176,6 +176,7 @@ task test_unit, "run unit tests":
   exec "nim c -r tests/unit/tool_availability_test"
   exec "nim c -r tests/unit/path_safety_test"
   exec "nim c -r tests/unit/stroke_paint_test"
+  exec "nim c -r tests/unit/bounds_test"
 
 task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"

@@ -11,6 +11,17 @@ import ./codec
 proc shared_of(self: VoxelStore): Shared =
   if ?self.build: self.build.shared_value.value else: nil
 
+proc note_chunk*(self: VoxelStore, chunk_id: Vector3) {.inline.} =
+  ## This store now holds `chunk_id`. The owner grows the unit's bounds from
+  ## it — the terrain clips loading and meshing to those bounds, so a chunk
+  ## that never reports here is a chunk that never renders.
+  ##
+  ## Call it from anywhere a chunk enters the store, unconditionally: it is
+  ## idempotent, and a condition on one caller and not another is exactly how
+  ## chunks went missing before.
+  if not self.on_chunk_created.is_nil:
+    self.on_chunk_created(chunk_id)
+
 proc init*(
     _: type VoxelStore,
     ctx: EdContext = nil,
@@ -229,6 +240,30 @@ iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
   ## remaining chunks to coalesce and flush on a later frame, so a single large
   ## (ASAP) draw burst can't overshoot the channel in one go. Drain it fully (the
   ## `proc` overload below) to flush everything, e.g. for save / end_asap.
+  # Bulk-adopted snapshots first. A staged blob is the chunk's state as of
+  # adoption, so it belongs underneath anything drawn since — draining it
+  # after the pending draws republished a stale blob over fresher content and
+  # cleared their deltas, losing the drawing outright.
+  for chunk_id in self.pending_snapshots.keys.to_seq:
+    let blob = self.pending_snapshots[chunk_id]
+    # A snapshot supersedes a chunk's deltas and pending changes only when it
+    # was encoded from that chunk's current cells. The staged blob wasn't, so
+    # it's authoritative only while the chunk is untouched since adoption.
+    # Once something has drawn into it, re-encode from the cells — those
+    # already fold packed (+) deltas (+) pending — and let that supersede.
+    # (Ordering alone wouldn't do: the worker breaks out of this iterator on
+    # channel pressure, so a staged blob can outlive a pass in which draws
+    # flushed.)
+    if blob.data.len == 0 or chunk_id in self.pending_chunks:
+      self.flush_chunk_snapshot(chunk_id)
+      self.pending_chunks.del chunk_id
+    else:
+      self.packed_chunks[chunk_id] = blob # bulk-adopted, publish verbatim
+      if chunk_id in self.chunk_deltas:
+        self.chunk_deltas[chunk_id].clear
+      inc self.snapshots_flushed
+    self.pending_snapshots.del chunk_id
+    yield chunk_id
   for chunk_id in self.pending_chunks.keys.to_seq:
     let changes = self.pending_chunks[chunk_id]
     let has_snapshot = chunk_id in self.packed_chunks
@@ -244,17 +279,6 @@ iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
     else:
       self.flush_chunk_delta(chunk_id, changes)
     self.pending_chunks.del chunk_id
-    yield chunk_id
-  for chunk_id in self.pending_snapshots.keys.to_seq:
-    let blob = self.pending_snapshots[chunk_id]
-    if blob.data.len > 0:
-      self.packed_chunks[chunk_id] = blob # bulk-adopted, publish verbatim
-      if chunk_id in self.chunk_deltas:
-        self.chunk_deltas[chunk_id].clear
-      inc self.snapshots_flushed
-    else:
-      self.flush_chunk_snapshot(chunk_id)
-    self.pending_snapshots.del chunk_id
     yield chunk_id
 
 proc flush_dirty_chunks*(self: VoxelStore) =
@@ -352,10 +376,12 @@ proc adopt_chunk(
       continue
     chunk.cells[linear] = v
     inc chunk.count
+  # Bounds first, and for every adopted chunk: an all-HOLE chunk installs
+  # nothing but still occupies space the terrain has to be allowed to load,
+  # and `chunk_ids` counts it, so reset_bounds would cover it anyway.
+  self.note_chunk(chunk_id)
   if chunk.count == 0:
     return
-  if not self.on_chunk_created.is_nil:
-    self.on_chunk_created(chunk_id)
   inc self.cache_tick
   chunk.tick = self.cache_tick
   self.chunk_cache[chunk_id] = chunk
@@ -451,8 +477,7 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
   let chunk = self.cached_chunk(chunk_id)
   let linear = linear_position(position)
 
-  if chunk.count == 0 and not self.on_chunk_created.is_nil:
-    self.on_chunk_created(chunk_id)
+  self.note_chunk(chunk_id)
 
   let packed =
     pack_voxel(pack_color_index(self.shared_of, voxel.color), voxel.kind.ord)
@@ -636,6 +661,7 @@ proc apply_snapshot*(
   ## decode installs directly: the cache is the store.
   if snapshot.data.len == 0:
     return
+  self.note_chunk(chunk_id)
   if ?self.build:
     self.chunk_cache.del(chunk_id)
   else:
@@ -649,6 +675,16 @@ proc unload_chunk*(self: VoxelStore, chunk_id: Vector3) =
   ## Drop a paged-out chunk's local state (the voxel paging counterpart of
   ## apply_snapshot). The data still exists on the authority; a later
   ## `request` re-applies it.
+  ##
+  ## "The authority has it" holds for flushed content only. Unflushed writes
+  ## in `pending_chunks` have not reached the synced tables, so dropping them
+  ## here loses them outright — the same hazard `cached_chunk`'s eviction
+  ## invariant refuses to take.
+  if chunk_id in self.pending_chunks:
+    warn "page-out dropping unflushed voxel writes",
+      unit = self.thing_id,
+      chunk = $chunk_id,
+      writes = self.pending_chunks[chunk_id].len
   self.chunk_cache.del(chunk_id)
   self.pending_chunks.del(chunk_id)
 
