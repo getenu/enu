@@ -1,10 +1,9 @@
 {
-  "enu_version": "v0.2.2-333-g2ca66c19",
-  "format_version": "v0.9.2",
+  "format_version": "1.0.0",
   "load_order": [
+    "build_welcome_sign",
     "build_boat",
     "build_course",
-    "build_welcome_sign",
     "build_rat_opera",
     "bot_rat",
     "build_progress_sign",
@@ -52,26 +51,10 @@
   "show_tools": true,
   "start_transform": {
     "basis": [
-      [
-        0.9914448857307434,
-        0.0,
-        -0.13052618503570557
-      ],
-      [
-        0.0,
-        1.0,
-        0.0
-      ],
-      [
-        0.13052618503570557,
-        0.0,
-        0.9914448857307434
-      ]
+      [0.9914449, 0.0, -0.13052619],
+      [0.0, 1.0, 0.0],
+      [0.13052619, 0.0, 0.9914449]
     ],
-    "origin": [
-      -219.5,
-      5.5,
-      -30.5
-    ]
+    "origin": [-219.5, 5.5, -30.5]
   }
 }
