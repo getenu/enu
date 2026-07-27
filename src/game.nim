@@ -64,11 +64,19 @@ proc get_network_stats(): string =
 const savable_flags =
   {CONSOLE_VISIBLE, MOUSE_CAPTURED, FLYING, GOD, ALT_WALK_SPEED, ALT_FLY_SPEED}
 
-const SPAWN_GATE_TIMEOUT = 30.seconds
+const SPAWN_GATE_TIMEOUT = 10.seconds
   ## Backstop on how long the reveal waits for the pre-PLAYERS builds to
   ## report rendered after LOAD_SCREEN clears. Never the normal path — a
   ## wedged mesh task or a build that can't settle must not hold the splash
-  ## forever.
+  ## forever. Settling is local meshing of already-loaded data: sub-second in
+  ## practice, so anything near this is a bug, and the error names the units
+  ## that were still holding it.
+
+const SPAWN_GATE_WARM_TIMEOUT = 1.second
+  ## Backstop on the warm-up half. It waits for two real draws behind the
+  ## splash, which needs the engine to actually be drawing — a minimized or
+  ## occluded window (every MCP-managed and test instance) stops incrementing
+  ## frames_drawn entirely, and without this the splash never lifts at all.
 
 
 var environment_cache {.threadvar.}: Table[string, Environment]
@@ -102,6 +110,8 @@ type SpawnGate = object
   settle_streak: int
   warm_drawn_at: int64
     ## get_frames_drawn() when warming began; lift at +2.
+  warm_deadline: MonoTime
+    ## Lift by this time even if the frame counter never advances.
   deadline: MonoTime
   started: MonoTime
 
@@ -144,7 +154,7 @@ gdobj Game of Node:
     if self.gate.active:
       let time = get_mono_time()
       if not self.gate.warming:
-        var ready = true
+        var blocking: seq[string]
         state.things.value.walk_tree proc(thing: Thing) =
           if thing of Build and thing.id in self.gate.ids and
               thing.pending_block_updates != 0:
@@ -154,18 +164,29 @@ gdobj Game of Node:
             let b = Build(thing)
             if b.packed_chunks.len > 0 or b.chunk_deltas.len > 0 or
                 b.frames.len > 0:
-              ready = false
-        if ready:
+              blocking.add thing.id & "=" & $thing.pending_block_updates
+        if blocking.len == 0:
           inc self.gate.settle_streak
         else:
           self.gate.settle_streak = 0
         if self.gate.settle_streak >= 2 or time > self.gate.deadline:
           if self.gate.settle_streak < 2:
+            # Name the units and their counts: settling is local meshing of
+            # data that's already in memory, so a unit still pending here has
+            # something wrong with it specifically, not with the level.
             error "spawn gate: deadline exceeded; revealing anyway",
-              gate_ids = self.gate.ids
+              blocking = blocking, gate_ids = self.gate.ids
           self.gate.warming = true # the splash block enables the viewport
           self.gate.warm_drawn_at = get_frames_drawn()
-      elif get_frames_drawn() >= self.gate.warm_drawn_at + 2:
+          self.gate.warm_deadline = time + SPAWN_GATE_WARM_TIMEOUT
+      elif get_frames_drawn() >= self.gate.warm_drawn_at + 2 or
+          time > self.gate.warm_deadline:
+        if get_frames_drawn() < self.gate.warm_drawn_at + 2:
+          # Nothing was drawn during the warm-up: the window can't draw
+          # (minimized/occluded), so waiting on the frame counter would hold
+          # the splash forever. Lift it — there's nothing to warm.
+          notice "spawn gate: no draws during warm-up; revealing anyway",
+            drawn = get_frames_drawn()
         info "spawn gate: released",
           waited_ms = (time - self.gate.started).in_milliseconds
         self.gate.active = false
