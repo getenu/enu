@@ -1,14 +1,14 @@
 {
-  "id": "build_p3pwvry0wznqb",
+  "id": "build_lose_spot",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
       [0.0, 0.0, 1.0]
     ],
-    "origin": [19.0, 0.0, -118.0]
+    "origin": [19.0, 0.0, -165.0]
   },
-  "start_color": "BLUE",
+  "start_color": "GREEN",
   "edits": {
     
   }

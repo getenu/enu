@@ -1,14 +1,14 @@
 {
-  "id": "build_2evt18x9goyxs",
+  "id": "build_win_spot",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
       [0.0, 0.0, 1.0]
     ],
-    "origin": [19.0, 0.0, -165.0]
+    "origin": [19.0, 0.0, -118.0]
   },
-  "start_color": "GREEN",
+  "start_color": "BLUE",
   "edits": {
     
   }

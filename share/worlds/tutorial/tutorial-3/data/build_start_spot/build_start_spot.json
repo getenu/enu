@@ -1,14 +1,14 @@
 {
-  "id": "build_0kqsf4kugz22b",
+  "id": "build_start_spot",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
       [0.0, 0.0, 1.0]
     ],
-    "origin": [9.0, 0.0, -135.0]
+    "origin": [-27.0, 0.0, 95.0]
   },
-  "start_color": "BLACK",
+  "start_color": "BLUE",
   "edits": {
     
   }
