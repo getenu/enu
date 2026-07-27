@@ -168,8 +168,7 @@ proc get_bot(): Bot =
   sleep 1
 
 -code_info:
-  say "- Coding",
-    """
+  say "- Coding", """
     # Coding Enu
 
     We control Enu using [Nim](https://nim-lang.org), a powerful programming
@@ -186,8 +185,7 @@ proc get_bot(): Bot =
   sleep 0.5
 
 -open_code:
-  sign.more =
-    """
+  sign.more = """
     # Coding Enu
 
     With the `Code` tool selected, you can code anything you've created by
@@ -204,8 +202,7 @@ proc get_bot(): Bot =
   sleep 0.5
 
 -bot_navigation:
-  sign.more =
-    """
+  sign.more = """
     # Coding Bots
 
     We control the bot with simple commands like `forward` and `turn`. Here's
@@ -251,8 +248,7 @@ proc get_bot(): Bot =
   maze.won = true
   say "- Great Job!", "# Great Job!"
   sleep 15
-  say "- All Done!",
-    """
+  say "- All Done!", """
     # Great Job!
 
     Good work! You learned the basics of Enu, and you coded your first robot.
@@ -261,8 +257,9 @@ proc get_bot(): Bot =
     and we'll cover how to do all of it in future tutorials.
 
     This is supposed to be where you move to the next tutorial, but it hasn't
-    been written yet. For now, you can try some
-    [Enu examples](<nim://load_level("tutorial-2")>) or load
+    been written yet. For now, you can try the
+    [Welcome Level](<nim://load_level("welcome)>), explore
+    [Enu Examples](<nim://load_level("tutorial-2")>), or load
     [Inky: Isolation](<nim://load_level("tutorial-3")>), a simple
     game written in Enu that's loosley inspired by **Alien: Isolation**, but
     features Inky, the blue ghost from Pac-Man. If you're curious how this
