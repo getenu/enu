@@ -258,7 +258,7 @@ proc get_bot(): Bot =
 
     This is supposed to be where you move to the next tutorial, but it hasn't
     been written yet. For now, you can try the
-    [Welcome Level](<nim://load_level("welcome)>), explore
+    [Welcome Level](<nim://load_level("welcome")>), explore
     [Enu Examples](<nim://load_level("tutorial-2")>), or load
     [Inky: Isolation](<nim://load_level("tutorial-3")>), a simple
     game written in Enu that's loosley inspired by **Alien: Isolation**, but
