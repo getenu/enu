@@ -26,7 +26,7 @@ let more =
 
   - [Load Enu Welcome](<nim://load_level("welcome")>) - Load the Enu Welcome level.
 
-  - [Load Tutorial World](<nim://load_level("tutorial-1", "default")>) - Leave this level and
+  - [Load Tutorial](<nim://load_level("tutorial-1")>) - Leave this level and
     load the Enu tutorial.
 
   - [Clear Changes and Reset Examples](<nim://reset_level()>) - Reset and reload
