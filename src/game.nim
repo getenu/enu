@@ -971,13 +971,6 @@ gdobj Game of Node:
     elif event.is_action_pressed("quit"):
       if host_os != "macosx":
         state.push_flag QUITTING
-    elif event.is_action_pressed("change_mode"):
-      var mode = state.config.environment
-      let keys = environments.keys.to_seq
-      while (mode = keys.sample; mode == state.config.environment):
-        discard
-      state.config_value.value:
-        environment = mode
     elif EDITOR_VISIBLE notin state.local_flags:
       if event.is_action_pressed("toggle_mouse_captured"):
         state.set_flag MOUSE_CAPTURED, MOUSE_CAPTURED notin state.local_flags

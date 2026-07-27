@@ -22,9 +22,10 @@ gdobj GUI of Control:
     left_stick: Control
     up: Button
     down: Button
-    # Fields moved from PlayerNode. jump_down/jump_time stay on the node:
-    # its physics loop reads them for the hold-to-float reduced gravity.
-    alt_speed, skip_release, skip_next_mouse_move: bool
+    # Fields moved from PlayerNode. jump_down/jump_time and alt_speed stay on
+    # the node: its physics loop reads them for the hold-to-float reduced
+    # gravity and hold-to-switch-speed.
+    skip_release, skip_next_mouse_move: bool
     run_time, crouch_time: Option[MonoTime]
     input_relative* = vec2()
     pan_delta = 0.0
@@ -187,10 +188,10 @@ gdobj GUI of Control:
           state.toggle_flag(ALT_WALK_SPEED)
       else:
         self.run_time = some time
-      self.alt_speed = true
+      player.alt_speed = true
     elif event.is_action_released("run"):
       self.get_tree().set_input_as_handled()
-      self.alt_speed = false
+      player.alt_speed = false
 
     if event of InputEventPanGesture and state.tool notin {CODE_MODE, PLACE_BOT}:
       let pan = event as InputEventPanGesture
