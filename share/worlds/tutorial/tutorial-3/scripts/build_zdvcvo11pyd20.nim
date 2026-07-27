@@ -13,10 +13,10 @@ proc stop_playing*() =
 proc level_menu*(me: Build, show_restart = true) =
   let blurb =
     """
-    `Inky: Isolation` is a simple survivial game created in Enu. Find buttons to
+    `Inky Isolation` is a simple survivial game created in Enu. Find buttons to
     open new areas of the space station. Hit the top of Inky's head to defeat
     them.
-    """
+    """.dedent
 
   let copy =
     \"""
@@ -25,7 +25,7 @@ proc level_menu*(me: Build, show_restart = true) =
     {blurb}
 
     - CLICK TO OPEN MENU
-    """
+    """.dedent
 
   me.right 3
 
@@ -60,13 +60,15 @@ proc level_menu*(me: Build, show_restart = true) =
       {toolbar_action}
 
       {return_action}
+      
+      - [LOAD WELCOME](<nim://load_level("welcome")>)
 
       - [LOAD TUTORIAL](<nim://load_level("tutorial-1")>)
 
       - [LOAD EXAMPLES](<nim://load_level("tutorial-2")>)
 
       - [CLEAR CHANGES AND RESET LEVEL](<nim://reset_level()>)
-      """
+      """.dedent
     sign1.more = more
     sign2.more = more
 
