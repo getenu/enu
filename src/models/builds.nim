@@ -217,17 +217,40 @@ proc maybe_join_previous_build(
             current_build = dest
             return
 
+proc empty_bounds*(): AABB {.inline.} =
+  ## The "no chunks yet" sentinel. Its size is negative, so it can't be fed
+  ## to merge/expand — every grower has to seed from it explicitly.
+  init_aabb(vec3(), vec3(-1, -1, -1))
+
 proc expand_bounds_to_chunk*(self: Build, chunk_id: Vector3) =
+  ## Grow the bounds to cover `chunk_id`. The terrain clips loading and
+  ## meshing to these bounds, so every chunk the store holds has to end up
+  ## inside them — this is unconditional and idempotent, and there is no
+  ## path that can skip it.
+  ##
+  ## It deliberately does not test containment first: AABB.contains in
+  ## godot-nim compares point.z against position.x, so the guard it used to
+  ## have dropped legitimate expansions and left units clipped.
+  ## `expand` rather than `merge`: merge is a GDNative call, so it is
+  ## unavailable to unit tests (and an FFI hop per chunk); expand is pure Nim.
   let range = chunk_id * ChunkSize
-  let min = range - ChunkSize - vec3(1, 1, 1)
-  let max = range + ChunkSize
-  if max notin self.bounds:
-    self.bounds = self.bounds.expand(max)
-  if min notin self.bounds:
-    self.bounds = self.bounds.expand(min)
+  let low = range - ChunkSize - vec3(1, 1, 1)
+  let high = range + ChunkSize
+  self.bounds =
+    if self.bounds == empty_bounds():
+      init_aabb(low, high - low)
+    else:
+      self.bounds.expand(low).expand(high)
+
+proc track_chunk_bounds*(self: Build) =
+  ## Every store this build owns reports its chunks here, so bounds growth
+  ## has one definition rather than one per construction path.
+  let build = self
+  self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
+    build.expand_bounds_to_chunk(chunk_id)
 
 proc reset_bounds*(self: Build) =
-  self.bounds = init_aabb(vec3(), vec3(-1, -1, -1))
+  self.bounds = empty_bounds()
 
   for chunk_id in self.voxels.chunk_ids:
     self.expand_bounds_to_chunk(chunk_id)
@@ -778,7 +801,7 @@ proc init*(
         EdValue[Transform].init(Transform.init, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       start_color: color,
       drawing: true,
-      bounds_value: ed(init_aabb(vec3(), vec3(-1, -1, -1))),
+      bounds_value: ed(empty_bounds()),
       clone_of: clone_of,
       bot_collisions: bot_collisions,
       parent: parent,
@@ -792,10 +815,7 @@ proc init*(
     self.voxels.edit_deltas = self.shared.edit_deltas
     self.voxels.rebuild_local_edits()
 
-    # Expand bounds as chunks are created (for early chunk loading)
-    let build = self
-    self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
-      build.expand_bounds_to_chunk(chunk_id)
+    self.track_chunk_bounds()
 
     if global:
       self.global_flags += GLOBAL
@@ -881,10 +901,7 @@ proc init_voxels_if_needed*(self: Build, rebuild_edits = true) =
     )
     if rebuild_edits:
       self.voxels.rebuild_local_edits()
-    # Expand bounds as chunks are created
-    let build = self
-    self.voxels.on_chunk_created = proc(chunk_id: Vector3) =
-      build.expand_bounds_to_chunk(chunk_id)
+    self.track_chunk_bounds()
 
 proc setup_packed_chunk_watches(self: Build) =
   ## Set up watches for packed_chunks and chunk_deltas to reconstruct local voxels on clients.
