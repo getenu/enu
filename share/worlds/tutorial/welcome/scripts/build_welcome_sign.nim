@@ -22,6 +22,7 @@ let page = """
 
   - [Reset this level](<nim://reset_level()>)
   - [Turn on all the tools](<nim://player.tools = {CodeMode, BlueBlock, RedBlock, GreenBlock, BlackBlock, WhiteBlock, BrownBlock, PlaceBot}; player.can_fly = true>)
+  - [Load Enu 0.2 Tutorial](<nim://load_level("tutorial-1")>)
   """
 
 # --- notice board: one centre post + framed panel ---

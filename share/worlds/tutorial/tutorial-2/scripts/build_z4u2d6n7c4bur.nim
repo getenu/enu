@@ -13,8 +13,8 @@ let text =
 
   {blurb}
 
+  - Load Enu Welcome
   - Load Tutorial
-  - Load Default World
   - Clear Changes and Reset Examples
   """
 
@@ -24,10 +24,10 @@ let more =
 
   {blurb}
 
+  - [Load Enu Welcome](<nim://load_level("welcome")>) - Load the Enu Welcome level.
+
   - [Load Tutorial](<nim://load_level("tutorial-1")>) - Leave this level and
     load the Enu tutorial.
-
-  - [Load Default World](<nim://load_level("default-1", "default")>).
 
   - [Clear Changes and Reset Examples](<nim://reset_level()>) - Reset and reload
     this level. Be careful, all of your changes will be lost.

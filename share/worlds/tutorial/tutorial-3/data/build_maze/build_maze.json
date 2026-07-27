@@ -1,15 +1,13 @@
 {
-  "id": "build_7acqeexn0l7r2",
+  "id": "build_maze",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
       [0.0, 1.0, 0.0],
       [0.0, 0.0, 1.0]
     ],
-    "origin": [42.0, 0.0, 70.0]
+    "origin": [-1.0, 0.0, -6.0]
   },
-  "start_color": "",
-  "edits": {
-    
-  }
+  "start_color": "BLACK",
+  "edits_file": "edits.bin"
 }

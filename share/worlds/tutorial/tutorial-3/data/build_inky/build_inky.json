@@ -1,5 +1,5 @@
 {
-  "id": "build_p3rokg2vii39x",
+  "id": "build_inky",
   "start_transform": {
     "basis": [
       [1.0, 0.0, 0.0],
@@ -10,7 +10,7 @@
   },
   "start_color": "BLUE",
   "edits": {
-    "build_p3rokg2vii39x": [
+    "build_inky": [
       [[0.0, 0.0, 1.0], [1, "BLUE"]],
       [[0.0, 0.0, 2.0], [1, "BLUE"]],
       [[0.0, 1.0, 0.0], [1, "BLUE"]],
