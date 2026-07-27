@@ -61,6 +61,12 @@ gdobj BuildNode of VoxelTerrain:
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
     next_stats_log: MonoTime
+    stream_floor_until: MonoTime
+    stream_floor_expired: bool
+    generating = true
+      ## Whether the terrain currently has its generator. Mirrors "RESETTING
+      ## notin the model's flags" — see keep_generator_in_sync. Starts true:
+      ## the scene ships a VoxelGeneratorFlat.
     prefill_hits, prefill_misses: int
     prefill_gated, prefill_miss_with_data: int
       ## Perf-log breakdown of misses: requests refused before the store was
@@ -486,10 +492,9 @@ gdobj BuildNode of VoxelTerrain:
         # a rerun always starts from live display, whatever was showing
         self.frames.reset()
         self.loaded_chunks.clear()
-        self.generator = nil
-        self.stream = nil
+        self.keep_generator_in_sync()
       elif RESETTING.removed:
-        self.generator = gdnew[VoxelGeneratorFlat]()
+        self.keep_generator_in_sync()
       elif HIGHLIGHT_ERROR.added:
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.error_highlight_on = true
@@ -588,6 +593,7 @@ gdobj BuildNode of VoxelTerrain:
 
   method process(delta: float) =
     if ?self.model:
+      self.keep_generator_in_sync()
       # Sync node->model only when the script isn't driving us this frame. While a
       # model->node update is pending (applied next physics_process), the node is
       # a frame stale, so writing it back would fight the script and bounce. With
@@ -641,7 +647,19 @@ gdobj BuildNode of VoxelTerrain:
           # been computed for a viewer — "not started" would be published
           # as "done", and loading-completion checks (the spawn gate,
           # wait_for_script) would release early.
-          pending = max(pending, 1)
+          #
+          # Bounded, because "not started" is only temporary while a viewer
+          # is on its way: a terrain no viewer ever demands (out of range,
+          # unreachable bounds, a viewer that never pairs) has nothing
+          # coming, and an unbounded floor there is a wedge — a build that
+          # published 1 and then went quiet held the whole spawn gate to its
+          # timeout, splash up, with the level fully loaded behind it.
+          if get_mono_time() < self.stream_floor_until:
+            pending = max(pending, 1)
+          elif not self.stream_floor_expired:
+            self.stream_floor_expired = true
+            notice "stream never started; dropping the loading floor",
+              unit = self.model.id, generating = self.generating
         if ?self.frames and SPAWN_HELD in state.local_flags and
             self.frames.display_pending:
           # A frame display in flight (bakes bypass the terrain pipeline, so
@@ -652,6 +670,30 @@ gdobj BuildNode of VoxelTerrain:
           pending.inc
         if pending != self.model.pending_block_updates:
           self.model.pending_block_updates = pending
+
+  proc keep_generator_in_sync() =
+    ## Hold the generator only while the build isn't resetting, derived from
+    ## the flag rather than driven by its edges. A reset adds and removes
+    ## RESETTING inside one worker tick, and the node is created in the middle
+    ## of that window (the script runs right after its thing joins
+    ## state.things): it can see the `added` — as the watch's replay of a flag
+    ## that's already set — while the `removed` that preceded its
+    ## registration never arrives as an edge. The terrain is then left with no
+    ## generator and no stream at all, which turns off streaming wholesale in
+    ## VoxelTerrain::_process: nothing is ever requested, has_stream_started()
+    ## stays false, and the unit publishes the not-started floor forever
+    ## without a single block of work to show for it. That's what held the
+    ## spawn gate to its timeout on a level switch, splash up, over a level
+    ## that had finished loading.
+    let generating = RESETTING notin self.model.global_flags
+    if generating == self.generating:
+      return
+    self.generating = generating
+    if generating:
+      self.generator = gdnew[VoxelGeneratorFlat]()
+    else:
+      self.generator = nil
+      self.stream = nil
 
   proc publishes_pending(): bool =
     ## Whether this machine's node is the authority for the build's synced
@@ -702,6 +744,10 @@ gdobj BuildNode of VoxelTerrain:
     # Palette + slots are live; prefill may now serve resolvable chunks.
     self.palette_published = true
 
+    # How long "hasn't started streaming" counts as still loading. Pairing a
+    # viewer and computing its required set takes a frame or two; measured at
+    # well under a second even for the biggest terrains in a debug build.
+    self.stream_floor_until = get_mono_time() + init_duration(seconds = 3)
     if self.model.code.owner == state.worker_ctx_name or self.publishes_pending:
       # Publish the not-yet-started floor immediately: the model initializes
       # pending_block_updates to 0, and a loading-completion check can run
