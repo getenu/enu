@@ -303,6 +303,15 @@ settings={
 "deadzone": 0.5,
 "events": [  ]
 }
+open_world={
+"deadzone": 0.5,
+"events": [  ]
+}
+open_world.macosx={
+"deadzone": 0.5,
+"events": [ Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":0,"alt":false,"shift":false,"control":false,"meta":true,"command":true,"pressed":false,"scancode":79,"physical_scancode":0,"unicode":0,"raw_code":0,"echo":false,"script":null)
+ ]
+}
 
 [layer_names]
 
