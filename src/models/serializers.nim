@@ -1024,6 +1024,23 @@ proc change_loaded_level*(level, world: string) =
   config.level_dir = join_path(world_dir, level)
   state.config = config
 
+proc open_picked_dir*(picked: string) =
+  ## Load whatever the user picked in an Open dialog. Any directory can be a
+  ## world. If the pick is actually an Enu *level* (it has a level.json), open
+  ## its parent world at that level; otherwise treat the dir as a world and open
+  ## its initial level — creating world.json and a "default" level on load when
+  ## it has neither.
+  var world_dir, level: string
+  if file_exists(picked / "level.json"):
+    world_dir = picked.parent_dir
+    level = picked.last_path_part
+  else:
+    world_dir = picked
+    let init =
+      read_world_initial_level(picked, state.config.lib_dir, picked.last_path_part)
+    level = if ?init: init else: "default"
+  change_loaded_level(level, world_dir)
+
 proc run_state_initializers*(worker: Worker) =
   # Re-establish VM-side globals (players.nim's `player`, etc.) registered via
   # register_state_init. Must run after every interpreter rebuild before any
