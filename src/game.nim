@@ -1,5 +1,5 @@
 import std/[monotimes, os, json, math, random, net, strformat]
-import pkg/[godot, metrics]
+import pkg/[godot, metrics, osdialog]
 when defined(metrics):
   import metrics_server
 from dotenv import nil
@@ -474,6 +474,11 @@ gdobj Game of Node:
       connect_address_override = saved_state.connect_address
 
     if host_os == "macosx" and not saved_state.restarting:
+      # File first, so the bar reads Enu | File | Help. A client joined to
+      # someone else's world can't open one of its own, so it gets neither the
+      # File menu nor the welcome item (same test as below).
+      if connect_address_override == "":
+        global_menu_add_item("File", "Open...", "open".to_variant, "".to_variant)
       global_menu_add_item(
         "Help", "Documentation", "help".to_variant, "".to_variant
       )
@@ -481,7 +486,7 @@ gdobj Game of Node:
       if connect_address_override == "":
         global_menu_add_separator("Help")
         global_menu_add_item(
-          "Help", "Launch Tutorial", "tutorial".to_variant, "".to_variant
+          "Help", "Enu Welcome", "welcome".to_variant, "".to_variant
         )
 
     when host_os == "ios":
@@ -887,14 +892,27 @@ gdobj Game of Node:
       state.push_flag SETTINGS_VISIBLE
     elif action == "openurl":
       logger("info", \"Open URL: {id}")
-    elif action == "tutorial":
+    elif action == "open":
+      self.open_world()
+    elif action == "welcome":
       state.config_value.value:
         level_dir = ""
       state.player.transform = Transform.init(origin = vec3(0, 2, 0))
       state.player.rotation = 0
-      change_loaded_level("tutorial-1", "tutorial")
+      change_loaded_level("welcome", "tutorial")
     else:
       warn "Unknown action", action, id
+
+  proc open_world() =
+    ## File > Open... (macOS only, from the menu or ⌘O). The same native
+    ## directory picker as Settings > Level > Open..., and the same rules for
+    ## what a picked directory means. The dialog is modal on the main thread, so
+    ## release the pointer first — otherwise the mouse stays captured by a game
+    ## the player can't see behind the dialog.
+    state.pop_flag MOUSE_CAPTURED
+    let picked = file_dialog(fdOpenDir, path = state.config.world_dir)
+    if ?picked:
+      open_picked_dir(picked)
 
   proc switch_world(diff: int) =
     var config = state.config
@@ -947,6 +965,11 @@ gdobj Game of Node:
     ):
       state.config_value.value:
         full_screen = not state.config.full_screen
+    elif event.is_action_pressed("open_world"):
+      # Bound on macOS only (⌘O); the base action ships with no events, so this
+      # never fires elsewhere.
+      self.open_world()
+      self.get_tree().set_input_as_handled()
     elif event.is_action_pressed("settings"):
       state.set_flag SETTINGS_VISIBLE, SETTINGS_VISIBLE notin state.local_flags
     elif event.is_action_pressed("next_level"):

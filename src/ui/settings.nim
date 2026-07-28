@@ -425,20 +425,7 @@ gdobj Settings of PanelContainer:
       self.update_values()
       return
 
-    # Any directory can be a world. If the pick is actually an Enu *level* (it
-    # has a level.json), open its parent world at that level; otherwise treat the
-    # dir as a world and open its initial level — creating world.json and a
-    # "default" level on load when it has neither.
-    var world_dir, level: string
-    if file_exists(picked / "level.json"):
-      world_dir = picked.parent_dir
-      level = picked.last_path_part
-    else:
-      world_dir = picked
-      let init =
-        read_world_initial_level(picked, state.config.lib_dir, picked.last_path_part)
-      level = if ?init: init else: "default"
-    change_loaded_level(level, world_dir)
+    open_picked_dir(picked)
     state.pop_flag SETTINGS_VISIBLE
 
   method on_button_up*(name: string) =
