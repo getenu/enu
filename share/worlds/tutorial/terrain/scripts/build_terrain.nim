@@ -10,6 +10,14 @@ import std/math
 # columns are drawn as single boxes.
 
 lock = true
+
+# Baked already: the land is saved with the level, so there's nothing to do.
+# The west cliff is solid rock here, so this block only exists once baked. To
+# regenerate, delete this unit's `edits.bin` from the level's data folder and
+# reload.
+if has_block_at(vec3(-255, 0, 0)):
+  quit()
+
 speed = ASAP
 
 let started = now_seconds()
@@ -687,5 +695,7 @@ fill_row(XA + 1)
 for x in XA + 1 ..< XB:
   fill_row(x + 1)
   draw_row(x)
+persist()
+save_level_now()
 echo "terrain: ", draws, " draws, ", trees, " trees in ",
   round(now_seconds() - started, 1), "s"

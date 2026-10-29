@@ -9,8 +9,19 @@ import std/math
 # 2 m cells.
 
 lock = true
-speed = ASAP
 
+const
+  FRAMES = 24 # one loop of the animation...
+  LOOP = 3.0 # ...lasting this many seconds
+
+# Baked already: the frames and the still sea are saved with the level, so
+# just play them. To regenerate, delete this unit's `edits.bin` and `frames`
+# from the level's data folder and reload.
+if me.frame_count > 0:
+  play(FRAMES.float / LOOP)
+  quit()
+
+speed = ASAP
 let started = now_seconds()
 
 const
@@ -320,29 +331,44 @@ const
   WX1 = 500
   WAVES = [(43.0, 20.0, 0.0, 0.42), (17.0, -35.0, 1.7, 0.30), (7.2, 65.0, 4.1, 0.20)]
 
-var wsx, wcx, wsz, wcz: seq[seq[float]]
+var wsx, wcx: seq[seq[float]]
 for (length, angle, phase, _) in WAVES:
   let
     a = angle * PI / 180.0
     k = 2.0 * PI / length
-  var sx, cx, sz, cz: seq[float]
+  var sx, cx: seq[float]
   for v in WX0 ..< WX1:
     sx.add sin(v.float * cos(a) * k)
     cx.add cos(v.float * cos(a) * k)
-    sz.add sin(v.float * sin(a) * k + phase)
-    cz.add cos(v.float * sin(a) * k + phase)
   wsx.add sx
   wcx.add cx
-  wsz.add sz
-  wcz.add cz
+
+# The z half carries time. Each wave's speed is nudged so it travels a whole
+# number of wavelengths per loop, so the last frame runs into the first.
+var sz0, cz0, sz1, cz1, sz2, cz2: seq[float]
+
+proc wave_time(t: float) =
+  var halves: seq[(seq[float], seq[float])]
+  for (length, angle, phase, _) in WAVES:
+    let
+      a = angle * PI / 180.0
+      k = 2.0 * PI / length
+      cycles = max(1.0, round(sqrt(9.81 * length / (2.0 * PI)) * LOOP / length))
+      shift = phase - k * (cycles * length / LOOP) * t
+    var sz, cz: seq[float]
+    for v in WX0 ..< WX1:
+      sz.add sin(v.float * sin(a) * k + shift)
+      cz.add cos(v.float * sin(a) * k + shift)
+    halves.add (sz, cz)
+  (sz0, cz0) = halves[0]
+  (sz1, cz1) = halves[1]
+  (sz2, cz2) = halves[2]
+
+# Per frame: how far the chop and churn have drifted round their little
+# circles, and how far the river's and the falls' streaks have travelled.
+var chop_dx, chop_dz, churn_dx, churn_dz, stream: int
 
 let
-  sz0 = wsz[0]
-  cz0 = wcz[0]
-  sz1 = wsz[1]
-  cz1 = wcz[1]
-  sz2 = wsz[2]
-  cz2 = wcz[2]
   chop_t = make_tile(4, 50) # fine chop on top of the swell
   fleck_t = make_tile(1, 11) # stray foam flecks
   churn_t = make_tile(4, 92) # the plunge pool's churn
@@ -389,7 +415,7 @@ template wave_at(x, z: int): float =
       group = group_row[gz] + (group_row[gz + 1] - group_row[gz]) * (fz - gz.float)
     sx0 * cz0[j] + cx0 * sz0[j] + sx1 * cz1[j] + cx1 * sz1[j] +
       (0.4 + 0.6 * group) * (sx2 * cz2[j] + cx2 * sz2[j]) +
-      0.18 * (tile(chop_t, x, z) - 0.5)
+      0.18 * (tile(chop_t, x + chop_dx, z + chop_dz) - 0.5)
 
 # --- near the land: per metre ---
 
@@ -484,7 +510,7 @@ proc sea_color(x, z: int, h, open_sea, shore: float): int =
     # foam lanes, dashes and streaks running downstream
     let
       lane = lanes[z - ZA]
-      xw = ((x mod 48) + 48) mod 48
+      xw = (((x - stream) mod 48) + 48) mod 48
       dash = hash01(z, xw div 3, 98)
       run = hash01(z * 7, xw div 8, 99)
     var streak = 0.0
@@ -508,7 +534,7 @@ proc sea_color(x, z: int, h, open_sea, shore: float): int =
     else:
       99.0
   if pool < 20.0:
-    let churn = tile(churn_t, x, z)
+    let churn = tile(churn_t, x + churn_dx, z + churn_dz)
     c.blend(FOAM, (1.0 - pool / 20.0) * (0.4 + 0.6 * churn))
     if x > -238 and x < -229 and abs(z - FALLS_Z) < 11:
       c.blend(FOAM, 0.65 + 0.35 * churn)
@@ -516,7 +542,8 @@ proc sea_color(x, z: int, h, open_sea, shore: float): int =
     return FOAM_KEY
   if e > -0.55:
     c.blend(FOAM, (e + 0.55) / 0.55 * 0.55)
-  if open_sea > 0.5 and h > 0.55 and tile(chop_t, x + 31, z) > 0.72:
+  if open_sea > 0.5 and h > 0.55 and
+      tile(chop_t, x + 31 + chop_dx, z + chop_dz) > 0.72:
     c.blend(FOAM, 0.9)
   elif h > 0.0 and tile(fleck_t, x, z) > 0.9975:
     return FOAM_KEY
@@ -644,7 +671,7 @@ proc falls_streak(z, y: int, phase: float): float =
   ## Curtain foam in [0, 1]: vertical foam lines plus falling flecks and runs.
   let
     zi = z * 31 + int(phase * 5.0)
-    yw = ((y mod 24) + 24) mod 24
+    yw = (((y + stream) mod 24) + 24) mod 24
     col = fbm(z.float * 1.1, 4.7, 94, 2)
     fleck = hash01(zi, yw div 2, 95)
     run = hash01(zi * 7, yw div 6, 96)
@@ -692,7 +719,8 @@ proc falls() =
   # froth mounds where the curtain meets the river
   for x in -236 .. -231:
     for dz in -9 .. 9:
-      if fbm(x.float / 3.1, (FALLS_Z + dz).float / 3.1, 93) > 0.5:
+      if fbm(float(x + churn_dx) / 3.1, float(FALLS_Z + dz + churn_dz) / 3.1, 93) >
+          0.5:
         block_at(x, 2, FALLS_Z + dz, 1, 1, 1, FOAM_KEY)
 
 # --- main ----------------------------------------------------------------------
@@ -700,26 +728,52 @@ proc falls() =
 for x in NX0 ..< NX1:
   classify_row(x)
 measure_shore()
-for x in NX0 ..< NX1:
-  near_row(x)
-  if x == FACE + 1:
-    front_tops = tops
-falls()
 
-# The open sea beyond, in 2 m cells. Nothing but water out here.
-for x in countup(WX0, WX1 - 2, 2):
-  let
-    near = x >= NX0 and x < NX1
-    c = coast_z(x)
-  var z_end = WX0
-  while z_end < WX1 and z_end.float < c and not (near and z_end >= ZA):
-    z_end += 2
-  wave_row(x)
-  slab(x, WX0, z_end, 2)
-  for z in countup(WX0, z_end - 2, 2):
+proc draw_frame() =
+  for x in NX0 ..< NX1:
+    near_row(x)
+    if x == FACE + 1:
+      front_tops = tops
+  falls()
+  # The open sea beyond, in 2 m cells. Nothing but water out here.
+  for x in countup(WX0, WX1 - 2, 2):
     let
-      h = wave_at(x, z)
-      top = clamp(int(round(SEA_BASE + h)), 0, 120)
-    add_cell(x, z, 2, top, sea_color(x, z, h, 1.0, 1e9))
-  flush_runs()
-echo "water: ", draws, " draws in ", round(now_seconds() - started, 1), "s"
+      near = x >= NX0 and x < NX1
+      c = coast_z(x)
+    var z_end = WX0
+    while z_end < WX1 and z_end.float < c and not (near and z_end >= ZA):
+      z_end += 2
+    wave_row(x)
+    slab(x, WX0, z_end, 2)
+    for z in countup(WX0, z_end - 2, 2):
+      let
+        h = wave_at(x, z)
+        top = clamp(int(round(SEA_BASE + h)), 0, 120)
+      add_cell(x, z, 2, top, sea_color(x, z, h, 1.0, 1e9))
+    flush_runs()
+
+clear_frames()
+for f in 0 ..< FRAMES:
+  if f > 0:
+    me.reset(clear = true) # back to an empty sea; saved frames stay
+    speed = ASAP
+  let
+    t = LOOP * f.float / FRAMES.float
+    turn = 2.0 * PI * f.float / FRAMES.float
+  wave_time(t)
+  chop_dx = int(round(1.5 * (cos(turn) - 1.0)))
+  chop_dz = int(round(1.5 * sin(turn)))
+  churn_dx = int(round(2.2 * (cos(turn) - 1.0)))
+  churn_dz = int(round(2.2 * sin(turn)))
+  stream = 2 * f
+  draw_frame()
+  save()
+  echo "water: frame ", f + 1, "/", FRAMES, " at ", round(now_seconds() - started, 1), "s"
+
+# The still sea under the animation (what you walk on) is the first frame.
+load_frame(0)
+persist()
+save_level_now()
+echo "water: baked ", FRAMES, " frames, ", draws, " draws in ",
+  round(now_seconds() - started, 1), "s"
+play(FRAMES.float / LOOP)
