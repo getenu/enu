@@ -1,0 +1,15 @@
+{
+  "id": "build_water",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [0.0, 0.0, -400.0]
+  },
+  "start_color": "BLUE",
+  "edits": {
+    
+  }
+}

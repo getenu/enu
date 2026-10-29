@@ -1,0 +1,18 @@
+{
+  "format_version": "1.0.0",
+  "load_order": [
+    "PLAYERS",
+    "build_water",
+    "build_terrain"
+  ],
+  "show_prototypes": true,
+  "show_tools": true,
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [-150.5, 40.5, -30.5]
+  }
+}
