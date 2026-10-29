@@ -329,6 +329,26 @@ while true:
     check get_mono_time() - started < 200.milliseconds
     ctx.stop()
 
+  test "a template default that names its own param is a compile error":
+    # Expanding `color = me.color` used to recurse until the compiler's stack
+    # overflowed, killing the process.
+    var ctx = ScriptCtx(interpreter: interp)
+    interp.register_error_hook proc(
+        config, info, msg, severity: auto
+    ) {.gcsafe.} =
+      if severity == Severity.Error:
+        raise (ref VMQuit)(info: info, msg: msg)
+    ctx.load(script_dir / "self_default.nim", "discard")
+    check not ctx.run(0)
+    var error: ref VMQuit
+    try:
+      discard ctx.eval(
+        "template paint(color: untyped = me.color) =\n  discard color\npaint()"
+      )
+    except VMQuit as e:
+      error = e
+    check ?error and error.msg == "the default value of 'color' refers back to 'color'"
+
   test "an eval that keeps calling the host hits the time limit":
     # An eval can't park: whoever asked wants its value now.
     const script = """
