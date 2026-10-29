@@ -431,7 +431,10 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
         self.voxels.set_edit(position, edit)
         return
       elif edit.kind == PERSISTED and edit.color == voxel.color:
+        # the script now draws what the edit added: it's computed from here on
         self.voxels.del_edit(position)
+        self.add_voxel(position, voxel)
+        self.global_flags += DIRTY
     elif ?self.clone_of and Build(self.clone_of).voxels.has_edit(position) and
         Build(self.clone_of).voxels.get_edit(position).kind == HOLE:
       return
@@ -488,6 +491,16 @@ proc log_block_placement(self: Build, local: Vector3, color: Color) =
   while state.player.block_log_entries.len > BLOCK_LOG_CAP:
     state.player.block_log_entries.del 0
 
+proc erase_cell(self: Build, cell: Vector3) =
+  ## Erasing a computed block leaves a hole, so the script doesn't put it
+  ## back. A manual block just goes.
+  if self.voxels.has_edit(cell) and self.voxels.get_edit(cell).kind == PERSISTED:
+    self.voxels.del_edit(cell)
+    self.del_voxel(cell)
+    self.global_flags += DIRTY
+  else:
+    self.draw(cell, (HOLE, ACTION_COLORS[ERASER]))
+
 proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
   ## Paint one cell of the active stroke. Interpolated cells (endpoint =
   ## false) skip cells already in the desired state; the aimed cell always
@@ -495,7 +508,7 @@ proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
   case stroke.mode
   of STROKE_REMOVE:
     if endpoint or cell in self:
-      self.draw(cell, (HOLE, ACTION_COLORS[ERASER]))
+      self.erase_cell(cell)
       self.log_block_placement(cell, ACTION_COLORS[ERASER])
   of STROKE_PLACE:
     if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
@@ -700,6 +713,29 @@ proc reset_state*(self: Build) =
   self.sync_turtle()
   self.transform = self.start_transform
 
+# A hole is marked (given the color it hides) when a computed block lands in
+# it. Each run starts with every hole unmarked; when a run finishes, the holes
+# still unmarked no longer cut into anything and are dropped. A run that fails
+# never finishes, so it can't drop them.
+
+proc unmark_holes(self: Build) =
+  var marked: seq[Vector3]
+  self.voxels.for_all_edits:
+    if info.kind == HOLE and info.color != ACTION_COLORS[ERASER]:
+      marked.add pos
+  for pos in marked:
+    self.voxels.set_edit(pos, (HOLE, ACTION_COLORS[ERASER]))
+
+method collect_garbage*(self: Build) =
+  var stale: seq[Vector3]
+  self.voxels.for_all_edits:
+    if info.kind == HOLE and info.color == ACTION_COLORS[ERASER]:
+      stale.add pos
+  for pos in stale:
+    self.voxels.del_edit(pos)
+  if stale.len > 0:
+    self.global_flags += DIRTY
+
 method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
@@ -738,6 +774,7 @@ method reset*(self: Build) =
   self.global_flags -= RESETTING
   if rebuild:
     self.restore_edits
+  self.unmark_holes()
   self.draw(vec3(), (TRANSIENT, self.start_color))
 
 method ensure_visible*(self: Build) =
