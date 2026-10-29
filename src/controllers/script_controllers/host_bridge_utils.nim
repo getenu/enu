@@ -1,6 +1,15 @@
 proc get_int(a: VmArgs, i: Natural): int =
   int vm.get_int(a, i)
 
+proc flag_host_error(self: Worker) =
+  ## Tell the VM's check_errors there's an error to collect. Looked up each
+  ## time: errors are rare, and a reload replaces the interpreter.
+  let flag = self.interpreter.select_unique_symbol(
+    "host_error_pending", module_name = "vm_bridge_utils"
+  )
+  assert ?flag
+  self.interpreter.set_global_value(flag, new_int_node(nkIntLit, 1))
+
 proc color_from_node(n: PNode): Color =
   let fields = n.sons
   result = Color(
@@ -224,6 +233,7 @@ macro bridged_from_vm(
               error "Exception calling into host", kind = $e.type, msg = e.msg
               echo e.get_stack_trace()
               script_engine.last_exception = e
+              script_engine.flag_host_error()
               if ?active and ?active.script_ctx:
                 let line = active.script_ctx.script_line(a)
                 if line.line > 0:
