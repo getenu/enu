@@ -6,10 +6,17 @@ const thing_types = ["Thing", "Bot", "Build", "Sign", "Player"]
 proc get_last_error_impl(): ErrorData =
   raise_assert "get_last_error_impl must be implemented by host"
 
+# Set by the host when a call into it failed, so a call that succeeded
+# doesn't need a second trip to the host to find that out. Exported so the
+# host can find it.
+var host_error_pending*: bool
+
 proc check_errors*() =
-  let err = get_last_error_impl().to_exception
-  if err != nil:
-    raise err
+  if host_error_pending:
+    host_error_pending = false
+    let err = get_last_error_impl().to_exception
+    if err != nil:
+      raise err
 
 proc get_name(node: NimNode): string =
   result =
