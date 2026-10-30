@@ -1,5 +1,7 @@
 import std/[macros, strutils]
-import shared/errors
+import shared/errors, handles
+
+const thing_types = ["Thing", "Bot", "Build", "Sign", "Player"]
 
 proc get_last_error_impl(): ErrorData =
   raise_assert "get_last_error_impl must be implemented by host"
@@ -21,7 +23,17 @@ proc get_name(node: NimNode): string =
     else:
       raise_assert "Can't handle " & $node.kind
 
+proc is_thing(typ: NimNode): bool =
+  typ.kind == nnk_ident and typ.str_val in thing_types
+
+proc is_thing_seq(typ: NimNode): bool =
+  typ.kind == nnk_bracket_expr and typ.len == 2 and typ[0].eq_ident("seq") and
+    typ[1].is_thing
+
 macro bridged_to_host*(body: untyped): untyped =
+  ## Declares procs the host implements. Things cross the bridge as handles:
+  ## the `_impl` the host sees takes and returns ints, and the wrapper
+  ## converts.
   result = new_stmt_list()
   var defs = new_stmt_list()
   var calls = new_stmt_list()
@@ -35,14 +47,39 @@ macro bridged_to_host*(body: untyped): untyped =
         raise_assert `impl_proc` & " must be implemented by host"
       def[0] = ident(impl_proc)
 
-      if params.len > 1:
-        for defs in params[1 ..^ 1]:
-          call.add(defs[0 ..^ 3])
+      for i in 1 ..< params.len:
+        let defs = params[i]
+        let typ = defs[^2]
+        for name in defs[0 ..^ 3]:
+          if typ.is_thing:
+            call.add new_call(bind_sym"bridge_handle", name)
+          else:
+            call.add name
+        if typ.is_thing:
+          def.params[i][^2] = ident"int"
+          def.params[i][^1] = new_empty_node()
+
+      let ret = params[0]
+      let thing_for_handle = bind_sym"thing_for_handle"
       node.body =
-        if params[0].kind == nnk_empty:
+        if ret.kind == nnk_empty:
           quote:
             `call`
             check_errors()
+        elif ret.is_thing:
+          def.params[0] = ident"int"
+          quote:
+            let handle = `call`
+            check_errors()
+            result = `ret`(`thing_for_handle`(handle))
+        elif ret.is_thing_seq:
+          def.params[0] = nnk_bracket_expr.new_tree(ident"seq", ident"int")
+          let elem = ret[1]
+          quote:
+            let handles = `call`
+            check_errors()
+            for handle in handles:
+              result.add `elem`(`thing_for_handle`(handle))
         else:
           quote:
             result = `call`
@@ -55,10 +92,7 @@ macro bridged_to_host*(body: untyped): untyped =
   result.add(calls)
 
 when is_main_module:
-  type
-    Thing = ref object
-    Vector3 = object
-    Colors = object
+  import types
 
   proc check_errors() =
     discard

@@ -33,8 +33,6 @@ if host_os == "windows":
   "dynamic_bind_sym"
 
 --define:
-  "vm_exec_hooks"
---define:
   "nim_preview_hash_ref"
 --define:
   "nim_type_names"

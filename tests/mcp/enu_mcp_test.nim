@@ -19,8 +19,12 @@ type McpSession = object
   next_id: int
 
 proc open_session(): McpSession =
+  # Nothing drains the child's stderr, so keep the compile quiet: a full pipe
+  # blocks `nim r` before the server ever starts.
   result.process = start_process(
-    "nim", args = ["r", "./bin/enu.nim", "mcp"], options = {poUsePath}
+    "nim",
+    args = ["r", "--hints:off", "--warnings:off", "./bin/enu.nim", "mcp"],
+    options = {poUsePath},
   )
   result.next_id = 1
 

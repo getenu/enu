@@ -1,8 +1,9 @@
 import std/[os, strformat, importutils, options]
 import pkg/compiler/ast except new_node
 import pkg/compiler/[vm, vmdef, lineinfos]
+from pkg/compiler/vm {.all.} import current_exception_msg
 from pkg/compiler/options import ConfigRef
-import core, eval
+import core, eval, coroutines, vm_exec_state
 
 export Interpreter, VmArgs, set_result
 
@@ -14,7 +15,23 @@ const STDLIB_PATHS =
 
 private_access ScriptCtx
 
-proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
+proc register_exception_ops(i: Interpreter) =
+  # vmops only registers these under -d:nimcore, which also gives scripts
+  # host file and env access. 2.4's VM needs them to bind `except E as e`.
+  let c = PCtx(i.get_graph.vm)
+  c.register_callback "stdlib.system.getCurrentException",
+    proc(a: VmArgs) {.nimcall.} =
+      set_result_ref(a, a.current_exception)
+  c.register_callback "stdlib.system.getCurrentExceptionMsg",
+    proc(a: VmArgs) {.nimcall.} =
+      set_result(a, current_exception_msg(cast[PCtx](a.ctxp), a.current_exception))
+  c.register_callback "stdlib.system.raiseDefect",
+    proc(a: VmArgs) {.nimcall.} =
+      discard
+
+proc init*(
+    _: type Interpreter, script_dir, vmlib: string, fuel: int
+): Interpreter =
   let std_paths = STDLIB_PATHS.map_it join_path(vmlib, "stdlib", it)
   let source_paths = std_paths & join_path(vmlib, "enu") & @[script_dir]
   {.gcsafe.}:
@@ -23,50 +40,135 @@ proc init*(_: type Interpreter, script_dir, vmlib: string): Interpreter =
       source_paths,
       defines = @{"nimscript": "true", "nimconfig": "true"},
     )
-    result.config.max_loop_iterations_vm = int.high
+    # The VM's loop budget (decremented on every backward jump and call) is
+    # the watchdog for scripts that never yield. Each script has its own
+    # copy, refilled whenever it resumes.
+    result.config.max_loop_iterations_vm = fuel
     result.config.notes.incl(warnUnusedImportX)
     result.config.notes.incl(hintXDeclaredButNotUsed)
+    result.register_exception_ops()
+
+proc vm(self: ScriptCtx): PCtx =
+  PCtx(self.interpreter.get_graph.vm)
 
 proc pause*(ctx: ScriptCtx) =
+  ## Park the script once the current host call returns. See `after_host_call`.
   ctx.pause_requested = true
 
-proc rebase_call_depth(self: ScriptCtx, tos: PStackFrame) =
-  # The VM's call-depth budget is a single countdown on the shared PCtx —
-  # dec'd on every call, inc'd on every return, error at 0. Every yielded
-  # script parks its stack mid-call and holds its decrements, so the budget
-  # tracks the sum of all parked stacks (and leaks permanently when a parked
-  # context is discarded by a reload or error). With enough animated things
-  # the counter drains and every script in the level fails at once with
-  # "maximum call depth for the VM exceeded". Rebase it to this stack's real
-  # depth at each VM entry so the limit applies per script.
-  let c =
-    if ?self.ctx:
-      self.ctx
-    elif ?self.interpreter:
-      PCtx(self.interpreter.get_graph.vm)
-    else:
-      nil
-  if c.is_nil:
+proc running_task(self: ScriptCtx): ScriptTask =
+  if self.tasks.len > 0:
+    result = self.tasks[^1]
+
+proc seal_top_level(task: ScriptTask) =
+  # Each new top-level statement is generated over the trailing `opcEof` of
+  # the last one. Code parked inside top-level code still needs its `opcEof`,
+  # so leave a spare after it for the next statement to replace.
+  let c = task.exec.vm
+  c.code.add TInstr(TInstrType(opcEof))
+  c.debug.add c.debug[^1]
+
+proc after_host_call*(ctx: ScriptCtx) =
+  ## Called by every bridged host proc before it returns to the VM. Acts on a
+  ## pause or exit the call asked for. Host calls made outside the script's
+  ## own tasks (e.g. state initializers run with the player active) can't
+  ## park or unwind it, so they're left alone.
+  let task = ctx.running_task
+  if not ?task or not task.coroutine.running:
     return
-  var depth = 0
-  var frame = tos
-  while not frame.is_nil:
-    inc depth
-    frame = frame.next
-  c.call_depth = c.config.max_call_depth_vm - depth
+  if ctx.exit_code.is_some:
+    raise ScriptExit.new_exception("script exited")
+  if ctx.pause_requested:
+    ctx.pause_requested = false
+    if task.top_level:
+      task.seal_top_level()
+    suspend()
+
+proc refuel*(ctx: ScriptCtx, fuel: int) =
+  ## Refill the watchdog budget, live if the script is running.
+  ctx.fuel = fuel
+  let task = ctx.running_task
+  if ?task and task.coroutine.running:
+    task.exec.vm.loop_iterations = fuel
+
+proc finish(self: ScriptCtx, task: ScriptTask) =
+  release(task.exec)
+  task.coroutine.destroy()
+  self.tasks.del(self.tasks.find(task))
+
+proc step(self: ScriptCtx, task: ScriptTask): bool =
+  ## Resume `task` until it parks or finishes. True if it finished. Errors
+  ## from the script propagate, after the task is cleaned up.
+  task.exec.loop_iterations =
+    if self.fuel > 0: self.fuel.int
+    else: task.exec.vm.config.max_loop_iterations_vm
+  swap(task.exec)
+  try:
+    task.coroutine.resume()
+  except ScriptExit:
+    discard
+  except Exception:
+    swap(task.exec)
+    self.finish(task)
+    self.running = false
+    self.exit_code = some(99)
+    raise
+  swap(task.exec)
+  result = task.coroutine.finished or self.exit_code.is_some
+  if result:
+    self.finish(task)
+    if not task.then.is_nil and self.exit_code.is_none:
+      task.then()
+
+proc start(
+    self: ScriptCtx,
+    top_level: bool,
+    then: proc() {.gcsafe.},
+    body: proc(task: ScriptTask),
+): ScriptTask =
+  ## Start `body` as a new innermost task and run it until it parks or
+  ## finishes. The task is returned either way; check `finished`.
+  let task =
+    ScriptTask(top_level: top_level, exec: ExecState.init(self.vm), then: then)
+  # Top-level work compiles, and the compiler recurses deeply, so it gets a
+  # big stack (address space, committed as touched and unmapped when the task
+  # ends). Script bodies are what stay parked, so they get small ones.
+  let stack_size = if top_level: 64 * 1024 * 1024 else: 512 * 1024
+  task.coroutine = Coroutine.init(
+    proc() {.gcsafe.} =
+      # Scripts only run on the worker thread.
+      {.gcsafe.}:
+        body(task),
+    stack_size,
+  )
+  self.tasks.add task
+  discard self.step(task)
+  task
+
+proc finished(task: ScriptTask): bool =
+  task.coroutine.is_nil or task.coroutine.finished
+
+proc parked(self: ScriptCtx): bool =
+  self.tasks.len > 0 and self.exit_code.is_none
+
+proc stop*(self: ScriptCtx) =
+  ## Drop the script's tasks, parked or not: before a reload, or when its
+  ## thing goes away. Frees their stacks without unwinding them.
+  while self.tasks.len > 0:
+    let task = self.tasks[^1]
+    assert not task.coroutine.running, "can't stop a script from inside itself"
+    self.finish(task)
 
 proc load*(self: ScriptCtx, file_name, code: string) =
-  self.ctx = nil
-  self.pc = 0
-  self.tos = nil
+  self.stop()
   self.code = code
   self.module_name = file_name.split_file.name
   self.file_name = file_name
 
   self.dependencies = @[]
 
-proc run*(self: ScriptCtx): bool =
-  private_access ScriptCtx
+proc run*(self: ScriptCtx, me: int): bool =
+  ## Load the script's module, then run its body. `me` is the bridge handle of
+  ## the thing the script drives. True while the script is parked.
   self.exit_code = none(int)
 
   var raw_dependencies = newSeq[string]()
@@ -83,15 +185,23 @@ proc run*(self: ScriptCtx): bool =
     interpreter_nil = self.interpreter.is_nil,
     pass_context_nil = self.pass_context.is_nil,
     code_len = self.code.len
+  proc run_body() {.gcsafe.} =
+    {.gcsafe.}:
+      let run_script = self.interpreter.select_routine(
+        "run_script", module_name = self.module_name
+      )
+      if me > 0 and ?run_script:
+        discard self.start(top_level = false, then = nil) do(task: ScriptTask):
+          discard self.interpreter.call_routine(
+            run_script, [new_int_node(nkIntLit, me), new_int_node(nkIntLit, 0)]
+          )
+
   try:
-    self.rebase_call_depth(nil)
-    self.interpreter.load_module(
-      self.file_name, self.code, self.pass_context, raw_dependencies
-    )
-    result = false
-  except VMPause:
-    private_access ScriptCtx
-    result = self.exit_code.is_none
+    discard self.start(top_level = true, then = run_body) do(task: ScriptTask):
+      self.interpreter.load_module(
+        self.file_name, self.code, self.pass_context, raw_dependencies
+      )
+    result = self.parked
   except Exception as e:
     self.running = false
     self.exit_code = some(99)
@@ -107,24 +217,14 @@ proc run*(self: ScriptCtx): bool =
         self.dependencies.add(expected_path.relative_path(script_dir))
 
 proc eval*(self: ScriptCtx, code: string): Option[string] =
+  ## Run `code` in the script's module. If it parks (`forward 5`), it carries
+  ## on ahead of the script itself and nothing is returned.
   self.exit_code = none(int)
-
-  try:
-    var
-      ctx = self.ctx
-      pc = self.pc
-      tos = self.tos
-    self.rebase_call_depth(nil)
-    result = self.interpreter.eval(self.pass_context, self.file_name, code)
-    self.ctx = ctx
-    self.pc = pc
-    self.tos = tos
-  except VMPause:
-    discard
-  except CatchableError:
-    self.running = false
-    self.exit_code = some(99)
-    raise
+  var value: Option[string]
+  let task = self.start(top_level = true, then = nil) do(task: ScriptTask):
+    value = self.interpreter.eval(self.pass_context, self.file_name, code)
+  if task.finished:
+    result = value
 
 proc call_proc*(
     self: ScriptCtx, proc_name: string, args: varargs[PNode, `to_node`]
@@ -135,20 +235,11 @@ proc call_proc*(
     raise new_exception(
       VMError, \"script does not export a proc of the name: '{proc_name}'"
     )
-  result =
-    try:
-      {.gcsafe.}:
-        (false, self.interpreter.call_routine(foreign_proc, args))
-    except VMPause:
-      (self.exit_code.is_none, nil)
-    except CatchableError:
-      self.running = false
-      self.exit_code = some(99)
-      raise
-    except Defect:
-      self.running = false
-      self.exit_code = some(99)
-      raise
+  let args = @args
+  let task = self.start(top_level = false, then = nil) do(task: ScriptTask):
+    {.gcsafe.}:
+      task.result = self.interpreter.call_routine(foreign_proc, args)
+  (self.parked, task.result)
 
 proc get_var*(self: ScriptCtx, var_name: string, module_name: string): PNode =
   let sym =
@@ -156,24 +247,8 @@ proc get_var*(self: ScriptCtx, var_name: string, module_name: string): PNode =
   self.interpreter.get_global_value(sym)
 
 proc resume*(self: ScriptCtx): bool =
-  assert not self.ctx.is_nil
-  assert self.pc > 0
-  assert not self.tos.is_nil
-
+  ## Continue the innermost task. True while the script is still parked.
+  assert self.tasks.len > 0
   trace "resuming", script = self.file_name, module = self.module_name
-  self.rebase_call_depth(self.tos)
-  result =
-    try:
-      {.gcsafe.}:
-        discard exec_from_ctx(self.ctx, self.pc, self.tos)
-      false
-    except VMPause:
-      self.exit_code.is_none
-    except CatchableError:
-      self.running = false
-      self.exit_code = some(99)
-      raise
-    except Defect:
-      self.running = false
-      self.exit_code = some(99)
-      raise
+  discard self.step(self.tasks[^1])
+  self.parked

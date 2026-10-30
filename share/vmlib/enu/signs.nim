@@ -80,9 +80,8 @@ proc say*(
     result.update_markdown_sign(message, more, width, height, size, billboard)
     result.show = true
   else:
-    result = Sign()
-    self.new_markdown_sign(
-      result, message, more, width, height, size, billboard
+    result = self.new_markdown_sign(
+      message, more, width, height, size, billboard
     )
 
     self.sign = result

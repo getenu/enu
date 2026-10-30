@@ -87,13 +87,6 @@ proc setup_mock_functions(interp: Interpreter) =
       let code = args.get_int(0)
       echo "  [VM] Exit called with code: ", code
 
-  # Mock register_template_node - called when types like Player, Bot, etc are registered
-  interp.implement_routine pkg,
-    "base_bridge",
-    "register_template_node_impl",
-    proc(args: VmArgs) =
-      discard
-
   # Mock report_test_results - called by testing framework
   interp.implement_routine pkg,
     "base_bridge",
@@ -127,11 +120,12 @@ proc setup_mock_functions(interp: Interpreter) =
     "vm_bridge_utils",
     "get_last_error_impl",
     proc(args: VmArgs) =
-      # Return (0, "") - no error
-      var result_node = nkTupleConstr.new_tree
-      result_node.add new_int_node(nkIntLit, 0)
-      result_node.add new_str_node(nkStrLit, "")
-      args.set_result(result_node)
+      {.cast(gcsafe).}:
+        # Return (0, "") - no error
+        var result_node = nkTupleConstr.new_tree
+        result_node.add new_int_node(nkIntLit, 0)
+        result_node.add new_str_node(nkStrLit, "")
+        args.set_result(result_node)
 
   # Mock now_seconds - returns seconds since test start
   var test_start_time = 0.0
@@ -151,16 +145,22 @@ proc setup_mock_functions(interp: Interpreter) =
     "base_bridge",
     "local_position_impl",
     proc(args: VmArgs) =
-      var v = nkTupleConstr.new_tree
-      v.add new_float_node(nkFloatLit, 0.0)
-      v.add new_float_node(nkFloatLit, 0.0)
-      v.add new_float_node(nkFloatLit, 0.0)
-      args.set_result(v)
+      {.cast(gcsafe).}:
+        var v = nkTupleConstr.new_tree
+        v.add new_float_node(nkFloatLit, 0.0)
+        v.add new_float_node(nkFloatLit, 0.0)
+        v.add new_float_node(nkFloatLit, 0.0)
+        args.set_result(v)
 
+  # Instances get handles past the ones register_active's stub hands out.
+  var last_instance_handle {.global.} = 1_000_000
   interp.implement_routine pkg,
     "base_bridge",
-    "new_instance_impl",
-    proc(args: VmArgs) = discard
+    "new_instance_handle_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        inc last_instance_handle
+        args.set_result(BiggestInt(last_instance_handle))
 
   interp.implement_routine pkg,
     "base_bridge",
@@ -235,7 +235,7 @@ proc run_test_script(script_path: string): TestResult =
   try:
     ctx.load(script_path, code)
 
-    discard ctx.run()
+    discard ctx.run(0)
     result.passed = true
   except CatchableError as e:
     result.passed = false
@@ -243,7 +243,7 @@ proc run_test_script(script_path: string): TestResult =
 
 proc run_all_tests(test_dir, vmlib_path: string): int =
   let script_dir = test_dir / "scripts"
-  runner.interp = Interpreter.init(script_dir, vmlib_path)
+  runner.interp = Interpreter.init(script_dir, vmlib_path, 5_000_000)
   setup_mock_functions(runner.interp)
 
   var test_files: seq[string]

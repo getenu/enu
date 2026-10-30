@@ -3,7 +3,7 @@
     "Nim": {
       "dir": "$deps/Nim",
       "url": "https://github.com/getenu/Nim",
-      "commit": "05fa8ee4d2490d1c946b963b8ae364602b05b7c3",
+      "commit": "28c66caadb1ca68d35fad7842fd38d683a975dce",
       "version": ""
     },
     "godot-nim": {
@@ -69,7 +69,7 @@
     "nim-metrics": {
       "dir": "$deps/metrics",
       "url": "https://github.com/status-im/nim-metrics",
-      "commit": "b56bfb8656bd135f0be17d4da95680e86f71e8b4",
+      "commit": "a1296caf3ebb5f30f51a5feae7749a30df2824c2",
       "version": ""
     },
     "zippy": {
@@ -81,7 +81,7 @@
     "nim-unittest2": {
       "dir": "$deps/unittest2",
       "url": "https://github.com/status-im/nim-unittest2",
-      "commit": "253e23e2bfc1de7aae6492e69018f32d69f436df",
+      "commit": "15e9962941271cf28d855120efba8626c52147ca",
       "version": ""
     },
     "nph": {
@@ -147,13 +147,13 @@
     "nim-faststreams": {
       "dir": "$deps/faststreams",
       "url": "https://github.com/status-im/nim-faststreams",
-      "commit": "059bc2f52546ac14b583639c33372c14b1d46fa3",
+      "commit": "5bdef9939b483435a61aa91a6422c1a9852127b4",
       "version": ""
     },
     "nim-serialization": {
       "dir": "$deps/serialization",
       "url": "https://github.com/status-im/nim-serialization",
-      "commit": "b5473564e80a4908cf6c5a038e4c4a6ca7de2223",
+      "commit": "937a65c19fc49a5f79e2ecd89094d367b6ca0e1b",
       "version": ""
     },
     "nim-json-serialization": {
@@ -165,13 +165,13 @@
     "nim-testutils": {
       "dir": "$deps/testutils",
       "url": "https://github.com/status-im/nim-testutils",
-      "commit": "94e9a5ef199a08ba0085691eafafee73cce215f6",
+      "commit": "4c7252fcd27f72d523e498fba5cf757d101cc3aa",
       "version": ""
     },
     "nimib": {
       "dir": "$deps/nimib",
       "url": "https://github.com/pietroppeter/nimib",
-      "commit": "99ac3477f6a9d421ea65aeda1c9682d343c5bc35",
+      "commit": "7cfe29cefd76b5110a0c7798f540b8c693b065cf",
       "version": ""
     },
     "jsony": {
@@ -183,7 +183,7 @@
     "nim-chronos": {
       "dir": "$deps/chronos",
       "url": "https://github.com/status-im/nim-chronos",
-      "commit": "40f8087c815403d64e3dd4044411022cc4bedd5b",
+      "commit": "0ab802baef6bf16a8e3cc7d8a5c3128ddafadec5",
       "version": ""
     },
     "nim-results": {
@@ -195,7 +195,7 @@
     "nim-stew": {
       "dir": "$deps/stew",
       "url": "https://github.com/status-im/nim-stew",
-      "commit": "c75502ceedb5ed2a37b7b5e4744fc71313682859",
+      "commit": "5e9c0503e15c42c118f84dc167cb6bedffe8abc7",
       "version": ""
     },
     "glob": {
@@ -207,7 +207,7 @@
     "nim-toml-serialization": {
       "dir": "$deps/toml_serialization",
       "url": "https://github.com/status-im/nim-toml-serialization",
-      "commit": "b5b387e6fb2a7cc75d54a269b07cc6218361bd46",
+      "commit": "9dbd2ccc5a3ac28b6ce332bdbd9a118b38991c2e",
       "version": ""
     },
     "nim-unicodedb": {
@@ -219,7 +219,7 @@
     "nim-taskpools": {
       "dir": "$deps/taskpools",
       "url": "https://github.com/status-im/nim-taskpools",
-      "commit": "544f1c8d6aa53fee0c8c6bc489ab6cae52112f40",
+      "commit": "cc0ea81d10c8ef901fd58e94598004f718d6d53a",
       "version": ""
     },
     "webby": {
@@ -249,13 +249,13 @@
     "nim-bearssl": {
       "dir": "$deps/bearssl",
       "url": "https://github.com/status-im/nim-bearssl",
-      "commit": "2aee5932fa1138969056b5bf6fad2f34941f249e",
+      "commit": "6a98e65d6860971a4b5e7672a5c5ad8a737d5ef8",
       "version": ""
     },
     "nim-http-utils": {
       "dir": "$deps/httputils",
       "url": "https://github.com/status-im/nim-http-utils",
-      "commit": "7d771ca337bd3bf563f6834569d2a06085ac21f1",
+      "commit": "97eafdb8852c52beeedcf49e1c8d16e4b559d331",
       "version": ""
     },
     "nimsimd": {
@@ -268,51 +268,50 @@
   "nimcfg": [
     "############# begin Atlas config section ##########",
     "--noNimblePath",
-    "--path:\"deps/nim\"",
-    "--path:\"deps/godot-nim/godot\"",
-    "--path:\"deps/ed/src\"",
-    "--path:\"deps/nanoid.nim/src\"",
-    "--path:\"deps/pretty/src\"",
-    "--path:\"deps/cligen\"",
-    "--path:\"deps/chroma/src\"",
-    "--path:\"deps/markdown/src\"",
-    "--path:\"deps/chronicles\"",
-    "--path:\"deps/dotenv/src\"",
-    "--path:\"deps/nimibook/src\"",
-    "--path:\"deps/metrics\"",
-    "--path:\"deps/zippy/src\"",
-    "--path:\"deps/unittest2\"",
-    "--path:\"deps/nph/src\"",
-    "--path:\"deps/regex/src\"",
-    "--path:\"deps/nimcp/src\"",
-    "--path:\"deps/mummyx/src\"",
-    "--path:\"deps/nim-libbacktrace\"",
-    "--path:\"deps/osdialog\"",
-    "--path:\"deps/threading\"",
-    "--path:\"deps/flatty/src\"",
-    "--path:\"deps/netty/src\"",
-    "--path:\"deps/supersnappy/src\"",
-    "--path:\"deps/faststreams\"",
-    "--path:\"deps/serialization\"",
-    "--path:\"deps/json_serialization\"",
-    "--path:\"deps/testutils\"",
-    "--path:\"deps/nimib/src\"",
-    "--path:\"deps/jsony/src\"",
-    "--path:\"deps/chronos\"",
-    "--path:\"deps/results\"",
-    "--path:\"deps/stew\"",
-    "--path:\"deps/unicodedb/src\"",
-    "--path:\"deps/taskpools\"",
-    "--path:\"deps/webby/src\"",
-    "--path:\"deps/crunchy/src\"",
-    "--path:\"deps/glob/src\"",
-    "--path:\"deps/toml_serialization\"",
-    "--path:\"deps/fusion/src\"",
-    "--path:\"deps/mustache/src\"",
-    "--path:\"deps/parsetoml/src\"",
+    "--path:\"deps/Nim\"",
     "--path:\"deps/bearssl\"",
+    "--path:\"deps/chroma/src\"",
+    "--path:\"deps/chronicles\"",
+    "--path:\"deps/chronos\"",
+    "--path:\"deps/cligen\"",
+    "--path:\"deps/crunchy/src\"",
+    "--path:\"deps/dotenv/src\"",
+    "--path:\"deps/ed/src\"",
+    "--path:\"deps/faststreams\"",
+    "--path:\"deps/flatty/src\"",
+    "--path:\"deps/fusion/src\"",
+    "--path:\"deps/glob/src\"",
+    "--path:\"deps/godot-nim/godot\"",
     "--path:\"deps/httputils\"",
+    "--path:\"deps/json_serialization\"",
+    "--path:\"deps/jsony/src\"",
+    "--path:\"deps/markdown/src\"",
+    "--path:\"deps/metrics\"",
+    "--path:\"deps/mummyx/src\"",
+    "--path:\"deps/nanoid.nim/src\"",
+    "--path:\"deps/netty/src\"",
+    "--path:\"deps/nim-libbacktrace\"",
+    "--path:\"deps/nimcp/src\"",
+    "--path:\"deps/nimib/src\"",
+    "--path:\"deps/nimibook/src\"",
     "--path:\"deps/nimsimd/src\"",
+    "--path:\"deps/nph/src\"",
+    "--path:\"deps/osdialog\"",
+    "--path:\"deps/parsetoml/src\"",
+    "--path:\"deps/pretty/src\"",
+    "--path:\"deps/regex/src\"",
+    "--path:\"deps/results\"",
+    "--path:\"deps/serialization\"",
+    "--path:\"deps/stew\"",
+    "--path:\"deps/supersnappy/src\"",
+    "--path:\"deps/taskpools\"",
+    "--path:\"deps/testutils\"",
+    "--path:\"deps/threading\"",
+    "--path:\"deps/toml_serialization\"",
+    "--path:\"deps/unicodedb/src\"",
+    "--path:\"deps/unittest2\"",
+    "--path:\"deps/webby/src\"",
+    "--path:\"deps/zippy/src\"",
     "############# end Atlas config section   ##########",
     ""
   ],
@@ -327,12 +326,12 @@
       "bin_dir = \"app\"",
       "src_dir = \"src\"",
       "",
-      "requires \"https://github.com/getenu/Nim#05fa8ee4\",",
+      "requires \"https://github.com/getenu/Nim#28c66caa\",",
       "  \"godot 0.8.6\",",
       "  \"ed 0.31.0\",",
       "  \"nanoid >= 0.2.1\",",
       "  \"pretty\", \"cligen\", \"chroma\", \"markdown\",",
-      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics 0.2.3\", \"zippy\", \"unittest2\",",
+      "  \"chronicles\", \"dotenv\", \"nimibook\", \"metrics#a1296ca\", \"zippy\", \"unittest2\",",
       "  \"nph#948b933\", \"regex\",",
       "  \"nimcp 0.10.0\",",
       "  \"mummy#32f0ef97\",",
@@ -343,7 +342,7 @@
   },
   "hostOS": "macosx",
   "hostCPU": "arm64",
-  "nimVersion": "2.2.12",
+  "nimVersion": "2.4.0",
   "gccVersion": "",
   "clangVersion": ""
 }

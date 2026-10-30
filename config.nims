@@ -7,9 +7,3 @@ when not defined(nimsuggest):
 # (Win32) need no such switch.
 when defined(linux):
   switch("define", "osdialogZenity")
-
-# Nim 2.2.12's backend-alias check in procParamTypeRel rejects lambdas whose
-# params mention a generic (`proc(changes: seq[Change[O]])`), which breaks ed.
-# Fixed in our Nim fork (used by the script VM); this covers the host compiler.
-when (NimMajor, NimMinor, NimPatch) >= (2, 2, 12):
-  switch("legacy", "procParamTypeBackendAliases")

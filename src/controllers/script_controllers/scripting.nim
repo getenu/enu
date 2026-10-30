@@ -5,7 +5,6 @@ import pkg/compiler/ast except new_node
 import
   pkg/compiler/
     [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents, vm]
-from pkg/compiler/vm {.all.} import stack_trace_aux
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, things, signs, players]
 import libs/[interpreters, eval, fd_tracking]
@@ -71,7 +70,9 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   private_access ScriptCtx
 
   var interpreter =
-    Interpreter.init(state.config.script_dir, state.config.lib_dir / "vmlib")
+    Interpreter.init(
+      state.config.script_dir, state.config.lib_dir / "vmlib", script_fuel
+    )
 
   let controller = self
 
@@ -81,6 +82,9 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   # aren't compiled yet, which falls back to compiling the raw script files
   # off disk and fails on unwrapped user code (issue #51).
   self.module_names.clear()
+  # Likewise handles: the new interpreter's script-side registry is empty.
+  self.handle_things.set_len(0)
+  self.thing_handles.clear()
 
   self.interpreter = interpreter
   interpreter.config.spell_suggest_max = 0
@@ -113,10 +117,7 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       if file_exists(full_file_name) and ?ctx.file_name:
         let reported_info = get_file_info(full_file_name)
         if reported_info != get_file_info(ctx.file_name):
-          msg_writeln(
-            config, "stack trace: (most recent call last)", {msg_no_unit_sep}
-          )
-          stack_trace_aux(ctx.ctx, ctx.tos, ctx.pc)
+          # The VM has already written the stack trace for runtime errors.
           let file_info = extract_file_info msg
 
           if ?file_info:
@@ -134,60 +135,40 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
           level_dir = state.config.level_dir
 
       var loc = \"{file_name}({int info.line},{int info.col})"
+      var kind = UNKNOWN
+      if msg.starts_with("interpretation requires too many iterations"):
+        kind = TIMEOUT
+        msg =
+          \"Timeout. Script {ctx.script} ran too long without yielding " &
+          "(loop budget exhausted)"
       errors.add (msg, info, loc, false)
       ctx.exit_code = error_code
-      raise (ref VMQuit)(info: info, msg: msg, location: loc)
+      raise (ref VMQuit)(info: info, kind: kind, msg: msg, location: loc)
 
-  interpreter.enter_hook = proc(
-      c: PCtx, pc: int, tos: PStackFrame, instr: TInstr
-  ) =
-    assert ?controller
-    assert ?controller.active_thing
-    assert ?controller.active_thing.script_ctx
+proc handle_for*(self: Worker, thing: Thing): int =
+  ## The bridge handle for `thing`, assigning one on first use. 0 is nil.
+  if thing.is_nil:
+    return 0
+  result = self.thing_handles.get_or_default(thing)
+  if result == 0:
+    if self.handle_things.len == 0:
+      self.handle_things.add nil
+    result = self.handle_things.len
+    self.handle_things.add thing
+    self.thing_handles[thing] = result
+    debug "mapping thing", handle = result, thing = thing.id
 
-    let ctx = controller.active_thing.script_ctx
+proc thing_for*(self: Worker, handle: int): Thing =
+  if handle > 0:
+    assert handle < self.handle_things.len, "unknown thing handle " & $handle
+    result = self.handle_things[handle]
 
-    ctx.ctx = c
-    ctx.pc = pc
-    ctx.tos = tos
-
-    let info = c.debug[pc]
-    # The old wall-clock watchdog batched its check behind a byte counter to
-    # avoid a get_mono_time() per instruction; a fuel decrement is just another
-    # field write next to the ctx.pc/tos writes above, so check it directly.
-    ctx.fuel -= 1
-    if ctx.fuel <= 0:
-      raise (ref VMQuit)(
-        info: info,
-        kind: TIMEOUT,
-        msg:
-          \"Timeout. Script {ctx.script} executed too many instructions " &
-          "without yielding (instruction budget exhausted)",
-      )
-
-    # `slurp`/`staticRead` read host files while a script compiles. It's an
-    # opcode rather than a vmops callback, so the host-IO sandbox can't see it.
-    if instr.opcode == opcSlurp:
-      raise (ref VMQuit)(
-        info: info, msg: "slurp/staticRead isn't available in Enu scripts"
-      )
-
-    # We don't care about the line info if we're not in our enu script.
-    # Store the file index the first time we hit our file and only change
-    # current_line/previous_line if the current instruction has that index.
-    if ctx.file_index == -1 and info.file_index.int >= 0 and
-        info.file_index.int < interpreter.config.m.file_infos.len:
-      let file_name =
-        interpreter.config.m.file_infos[info.file_index.int].full_path.string
-      if file_name == ctx.file_name:
-        ctx.file_index = info.file_index.int
-    elif ctx.file_index == info.file_index.int:
-      if ctx.previous_line != info:
-        (ctx.previous_line, ctx.current_line) = (ctx.current_line, info)
-
-    if ctx.pause_requested:
-      ctx.pause_requested = false
-      raise VMPause.new_exception("vm paused")
+proc unmap_thing*(self: Worker, thing: Thing) =
+  let handle = self.thing_handles.get_or_default(thing)
+  if handle > 0:
+    debug "unmapping thing", handle, thing = thing.id
+    self.handle_things[handle] = nil
+    self.thing_handles.del thing
 
 proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
   if SCRIPT_LOADING in thing.global_flags:
@@ -261,9 +242,7 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
 
     if not state.paused:
       ctx.fuel = fuel
-      ctx.running = ctx.run()
-      debug "script fuel consumed", script = ctx.script,
-        consumed = fuel - ctx.fuel
+      ctx.running = ctx.run(self.handle_for(thing))
 
       var temp_visited: HashSet[string]
       proc visit(node: string) =
