@@ -29,11 +29,13 @@ anchor:
   back 8
 
 place(0, 0, 0, eraser)  # cover the origin default block
-clear_frames()
-body(); wings_down(white); save()
-wings_down(eraser); body(); wings_mid(white); save()
-wings_mid(eraser); body(); wings_up(white); save()
-wings_up(eraser); body(); wings_mid(white); save()
+body(); wings_down(white)
+frame = 1
+body(); wings_mid(white)
+frame = 2
+body(); wings_up(white)
+frame = 3
+body(); wings_mid(white)
 
 play(8.0)
 

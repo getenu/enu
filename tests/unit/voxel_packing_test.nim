@@ -210,27 +210,26 @@ suite "Frame sidecar files":
     let keyframe = encode_frame_file(b, none(FrameData))
     check delta_file.len < keyframe.len
 
-suite "Frame pack/load round-trip":
-  test "pack_frame captures every chunk; apply_snapshot restores it":
-    let a = VoxelStore.init(thing_id = "frame_a")
-    a.add_voxel(vec3(0, 0, 0), (TRANSIENT, ACTION_COLORS[BLUE]))
-    a.add_voxel(vec3(1, 2, 3), (TRANSIENT, ACTION_COLORS[RED]))
-    a.add_voxel(vec3(20, 0, -5), (PERSISTED, ACTION_COLORS[GREEN])) # 2nd chunk
-    a.add_voxel(vec3(4, 4, 4), (HOLE, ACTION_COLORS[ERASER]))
+suite "Frames in the store":
+  test "each frame keeps its own blocks":
+    let store = VoxelStore.init(thing_id = "frame_store")
+    let near = vec3(1, 2, 3)
+    let far = vec3(20, 0, -5)
+    store.add_voxel(near, (TRANSIENT, ACTION_COLORS[BLUE]))
+    store.with_frame(1):
+      store.add_voxel(far, (PERSISTED, ACTION_COLORS[RED]))
+      check near notin store
+      check store.has_edit(far)
+    check far notin store
+    check not store.has_edit(far)
+    check store.voxel_info(near) == (TRANSIENT, ACTION_COLORS[BLUE])
 
-    let frame = a.pack_frame
-    check frame.chunks.len == 2
-
-    let b = VoxelStore.init(thing_id = "frame_b")
-    for chunk_id, packed in frame.chunks:
-      b.apply_snapshot(chunk_id, packed)
-
-    for pos in [vec3(0, 0, 0), vec3(1, 2, 3), vec3(20, 0, -5), vec3(4, 4, 4)]:
-      check pos in b
-      check b.voxel_info(pos) == a.voxel_info(pos)
-    # 3 solid + 1 hole round-tripped
-    var solid = 0
-    for _, info in b.all_voxels:
-      if info.kind != HOLE:
-        inc solid
-    check solid == 3
+  test "a snapshot lands in its own frame":
+    let source = VoxelStore.init(thing_id = "frame_source")
+    source.add_voxel(vec3(0, 0, 0), (TRANSIENT, ACTION_COLORS[GREEN]))
+    let packed = encode_chunk(source.chunk_cache[(0, vec3())].cells)
+    let store = VoxelStore.init(thing_id = "frame_target")
+    store.apply_snapshot((3, vec3()), packed)
+    check vec3(0, 0, 0) notin store
+    store.with_frame(3):
+      check store.voxel_info(vec3(0, 0, 0)) == (TRANSIENT, ACTION_COLORS[GREEN])

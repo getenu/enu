@@ -134,21 +134,31 @@ regardless of visibility, which is exactly the flaw the real feature removes.
 
 ## API (v1: client + VM; UI later)
 
-    build.save()                  # append a frame (raises past 64 frames)
-    build.save(at = 3)            # overwrite frame 3 in place
-    build.load_frame(3)           # restore frame 3 into the live voxels
-    build.frame = 2               # display-only; -1 = live state
-    build.frame_count
-    build.delete_frame(3)         # later frames shift down
-    build.clear_frames()          # explicit — frames persist across script
-                                  #   re-runs (hand-edit flow: pose, run a
-                                  #   script calling save, repeat)
-    build.play(fps = 8.0, loop = true)
+    build.frame = 3               # draw into frame 3; past the end adds
+                                  #   empty frames up to it (0 to 63)
+    build.frame                   # the frame being drawn into (saved)
+    build.frames.len / .high
+    build.frames[3] = build.frames[0]   # copy (grows if past the end)
+    build.frames.add build.frames[2]
+    build.frames.insert(build.frames[2], 1)  # later frames move up
+    build.frames.delete(3)        # or delete(3 .. 5); later frames move down
+    build.frames[3].clear()       # empty one frame
+    build.frames[3].paste(build.frames[0])  # lay frame 0 over frame 3
+    build.frames.clear()          # keep only the current frame, as frame 0
+    build.play(fps = 8.0, loop = true, first = 0, last = -1)
     build.stop()
 
-Script reset stops playback and drops the display but keeps frames;
-programmatic animations call clear_frames() first. The 64-frame cap
-(MAX_FRAMES) keeps an unguarded save loop from growing forever.
+Every frame is stored the same way: the chunk and edit tables are keyed by
+frame id, and `frame_order` lists the ids in order (see
+voxel-frame-model.md). `frame` is the frame the script draws into;
+`current_frame` is the one on screen, and hand edits go to it. Switching
+copies nothing, and a script can keep drawing while the build plays. A
+script run redraws every frame: it starts on frame 0 with every frame's
+computed blocks dropped, so each frame holds its hand-placed blocks and
+holes until the script draws into it. Only hand-placed blocks and holes are
+saved — one file per frame once a build has two — and the current frame's
+number with them, which matters only for builds without a script. Empty
+frames play blank.
 
 ## Milestones
 

@@ -91,7 +91,7 @@ gdobj BuildNode of VoxelTerrain:
       ## the served content's voxel count. Consumed by on_block_loaded to skip
       ## the now-redundant snapshot + delta paints while still crediting
       ## rendered_voxel_count. See docs/notes/voxel-stream-loading.md.
-    tracked_delta_seqs: Table[Vector3, EID]
+    tracked_delta_seqs: Table[FrameChunk, EID]
     renderer: VoxelRenderer
     paging_logged: bool
     data_logged: bool
@@ -101,6 +101,8 @@ gdobj BuildNode of VoxelTerrain:
       ## and per-chunk display bookkeeping; see build_node_frames.nim. Created
       ## in setup once the renderer/resolver exist.
     next_warm_log: MonoTime
+    show_deferred: bool
+      ## The frame on screen changed during ASAP drawing; flip once it ends.
 
   proc init*() =
     self.bind_signals self, "block_loaded", "block_unloaded",
@@ -129,12 +131,21 @@ gdobj BuildNode of VoxelTerrain:
     if took > 5:
       warn "prepare_materials slow", ms = took, unit = self.model.id
 
-  proc watch_delta_seq(chunk_id: Vector3, delta_seq: EdSeq[DeltaUpdate]) =
-    if chunk_id in self.tracked_delta_seqs:
+  proc showing(fc: FrameChunk): bool =
+    ## Whether the terrain holds this frame's chunk as is: the frame on screen
+    ## while nothing plays. Other frames' changes go to the frame player.
+    fc.frame == self.model.voxels.frame_id and self.model.frames_fps <= 0
+
+  proc watch_delta_seq(fc: FrameChunk, delta_seq: EdSeq[DeltaUpdate]) =
+    if fc in self.tracked_delta_seqs:
       return
+    let chunk_id = fc.loc
 
     let zid = delta_seq.watch:
-      if added:
+      if added and not self.showing(fc):
+        self.frames.chunk_changed(fc)
+      elif added:
+        self.frames.chunk_changed(fc)
         if chunk_id in self.loaded_chunks:
           var painted = 0
           if ASAP_MODE in self.model.global_flags:
@@ -152,7 +163,7 @@ gdobj BuildNode of VoxelTerrain:
           # and let on_block_loaded repaint the fresh state instead of skipping.
           self.prefilled_chunks.del chunk_id
 
-    self.tracked_delta_seqs[chunk_id] = zid
+    self.tracked_delta_seqs[fc] = zid
 
   proc set_glow(glow: float) =
     self.each_material(i, m):
@@ -230,10 +241,11 @@ gdobj BuildNode of VoxelTerrain:
       if not prefill_disabled:
         inc self.prefill_gated
       return
+    let fc: FrameChunk = (self.model.voxels.frame_id, block_position)
     let bytes = self.model.voxels.prefill_bytes(block_position)
     if bytes.len == 0:
-      let key: EditKey = (self.model.id, block_position)
-      if block_position in self.model.voxels.packed_chunks or (
+      let key: EditKey = (self.model.id, fc.frame, block_position)
+      if fc in self.model.voxels.packed_chunks or (
         ?self.model.voxels.edit_snapshots and
         key in self.model.voxels.edit_snapshots
       ):
@@ -242,7 +254,7 @@ gdobj BuildNode of VoxelTerrain:
       self.prefilled_chunks[block_position] = PackedChunk(data: bytes).voxel_count
       # Served from edit_snapshots (packed_chunks hadn't synced yet): remember
       # it so the later packed_chunks sync doesn't repaint it on the main thread.
-      if block_position notin self.model.voxels.packed_chunks:
+      if fc notin self.model.voxels.packed_chunks:
         self.edit_prefilled.incl block_position
       result = to_pool_byte_array(bytes)
 
@@ -269,26 +281,24 @@ gdobj BuildNode of VoxelTerrain:
         # already loaded; a miss leaves a per-key subscription behind, so
         # someone building here pops in). The tables are LAZY — they arrive
         # as empty handles with the thing.
-        self.model.voxels.packed_chunks.request(chunk_id)
-        self.model.voxels.chunk_deltas.request(chunk_id)
+        for id in self.model.frame_order.ids:
+          self.model.voxels.packed_chunks.request((id, chunk_id))
+          self.model.voxels.chunk_deltas.request((id, chunk_id))
         if not self.paging_logged:
           self.paging_logged = true
           # One line per build: paired with "voxel data arriving" below, a
           # build that requests but never receives is visible in the logs.
           info "voxel paging", thing = self.model.id
 
-      # While a frame is displayed, don't paint the live state into the
-      # fresh chunk — show_frame below writes the frame's content instead,
-      # and a live paint would schedule a remesh that lands after (and
-      # overwrites) a directly-set cached frame mesh. The live state comes
-      # back through hide_frames, which replays it for every dirty chunk.
+      # While playing, the frame player gives the fresh chunk its content:
+      # painting the shown frame would schedule a remesh that lands after
+      # (and overwrites) a directly-set cached frame mesh.
       let displaying_frame =
-        self.model.current_frame >= 0 and
-        self.model.current_frame < self.model.frames.len and
-        ASAP_MODE notin self.model.global_flags
+        self.model.frames_fps > 0 and ASAP_MODE notin self.model.global_flags
+      let fc: FrameChunk = (self.model.voxels.frame_id, chunk_id)
 
-      if chunk_id in self.model.voxels.packed_chunks and not displaying_frame:
-        let snapshot = self.model.voxels.packed_chunks[chunk_id]
+      if fc in self.model.voxels.packed_chunks and not displaying_frame:
+        let snapshot = self.model.voxels.packed_chunks[fc]
         var painted = 0
         if prefilled and ASAP_MODE in self.model.global_flags:
           # Prefilled: the engine block already holds this exact content — an
@@ -313,8 +323,8 @@ gdobj BuildNode of VoxelTerrain:
         self.model.rendered_voxel_count =
           self.model.rendered_voxel_count + painted
 
-      if chunk_id in self.model.voxels.chunk_deltas:
-        let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
+      if fc in self.model.voxels.chunk_deltas:
+        let delta_seq = self.model.voxels.chunk_deltas[fc]
         if ?delta_seq:
           if not displaying_frame:
             var painted = 0
@@ -336,7 +346,7 @@ gdobj BuildNode of VoxelTerrain:
               self.model.rendered_voxel_count =
                 self.model.rendered_voxel_count + painted
 
-          self.watch_delta_seq(chunk_id, delta_seq)
+          self.watch_delta_seq(fc, delta_seq)
       flush_registry()
       if displaying_frame:
         # give the fresh chunk its frame content on the next drain
@@ -353,9 +363,23 @@ gdobj BuildNode of VoxelTerrain:
         # Out of view: page out. Evicts locally (the excl above keeps the
         # REMOVED watch from erasing an already-dropped block) and retracts
         # our per-key interest upstream — never touches the authority's data.
-        self.model.voxels.packed_chunks.release(chunk_id)
-        self.model.voxels.chunk_deltas.release(chunk_id)
+        for id in self.model.frame_order.ids:
+          self.model.voxels.packed_chunks.release((id, chunk_id))
+          self.model.voxels.chunk_deltas.release((id, chunk_id))
       self.frames.drop_chunk(chunk_id)
+
+  proc show_current_frame() =
+    ## Put `current_frame` on screen. During a reset the terrain is reloading
+    ## and picks the frame up as it does; during ASAP drawing the flip waits
+    ## for the drawing to end, so the screen never mixes two frames.
+    if RESETTING in self.model.global_flags:
+      self.model.target_shown_frame()
+    elif ASAP_MODE in self.model.global_flags and self.model.frames_fps <= 0:
+      self.show_deferred = true
+    else:
+      self.show_deferred = false
+      self.model.target_shown_frame()
+      self.frames.render(self.model.current_frame)
 
   proc track_changes() =
     self.model.glow_value.watch:
@@ -370,57 +394,63 @@ gdobj BuildNode of VoxelTerrain:
 
     # Watch packed_chunks for new snapshots
     self.model.voxels.packed_chunks.watch:
-      if added:
+      let fc = change.item.key
+      let chunk_id = fc.loc
+      if (added or removed) and not self.showing(fc):
+        self.frames.chunk_changed(fc)
+      elif added:
+        self.frames.chunk_changed(fc)
         if not self.data_logged:
           self.data_logged = true
           info "voxel data arriving", thing = self.model.id
-        if change.item.key in self.edit_prefilled and not modified:
+        if chunk_id in self.edit_prefilled and not modified:
           # This chunk was already prefilled+meshed from its (identical)
           # edit_snapshot before packed_chunks synced. The arriving snapshot is
           # the same content, so skip the main-thread repaint entirely — that
           # redundant paint over every terrain chunk was the load bog-down. A
           # genuine later change arrives as `modified` and is not skipped.
-          self.edit_prefilled.excl change.item.key
-        elif change.item.key in self.loaded_chunks:
+          self.edit_prefilled.excl chunk_id
+        elif chunk_id in self.loaded_chunks:
           # A rewrite (REMOVED+MODIFIED, e.g. voxels.clear() + redraw
           # coalescing in one sync batch) must REPLACE the chunk: painting
           # it additively leaves voxels the new content doesn't cover —
           # visible as stray geometry at the edges of regenerated builds.
           if ASAP_MODE in self.model.global_flags:
             self.renderer.buffer_snapshot(
-              change.item.key, change.item.value, replace = modified
+              chunk_id, change.item.value, replace = modified
             )
           elif ?self.renderer.voxel_tool:
             if modified:
               render_snapshot_replace(
-                self.renderer.voxel_tool, change.item.key, change.item.value,
+                self.renderer.voxel_tool, chunk_id, change.item.value,
                 self.resolver,
               )
             else:
               render_snapshot_direct(
-                self.renderer.voxel_tool, change.item.key, change.item.value,
+                self.renderer.voxel_tool, chunk_id, change.item.value,
                 self.resolver,
               )
         else:
           # Snapshot changed while the chunk is still loading: the prefilled
           # buffer was captured from the previous bytes, so drop the hint and let
           # on_block_loaded paint the fresh snapshot instead of skipping it.
-          self.prefilled_chunks.del change.item.key
+          self.prefilled_chunks.del chunk_id
       elif removed and not modified:
         # Paged out or cleared (a rewrite is REMOVED+MODIFIED and skipped) —
         # clear it from the terrain, and from the ASAP buffer's terrain
         # copy so the next paste can't resurrect it.
-        if change.item.key in self.loaded_chunks and ?self.renderer.voxel_tool:
-          self.renderer.buffer_erase(change.item.key)
-          erase_chunk_direct(self.renderer.voxel_tool, change.item.key)
+        self.frames.chunk_changed(fc)
+        if chunk_id in self.loaded_chunks and ?self.renderer.voxel_tool:
+          self.renderer.buffer_erase(chunk_id)
+          erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
 
     # Render existing packed_chunks (for clients connecting to existing builds)
     if ?self.renderer.voxel_tool:
       let start = get_mono_time()
-      for chunk_id, snapshot in self.model.voxels.packed_chunks:
-        if chunk_id in self.loaded_chunks:
+      for fc, snapshot in self.model.voxels.packed_chunks:
+        if self.showing(fc) and fc.loc in self.loaded_chunks:
           render_snapshot_direct(
-            self.renderer.voxel_tool, chunk_id, snapshot, self.resolver
+            self.renderer.voxel_tool, fc.loc, snapshot, self.resolver
           )
       flush_registry()
       let took = (get_mono_time() - start).in_milliseconds
@@ -429,9 +459,16 @@ gdobj BuildNode of VoxelTerrain:
 
     # Watch chunk_deltas for new chunks
     self.model.voxels.chunk_deltas.watch:
-      if added:
-        let chunk_id = change.item.key
+      let fc = change.item.key
+      let chunk_id = fc.loc
+      if added and not self.showing(fc):
         let delta_seq = change.item.value
+        self.frames.chunk_changed(fc)
+        if ?delta_seq:
+          self.watch_delta_seq(fc, delta_seq)
+      elif added:
+        let delta_seq = change.item.value
+        self.frames.chunk_changed(fc)
         if ?delta_seq:
           # Render any existing deltas in the new chunk
           if chunk_id in self.loaded_chunks:
@@ -449,13 +486,14 @@ gdobj BuildNode of VoxelTerrain:
             # repaint the fresh state rather than skipping it.
             self.prefilled_chunks.del chunk_id
           # Watch for future deltas
-          self.watch_delta_seq(chunk_id, delta_seq)
+          self.watch_delta_seq(fc, delta_seq)
       elif removed:
-        let chunk_id = change.item.key
-        if chunk_id in self.tracked_delta_seqs:
-          Ed.thread_ctx.untrack(self.tracked_delta_seqs[chunk_id])
-          self.tracked_delta_seqs.del(chunk_id)
-        if not modified and chunk_id notin self.model.voxels.packed_chunks and
+        if fc in self.tracked_delta_seqs:
+          Ed.thread_ctx.untrack(self.tracked_delta_seqs[fc])
+          self.tracked_delta_seqs.del(fc)
+        self.frames.chunk_changed(fc)
+        if self.showing(fc) and not modified and
+            fc notin self.model.voxels.packed_chunks and
             chunk_id in self.loaded_chunks and ?self.renderer.voxel_tool:
           # Paged out a delta-only chunk (never snapshotted): the packed_chunks
           # REMOVED won't fire for it, so erase here.
@@ -465,14 +503,14 @@ gdobj BuildNode of VoxelTerrain:
     # Render existing chunk_deltas and set up watches
     if ?self.renderer.voxel_tool:
       let start = get_mono_time()
-      for chunk_id, delta_seq in self.model.voxels.chunk_deltas:
+      for fc, delta_seq in self.model.voxels.chunk_deltas:
         if ?delta_seq:
-          if chunk_id in self.loaded_chunks:
+          if self.showing(fc) and fc.loc in self.loaded_chunks:
             for delta in delta_seq:
               render_delta_direct(
-                self.renderer.voxel_tool, chunk_id, delta, self.resolver
+                self.renderer.voxel_tool, fc.loc, delta, self.resolver
               )
-          self.watch_delta_seq(chunk_id, delta_seq)
+          self.watch_delta_seq(fc, delta_seq)
       flush_registry()
       let took = (get_mono_time() - start).in_milliseconds
       if took > 10:
@@ -485,7 +523,9 @@ gdobj BuildNode of VoxelTerrain:
       ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
       elif RESETTING.added:
-        # a rerun always starts from live display, whatever was showing
+        # the terrain reloads with the frame the run starts on
+        self.show_deferred = false
+        self.model.target_shown_frame()
         self.frames.reset()
         self.loaded_chunks.clear()
         self.generator = nil
@@ -518,6 +558,8 @@ gdobj BuildNode of VoxelTerrain:
             self.holding_bakes = false
             release_bakes()
           flush_registry()
+          if self.show_deferred:
+            self.show_current_frame()
 
     self.model.local_flags.watch:
       if change.item == HIGHLIGHT:
@@ -529,11 +571,12 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.current_frame_value.watch:
       if added:
-        self.frames.render(change.item)
+        self.show_current_frame()
 
-    self.model.frames.watch:
-      if added or removed:
-        self.frames.on_frames_changed()
+    self.model.frame_order_value.watch:
+      if added:
+        self.model.target_shown_frame()
+        self.frames.on_order_changed()
 
     self.model.cull_down_faces_value.watch:
       if added:
@@ -684,6 +727,7 @@ gdobj BuildNode of VoxelTerrain:
     dont_join = true
 
     self.model.init_voxels_if_needed(rebuild_edits = false)
+    self.model.target_shown_frame()
 
     # Static RGB colors resolve through the process-global library registry;
     # named indices pass through untouched (identity below STATIC_COLOR_BASE).
@@ -778,7 +822,7 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.sight_ray = self.get_node("SightRay") as RayCast
     self.prepare_materials()
-    if self.model.current_frame >= 0:
+    if self.model.frames_fps > 0:
       self.frames.render(self.model.current_frame)
 
 proc init*(_: type BuildNode): BuildNode =

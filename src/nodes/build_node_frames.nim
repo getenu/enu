@@ -67,12 +67,9 @@ type FramePlayer* = ref object
     ## being applied.
   keys: Table[int, Table[Vector3, Hash]] ## per frame, lazily built
   frame_data: Table[int, ref FrameData]
-    ## one deep copy of each active frame: the synced EdTable returns
-    ## FrameData BY VALUE, so reading `model.frames[index]` copies every
-    ## chunk's packed string (MBs). The drain and key paths were doing that
-    ## per chunk access — hundreds of MB copied per flip, the dominant
-    ## main-thread cost of paging hitches on release builds. Pruned with
-    ## `decoded` each flip; invalidated whenever frames change.
+    ## each active frame's packed chunks, gathered from the synced tables
+    ## once per index rather than per chunk access. Pruned with `decoded`
+    ## each flip; patched per chunk as the frame changes (`chunk_changed`).
   bytes: PoolByteArray ## reusable set_block_voxel_data payload
   payloads: Table[Hash, PoolByteArray]
     ## resolved set_block_voxel_data payloads per content key. Steady-state
@@ -80,7 +77,6 @@ type FramePlayer* = ref object
     ## and resolving on every write was ~20% of main during paging. ~8 KB per
     ## key (sealed builds dedupe hard; unsealed shell-aware keys fragment
     ## this cache but stay correct).
-  dirty: HashSet[Vector3] ## terrain data differs from live state
   mesh_lru: Table[Hash, int] ## last-touched tick per cached mesh
   lru_tick: int
   harvests: int ## since the last stats log
@@ -152,7 +148,7 @@ proc frame_at(self: FramePlayer, index: int): ref FrameData =
   self.frame_data.with_value(index, cached):
     return cached[]
   result = new FrameData
-  result[] = self.model.frames[index]
+  result[] = self.model.voxels.frame_data(self.model.frame_order.ids[index])
   self.frame_data[index] = result
 
 proc key_for(self: FramePlayer, index: int, chunk_id: Vector3): Hash =
@@ -197,7 +193,9 @@ proc write_chunk(
   discard self.terrain.set_block_voxel_data(
     chunk_id, self.payload_for(key, snapshot), remesh
   )
-  self.dirty.incl chunk_id
+
+proc has_frame(self: FramePlayer, index: int): bool =
+  index in 0 ..< self.model.frame_order.ids.len
 
 proc drain(self: FramePlayer) =
   ## Apply queued frame chunks under a time budget. Big flips spread over
@@ -208,11 +206,10 @@ proc drain(self: FramePlayer) =
     return
   const BUDGET_MS = 8
   let start = get_mono_time()
-  let frames = self.model.frames
   flush_registry()
   var done: seq[Vector3]
   for chunk_id, chunk_index in self.queue:
-    if chunk_index >= frames.len or chunk_id in self.missing:
+    if not self.has_frame(chunk_index) or chunk_id in self.missing:
       # a bake is already in flight for this chunk — let it land or time out
       # before writing newer content over it
       done.add chunk_id
@@ -269,14 +266,20 @@ proc viewer_positions(self: FramePlayer): seq[Vector3] =
       result.add pos.as_vector3
 
 proc effective_frame(
-    self: FramePlayer, chunk_id: Vector3, index, count: int, viewers: seq[Vector3]
+    self: FramePlayer, chunk_id: Vector3, index: int, viewers: seq[Vector3]
 ): int =
   ## The frame this chunk should display: `index` near a viewer, a quantized
-  ## index mid-distance, frame 0 beyond. Quantized indices are just other
-  ## content keys, so the cache, miss set and blocking playback need no special
-  ## cases — distant chunks simply flip less.
-  if count <= 1 or viewers.len == 0 or not frame_lod_enabled:
+  ## index mid-distance, the first played frame beyond. Quantized indices are
+  ## just other content keys, so the cache, miss set and blocking playback need
+  ## no special cases — distant chunks simply flip less. Quantizing stays inside
+  ## the played range, which `play` checked has no gaps.
+  let first = self.model.frames_first
+  let last = self.model.frames_last
+  let count = last - first + 1
+  if self.model.frames_fps <= 0 or index notin first .. last or count <= 1 or
+      viewers.len == 0 or not frame_lod_enabled:
     return index
+  let step = index - first
   let centre = chunk_id * ChunkDim.float + vec3(8, 8, 8)
   var nearest = float.high
   for viewer in viewers:
@@ -289,13 +292,13 @@ proc effective_frame(
     index
   elif count <= 8:
     # short loops read as broken when decimated (a 4-frame flap quantized
-    # by 4 is permanently frame 0): play them whole to mid distance, then
-    # stop entirely
-    if dist <= frame_lod_mid: index else: 0
+    # by 4 is permanently its first frame): play them whole to mid distance,
+    # then stop entirely
+    if dist <= frame_lod_mid: index else: first
   elif dist <= frame_lod_mid:
-    index - index mod frame_lod_mid_step
+    first + step - step mod frame_lod_mid_step
   else:
-    0
+    first
 
 proc show_chunk*(self: FramePlayer, chunk_id: Vector3, index: int) =
   ## Queue frame content for ONE freshly loaded chunk — on_block_loaded's
@@ -303,11 +306,10 @@ proc show_chunk*(self: FramePlayer, chunk_id: Vector3, index: int) =
   ## walks every loaded chunk: O(loaded x incoming) on main made each 16m row
   ## crossing a 250-550ms debug hitch (and boot O(n^2)). The chunk drains on
   ## the next tick.
-  let frames = self.model.frames
-  if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
+  if not self.has_frame(index) or not ?self.renderer.voxel_tool:
     return
   let viewers = self.viewer_positions()
-  let chunk_index = self.effective_frame(chunk_id, index, frames.len, viewers)
+  let chunk_index = self.effective_frame(chunk_id, index, viewers)
   let known = self.cached_key(chunk_index, chunk_id)
   if known.is_some and chunk_id in self.display and
       self.display[chunk_id] == known.get:
@@ -321,11 +323,11 @@ proc show*(self: FramePlayer, index: int) =
   ## stages cached meshes; a miss bakes from data (see `drain`) and the chunk
   ## keeps its previous mesh until the bake lands — playback never blocks on
   ## meshing.
-  let frames = self.model.frames
-  if index < 0 or index >= frames.len or not ?self.renderer.voxel_tool:
+  if not self.has_frame(index) or not ?self.renderer.voxel_tool:
     return
   let flip_start = get_mono_time()
-  if index == 0 and self.commit_index != 0:
+  if index == self.model.frames_first and
+      self.commit_index != self.model.frames_first:
     # one line per animation loop: steady timestamps prove playback is
     # free-running (never gated on meshing)
     info "frame loop",
@@ -335,7 +337,7 @@ proc show*(self: FramePlayer, index: int) =
   var active: HashSet[int]
   active.incl index
   for chunk_id in self.loaded_chunks[]:
-    let chunk_index = self.effective_frame(chunk_id, index, frames.len, viewers)
+    let chunk_index = self.effective_frame(chunk_id, index, viewers)
     active.incl chunk_index
     let known = self.cached_key(chunk_index, chunk_id)
     if known.is_some and chunk_id in self.display and self.display[chunk_id] == known.get:
@@ -397,71 +399,66 @@ proc commit_meshes(self: FramePlayer) =
   self.staged.clear()
   # prepare the NEXT flip now: its keys and data writes spread over the rest of
   # the interval, so the flip itself is just the swap pass above
-  if self.model.frames_fps > 0 and self.model.frames.len > 1:
+  if self.model.frames_fps > 0 and
+      self.model.frames_last > self.model.frames_first:
     let current = self.model.current_frame
     var predicted = current + 1
-    if predicted >= self.model.frames.len:
-      predicted = if self.model.frames_loop: 0 else: current
-    if predicted != current:
+    if predicted > self.model.frames_last:
+      predicted = if self.model.frames_loop: self.model.frames_first else: current
+    if predicted != current and self.has_frame(predicted):
       self.show(predicted)
 
-proc hide*(self: FramePlayer) =
-  ## Drop all frame display and restore the live voxel state wherever frame
-  ## content was written.
+proc reset*(self: FramePlayer) =
+  ## Forget all frame display: the terrain is reloading, and each block comes
+  ## back with the shown frame's content.
   self.missing.clear()
   self.display.clear()
   self.queue.clear()
   self.staged.clear()
   self.decoded.clear()
   self.frame_data.clear()
-  if self.dirty.len > 0 and ?self.renderer.voxel_tool:
-    for chunk_id in self.dirty:
-      if chunk_id notin self.loaded_chunks[]:
-        continue
-      if chunk_id in self.model.voxels.packed_chunks:
-        render_snapshot_replace(
-          self.renderer.voxel_tool, chunk_id,
-          self.model.voxels.packed_chunks[chunk_id], self.resolver,
-        )
-      else:
-        erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
-      if chunk_id in self.model.voxels.chunk_deltas:
-        let delta_seq = self.model.voxels.chunk_deltas[chunk_id]
-        if ?delta_seq:
-          for delta in delta_seq:
-            render_delta_direct(
-              self.renderer.voxel_tool, chunk_id, delta, self.resolver
-            )
-    flush_registry()
-  self.dirty.clear()
+  self.keys.clear()
 
 proc render*(self: FramePlayer, index: int) =
-  ## Display a saved frame (or the live state for index < 0). The terrain itself
-  ## is the display: frame content is written into the voxel data, so collision
-  ## and spatial queries always match what's on screen, and scaled builds animate
-  ## correctly (the terrain inherits the node transform). Only SHOWING is gated
-  ## on ASAP: hiding must always run — reset turns ASAP on before it clears
-  ## current_frame, and skipping the hide there would leave stale frame content
-  ## behind after the rerun.
-  if index >= 0 and index < self.model.frames.len:
-    if ASAP_MODE notin self.model.global_flags:
-      self.show(index)
-  else:
-    self.hide()
+  ## Show frame `index`. The terrain itself is the display: frame content is
+  ## written into the voxel data, so collision and spatial queries always
+  ## match what's on screen, and scaled builds animate correctly (the terrain
+  ## inherits the node transform).
+  self.show(index)
 
-proc on_frames_changed*(self: FramePlayer) =
-  ## Frame content changed; the mesh cache stays valid (keys are content hashes)
-  ## but per-frame key tables must recompute.
+proc on_order_changed*(self: FramePlayer) =
+  ## Frames moved: per-index caches are stale. The mesh cache stays valid
+  ## (keys are content hashes).
   self.keys.clear()
   self.decoded.clear()
   self.frame_data.clear()
   self.display.clear()
-  self.render(self.model.current_frame)
+  self.show(self.model.current_frame)
 
-proc reset*(self: FramePlayer) =
-  ## A rerun always starts from live display, whatever was showing.
-  self.hide()
-  self.keys.clear()
+proc chunk_changed*(self: FramePlayer, fc: FrameChunk) =
+  ## A chunk of some frame changed. Patch the cached copy of that frame, and
+  ## while playing, queue the chunk so it picks the change up.
+  let index = self.model.frame_order.ids.find(fc.frame)
+  if index < 0:
+    return
+  self.keys.del index
+  self.decoded.with_value(index, decoded):
+    decoded[].del fc.loc
+    # unsealed keys and bakes read a one-voxel shell from the neighbors
+    for offset in [
+      vec3(1, 0, 0), vec3(-1, 0, 0), vec3(0, 1, 0), vec3(0, -1, 0),
+      vec3(0, 0, 1), vec3(0, 0, -1),
+    ]:
+      decoded[].del fc.loc + offset
+  self.frame_data.with_value(index, frame):
+    let packed = self.model.voxels.chunk_bytes(fc)
+    if packed.is_empty:
+      frame[][].chunks.del fc.loc
+    else:
+      frame[][].chunks[fc.loc] = packed
+  self.display.del fc.loc
+  if self.model.frames_fps > 0 and fc.loc in self.loaded_chunks[]:
+    self.show_chunk(fc.loc, self.model.current_frame)
 
 proc display_pending*(self: FramePlayer): bool =
   ## A frame display is still in flight: chunks queued for their content
@@ -484,7 +481,6 @@ proc drop_chunk*(self: FramePlayer, chunk_id: Vector3) =
   self.missing.del chunk_id
   self.queue.del chunk_id
   self.staged.del chunk_id
-  self.dirty.excl chunk_id
 
 proc tick*(self: FramePlayer) =
   ## Per-frame playback work: expire dropped bakes, drain the queue, commit a
@@ -505,7 +501,7 @@ proc tick*(self: FramePlayer) =
   self.drain()
   self.commit_meshes()
 
-  if self.model.current_frame >= 0:
+  if self.model.frames_fps > 0:
     let now = get_mono_time()
     if now > self.next_stats:
       self.next_stats = now + init_duration(seconds = 15)
@@ -523,7 +519,7 @@ proc tick*(self: FramePlayer) =
     # big for the mesh cache) is visible in the logs.
     self.playback_logged = true
     info "frame playback",
-      unit = self.model.id, frames = self.model.frames.len, fps = self.model.frames_fps
+      unit = self.model.id, frames = self.model.frame_order.ids.len, fps = self.model.frames_fps
 
 proc advance_playback*(self: FramePlayer) =
   ## Server-only: advance current_frame on the flipbook schedule. The synced
@@ -534,7 +530,7 @@ proc advance_playback*(self: FramePlayer) =
   ## in-flight meshes. Free-running: chunks that aren't ready stay stale until
   ## their bake lands — playback never waits for meshing.
   if SERVER notin state.local_flags or self.model.frames_fps <= 0 or
-      self.model.frames.len <= 1:
+      self.model.frames_last <= self.model.frames_first:
     return
   # Hold the animation on its first frame until the level has finished
   # loading. Cycling frames mid-load floods the mesher (every flip rebakes
@@ -551,11 +547,11 @@ proc advance_playback*(self: FramePlayer) =
     self.next_at = self.next_at + interval
     if self.next_at < now:
       self.next_at = now + interval
-    let last = self.model.frames.len - 1
+    let last = self.model.frames_last
     var next = self.model.current_frame + 1
-    if next > last:
+    if next > last or next < self.model.frames_first:
       if self.model.frames_loop:
-        next = 0
+        next = self.model.frames_first
       else:
         next = last
         self.model.frames_fps = 0.0

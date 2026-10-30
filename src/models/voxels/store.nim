@@ -1,7 +1,11 @@
 ## VoxelStore — a build's per-side voxel state: a lazy read-through cache of
 ## decoded chunks over the synced tables (packed_chunks / chunk_deltas), plus
 ## the persisted-edit bookkeeping. Point reads/writes, flushing to the synced
-## tables, applying inbound snapshots/deltas, and frame pack/load live here.
+## tables, applying inbound snapshots/deltas, and per-frame copies live here.
+##
+## Every row is keyed by frame. Point reads and writes go to `frame_id`, the
+## frame this side targets: the frame a script draws into on the worker, the
+## frame on screen on main.
 import std/[options, tables, monotimes, times, sequtils, sets, hashes]
 import pkg/godot except print, Color
 import core
@@ -44,7 +48,7 @@ proc init*(
     edit_deltas: edit_deltas,
     # Main only runs interactive point queries (targeting, floor-follow,
     # draw), so its decoded working set is a small LRU. The worker's scripts,
-    # saves and frame packs touch everything -- unbounded (0). A build-less
+    # saves and frame copies touch everything -- unbounded (0). A build-less
     # store (tests, tools) is never capped: with no synced tables behind it,
     # its cache is authoritative and eviction would lose data.
     cache_cap:
@@ -54,7 +58,22 @@ proc init*(
         0,
   )
 
-proc compose_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
+proc key(self: VoxelStore, chunk_id: Vector3): FrameChunk {.inline.} =
+  (self.frame_id, chunk_id)
+
+proc edit_key(self: VoxelStore, fc: FrameChunk): EditKey {.inline.} =
+  (self.thing_id, fc.frame, fc.loc)
+
+template with_frame*(self: VoxelStore, id: int, body: untyped) =
+  ## Run `body` with the store targeting frame `id`.
+  let previous = self.frame_id
+  self.frame_id = id
+  try:
+    body
+  finally:
+    self.frame_id = previous
+
+proc compose_chunk(self: VoxelStore, fc: FrameChunk): CachedChunk =
   ## A chunk's live cell state, decoded fresh from the synced tables plus the
   ## unflushed write buffer: packed snapshot ⊕ deltas ⊕ pending. This is the
   ## single source of truth the cache and every bulk iterator build on. A
@@ -63,28 +82,28 @@ proc compose_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
   ## other input.
   result = CachedChunk()
   if ?self.build:
-    if chunk_id in self.packed_chunks:
-      result.cells = decode_chunk(self.packed_chunks[chunk_id])
-    if chunk_id in self.chunk_deltas:
-      for delta in self.chunk_deltas[chunk_id]:
+    if fc in self.packed_chunks:
+      result.cells = decode_chunk(self.packed_chunks[fc])
+    if fc in self.chunk_deltas:
+      for delta in self.chunk_deltas[fc]:
         for (local_pos, voxel) in decode_delta(delta):
           result.cells[linear_position(local_pos)] = voxel
-  if chunk_id in self.pending_chunks:
-    for (local_pos, voxel) in self.pending_chunks[chunk_id]:
+  if fc in self.pending_chunks:
+    for (local_pos, voxel) in self.pending_chunks[fc]:
       result.cells[linear_position(local_pos)] = voxel
   for v in result.cells:
     if v != EMPTY_VOXEL:
       inc result.count
 
-proc cached_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
+proc cached_chunk(self: VoxelStore, fc: FrameChunk): CachedChunk =
   ## The chunk's decoded cells for point reads and writes: cache hit or
   ## compose-and-insert, evicting the least recently touched entry when the
   ## side's cap is exceeded (main only; the worker is unbounded).
   inc self.cache_tick
-  self.chunk_cache.with_value(chunk_id, entry):
+  self.chunk_cache.with_value(fc, entry):
     entry[].tick = self.cache_tick
     return entry[]
-  result = self.compose_chunk(chunk_id)
+  result = self.compose_chunk(fc)
   result.tick = self.cache_tick
   if self.cache_cap > 0 and self.chunk_cache.len >= self.cache_cap:
     # Eviction invariant: never evict a chunk with unflushed writes — a
@@ -93,7 +112,7 @@ proc cached_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
     # the same call today, but that's a cross-file coincidence; enforce it
     # here. If every entry is dirty, skip eviction and run over cap until
     # the next flush.
-    var oldest_id: Vector3
+    var oldest_id: FrameChunk
     var oldest_tick = int.high
     for id, entry in self.chunk_cache:
       if entry.tick < oldest_tick and id notin self.pending_chunks and
@@ -102,76 +121,77 @@ proc cached_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
         oldest_id = id
     if oldest_tick < int.high:
       self.chunk_cache.del(oldest_id)
-  self.chunk_cache[chunk_id] = result
+  self.chunk_cache[fc] = result
+
+proc chunk_bytes*(self: VoxelStore, fc: FrameChunk): SnapshotData =
+  ## One chunk of any frame, packed. A snapshot-only chunk hands back its
+  ## stored blob verbatim; one with deltas or pending writes is composed and
+  ## re-encoded. Empty when the chunk holds nothing.
+  if not ?self.build:
+    return
+  let has_deltas = fc in self.chunk_deltas and self.chunk_deltas[fc].len > 0
+  if not has_deltas and fc notin self.pending_chunks:
+    if fc in self.packed_chunks:
+      return self.packed_chunks[fc]
+    return
+  let chunk = self.compose_chunk(fc)
+  if chunk.count > 0:
+    result = encode_chunk(chunk.cells)
 
 proc prefill_bytes*(self: VoxelStore, chunk_id: Vector3): string =
   ## The packed bytes a paged-in engine block is prefilled with so it renders
-  ## complete on its first (and only) mesh. A snapshot-only chunk hands back its
-  ## stored blob verbatim (a memcpy). A chunk carrying unflushed deltas or
-  ## pending writes is composed (packed ⊕ deltas ⊕ pending) and re-encoded, so
-  ## the block arrives whole instead of snapshot-then-delta-repaint (which would
-  ## cost a second mesh). Returns "" when the chunk holds nothing.
-  if not ?self.build:
-    return ""
-  let has_deltas =
-    chunk_id in self.chunk_deltas and self.chunk_deltas[chunk_id].len > 0
-  let has_pending = chunk_id in self.pending_chunks
-  if not has_deltas and not has_pending:
-    if chunk_id in self.packed_chunks:
-      return self.packed_chunks[chunk_id].data
-    # No packed chunk resident yet: a lazy `packed_chunks` entry the worker
-    # published (restore_edits on load) but this side hasn't pulled. Report the
-    # miss — the block loads empty and repaints when the request lands (see
-    # build_node's packed_chunks.watch). We deliberately do NOT read
-    # `edit_snapshots` here: that table is the persistence/restore format and is
-    # not what main renders from; packed_chunks is the render truth.
-    return ""
-  let chunk = self.compose_chunk(chunk_id)
-  if chunk.count == 0:
-    return ""
-  encode_chunk(chunk.cells).data
+  ## complete on its first (and only) mesh: the targeted frame's chunk,
+  ## composed with any deltas so the block arrives whole instead of
+  ## snapshot-then-delta-repaint. "" when the chunk holds nothing or hasn't
+  ## synced here yet (the block loads empty and repaints when it lands).
+  self.chunk_bytes(self.key(chunk_id)).data
 
-iterator chunk_ids*(self: VoxelStore): Vector3 =
-  ## Every chunk that may hold voxels, deduped across the synced tables, the
-  ## write buffer, and the cache (which is authoritative on a standalone
-  ## store) -- the id set bulk operations walk.
+iterator frame_chunk_ids*(self: VoxelStore, frame_id: int): Vector3 =
+  ## Every chunk of a frame that may hold voxels, deduped across the synced
+  ## tables, the write buffer, and the cache (which is authoritative on a
+  ## standalone store).
   var seen: HashSet[Vector3]
   if ?self.build:
-    for chunk_id in self.packed_chunks.value.keys:
-      if not seen.contains_or_incl(chunk_id):
-        yield chunk_id
-    for chunk_id in self.chunk_deltas.value.keys:
-      if not seen.contains_or_incl(chunk_id):
-        yield chunk_id
-  for chunk_id in self.pending_chunks.keys:
-    if not seen.contains_or_incl(chunk_id):
-      yield chunk_id
-  for chunk_id in self.chunk_cache.keys:
-    if not seen.contains_or_incl(chunk_id):
-      yield chunk_id
+    for fc in self.packed_chunks.value.keys:
+      if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
+        yield fc.loc
+    for fc in self.chunk_deltas.value.keys:
+      if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
+        yield fc.loc
+  for fc in self.pending_chunks.keys:
+    if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
+      yield fc.loc
+  for fc in self.chunk_cache.keys:
+    if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
+      yield fc.loc
 
-proc peek_chunk(self: VoxelStore, chunk_id: Vector3): CachedChunk =
+iterator chunk_ids*(self: VoxelStore): Vector3 =
+  ## The targeted frame's chunks: the id set bulk operations walk.
+  for chunk_id in self.frame_chunk_ids(self.frame_id):
+    yield chunk_id
+
+proc peek_chunk(self: VoxelStore, fc: FrameChunk): CachedChunk =
   ## The chunk's cells without inserting into the cache: bulk iteration uses
   ## this so a whole-build scan can't flush main's hot interactive set.
-  self.chunk_cache.with_value(chunk_id, entry):
+  self.chunk_cache.with_value(fc, entry):
     return entry[]
-  self.compose_chunk(chunk_id)
+  self.compose_chunk(fc)
 
 proc unpack_info(self: VoxelStore, packed: PackedVoxel): VoxelInfo =
   let (color_idx, kind_ord) = unpack_voxel(packed)
   (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
 
+proc cell(self: VoxelStore, position: Vector3): PackedVoxel =
+  self.cached_chunk(self.key(position.buffer)).cells[linear_position(position)]
+
 proc contains*(self: VoxelStore, position: Vector3): bool =
-  self.cached_chunk(position.buffer).cells[linear_position(position)] !=
-    EMPTY_VOXEL
+  self.cell(position) != EMPTY_VOXEL
 
 proc voxel_info*(self: VoxelStore, position: Vector3): VoxelInfo =
-  self.unpack_info(
-    self.cached_chunk(position.buffer).cells[linear_position(position)]
-  )
+  self.unpack_info(self.cell(position))
 
 proc find_voxel*(self: VoxelStore, position: Vector3): Option[VoxelInfo] =
-  let packed = self.cached_chunk(position.buffer).cells[linear_position(position)]
+  let packed = self.cell(position)
   if packed != EMPTY_VOXEL:
     some(self.unpack_info(packed))
   else:
@@ -183,58 +203,110 @@ proc should_use_snapshot(
   not has_existing or change_count > MAX_CHANGES_FOR_DELTA or
     delta_count >= MAX_DELTAS_BEFORE_SNAPSHOT or is_empty
 
-proc build_chunk_state(
-    self: VoxelStore, chunk_id: Vector3
-): array[CHUNK_VOLUME, PackedVoxel] =
-  self.cached_chunk(chunk_id).cells
+proc edit_cells(self: VoxelStore, fc: FrameChunk): array[CHUNK_VOLUME, PackedVoxel] =
+  ## A chunk's edits as stored in the synced tables: snapshot ⊕ deltas.
+  if not ?self.edit_snapshots:
+    return
+  let key = self.edit_key(fc)
+  if key in self.edit_snapshots:
+    result = decode_chunk(self.edit_snapshots[key])
+  if ?self.edit_deltas and key in self.edit_deltas:
+    let deltas = self.edit_deltas[key]
+    if ?deltas:
+      for delta in deltas:
+        for (local_pos, packed_voxel) in decode_delta(delta):
+          result[linear_position(local_pos)] = packed_voxel
+
+proc load_edits(self: VoxelStore, fc: FrameChunk) =
+  ## Decode a chunk's edits on first use.
+  if self.edits_loaded.contains_or_incl(fc):
+    return
+  let cells = self.edit_cells(fc)
+  for linear in 0 ..< CHUNK_VOLUME:
+    if cells[linear] != EMPTY_VOXEL:
+      let (color_idx, kind_ord) = unpack_voxel(cells[linear])
+      self.local_edits.mget_or_put(fc, Table[Vector3, VoxelInfo].init)[
+        from_linear(linear)
+      ] = (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
+
+proc forget_edits(self: VoxelStore, fc: FrameChunk) =
+  self.edits_loaded.excl fc
+  self.local_edits.del fc
+
+proc edit_chunk_ids*(self: VoxelStore, frame_id: int): seq[Vector3] =
+  ## Every chunk of a frame that may hold edits.
+  var seen: HashSet[Vector3]
+  if ?self.edit_snapshots:
+    for key in self.edit_snapshots.value.keys:
+      if key.id == self.thing_id and key.frame == frame_id and
+          not seen.contains_or_incl(key.loc):
+        result.add key.loc
+    for key in self.edit_deltas.value.keys:
+      if key.id == self.thing_id and key.frame == frame_id and
+          not seen.contains_or_incl(key.loc):
+        result.add key.loc
+  for fc in self.local_edits.keys:
+    if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
+      result.add fc.loc
+
+proc has_kind(self: VoxelStore, fc: FrameChunk, kind: VoxelKind): bool =
+  if fc in self.edits_loaded:
+    if fc in self.local_edits:
+      for info in self.local_edits[fc].values:
+        if info.kind == kind:
+          return true
+    return false
+  for v in self.edit_cells(fc):
+    if v != EMPTY_VOXEL and VoxelKind(unpack_voxel(v)[1]) == kind:
+      return true
 
 proc build_edit_state(
-    self: VoxelStore, chunk_id: Vector3
+    self: VoxelStore, fc: FrameChunk
 ): array[CHUNK_VOLUME, PackedVoxel] =
-  if chunk_id in self.local_edits:
-    for local_pos, info in self.local_edits[chunk_id]:
+  self.load_edits(fc)
+  if fc in self.local_edits:
+    for local_pos, info in self.local_edits[fc]:
       let linear = linear_position(local_pos)
       if linear >= 0 and linear < CHUNK_VOLUME:
         result[linear] =
           pack_voxel(pack_color_index(self.shared_of, info.color), info.kind.ord)
 
-proc flush_chunk_snapshot(self: VoxelStore, chunk_id: Vector3) =
-  let voxels = self.build_chunk_state(chunk_id)
-  let packed = encode_chunk(voxels)
+proc flush_chunk_snapshot(self: VoxelStore, fc: FrameChunk) =
+  let packed = encode_chunk(self.cached_chunk(fc).cells)
 
   if packed.is_empty:
-    if chunk_id in self.packed_chunks:
-      self.packed_chunks.del(chunk_id)
-    if chunk_id in self.chunk_deltas:
-      self.chunk_deltas.del(chunk_id)
+    if fc in self.packed_chunks:
+      self.packed_chunks.del(fc)
+    if fc in self.chunk_deltas:
+      self.chunk_deltas.del(fc)
   else:
-    self.packed_chunks[chunk_id] = packed
-    if chunk_id in self.chunk_deltas:
-      self.chunk_deltas[chunk_id].clear
+    self.packed_chunks[fc] = packed
+    if fc in self.chunk_deltas:
+      self.chunk_deltas[fc].clear
 
   inc self.snapshots_flushed
 
 proc flush_chunk_delta(
     self: VoxelStore,
-    chunk_id: Vector3,
+    fc: FrameChunk,
     changes: seq[tuple[pos: Vector3, voxel: PackedVoxel]],
 ) =
   let delta = encode_delta(changes)
 
-  if chunk_id notin self.chunk_deltas:
+  if fc notin self.chunk_deltas:
     # Own the nested seq under its table's owner (the build): it's created here
     # during drawing — outside any own scope — and an unowned container escapes
     # the destroy cascade, leaking on every reload.
     let table_owner = self.chunk_deltas.owner_id
     table_owner.own:
-      self.chunk_deltas[chunk_id] =
+      self.chunk_deltas[fc] =
         EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
 
-  self.chunk_deltas[chunk_id].add delta
+  self.chunk_deltas[fc].add delta
   inc self.deltas_flushed
 
-iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
-  ## Flush each dirty chunk as one synced message, yielding its id after it's
+iterator flush_dirty_chunks*(self: VoxelStore): FrameChunk =
+  ## Flush each dirty chunk as one synced message, yielding its key after it's
   ## flushed and removed from `pending_chunks`. The caller drives the cadence and
   ## may stop early -- the worker breaks on channel pressure -- leaving the
   ## remaining chunks to coalesce and flush on a later frame, so a single large
@@ -244,8 +316,8 @@ iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
   # adoption, so it belongs underneath anything drawn since — draining it
   # after the pending draws republished a stale blob over fresher content and
   # cleared their deltas, losing the drawing outright.
-  for chunk_id in self.pending_snapshots.keys.to_seq:
-    let blob = self.pending_snapshots[chunk_id]
+  for fc in self.pending_snapshots.keys.to_seq:
+    let blob = self.pending_snapshots[fc]
     # A snapshot supersedes a chunk's deltas and pending changes only when it
     # was encoded from that chunk's current cells. The staged blob wasn't, so
     # it's authoritative only while the chunk is untouched since adoption.
@@ -254,32 +326,32 @@ iterator flush_dirty_chunks*(self: VoxelStore): Vector3 =
     # (Ordering alone wouldn't do: the worker breaks out of this iterator on
     # channel pressure, so a staged blob can outlive a pass in which draws
     # flushed.)
-    if blob.data.len == 0 or chunk_id in self.pending_chunks:
-      self.flush_chunk_snapshot(chunk_id)
-      self.pending_chunks.del chunk_id
+    if blob.data.len == 0 or fc in self.pending_chunks:
+      self.flush_chunk_snapshot(fc)
+      self.pending_chunks.del fc
     else:
-      self.packed_chunks[chunk_id] = blob # bulk-adopted, publish verbatim
-      if chunk_id in self.chunk_deltas:
-        self.chunk_deltas[chunk_id].clear
+      self.packed_chunks[fc] = blob # bulk-adopted, publish verbatim
+      if fc in self.chunk_deltas:
+        self.chunk_deltas[fc].clear
       inc self.snapshots_flushed
-    self.pending_snapshots.del chunk_id
-    yield chunk_id
-  for chunk_id in self.pending_chunks.keys.to_seq:
-    let changes = self.pending_chunks[chunk_id]
-    let has_snapshot = chunk_id in self.packed_chunks
+    self.pending_snapshots.del fc
+    yield fc
+  for fc in self.pending_chunks.keys.to_seq:
+    let changes = self.pending_chunks[fc]
+    let has_snapshot = fc in self.packed_chunks
     let delta_count =
-      if chunk_id in self.chunk_deltas:
-        self.chunk_deltas[chunk_id].len
+      if fc in self.chunk_deltas:
+        self.chunk_deltas[fc].len
       else:
         0
-    let chunk_empty = self.cached_chunk(chunk_id).count == 0
+    let chunk_empty = self.cached_chunk(fc).count == 0
 
     if should_use_snapshot(has_snapshot, changes.len, delta_count, chunk_empty):
-      self.flush_chunk_snapshot(chunk_id)
+      self.flush_chunk_snapshot(fc)
     else:
-      self.flush_chunk_delta(chunk_id, changes)
-    self.pending_chunks.del chunk_id
-    yield chunk_id
+      self.flush_chunk_delta(fc, changes)
+    self.pending_chunks.del fc
+    yield fc
 
 proc flush_dirty_chunks*(self: VoxelStore) =
   ## Flush every dirty chunk (save / end_asap). The worker uses the iterator form
@@ -287,10 +359,9 @@ proc flush_dirty_chunks*(self: VoxelStore) =
   for _ in self.flush_dirty_chunks():
     discard
 
-proc flush_edit_snapshot(self: VoxelStore, chunk_id: Vector3) =
-  let key: EditKey = (self.thing_id, chunk_id)
-  let voxels = self.build_edit_state(chunk_id)
-  let packed = encode_chunk(voxels)
+proc flush_edit_snapshot(self: VoxelStore, fc: FrameChunk) =
+  let key = self.edit_key(fc)
+  let packed = encode_chunk(self.build_edit_state(fc))
 
   if packed.is_empty:
     if key in self.edit_snapshots:
@@ -306,10 +377,10 @@ proc flush_edit_snapshot(self: VoxelStore, chunk_id: Vector3) =
 
 proc flush_edit_delta(
     self: VoxelStore,
-    chunk_id: Vector3,
+    fc: FrameChunk,
     changes: seq[tuple[pos: Vector3, voxel: PackedVoxel]],
 ) =
-  let key: EditKey = (self.thing_id, chunk_id)
+  let key = self.edit_key(fc)
   let delta = encode_delta(changes)
 
   if key notin self.edit_deltas:
@@ -328,36 +399,43 @@ proc flush_dirty_edits*(self: VoxelStore) =
   if not ?self.edit_snapshots:
     return
 
-  for chunk_id, changes in self.pending_edits:
-    let key: EditKey = (self.thing_id, chunk_id)
+  for fc, changes in self.pending_edits:
+    self.load_edits(fc)
+    let key = self.edit_key(fc)
     let has_snapshot = key in self.edit_snapshots
     let delta_count =
       if key in self.edit_deltas:
         self.edit_deltas[key].len
       else:
         0
-    let chunk_empty =
-      chunk_id notin self.local_edits or self.local_edits[chunk_id].len == 0
+    let chunk_empty = fc notin self.local_edits or self.local_edits[fc].len == 0
 
     if should_use_snapshot(has_snapshot, changes.len, delta_count, chunk_empty):
-      self.flush_edit_snapshot(chunk_id)
+      self.flush_edit_snapshot(fc)
     else:
-      self.flush_edit_delta(chunk_id, changes)
+      self.flush_edit_delta(fc, changes)
 
   self.pending_edits.clear
 
 proc rebuild_local_edits*(self: VoxelStore)
 proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo)
 proc flush_edits_for_save*(self: VoxelStore) =
-  ## Flushes all pending edits to snapshots so they are included in save data
+  ## Fold every edit chunk's deltas into its snapshot, so the save reads
+  ## snapshots alone.
   self.flush_dirty_edits()
   {.cast(gcsafe).}:
     self.rebuild_local_edits()
-  for chunk_id in self.local_edits.keys:
-    self.flush_edit_snapshot(chunk_id)
+  if not ?self.edit_deltas:
+    return
+  var chunked: seq[FrameChunk]
+  for key, deltas in self.edit_deltas.value:
+    if key.id == self.thing_id and ?deltas and deltas.len > 0:
+      chunked.add (key.frame, key.loc)
+  for fc in chunked:
+    self.flush_edit_snapshot(fc)
 
 proc adopt_chunk(
-    self: VoxelStore, chunk_id: Vector3,
+    self: VoxelStore, fc: FrameChunk,
     cells: array[CHUNK_VOLUME, PackedVoxel], snapshot: SnapshotData,
     changed: bool,
 ) =
@@ -379,40 +457,49 @@ proc adopt_chunk(
   # Bounds first, and for every adopted chunk: an all-HOLE chunk installs
   # nothing but still occupies space the terrain has to be allowed to load,
   # and `chunk_ids` counts it, so reset_bounds would cover it anyway.
-  self.note_chunk(chunk_id)
+  self.note_chunk(fc.loc)
   if chunk.count == 0:
     return
   inc self.cache_tick
   chunk.tick = self.cache_tick
-  self.chunk_cache[chunk_id] = chunk
+  self.chunk_cache[fc] = chunk
   # Stage for the paced flusher rather than publishing here: load adopts
   # thousands of chunks, and pushing them all through sync in one burst
   # overwhelms the channel right when boot is busiest.
-  self.pending_snapshots[chunk_id] =
+  self.pending_snapshots[fc] =
     if dropped:
       SnapshotData()
     else:
       snapshot
 
+proc has_live_content(self: VoxelStore): bool =
+  for fc in self.chunk_cache.keys:
+    if fc.frame == self.frame_id:
+      return true
+  for fc in self.pending_chunks.keys:
+    if fc.frame == self.frame_id:
+      return true
+  for fc in self.pending_snapshots.keys:
+    if fc.frame == self.frame_id:
+      return true
+
 proc adopt_edit_chunks*(self: VoxelStore): bool =
-  ## Bulk restore for a store with no live content — the fresh-load path of a
-  ## persisted build, where the edits ARE the content. Each edit chunk's
-  ## packed cells are adopted directly as the live chunk and published as one
-  ## snapshot, instead of round-tripping every voxel through
+  ## Bulk restore of the targeted frame when it has no live content — the
+  ## fresh-load path of a persisted build, where the edits ARE the content.
+  ## Each edit chunk's packed cells are adopted directly as the live chunk and
+  ## published as one snapshot, instead of round-tripping every voxel through
   ## unpack/resolve_color -> add_voxel/pack_color_index (seconds per million
   ## voxels at load, plus a redundant set_edit per voxel). HOLE edits erase
   ## from a base; with no base they are no-ops and are skipped. Returns false
   ## when live content already exists (script rerun/reset) — the caller keeps
   ## the per-voxel overlay semantics.
-  if self.chunk_cache.len > 0 or self.pending_chunks.len > 0 or
-      self.pending_snapshots.len > 0:
+  if self.has_live_content:
     return false
   var handled = init_hash_set[Vector3]()
   if ?self.edit_snapshots:
     for key, snapshot in self.edit_snapshots:
-      if key.id != self.thing_id:
+      if key.id != self.thing_id or key.frame != self.frame_id:
         continue
-      let chunk_id = key.loc
       var cells = decode_chunk(snapshot)
       var changed = false
       if ?self.edit_deltas and key in self.edit_deltas:
@@ -424,11 +511,12 @@ proc adopt_edit_chunks*(self: VoxelStore): bool =
                 linear_position(local_pos.x.int, local_pos.y.int, local_pos.z.int)
               ] = packed_voxel
               changed = true
-      handled.incl chunk_id
-      self.adopt_chunk(chunk_id, cells, snapshot, changed)
+      handled.incl key.loc
+      self.adopt_chunk(self.key(key.loc), cells, snapshot, changed)
   if ?self.edit_deltas:
     for key, delta_seq in self.edit_deltas:
-      if key.id != self.thing_id or key.loc in handled or not ?delta_seq:
+      if key.id != self.thing_id or key.frame != self.frame_id or
+          key.loc in handled or not ?delta_seq:
         continue
       var cells: array[CHUNK_VOLUME, PackedVoxel]
       for delta in delta_seq:
@@ -436,11 +524,11 @@ proc adopt_edit_chunks*(self: VoxelStore): bool =
           cells[
             linear_position(local_pos.x.int, local_pos.y.int, local_pos.z.int)
           ] = packed_voxel
-      self.adopt_chunk(key.loc, cells, SnapshotData(), changed = true)
+      self.adopt_chunk(self.key(key.loc), cells, SnapshotData(), changed = true)
   true
 
 proc restore_needed*(self: VoxelStore): bool =
-  ## Whether reset() must rebuild the voxel state (clear + restore_edits).
+  ## Whether reset() must rebuild the targeted frame (clear + restore_edits).
   ## Kind is the ground truth — persisted edits restore as PERSISTED cells,
   ## scripts draw TRANSIENT ones — so:
   ## - any TRANSIENT cell → a script drew since the last restore: rebuild
@@ -458,8 +546,8 @@ proc restore_needed*(self: VoxelStore): bool =
   ## won't resurrect the erased voxels — rerunning the script reproduces
   ## the same state anyway.
   var has_content = false
-  for chunk_id in self.chunk_ids:
-    let chunk = self.cached_chunk(chunk_id)
+  for chunk_id in self.chunk_ids.to_seq:
+    let chunk = self.cached_chunk(self.key(chunk_id))
     if chunk.count == 0:
       continue
     has_content = true
@@ -472,12 +560,19 @@ proc restore_needed*(self: VoxelStore): bool =
         return true
   not has_content
 
+proc local_pos_of(position: Vector3): Vector3 =
+  vec3(
+    floor_mod(position.x.int, 16).float,
+    floor_mod(position.y.int, 16).float,
+    floor_mod(position.z.int, 16).float,
+  )
+
 proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
-  let chunk_id = position.buffer
-  let chunk = self.cached_chunk(chunk_id)
+  let fc = self.key(position.buffer)
+  let chunk = self.cached_chunk(fc)
   let linear = linear_position(position)
 
-  self.note_chunk(chunk_id)
+  self.note_chunk(fc.loc)
 
   let packed =
     pack_voxel(pack_color_index(self.shared_of, voxel.color), voxel.kind.ord)
@@ -485,174 +580,147 @@ proc add_voxel*(self: VoxelStore, position: Vector3, voxel: VoxelInfo) =
     inc chunk.count
   chunk.cells[linear] = packed
 
-  let local_pos = vec3(
-    floor_mod(position.x.int, 16).float,
-    floor_mod(position.y.int, 16).float,
-    floor_mod(position.z.int, 16).float,
-  )
+  let local_pos = local_pos_of(position)
 
   if self.ctx.metrics_label == "main" or self.immediate:
-    self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
+    self.flush_chunk_delta(fc, @[(local_pos, packed)])
     let delta_count =
-      if chunk_id in self.chunk_deltas:
-        self.chunk_deltas[chunk_id].len
+      if fc in self.chunk_deltas:
+        self.chunk_deltas[fc].len
       else:
         0
-    if should_use_snapshot(
-      chunk_id in self.packed_chunks, 1, delta_count, false
-    ):
-      self.flush_chunk_snapshot(chunk_id)
+    if should_use_snapshot(fc in self.packed_chunks, 1, delta_count, false):
+      self.flush_chunk_snapshot(fc)
   else:
-    self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+    self.pending_chunks.mgetOrPut(fc, @[]).add (local_pos, packed)
 
   if voxel.kind == PERSISTED:
     {.cast(gcsafe).}:
       self.set_edit(position, voxel)
 
 proc del_voxel*(self: VoxelStore, position: Vector3) =
-  let chunk_id = position.buffer
-  let chunk = self.cached_chunk(chunk_id)
+  let fc = self.key(position.buffer)
+  let chunk = self.cached_chunk(fc)
   let linear = linear_position(position)
   if chunk.cells[linear] != EMPTY_VOXEL:
     chunk.cells[linear] = EMPTY_VOXEL
     dec chunk.count
 
-    let local_pos = vec3(
-      floor_mod(position.x.int, 16).float,
-      floor_mod(position.y.int, 16).float,
-      floor_mod(position.z.int, 16).float,
-    )
+    let local_pos = local_pos_of(position)
     let packed = EMPTY_VOXEL
 
     if self.ctx.metrics_label == "main" or self.immediate:
-      self.flush_chunk_delta(chunk_id, @[(local_pos, packed)])
+      self.flush_chunk_delta(fc, @[(local_pos, packed)])
       let delta_count =
-        if chunk_id in self.chunk_deltas:
-          self.chunk_deltas[chunk_id].len
+        if fc in self.chunk_deltas:
+          self.chunk_deltas[fc].len
         else:
           0
       let chunk_empty = chunk.count == 0
       if should_use_snapshot(
-        chunk_id in self.packed_chunks, 1, delta_count, chunk_empty
+        fc in self.packed_chunks, 1, delta_count, chunk_empty
       ):
-        self.flush_chunk_snapshot(chunk_id)
+        self.flush_chunk_snapshot(fc)
     else:
-      self.pending_chunks.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+      self.pending_chunks.mgetOrPut(fc, @[]).add (local_pos, packed)
 
 proc has_edit*(self: VoxelStore, position: Vector3): bool =
-  let chunk_id = chunk_id_for_pos(position)
-  let local_pos = local_pos_in_chunk(position)
-  chunk_id in self.local_edits and local_pos in self.local_edits[chunk_id]
+  let fc = self.key(chunk_id_for_pos(position))
+  self.load_edits(fc)
+  fc in self.local_edits and local_pos_in_chunk(position) in self.local_edits[fc]
 
 proc get_edit*(self: VoxelStore, position: Vector3): VoxelInfo =
-  let chunk_id = chunk_id_for_pos(position)
-  let local_pos = local_pos_in_chunk(position)
-  self.local_edits[chunk_id][local_pos]
+  let fc = self.key(chunk_id_for_pos(position))
+  self.load_edits(fc)
+  self.local_edits[fc][local_pos_in_chunk(position)]
 
 proc set_edit*(self: VoxelStore, position: Vector3, info: VoxelInfo) =
-  let chunk_id = chunk_id_for_pos(position)
+  let fc = self.key(chunk_id_for_pos(position))
   let local_pos = local_pos_in_chunk(position)
+  self.load_edits(fc)
 
-  if chunk_id notin self.local_edits:
-    self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
-  self.local_edits[chunk_id][local_pos] = info
+  if fc notin self.local_edits:
+    self.local_edits[fc] = Table[Vector3, VoxelInfo].init
+  self.local_edits[fc][local_pos] = info
 
   let packed =
     pack_voxel(pack_color_index(self.shared_of, info.color), info.kind.ord)
 
   if self.ctx.metrics_label == "main" or self.immediate:
-    self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
-    let key: EditKey = (self.thing_id, chunk_id)
+    self.flush_edit_delta(fc, @[(local_pos, packed)])
+    let key = self.edit_key(fc)
     let delta_count =
       if key in self.edit_deltas:
         self.edit_deltas[key].len
       else:
         0
     if should_use_snapshot(key in self.edit_snapshots, 1, delta_count, false):
-      self.flush_edit_snapshot(chunk_id)
+      self.flush_edit_snapshot(fc)
   else:
-    self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+    self.pending_edits.mgetOrPut(fc, @[]).add (local_pos, packed)
 
 proc del_edit*(self: VoxelStore, position: Vector3) =
-  let chunk_id = chunk_id_for_pos(position)
+  let fc = self.key(chunk_id_for_pos(position))
   let local_pos = local_pos_in_chunk(position)
+  self.load_edits(fc)
 
-  if chunk_id in self.local_edits and local_pos in self.local_edits[chunk_id]:
-    self.local_edits[chunk_id].del(local_pos)
-    if self.local_edits[chunk_id].len == 0:
-      self.local_edits.del(chunk_id)
+  if fc in self.local_edits and local_pos in self.local_edits[fc]:
+    self.local_edits[fc].del(local_pos)
+    if self.local_edits[fc].len == 0:
+      self.local_edits.del(fc)
 
     let packed = EMPTY_VOXEL
     if self.ctx.metrics_label == "main" or self.immediate:
-      self.flush_edit_delta(chunk_id, @[(local_pos, packed)])
-      let key: EditKey = (self.thing_id, chunk_id)
+      self.flush_edit_delta(fc, @[(local_pos, packed)])
+      let key = self.edit_key(fc)
       let delta_count =
         if key in self.edit_deltas:
           self.edit_deltas[key].len
         else:
           0
-      let chunk_empty =
-        chunk_id notin self.local_edits or self.local_edits[chunk_id].len == 0
+      let chunk_empty = fc notin self.local_edits or self.local_edits[fc].len == 0
       if should_use_snapshot(
         key in self.edit_snapshots, 1, delta_count, chunk_empty
       ):
-        self.flush_edit_snapshot(chunk_id)
+        self.flush_edit_snapshot(fc)
     else:
-      self.pending_edits.mgetOrPut(chunk_id, @[]).add (local_pos, packed)
+      self.pending_edits.mgetOrPut(fc, @[]).add (local_pos, packed)
+
+template for_edits_in(self: VoxelStore, chunk_ids: seq[Vector3], body: untyped) =
+  for chunk_id in chunk_ids:
+    let fc: FrameChunk = (self.frame_id, chunk_id)
+    self.load_edits(fc)
+    if fc in self.local_edits:
+      for local_pos, info {.inject.} in self.local_edits[fc]:
+        let pos {.inject.} = vec3(
+          chunk_id.x * ChunkDim + local_pos.x,
+          chunk_id.y * ChunkDim + local_pos.y,
+          chunk_id.z * ChunkDim + local_pos.z,
+        )
+        body
 
 template for_all_edits*(self: VoxelStore, body: untyped) =
-  for chunk_id, chunk in self.local_edits:
-    for local_pos, info {.inject.} in chunk:
-      let pos {.inject.} = vec3(
-        chunk_id.x * ChunkDim + local_pos.x,
-        chunk_id.y * ChunkDim + local_pos.y,
-        chunk_id.z * ChunkDim + local_pos.z,
-      )
-      body
+  ## Every edit of the targeted frame.
+  self.for_edits_in(self.edit_chunk_ids(self.frame_id), body)
+
+template for_hole_edits*(self: VoxelStore, body: untyped) =
+  ## Every edit of the targeted frame's chunks that hold holes. Holes are
+  ## found in the packed rows, so a frame of hand-placed blocks isn't decoded
+  ## to find none.
+  var with_holes: seq[Vector3]
+  for chunk_id in self.edit_chunk_ids(self.frame_id):
+    if self.has_kind((self.frame_id, chunk_id), HOLE):
+      with_holes.add chunk_id
+  self.for_edits_in(with_holes, body)
 
 proc rebuild_local_edits*(self: VoxelStore) =
+  ## Forget the decoded edits; each chunk decodes again from the synced edit
+  ## tables on its next use.
   self.local_edits.clear()
-
-  if not ?self.edit_snapshots:
-    return
-
-  for key, snapshot in self.edit_snapshots:
-    if key.id != self.thing_id:
-      continue
-    let chunk_id = key.loc
-    let voxels = decode_chunk(snapshot)
-    for linear in 0 ..< CHUNK_VOLUME:
-      let packed_voxel = voxels[linear]
-      if packed_voxel != EMPTY_VOXEL:
-        let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
-        let local_pos = from_linear(linear)
-        if chunk_id notin self.local_edits:
-          self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
-        self.local_edits[chunk_id][local_pos] =
-          (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
-
-  if not ?self.edit_deltas:
-    return
-
-  for key, delta_seq in self.edit_deltas:
-    if key.id != self.thing_id or not ?delta_seq:
-      continue
-    let chunk_id = key.loc
-    for delta in delta_seq:
-      let changes = decode_delta(delta)
-      for (local_pos, packed_voxel) in changes:
-        if packed_voxel == EMPTY_VOXEL:
-          if chunk_id in self.local_edits:
-            self.local_edits[chunk_id].del(local_pos)
-        else:
-          let (color_idx, kind_ord) = unpack_voxel(packed_voxel)
-          if chunk_id notin self.local_edits:
-            self.local_edits[chunk_id] = Table[Vector3, VoxelInfo].init
-          self.local_edits[chunk_id][local_pos] =
-            (VoxelKind(kind_ord), resolve_color(self.shared_of, color_idx))
+  self.edits_loaded.clear()
 
 proc apply_snapshot*(
-    self: VoxelStore, chunk_id: Vector3, snapshot: SnapshotData
+    self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData
 ) =
   ## A whole-chunk snapshot arrived (sync watch): the cached decode, if any,
   ## is stale -- drop it and let the next read compose from the new blob.
@@ -661,17 +729,17 @@ proc apply_snapshot*(
   ## decode installs directly: the cache is the store.
   if snapshot.data.len == 0:
     return
-  self.note_chunk(chunk_id)
+  self.note_chunk(fc.loc)
   if ?self.build:
-    self.chunk_cache.del(chunk_id)
+    self.chunk_cache.del(fc)
   else:
     let chunk = CachedChunk(cells: decode_chunk(snapshot))
     for v in chunk.cells:
       if v != EMPTY_VOXEL:
         inc chunk.count
-    self.chunk_cache[chunk_id] = chunk
+    self.chunk_cache[fc] = chunk
 
-proc unload_chunk*(self: VoxelStore, chunk_id: Vector3) =
+proc unload_chunk*(self: VoxelStore, fc: FrameChunk) =
   ## Drop a paged-out chunk's local state (the voxel paging counterpart of
   ## apply_snapshot). The data still exists on the authority; a later
   ## `request` re-applies it.
@@ -680,18 +748,18 @@ proc unload_chunk*(self: VoxelStore, chunk_id: Vector3) =
   ## in `pending_chunks` have not reached the synced tables, so dropping them
   ## here loses them outright — the same hazard `cached_chunk`'s eviction
   ## invariant refuses to take.
-  if chunk_id in self.pending_chunks:
+  if fc in self.pending_chunks:
     warn "page-out dropping unflushed voxel writes",
       unit = self.thing_id,
-      chunk = $chunk_id,
-      writes = self.pending_chunks[chunk_id].len
-  self.chunk_cache.del(chunk_id)
-  self.pending_chunks.del(chunk_id)
+      chunk = $fc.loc,
+      writes = self.pending_chunks[fc].len
+  self.chunk_cache.del(fc)
+  self.pending_chunks.del(fc)
 
-proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
+proc apply_delta*(self: VoxelStore, fc: FrameChunk, delta: DeltaUpdate) =
   ## A delta arrived (sync watch): poke a cached decode in place; an uncached
   ## chunk needs nothing -- the next read composes the delta from the table.
-  self.chunk_cache.with_value(chunk_id, entry):
+  self.chunk_cache.with_value(fc, entry):
     for (local_pos, packed_voxel) in decode_delta(delta):
       let linear = linear_position(local_pos)
       if entry[].cells[linear] != EMPTY_VOXEL:
@@ -700,40 +768,131 @@ proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
         inc entry[].count
       entry[].cells[linear] = packed_voxel
 
-proc pack_frame*(self: VoxelStore): FrameData =
-  ## Snapshot the current voxel state as one animation frame — every
-  ## non-empty chunk, packed with the standard codecs.
-  for chunk_id in self.chunk_ids:
-    let chunk = self.peek_chunk(chunk_id)
-    if chunk.count > 0:
-      let packed = encode_chunk(chunk.cells)
-      if not packed.is_empty:
-        result.chunks[chunk_id] = packed
+# Whole frames. These take frame ids, not indexes.
 
-proc load_frame*(self: VoxelStore, frame: FrameData) =
-  ## Replace the live voxel state with a frame's contents — the authoring
-  ## path (re-edit a saved pose). Goes through the synced chunk tables, so
-  ## every side re-renders it like any other voxel change.
-  let stale = self.chunk_ids.to_seq
-  for chunk_id in stale:
-    if chunk_id notin frame.chunks:
-      if chunk_id in self.packed_chunks:
-        self.packed_chunks.del(chunk_id)
-      if chunk_id in self.chunk_deltas:
-        self.chunk_deltas.del(chunk_id)
-      self.chunk_cache.del(chunk_id)
-  for chunk_id, packed in frame.chunks:
-    self.apply_snapshot(chunk_id, packed)
-    self.packed_chunks[chunk_id] = packed
-    if chunk_id in self.chunk_deltas:
-      self.chunk_deltas[chunk_id].clear
-  self.pending_chunks.clear
+proc frame_data*(self: VoxelStore, frame_id: int): FrameData =
+  ## Every chunk of a frame, packed: computed and manual blocks.
+  for chunk_id in self.frame_chunk_ids(frame_id).to_seq:
+    let packed = self.chunk_bytes((frame_id, chunk_id))
+    if not packed.is_empty:
+      result.chunks[chunk_id] = packed
+
+proc frame_edits*(self: VoxelStore, frame_id: int): FrameData =
+  ## A frame's manual blocks and holes, packed: what gets saved.
+  for chunk_id in self.edit_chunk_ids(frame_id):
+    let fc: FrameChunk = (frame_id, chunk_id)
+    let key = self.edit_key(fc)
+    let packed =
+      if fc in self.edits_loaded:
+        encode_chunk(self.build_edit_state(fc))
+      elif key in self.edit_snapshots and
+          (key notin self.edit_deltas or self.edit_deltas[key].len == 0):
+        self.edit_snapshots[key]
+      else:
+        encode_chunk(self.edit_cells(fc))
+    if not packed.is_empty:
+      result.chunks[chunk_id] = packed
+
+proc drop_frame*(self: VoxelStore, frame_id: int) =
+  ## Remove every row of a frame: its blocks and its edits.
+  if ?self.build:
+    for fc in self.packed_chunks.value.keys:
+      if fc.frame == frame_id:
+        self.packed_chunks.del(fc)
+    for fc in self.chunk_deltas.value.keys:
+      if fc.frame == frame_id:
+        self.chunk_deltas.del(fc)
+  if ?self.edit_snapshots:
+    for key in self.edit_snapshots.value.keys:
+      if key.id == self.thing_id and key.frame == frame_id:
+        self.edit_snapshots.del(key)
+    for key in self.edit_deltas.value.keys:
+      if key.id == self.thing_id and key.frame == frame_id:
+        self.edit_deltas.del(key)
+  for table in [addr self.pending_chunks, addr self.pending_edits]:
+    for fc in table[].keys.to_seq:
+      if fc.frame == frame_id:
+        table[].del fc
+  for fc in self.pending_snapshots.keys.to_seq:
+    if fc.frame == frame_id:
+      self.pending_snapshots.del fc
+  for fc in self.chunk_cache.keys.to_seq:
+    if fc.frame == frame_id:
+      self.chunk_cache.del fc
+  for fc in self.local_edits.keys.to_seq:
+    if fc.frame == frame_id:
+      self.local_edits.del fc
+  for fc in self.edits_loaded.to_seq:
+    if fc.frame == frame_id:
+      self.edits_loaded.excl fc
+
+proc install_frame*(
+    self: VoxelStore, frame_id: int, blocks, edits: FrameData
+) =
+  ## Fill an empty frame a chunk at a time: `blocks` as its chunks, `edits`
+  ## as its manual blocks and holes.
+  for chunk_id, packed in blocks.chunks:
+    let fc: FrameChunk = (frame_id, chunk_id)
+    self.apply_snapshot(fc, packed)
+    if ?self.build:
+      self.packed_chunks[fc] = packed
+  if ?self.edit_snapshots:
+    for chunk_id, packed in edits.chunks:
+      let fc: FrameChunk = (frame_id, chunk_id)
+      self.edit_snapshots[self.edit_key(fc)] = packed
+      self.forget_edits(fc)
+
+proc load_frame_edits*(
+    self: VoxelStore, frame_id: int, edits: FrameData, adopt = true
+) =
+  ## Restore a saved frame — its manual blocks and holes — into an empty
+  ## frame, a chunk at a time. `adopt = false` restores only the edits,
+  ## leaving the blocks to a later `adopt_edit_chunks`.
+  if ?self.edit_snapshots:
+    for chunk_id, packed in edits.chunks:
+      let fc: FrameChunk = (frame_id, chunk_id)
+      self.edit_snapshots[self.edit_key(fc)] = packed
+      self.forget_edits(fc)
+  if adopt:
+    self.with_frame(frame_id):
+      discard self.adopt_edit_chunks()
+
+proc copy_frame*(self: VoxelStore, src, dst: int) =
+  ## Frame `dst` becomes a copy of frame `src`.
+  self.flush_dirty_chunks()
+  self.flush_dirty_edits()
+  self.drop_frame(dst)
+  self.install_frame(dst, self.frame_data(src), self.frame_edits(src))
+
+proc overlay(base: var FrameData, top: FrameData) =
+  for chunk_id, packed in top.chunks:
+    var cells =
+      if chunk_id in base.chunks: decode_chunk(base.chunks[chunk_id])
+      else: default(array[CHUNK_VOLUME, PackedVoxel])
+    let top_cells = decode_chunk(packed)
+    for i in 0 ..< CHUNK_VOLUME:
+      if top_cells[i] != EMPTY_VOXEL:
+        cells[i] = top_cells[i]
+    base.chunks[chunk_id] = encode_chunk(cells)
+
+proc paste_frame*(self: VoxelStore, src, dst: int) =
+  ## Lay frame `src`'s blocks and edits over frame `dst`'s; `src` wins where
+  ## both have one.
+  self.flush_dirty_chunks()
+  self.flush_dirty_edits()
+  var blocks = self.frame_data(dst)
+  var edits = self.frame_edits(dst)
+  blocks.overlay(self.frame_data(src))
+  edits.overlay(self.frame_edits(src))
+  self.drop_frame(dst)
+  self.install_frame(dst, blocks, edits)
 
 proc swap_color*(self: VoxelStore, from_color, to_color: Color) =
-  ## Recolour every voxel of `from_color` to `to_color`, across both the
-  ## computed chunk state and the persisted (manual) edits. Pending writes are
-  ## flushed first so they can't re-apply the old colour after the swap. Used to
-  ## build invisible walls: draw in a spare colour, then swap it to `invisible`.
+  ## Recolour every voxel of `from_color` to `to_color` in the targeted frame,
+  ## across both the computed chunk state and the persisted (manual) edits.
+  ## Pending writes are flushed first so they can't re-apply the old colour
+  ## after the swap. Used to build invisible walls: draw in a spare colour,
+  ## then swap it to `invisible`.
   let shared = self.shared_of
   let from_idx = pack_color_index(shared, from_color)
   let to_idx = pack_color_index(shared, to_color)
@@ -742,7 +901,8 @@ proc swap_color*(self: VoxelStore, from_color, to_color: Color) =
 
   self.flush_dirty_chunks()
   for chunk_id in self.chunk_ids.to_seq:
-    let chunk = self.cached_chunk(chunk_id)
+    let fc = self.key(chunk_id)
+    let chunk = self.cached_chunk(fc)
     var changed = false
     for linear in 0 ..< CHUNK_VOLUME:
       let packed = chunk.cells[linear]
@@ -752,47 +912,60 @@ proc swap_color*(self: VoxelStore, from_color, to_color: Color) =
           chunk.cells[linear] = pack_voxel(to_idx, kind_ord)
           changed = true
     if changed:
-      self.flush_chunk_snapshot(chunk_id)
+      self.flush_chunk_snapshot(fc)
 
   self.flush_dirty_edits()
-  for chunk_id in self.local_edits.keys.to_seq:
+  for chunk_id in self.edit_chunk_ids(self.frame_id):
+    let fc = self.key(chunk_id)
+    self.load_edits(fc)
+    if fc notin self.local_edits:
+      continue
     var changed = false
-    for local_pos, info in self.local_edits[chunk_id].mpairs:
+    for local_pos, info in self.local_edits[fc].mpairs:
       if info.color == from_color:
         info.color = to_color
         changed = true
     if changed:
-      self.flush_edit_snapshot(chunk_id)
+      self.flush_edit_snapshot(fc)
 
 proc clear*(self: VoxelStore, all = false) =
-  self.chunk_cache.clear
-  let packed = self.packed_chunks.value
-  for chunk_id in packed.keys:
-    self.packed_chunks.del(chunk_id)
-  let deltas = self.chunk_deltas.value
-  for chunk_id in deltas.keys:
-    self.chunk_deltas.del(chunk_id)
-  self.pending_chunks.clear
+  ## Empty the targeted frame's blocks. `clear` normally spares the persisted
+  ## edits (a reset clears the render state and restores from them); pass
+  ## all = true when the edits must go too.
+  for chunk_id in self.chunk_ids.to_seq:
+    let fc = self.key(chunk_id)
+    self.chunk_cache.del fc
+    self.pending_chunks.del fc
+    self.pending_snapshots.del fc
+    if ?self.build:
+      if fc in self.packed_chunks:
+        self.packed_chunks.del(fc)
+      if fc in self.chunk_deltas:
+        self.chunk_deltas.del(fc)
   if all:
-    # `clear` normally spares the persisted edits (a reset clears the render
-    # state and restores from them). Pass all = true when redrawing from
-    # scratch and the edits must NOT accumulate — e.g. capturing successive
-    # animation frames, where each frame is a fresh full draw.
-    let snaps = self.edit_snapshots.value
-    for key in snaps.keys:
-      self.edit_snapshots.del(key)
-    let edeltas = self.edit_deltas.value
-    for key in edeltas.keys:
-      self.edit_deltas.del(key)
-    self.local_edits.clear
-    self.pending_edits.clear
+    if ?self.edit_snapshots:
+      for key in self.edit_snapshots.value.keys:
+        if key.id == self.thing_id and key.frame == self.frame_id:
+          self.edit_snapshots.del(key)
+      for key in self.edit_deltas.value.keys:
+        if key.id == self.thing_id and key.frame == self.frame_id:
+          self.edit_deltas.del(key)
+    for fc in self.local_edits.keys.to_seq:
+      if fc.frame == self.frame_id:
+        self.local_edits.del fc
+    for fc in self.edits_loaded.to_seq:
+      if fc.frame == self.frame_id:
+        self.edits_loaded.excl fc
+    for fc in self.pending_edits.keys.to_seq:
+      if fc.frame == self.frame_id:
+        self.pending_edits.del fc
 
 iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
-  ## Every voxel with its world position, streaming chunk by chunk. Reads
-  ## through `peek_chunk` (no cache insertion) so a whole-build scan can't
-  ## flush main's interactive working set.
+  ## Every voxel of the targeted frame with its world position, streaming
+  ## chunk by chunk. Reads through `peek_chunk` (no cache insertion) so a
+  ## whole-build scan can't flush main's interactive working set.
   for chunk_id in self.chunk_ids.to_seq:
-    let chunk = self.peek_chunk(chunk_id)
+    let chunk = self.peek_chunk(self.key(chunk_id))
     if chunk.count == 0:
       continue
     for linear in 0 ..< CHUNK_VOLUME:
@@ -805,4 +978,3 @@ iterator all_voxels*(self: VoxelStore): tuple[pos: Vector3, info: VoxelInfo] =
           chunk_id.z * ChunkDim.float + pos.z,
         )
         yield (world_pos, self.unpack_info(packed))
-

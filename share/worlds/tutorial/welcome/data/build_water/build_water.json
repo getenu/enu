@@ -9,10 +9,13 @@
     "origin": [0.0, 0.0, -400.0]
   },
   "start_color": "BLUE",
-  "edits_file": "edits.bin",
+  "edits": {
+    
+  },
   "frames": {
     "version": 1,
     "count": 24,
+    "frame": 0,
     "keyframe_interval": 8
   },
   "palette": [

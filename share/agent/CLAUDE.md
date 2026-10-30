@@ -198,8 +198,8 @@ floor(length = N, width = W, color = c)
 forward 3 .. 8        # random int in range
 if 1 in 3: ...        # 1-in-3 chance
 color = cycle(red, white)  # alternates per call
-save()                # save turtle pose + color
-restore()
+let spot = pen        # save turtle pose + color
+pen = spot            # and go back to it
 ```
 
 `size` accepts ints or floats; rasterisation is voxel-centred, so
