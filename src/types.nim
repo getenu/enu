@@ -580,6 +580,13 @@ type
     exec*: ExecState
     # Running module top-level code (a load or an eval) rather than a proc.
     top_level*: bool
+    # Held to the script's time limit. Loads aren't: they compile, which can
+    # be slow on a cold start.
+    timed*: bool
+    # Parked at a host call once it has run `park_after` without yielding,
+    # rather than failing at the time limit. Not evals: their caller wants
+    # the value back now.
+    can_park*: bool
     result*: PNode
     # Started once this task finishes, e.g. a script's body after its load.
     then*: proc() {.gcsafe.}
@@ -605,6 +612,13 @@ type
     # Running work, innermost last: the script itself, and on top of it
     # anything started while it was parked (an eval, an instance's ctor).
     tasks: seq[ScriptTask]
+    # How long the script may run between yields, checked at host calls. The
+    # fuel budget covers loops that never call the host. Zero is no limit.
+    time_limit*: Duration
+    # How long a task that can park runs before a host call parks it, so a
+    # host-heavy loop shares the worker instead of hitting the time limit.
+    park_after*: Duration
+    resumed_at: MonoTime
     current_line*: TLineInfo
     pause_requested: bool
     module_name*: string

@@ -136,7 +136,11 @@ gdobj TurtleOverlay of ViewportContainer:
 
     var show = false
     let thing = state.open_thing
-    if ?thing and thing of Build and ?thing.node:
+    # Follow a draw slow enough to watch, but not an ASAP one: the turtle
+    # leaps between batches. It reappears where the script left it.
+    if ?thing and thing of Build and ?thing.node and
+        {SCRIPT_RUNNING, ASAP_MODE} * thing.global_flags.value !=
+        {SCRIPT_RUNNING, ASAP_MODE}:
       let world_camera = self.world_viewport.get_camera()
       if ?world_camera:
         show = true

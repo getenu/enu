@@ -129,14 +129,18 @@ let enu_server = mcp_server("enu", "1.0.0"):
         var settled_streak = 0
         var last_pending = ""
         while settled_streak < 3:
+          # In the thing's own context: the player's doesn't import `builds`.
           let p = bot_for().ask(
-              eval_query \"""
+              eval_query(
+                \"""
               let u = find_by_id({thing_id.escape})
               if u.is_nil:
                 "0"
               else:
                 $u.pending_block_updates
-            """.dedent.strip
+            """.dedent.strip,
+                thing_id = thing_id,
+              )
             )
           if p.error != "":
             break

@@ -23,6 +23,8 @@ proc init*(
     module_name: if ?clone_of: clone_of.id else: "",
     interpreter: interpreter,
     fuel: int64.high,
+    time_limit: script_time_limit,
+    park_after: script_park_after,
     timer: MonoTime.high,
   )
 
@@ -69,10 +71,9 @@ proc script_error*(self: Worker, thing: Thing, e: ref VMQuit) =
 proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   private_access ScriptCtx
 
-  var interpreter =
-    Interpreter.init(
-      state.config.script_dir, state.config.lib_dir / "vmlib", script_fuel
-    )
+  var interpreter = Interpreter.init(
+    state.config.script_dir, state.config.lib_dir / "vmlib", script_fuel
+  )
 
   let controller = self
 
@@ -138,9 +139,7 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       var kind = UNKNOWN
       if msg.starts_with("interpretation requires too many iterations"):
         kind = TIMEOUT
-        msg =
-          \"Timeout. Script {ctx.script} ran too long without yielding " &
-          "(loop budget exhausted)"
+        msg = \"Timeout. Script {ctx.script} ran too long without yielding"
       errors.add (msg, info, loc, false)
       ctx.exit_code = error_code
       raise (ref VMQuit)(info: info, kind: kind, msg: msg, location: loc)
@@ -169,6 +168,18 @@ proc unmap_thing*(self: Worker, thing: Thing) =
     debug "unmapping thing", handle, thing = thing.id
     self.handle_things[handle] = nil
     self.thing_handles.del thing
+
+proc script_finished*(thing: Thing) =
+  ## The script ran to the end: show what it made. A script that only draws
+  ## never parks through pause_script, so its node is still hidden
+  ## (SCRIPT_INITIALIZING) and its drawing still buffered (ASAP).
+  thing.global_flags -= SCRIPT_INITIALIZING
+  if thing of Build:
+    Build(thing).end_asap()
+  if not ?thing.clone_of:
+    thing.collect_garbage
+    thing.ensure_visible
+    thing.current_line = 0
 
 proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
   if SCRIPT_LOADING in thing.global_flags:
@@ -236,7 +247,6 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
         write_file_if_changed(generated_dir / module_name & ".nim", code)
 
       ctx.fuel = fuel
-      ctx.file_index = -1
       info "loading script", script = ctx.script
       ctx.load(ctx.script, code)
 
@@ -267,9 +277,9 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
       # Loaded successfully: other things' wrappers may now import this module.
       self.module_names.incl ctx.module_name
 
-      if not ctx.running and not ?thing.clone_of:
-        thing.collect_garbage
-        thing.ensure_visible
+      if not ctx.running:
+        # finished without ever parking, so advance_thing won't end it
+        thing.script_finished
   except VMQuit as e:
     ctx.running = false
     self.interpreter.reset_module(thing.script_ctx.module_name)

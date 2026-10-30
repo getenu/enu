@@ -454,9 +454,6 @@ macro load_enu_script*(
       # templates above instead of colliding with them
       block:
         `inner`
-      # If a new instance doesn't ever yield the interpreter can crash. Unsure
-      # why, but probably fixable. Sleep before exit as a workaround.
-      sleep 0.0
 
   # The host calls `run_script(me.bridge_handle, false)` once the module has
   # loaded. Running it from here would park the script inside top-level code,

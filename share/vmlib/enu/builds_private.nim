@@ -9,6 +9,12 @@ bridged_to_host:
     ## which mark voxels TRANSIENT and let the script regenerate them on
     ## reload.
 
+  proc asap_mode*(self: Build): bool
+    ## Whether the build is in ASAP mode. For tests.
+
+  proc initializing*(self: Build): bool
+    ## Whether the build is still hidden while its script starts. For tests.
+
   proc persist*(self: Build)
     ## Promote everything the script has drawn (normally TRANSIENT, dropped and
     ## regenerated each reload) into saved PERSISTED voxels, then mark the build

@@ -217,12 +217,16 @@ macro bridged_from_vm(
           # The 2.4 VM's value conversions aren't gcsafe. Scripts only run on
           # the worker thread.
           {.gcsafe.}:
+            let active = script_engine.active_thing
             try:
               `call`
             except Exception as e:
               error "Exception calling into host", kind = $e.type, msg = e.msg
               echo e.get_stack_trace()
               script_engine.last_exception = e
-            let active = script_engine.active_thing
+              if ?active and ?active.script_ctx:
+                let line = active.script_ctx.script_line(a)
+                if line.line > 0:
+                  active.script_ctx.current_line = line
             if ?active and ?active.script_ctx:
-              active.script_ctx.after_host_call()
+              active.script_ctx.after_host_call(a)
