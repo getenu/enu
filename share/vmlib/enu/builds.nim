@@ -85,29 +85,36 @@ bridged_to_host:
     use_turtle: bool,
   )
 
-  proc save_frame_impl*(self: Build, at: int): int
+  proc save_frame_impl*(self: Build, index: int): int
+
+  proc clear_frame*(self: Build, index: int)
+    ## Remove a saved frame, leaving a gap. Other frames keep their
+    ## numbers.
 
   proc delete_frame*(self: Build, index: int)
-    ## Remove a saved frame; later frames shift down one index.
+    ## Remove a frame and move every later frame down one, so frame 4
+    ## becomes frame 3.
 
   proc clear_frames*(self: Build)
-    ## Drop every saved frame and stop playback. Frames persist across
-    ## script re-runs (that's the hand-edit flow: pose, run a script that
-    ## calls save, repeat) — so programmatic animations clear first.
-    ## save raises after 64 frames without a clear.
-
-  proc load_frame*(self: Build, index: int)
-    ## Restore a saved frame into the live voxels for editing (this changes
-    ## the real state, unlike `frame=` which only changes the display).
+    ## Drop every saved frame and stop playback. The current frame goes
+    ## back to 0. Frames are kept across script runs, so a script that
+    ## builds an animation from scratch clears them first.
 
   proc `frame=`*(self: Build, index: int)
-    ## Display a saved frame (-1 = the live voxel state). Display-only.
+    ## Go to frame `index`: the build's blocks, the script's and the ones
+    ## placed by hand, are replaced by that frame's, ready to edit and
+    ## `save()`. A frame that hasn't been saved keeps the blocks as they
+    ## are, to save there. Frames go from 0 to 63. Stops playback.
 
   proc frame*(self: Build): int
+    ## The current frame: the one `save()` writes.
 
   proc frames_len*(self: Build): int
 
-  proc play_impl*(self: Build, fps: float, loop: bool)
+  proc last_frame*(self: Build): int
+    ## The highest saved frame, or -1 when there are none.
+
+  proc play_impl*(self: Build, fps: float, loop: bool, first, last: int)
 
   proc stop_impl*(self: Build)
 
@@ -138,29 +145,32 @@ bridged_to_host:
     ## to leave the turtle at the far end of the shape.
 
 template frame_count*(self: Build): int =
+  ## How many frames are saved.
   self.frames_len
 
-proc save*(self: Build, at: int = -1): int {.discardable.} =
-  ## Snapshot the current voxels as an animation frame and return its
-  ## index — appended by default, or overwriting frame `at`. Replace
-  ## workflow: load_frame(3), edit, save(at = 3). Raises past 64
-  ## frames without a clear_frames().
-  self.save_frame_impl(at)
+proc save*(self: Build, index: int = -1): int {.discardable.} =
+  ## Save the build's blocks, the script's and the ones placed by hand, as
+  ## the current frame, overwriting it. `save(3)` saves them as frame 3
+  ## instead, and makes it the current frame. Frames go from 0 to 63, and
+  ## can have gaps. Returns the frame's index.
+  self.save_frame_impl(index)
 
-proc play*(self: Build, fps = 8.0, loop = true) =
-  ## Cycle through the saved frames at `fps` (loops by default).
-  self.play_impl(fps, loop)
+proc play*(self: Build, fps = 8.0, loop = true, first = 0, last = -1) =
+  ## Cycle through frames `first` to `last` at `fps` (loops by default).
+  ## `last` defaults to the last saved frame. Every frame in between must
+  ## be saved: playing over a gap raises `Animation missing frame n`.
+  self.play_impl(fps, loop, first, last)
 
 proc stop*(self: Build) =
   ## Stop frame playback; the display stays on the current frame.
   self.stop_impl()
 
 # bare forms for the active unit, matching the drawing API
-proc save*(at: int = -1): int {.discardable.} =
-  Build(active_thing()).save_frame_impl(at)
+proc save*(index: int = -1): int {.discardable.} =
+  Build(active_thing()).save_frame_impl(index)
 
-proc load_frame*(index: int) =
-  Build(active_thing()).load_frame(index)
+proc clear_frame*(index: int) =
+  Build(active_thing()).clear_frame(index)
 
 proc delete_frame*(index: int) =
   Build(active_thing()).delete_frame(index)
@@ -168,8 +178,8 @@ proc delete_frame*(index: int) =
 proc clear_frames*() =
   Build(active_thing()).clear_frames()
 
-proc play*(fps = 8.0, loop = true) =
-  Build(active_thing()).play_impl(fps, loop)
+proc play*(fps = 8.0, loop = true, first = 0, last = -1) =
+  Build(active_thing()).play_impl(fps, loop, first, last)
 
 proc stop*() =
   Build(active_thing()).stop_impl()

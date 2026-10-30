@@ -70,3 +70,26 @@ suite "Computed and manual blocks":
     build.unmark_holes()
     build.collect_garbage()
     check not build.voxels.has_edit(spot)
+
+suite "Frames":
+  test "a frame keeps holes and manual blocks":
+    let build = Build.init(id = "build_frames_holes")
+    let hand = vec3(5, 3, 4)
+    build.computed(red)
+    build.erase_cell(spot)
+    build.draw(hand, (PERSISTED, blue))
+    discard build.save(0)
+    # frame 1: the hole and the manual block are gone
+    build.voxels.del_edit(spot)
+    build.voxels.del_edit(hand)
+    build.del_voxel(hand)
+    build.computed(red)
+    discard build.save(1)
+    build.go_to_frame(0)
+    check build.has_hole
+    check spot notin build
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+    build.go_to_frame(1)
+    check not build.voxels.has_edit(spot)
+    check not build.voxels.has_edit(hand)
+    check build.voxel_info(spot) == (TRANSIENT, red)

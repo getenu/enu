@@ -281,8 +281,7 @@ gdobj BuildNode of VoxelTerrain:
       # overwrites) a directly-set cached frame mesh. The live state comes
       # back through hide_frames, which replays it for every dirty chunk.
       let displaying_frame =
-        self.model.current_frame >= 0 and
-        self.model.current_frame < self.model.frames.len and
+        self.model.current_frame in self.model.frames and
         ASAP_MODE notin self.model.global_flags
 
       if chunk_id in self.model.voxels.packed_chunks and not displaying_frame:

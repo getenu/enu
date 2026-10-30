@@ -325,69 +325,137 @@ template buffer*(self: Build, body: untyped) =
     self.voxels.immediate = was_immediate
 
 proc frame_count*(self: Build): int =
+  ## How many frames are saved. Frames can have gaps, so this isn't always
+  ## one more than the last frame.
   self.frames.len
 
-proc save*(self: Build, at: int = -1): int {.discardable.} =
-  ## Snapshot the current voxels as an animation frame and return its index:
-  ## appended by default, or overwriting frame `at` (replace workflow:
-  ## `load_frame(3)`, edit, `save(at = 3)`). Keyed table writes make
-  ## both cases a single synced op.
+proc last_frame*(self: Build): int =
+  ## The highest saved frame, or -1 when there are none.
+  result = MAX_FRAMES - 1
+  while result >= 0 and result notin self.frames:
+    dec result
+
+proc check_frame_index(self: Build, index: int) =
+  if index < 0 or index >= MAX_FRAMES:
+    raise ValueError.init(
+      "no frame " & $index & ": frames go from 0 to " & $(MAX_FRAMES - 1)
+    )
+
+proc save*(self: Build, index: int = -1): int {.discardable.} =
+  ## Write the live voxels, computed and manual, into frame `index` (the
+  ## current frame by default), which becomes the current frame. Returns
+  ## the index.
+  result = if index < 0: self.frame else: index
+  self.check_frame_index(result)
   self.global_flags += DIRTY
   self.frames_dirty = true
-  if at >= 0 and at < self.frames.len:
-    self.frames[at] = self.voxels.pack_frame
-    at
-  else:
-    if self.frames.len >= MAX_FRAMES:
-      raise ResourceLimitError.init(
-        "frame limit reached (" & $MAX_FRAMES &
-          "): call clear_frames(), or overwrite with save(at = ...)"
-      )
-    let index = self.frames.len
-    self.frames[index] = self.voxels.pack_frame
-    index
+  self.frames[result] = self.voxels.pack_frame
+  self.frame = result
 
-proc load_frame*(self: Build, index: int) =
-  ## Restore a saved frame into the live voxels for editing. Unlike
-  ## `current_frame=`, this changes the real state (and syncs it). Also
-  ## switches the display to the live state, so you see what you edit.
-  self.global_flags += DIRTY
-  if index >= 0 and index < self.frames.len:
+proc go_to_frame*(self: Build, index: int) =
+  ## Make `index` the current frame: every voxel, computed and manual, is
+  ## replaced by the frame's, and its manual voxels become the build's
+  ## edits. An unsaved frame keeps the voxels as they are, ready to save
+  ## there. Stops playback and shows the live voxels.
+  self.check_frame_index(index)
+  self.frames_fps = 0.0
+  self.current_frame = -1
+  if index in self.frames:
+    var edits: seq[Vector3]
+    self.voxels.for_all_edits:
+      edits.add pos
+    for pos in edits:
+      self.voxels.del_edit(pos)
     self.voxels.load_frame(self.frames[index])
+    var manual: seq[tuple[pos: Vector3, info: VoxelInfo]]
+    for pos, info in self.voxels.all_voxels:
+      if info.kind != TRANSIENT:
+        manual.add (pos, info)
+    for (pos, info) in manual:
+      self.voxels.set_edit(pos, info)
+      if info.kind == HOLE:
+        self.voxels.del_voxel(pos)
     self.reset_bounds()
-    self.current_frame = -1
+    self.global_flags += DIRTY
+  self.frame = index
 
 proc clear_frames*(self: Build) =
-  ## Drop every saved frame, stop playback, and show the live state.
-  ## Scripts that build an animation programmatically call this first;
-  ## otherwise save keeps appending across script re-runs.
+  ## Drop every saved frame, stop playback, and show the live state. The
+  ## current frame goes back to 0.
   self.global_flags += DIRTY
   self.frames_dirty = true
   self.frames_fps = 0.0
   self.current_frame = -1
+  self.frame = 0
   self.frames.clear
 
+proc clear_frame*(self: Build, index: int) =
+  ## Remove a saved frame, leaving a gap. Other frames keep their indexes.
+  ## Stops playback that runs over it.
+  self.check_frame_index(index)
+  if index in self.frames:
+    self.global_flags += DIRTY
+    self.frames_dirty = true
+    if self.current_frame == index or
+        (self.frames_fps > 0 and index in self.frames_first .. self.frames_last):
+      self.frames_fps = 0.0
+      self.current_frame = -1
+    self.frames.del index
+
 proc delete_frame*(self: Build, index: int) =
-  ## Remove a saved frame; later frames shift down one index (keys stay
-  ## dense: each higher frame rewrites down by one keyed op).
+  ## Remove a frame, saved or not, and move every later frame down one.
+  self.check_frame_index(index)
+  let last = self.last_frame
+  if index > last:
+    return
   self.global_flags += DIRTY
   self.frames_dirty = true
-  if index >= 0 and index < self.frames.len:
-    let last = self.frames.len - 1
-    for i in index ..< last:
+  for i in index ..< last:
+    if i + 1 in self.frames:
       self.frames[i] = self.frames[i + 1]
-    self.frames.del last
-    if self.current_frame == index:
+    elif i in self.frames:
+      self.frames.del i
+  self.frames.del last
+  if self.current_frame == index:
+    self.frames_fps = 0.0
+    self.current_frame = -1
+  elif self.current_frame > index:
+    self.current_frame = self.current_frame - 1
+  if index < self.frames_first:
+    self.frames_first = self.frames_first - 1
+    self.frames_last = self.frames_last - 1
+  elif index <= self.frames_last:
+    if self.frames_first == self.frames_last:
+      self.frames_fps = 0.0
       self.current_frame = -1
-    elif self.current_frame > index:
-      self.current_frame = self.current_frame - 1
+    else:
+      self.frames_last = self.frames_last - 1
+  if self.frame > index:
+    self.frame = self.frame - 1
 
-proc play*(self: Build, fps: float = 8.0, loop: bool = true) =
-  ## Start frame playback; the server advances `current_frame` at `fps`.
-  ## `current_frame=` displays a frame without touching the live voxels;
-  ## `load_frame` restores one for editing.
+proc play*(
+    self: Build, fps: float = 8.0, loop: bool = true, first = 0, last = -1
+) =
+  ## Start playing frames `first` to `last` (the last saved frame by
+  ## default); the server advances `current_frame` at `fps`. Raises if a
+  ## frame in the range isn't saved. Display-only: `go_to_frame` loads a
+  ## frame for editing.
+  let last = if last < 0: self.last_frame else: last
+  self.check_frame_index(first)
+  if last < first:
+    raise ValueError.init(
+      "no frames to play from " & $first & " to " & $last
+    )
+  self.check_frame_index(last)
+  for index in first .. last:
+    if index notin self.frames:
+      raise ValueError.init("Animation missing frame " & $index)
   self.global_flags += DIRTY
+  self.frames_first = first
+  self.frames_last = last
   self.frames_loop = loop
+  if self.current_frame notin first .. last:
+    self.current_frame = first
   self.frames_fps = fps
 
 proc stop*(self: Build) =
@@ -827,6 +895,8 @@ proc init*(
       current_frame_value: EdValue[int].init(-1, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_first_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_last_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       sealed_frames_value:
         EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       cull_down_faces_value:

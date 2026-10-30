@@ -702,13 +702,27 @@ proc apply_delta*(self: VoxelStore, chunk_id: Vector3, delta: DeltaUpdate) =
 
 proc pack_frame*(self: VoxelStore): FrameData =
   ## Snapshot the current voxel state as one animation frame — every
-  ## non-empty chunk, packed with the standard codecs.
-  for chunk_id in self.chunk_ids:
-    let chunk = self.peek_chunk(chunk_id)
-    if chunk.count > 0:
-      let packed = encode_chunk(chunk.cells)
-      if not packed.is_empty:
-        result.chunks[chunk_id] = packed
+  ## non-empty chunk, packed with the standard codecs. Holes are edits
+  ## rather than voxels, so they're added as HOLE cells: a frame keeps the
+  ## manual changes along with what they hide.
+  var holes: Table[Vector3, seq[(int, PackedVoxel)]]
+  self.for_all_edits:
+    if info.kind == HOLE:
+      holes.mget_or_put(chunk_id_for_pos(pos), @[]).add (
+        linear_position(local_pos_in_chunk(pos)),
+        pack_voxel(pack_color_index(self.shared_of, info.color), HOLE.ord),
+      )
+  var chunk_ids = self.chunk_ids.to_seq
+  for chunk_id in holes.keys:
+    if chunk_id notin chunk_ids:
+      chunk_ids.add chunk_id
+  for chunk_id in chunk_ids:
+    var cells = self.peek_chunk(chunk_id).cells
+    for (linear, packed) in holes.get_or_default(chunk_id):
+      cells[linear] = packed
+    let packed = encode_chunk(cells)
+    if not packed.is_empty:
+      result.chunks[chunk_id] = packed
 
 proc load_frame*(self: VoxelStore, frame: FrameData) =
   ## Replace the live voxel state with a frame's contents — the authoring

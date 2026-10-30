@@ -11,15 +11,19 @@ screenshot it, rather than filming live playback.
 
 ## The core idea
 
-A frame-animated build exposes a display-only frame setter. Pin the frame,
-screenshot, repeat 0..count-1, then stitch at the animation's fps.
+Playing a single frame pins the display on it. Pin the frame, screenshot,
+repeat 0..last_frame, then stitch at the animation's fps.
 
 ```nim
-me.frame_count        # number of frames (e.g. 24)
-me.stop()             # halt playback (frames_fps = 0)
-me.frame = 12         # DISPLAY frame 12 (display-only; -1 = live)
-me.play(8.0)          # resume playback at 8 fps
+me.last_frame                   # highest saved frame (e.g. 23)
+me.play(first = 12, last = 12)  # DISPLAY frame 12 and hold it there
+me.play(8.0)                    # resume playback at 8 fps
 ```
+
+Don't use `me.frame = 12` for this: it loads frame 12 into the build's
+live blocks (and its hand-placed blocks into the unit's saved edits) to
+edit it, and it remeshes from scratch instead of using the frame-mesh
+cache.
 
 **These frame procs only exist in the *build's* module.** Call them via
 `eval(..., thing_id: "build_water")`, where `me` is that build. They are
@@ -30,16 +34,16 @@ NOT in the player module. (Note the eval param is `thing_id`, not
 
 ## Why the naive approach fails (read this first)
 
-Setting `me.frame` echoes the value back instantly, but that alone does
-**not** give correct screenshots. Every one of these will wreck the loop
+Pinning a frame takes effect instantly, but that alone does **not** give
+correct screenshots. Every one of these will wreck the loop
 (observed: frames out of order, "bouncing", duplicates):
 
 - **Playback still running.** If the level is still loading, the build's
   `play()` re-runs as loading finishes and *restarts* playback, which
-  advances `current_frame` every tick and overrides your `me.frame = N`
-  between the set and the screenshot. Wait until the level is fully
-  loaded, `stop()`, and **verify the frame holds** (read `me.frame`
-  twice a second apart — if it changed, playback is live).
+  advances the displayed frame every tick and overrides your pin between
+  the set and the screenshot. Wait until the level is fully loaded, pin
+  a frame, and **verify it holds** (screenshot twice a second apart and
+  diff — if they differ, playback is live).
 - **Other unit scripts never stop.** `stop()` only halts *this build's*
   frame playback. Every other script keeps running (a sign's update
   loop, gulls flapping, the windmill turning). There is **no way to stop
@@ -64,9 +68,9 @@ same world** — it causes crashes, a netty
 `reactor.id` assertion on connect, and fighting writes to the level
 files. Prefer attaching to the user's instance so they can watch.
 
-### 2. Find the build and its frame count
+### 2. Find the build and its last frame
 ```
-eval('"count=" & $me.frame_count', thing_id: "build_water")
+eval('"last=" & $me.last_frame', thing_id: "build_water")
 ```
 
 ### 3. Set up the camera
@@ -115,17 +119,16 @@ eval("me.play(8.0)", thing_id: "build_water")
 # any statement after it runs (e.g. a trailing stop() silently won't run).
 ```
 
-### 6. Stop, verify it holds
+### 6. Pin a frame, verify it holds
 ```
-eval("me.stop()\nme.frame = 0\n$me.frame", thing_id: "build_water")
-# read me.frame again a moment later — must be unchanged (still 0).
+eval("me.play(first = 0, last = 0)", thing_id: "build_water")
+# screenshot twice a moment apart — they must match.
 ```
 
 ### 7. Capture frame by frame
-For N in 0 .. count-1, re-assert `stop()` as insurance, set the frame,
-then screenshot:
+For N in 0 .. last_frame, pin the frame, then screenshot:
 ```
-eval("me.stop()\nme.frame = <N>\n<N>", thing_id: "build_water")
+eval("me.play(first = <N>, last = <N>)", thing_id: "build_water")
 screenshot()            # or screenshot_at(... same params ...) / screenshot_from_player()
 ```
 Screenshots are 1920×1080, written to a temp dir with incrementing
@@ -173,6 +176,6 @@ Enu auto-saved (`git checkout -- <level>/level.json <changed unit>.json`).
 - [ ] Camera parked & previewed (`open` the first frame)
 - [ ] Player self-model + all script-driven units hidden
 - [ ] Frame meshes warmed at the vantage
-- [ ] `stop()` verified holding (frame doesn't advance)
+- [ ] Pinned frame verified holding (doesn't advance)
 - [ ] 24 frames captured, contact sheet + seam diff check pass
 - [ ] Stitched to mp4; instance restored
