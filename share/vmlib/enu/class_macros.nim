@@ -358,10 +358,12 @@ proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
     pragmas = new_nim_node(nnkPragma).add(ident"discardable"),
   ).fix_line_info(sig)
 
-proc transform_commands(parent: NimNode): NimNode =
+proc transform_commands*(parent: NimNode): NimNode =
   for i, node in parent:
+    # `- name:` statements define commands. They always have a body, which
+    # tells them apart from a negation like `if a: -b else: c`.
     if parent.kind == nnkStmtList and node.kind == nnkPrefix and
-        node[0] == ident"-":
+        node[0] == ident"-" and node.len == 3 and node[2].kind == nnkStmtList:
       if node[1].kind in [nnkIdent, nnkCall]:
         let new_proc = build_proc(node[1], transform_commands node[2])
         parent[i] = new_proc

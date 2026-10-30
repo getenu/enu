@@ -88,7 +88,7 @@ of distinctly-colored bots.
 **Spatial queries** (via `eval`):
 - `units_in_box(x1, y1, z1, x2, y2, z2)` — `seq[Unit]` whose origins are inside the box. To enumerate units by kind/id, loop `Build.all` / `Bot.all` instead (see `/reload-verify`).
 - `floor_at(x, z)` — top y with a visible voxel, or -1
-- `clear_box(...)` — true if no voxels in the box
+- `has_blocks_in(...)` — true if any build has a voxel in the box
 - `find_voxel_overlaps(limit)` — positions where two builds share a voxel (z-fighting)
 - `unit.bounds` — tight world-space AABB after scale/rotation/anchor
 - `Proto.bounds_at(position, rotation, scale)` — predicted AABB of a hypothetical instance, for pre-placement clearance checks

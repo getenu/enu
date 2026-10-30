@@ -100,7 +100,7 @@ proc check_cottage(): bool =
   if not ?cottage:
     return false
   let o = cottage.position
-  north_wired and not clear_box(
+  north_wired and has_blocks_in(
     o.x + 8.0, o.y + 1.0, o.z + 2.0,
     o.x + 8.0, o.y + 4.0, o.z + 4.0,
   )

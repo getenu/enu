@@ -661,7 +661,11 @@ type
     pending_things*: seq[Thing]
     retry_failures*: bool
     interpreter*: Interpreter
-    active_thing*: Thing
+    # Use `active_thing`/`active_thing=` (scripting.nim): setting it also
+    # tells the VM, which reads it from a global instead of asking the host.
+    active_thing_value*: Thing
+    active_handle_global*: PSym
+    active_handle_interpreter*: Interpreter
     # Things cross the VM bridge as integer handles (0 is nil). Indexed by
     # handle; handles aren't reused, so a stale one can't alias a new thing.
     handle_things*: seq[Thing]
