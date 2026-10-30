@@ -1,9 +1,11 @@
 import unittest2
-import std/[json, jsonutils]
+import std/[json, jsonutils, os, options]
 import core
 import models/colors
 import models/builds
 import models/bots
+import models/states
+import models/voxels/[store, codec]
 import models/serializers {.all.}
 
 suite "Color Serialization":
@@ -146,3 +148,70 @@ suite "Bot Serialization":
     check restored.start_transform.origin.x == original.start_transform.origin.x
     check restored.start_transform.origin.y == original.start_transform.origin.y
     check restored.start_transform.origin.z == original.start_transform.origin.z
+
+suite "Frame Serialization":
+  test "frames round-trip with only their manual blocks":
+    let dir = get_temp_dir() / "enu_frames_test"
+    remove_dir dir
+    state = GameState.init
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    let build = Build.init(id = "build_frames_save")
+    for (index, color) in [(0, RED), (1, BLUE), (2, GREEN), (3, RED), (4, BLUE)]:
+      build.go_to_frame(index)
+      build.draw(vec3(index.float, 0, 0), (PERSISTED, ACTION_COLORS[color]))
+      build.draw(vec3(index.float, 1, 0), (TRANSIENT, ACTION_COLORS[color]))
+    build.go_to_frame(2)
+    build.save_frames()
+    check file_exists(dir / build.id / "frames" / "002.bin")
+    check build.id notin parse_json($build)["edits"]
+
+    let restored = Build.init(id = "build_frames_save")
+    restored.load_frames_sidecar(
+      %*{"frames": {"count": build.frames_len, "frame": build.frame}}
+    )
+    restored.restore_edits
+    check restored.frames_len == 5
+    check restored.frame == 2
+    check restored.voxels.get_edit(vec3(2, 0, 0)) ==
+      (PERSISTED, ACTION_COLORS[GREEN])
+    check vec3(2, 1, 0) notin restored
+    check vec3(2, 0, 0) in restored
+    for index in [0, 1, 3, 4]:
+      let saved = build.voxels.frame_edits(build.frame_order.ids[index])
+      check restored.voxels.frame_edits(restored.frame_order.ids[index]).chunks ==
+        saved.chunks
+      check saved.chunks.len == 1
+    remove_dir dir
+
+  test "older frame files keep their computed blocks when there's no script":
+    let dir = get_temp_dir() / "enu_frames_old_test"
+    remove_dir dir
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    let build = Build.init(id = "build_frames_old")
+    let frames_dir = build.data_dir / "frames"
+    create_dir frames_dir
+    for i, kind in [TRANSIENT, PERSISTED]:
+      var cells: array[CHUNK_VOLUME, PackedVoxel]
+      cells[linear_position(i, 0, 0)] = pack_voxel(int(RED), kind.ord)
+      var frame: FrameData
+      frame.chunks[vec3()] = encode_chunk(cells)
+      write_file(
+        frames_dir / ("00" & $i & ".bin"),
+        encode_frame_file(frame, none(FrameData)),
+      )
+
+    let restored = Build.init(id = "build_frames_old")
+    restored.load_frames_sidecar(%*{"frames": {"count": 2}})
+    restored.restore_edits
+    check restored.frame == 0
+    check restored.voxels.get_edit(vec3(0, 0, 0)) ==
+      (PERSISTED, ACTION_COLORS[RED])
+    check vec3(0, 0, 0) in restored
+    restored.go_to_frame(1)
+    check restored.voxels.get_edit(vec3(1, 0, 0)) ==
+      (PERSISTED, ACTION_COLORS[RED])
+    remove_dir dir

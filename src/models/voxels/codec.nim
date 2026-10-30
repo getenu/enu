@@ -500,7 +500,8 @@ proc decode_edits_file*(
     result[thing_id] = chunks
 
 proc pack_and_store_edited_voxels*(
-    shared: Shared, id: string, edits: openArray[(Vector3, VoxelInfo)]
+    shared: Shared, id: string, edits: openArray[(Vector3, VoxelInfo)],
+    frame = 0,
 ) =
   ## Takes a list of world-space edits, groups them by chunk,
   ## packs them, and stores in shared.edit_snapshots.
@@ -522,7 +523,7 @@ proc pack_and_store_edited_voxels*(
   for chunk_id, voxels in chunks:
     let packed = encode_chunk(voxels)
     if not packed.is_empty:
-      let key: EditKey = (id, chunk_id)
+      let key: EditKey = (id, frame, chunk_id)
       shared.edit_snapshots[key] = packed
 
 proc decode_delta*(

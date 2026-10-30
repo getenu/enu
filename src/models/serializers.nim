@@ -89,37 +89,69 @@ proc from_json_hook*(self: var VoxelInfo, json: JsonNode) =
   self.kind = VoxelKind(json[0].get_int)
   self.color = json[1].json_to(Color)
 
+proc legacy_manual(frame: FrameData, scripted: bool): FrameData =
+  ## Older levels saved computed blocks in their frames. A script draws them
+  ## again; a build with no script keeps them, as hand-placed blocks.
+  for chunk_id, packed in frame.chunks:
+    var cells = decode_chunk(packed)
+    var changed = false
+    for i in 0 ..< CHUNK_VOLUME:
+      if cells[i] != EMPTY_VOXEL:
+        let (color_idx, kind_ord) = unpack_voxel(cells[i])
+        if VoxelKind(kind_ord) == TRANSIENT:
+          changed = true
+          cells[i] =
+            if scripted: EMPTY_VOXEL else: pack_voxel(color_idx, PERSISTED.ord)
+    let manual = if changed: encode_chunk(cells) else: packed
+    if not manual.is_empty:
+      result.chunks[chunk_id] = manual
+
 proc load_frames_sidecar*(self: Build, json: JsonNode) =
+  ## Each file holds one frame's manual blocks; the script draws the rest. A
+  ## delta file applies to the frame just before it. Frames get fresh ids,
+  ## 0 ..< count.
   let meta = json["frames"]
   let dir = self.data_dir / "frames"
-  let count = meta["count"].get_int
+  let count = max(meta["count"].get_int, 1)
+  let legacy = "frame" notin meta
+  let scripted = file_exists(state.config.script_dir / self.id & ".nim")
+  # the build's own edits are in the frame files, not the JSON
+  self.voxels.drop_frame(0)
+  let current = meta{"frame"}.get_int(0).clamp(0, count - 1)
+  var order = FrameOrder()
   var prev = none(FrameData)
-  var loaded = 0
   for i in 0 ..< count:
+    order.ids.add i
     let path = dir / \"{i:03}.bin"
     if not file_exists(path):
-      warn "frame sidecar file missing; dropping later frames",
-        unit = self.id, frame = i
-      break
+      warn "frame sidecar file missing", unit = self.id, frame = i
+      prev = none(FrameData)
+      continue
     try:
       let frame = decode_frame_file(read_file(path), prev)
-      self.frames[i] = frame
       prev = some(frame)
-      inc loaded
+      # the current frame's blocks come with the build's restore_edits
+      self.voxels.load_frame_edits(
+        i,
+        if legacy: frame.legacy_manual(scripted) else: frame,
+        adopt = i != current,
+      )
     except ValueError as e:
-      warn "frame sidecar file unreadable; dropping later frames",
+      warn "frame sidecar file unreadable; dropping it",
         unit = self.id, frame = i, error = e.msg
-      break
-  self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
-  self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
-  info "frames sidecar loaded", unit = self.id, loaded = loaded
-  if loaded > 0:
-    # Playback is never auto-resumed — it's a runtime action a script
-    # triggers with `play()`. Show the first frame so the unit comes back
-    # visible (its voxels are TRANSIENT, so only frames survive on
-    # reload); a script then takes over if it plays. fps/loop/current are
-    # no longer persisted (script-driven state — see extras_json).
-    self.current_frame = 0
+      prev = none(FrameData)
+  self.frame_order = order
+  self.next_frame_id = count
+  self.frame = current
+  self.current_frame = self.frame
+  self.target_frame()
+  self.reset_bounds()
+  # legacy files are rewritten on the next save
+  if legacy:
+    self.saved_frames_hash = Hash(0)
+  else:
+    self.saved_frames_hash = self.frames_hash
+  info "frames sidecar loaded", unit = self.id, loaded = count
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
@@ -143,7 +175,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     if file_exists(path):
       for thing_id, chunks in decode_edits_file(read_file(path)):
         for chunk_id, snapshot in chunks:
-          self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
+          self.shared.edit_snapshots[(thing_id, 0, chunk_id)] = snapshot
     else:
       warn "edits sidecar missing", unit = self.id, path = path
   elif "edits" in json:
@@ -185,7 +217,7 @@ proc from_json_hook(self: var Bot, json: JsonNode) =
     if file_exists(path):
       for thing_id, chunks in decode_edits_file(read_file(path)):
         for chunk_id, snapshot in chunks:
-          self.shared.edit_snapshots[(thing_id, chunk_id)] = snapshot
+          self.shared.edit_snapshots[(thing_id, 0, chunk_id)] = snapshot
     else:
       warn "edits sidecar missing", unit = self.id, path = path
   elif "edits" in json:
@@ -208,13 +240,15 @@ proc `$`(self: VoxelInfo): string =
 proc `$`(self: tuple[voxel: Vector3, info: VoxelInfo]): string =
   \"[{$[self.voxel.x, self.voxel.y, self.voxel.z]}, [{int self.info.kind}, {self.info.color}]]"
 
-proc edits_to_string(shared: Shared): string =
+proc edits_to_string(shared: Shared, skip: string): string =
   ## Serialize edit_snapshots to JSON format for backwards compatibility
   # Group edits by thing_id
   var by_thing: Table[string, seq[tuple[pos: Vector3, info: VoxelInfo]]]
 
   for key, packed in shared.edit_snapshots.value:
     let thing_id = key.id
+    if thing_id == skip:
+      continue
     let chunk_id = key.loc
 
     let decoded = decode_chunk(packed)
@@ -249,32 +283,27 @@ proc count_frame_files(dir: string): int =
       inc result
 
 proc save_frames(self: Build) =
-  ## Frame animation sidecar: data/<id>/frames/NNN.bin, keyframes every
-  ## FRAME_KEYFRAME_INTERVAL frames and per-chunk deltas between. The unit
-  ## JSON carries the metadata (count, fps, loop) and the static palette
-  ## the packed values reference.
+  ## Frame animation sidecar: data/<id>/frames/NNN.bin, one file per frame
+  ## holding its manual blocks, keyframes every FRAME_KEYFRAME_INTERVAL
+  ## frames and per-chunk deltas between. The unit JSON carries the metadata
+  ## (count, current frame) and the static palette the packed values
+  ## reference. Skipped when no frame's manual blocks changed since the last
+  ## save or load.
   let dir = self.data_dir / "frames"
-  if self.frames.len == 0:
+  if self.frames_len <= 1:
     if dir_exists(dir):
       remove_dir(dir)
     return
-  if not self.frames_dirty and dir_exists(dir) and
-      count_frame_files(dir) == self.frames.len:
-    # Untouched since load/last save: skip 24 frame re-encodes per save.
-    # (Local frame mutations set frames_dirty; client-synced frames are
-    # covered by the dir/count checks — a same-count in-place replacement
-    # from a remote client is the one uncovered case, and the generator
-    # workflow always starts from a deleted data dir.)
+  let hash = self.frames_hash
+  if hash == self.saved_frames_hash and dir_exists(dir) and
+      count_frame_files(dir) == self.frames_len:
     return
   create_dir dir
   var prev = none(FrameData)
-  for i in 0 ..< self.frames.len:
-    let frame = self.frames[i]
+  for i in 0 ..< self.frames_len:
+    let frame = self.voxels.frame_edits(self.frame_order.ids[i])
     let key = i mod FRAME_KEYFRAME_INTERVAL == 0
-    let data = encode_frame_file(
-      frame,
-      if key: none(FrameData) else: prev
-    )
+    let data = encode_frame_file(frame, if key: none(FrameData) else: prev)
     write_file_if_changed(dir / \"{i:03}.bin", data)
     prev = some(frame)
   for kind, path in walk_dir(dir):
@@ -283,27 +312,27 @@ proc save_frames(self: Build) =
       var stale = true
       try:
         let idx = parse_int(name[0 ..^ 5])
-        stale = idx < 0 or idx >= self.frames.len
+        stale = idx < 0 or idx >= self.frames_len
       except ValueError:
         discard
       if stale:
         remove_file path
-  self.frames_dirty = false
+  self.saved_frames_hash = hash
 
 proc extras_json(self: Thing): string =
   ## Optional trailing sections for the unit JSON: frame-animation metadata
   ## and the static color palette (frame files reference palette indices,
   ## so the palette must restore in the same order on load).
-  if self of Build and Build(self).frames.len > 0:
+  if self of Build and Build(self).frames_len > 1:
     let build = Build(self)
-    # Format metadata only. Playback state — fps, loop, and the current
-    # frame — is driven by the script's `play()` and must not persist: the
-    # live playhead churned the JSON on every save, and re-running the
-    # script re-establishes how the animation plays.
+    # Playback state (fps, loop, the displayed frame) is driven by the
+    # script's `play()` and isn't saved: the live playhead churned the JSON
+    # on every save, and re-running the script re-establishes it.
     result.add \""",
   "frames": {{
     "version": {FRAME_FILE_VERSION},
-    "count": {build.frames.len},
+    "count": {build.frames_len},
+    "frame": {build.frame},
     "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:
@@ -317,14 +346,16 @@ proc extras_json(self: Thing): string =
 {entries.join(",\n")}
   ]"""
 
-proc edited_voxel_count(shared: Shared): int =
-  for _, packed in shared.edit_snapshots.value:
+proc edited_voxel_count(shared: Shared, skip: string): int =
+  for key, packed in shared.edit_snapshots.value:
+    if key.id == skip:
+      continue
     let decoded = decode_chunk(packed)
     for linear in 0 ..< CHUNK_VOLUME:
       if decoded[linear] != EMPTY_VOXEL:
         inc result
 
-proc save_edits_sidecar(self: Thing): bool =
+proc save_edits_sidecar(self: Thing, skip: string): bool =
   ## Big builds persist their hand edits as packed chunks in
   ## data/<id>/edits.bin instead of the per-voxel JSON list (~30-40x
   ## smaller before compression). Returns whether the sidecar was written
@@ -334,13 +365,15 @@ proc save_edits_sidecar(self: Thing): bool =
     # there's nowhere to write a sidecar, so keep edits inline and touch no
     # files. `data_dir` dereferences `state.config`, absent here.
     return false
-  if edited_voxel_count(self.shared) <= EDITS_SIDECAR_THRESHOLD:
+  if edited_voxel_count(self.shared, skip) <= EDITS_SIDECAR_THRESHOLD:
     let stale = self.data_dir / "edits.bin"
     if file_exists(stale):
       remove_file stale
     return false
   var edits: Table[string, Table[Vector3, SnapshotData]]
   for key, packed in self.shared.edit_snapshots.value:
+    if key.id == skip:
+      continue
     edits.mget_or_put(key.id, Table[Vector3, SnapshotData]())[key.loc] = packed
   create_dir self.data_dir
   write_file_if_changed(self.data_dir / "edits.bin", encode_edits_file(edits))
@@ -350,11 +383,15 @@ proc `$`(self: Thing): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
+  # An animated build's edits are its current frame's manual blocks, saved
+  # with the other frames.
+  let skip =
+    if self of Build and Build(self).frames_len > 1: self.id else: ""
   let edits_section =
-    if self.save_edits_sidecar():
+    if self.save_edits_sidecar(skip):
       "\"edits_file\": \"edits.bin\""
     else:
-      let edits = edits_to_string(self.shared)
+      let edits = edits_to_string(self.shared, skip)
       \""""edits": {{
 {edits.indent(4)}
   }}"""
@@ -522,6 +559,10 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
       # seconds of terrain/water encoding in debug for zero changes. A
       # script that genuinely edits during the load re-adds the flag.
       thing.global_flags -= DIRTY
+      if thing of Build and Build(thing).frames_len > 1 and
+          Build(thing).saved_frames_hash == Hash(0):
+        # older frame files: the load-end save rewrites them
+        thing.global_flags += DIRTY
       thing.global_flags += SCRIPT_INITIALIZING
       # script_ctx isn't populated until the thing joins state.things (a worker
       # watch mints it), and we need this before the add — derive the path

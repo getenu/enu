@@ -162,8 +162,7 @@ gdobj Game of Node:
             # build never starts streaming, so its not-started floor of 1
             # would hold the gate open forever.
             let b = Build(thing)
-            if b.packed_chunks.len > 0 or b.chunk_deltas.len > 0 or
-                b.frames.len > 0:
+            if b.packed_chunks.len > 0 or b.chunk_deltas.len > 0:
               blocking.add thing.id & "=" & $thing.pending_block_updates
         if blocking.len == 0:
           inc self.gate.settle_streak

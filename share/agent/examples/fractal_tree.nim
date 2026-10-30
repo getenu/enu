@@ -14,19 +14,19 @@ proc branch(depth: int, len: int) =
   forward len
   if depth > 4:
     # trunk: a single continuation with a slight random wander
-    save()
+    let start = pen
     lean right, 0.0 .. 360.0
     lean back, 0.0 .. 8.0
     branch(depth - 1, (len.float * 0.85).int)
-    restore()
+    pen = start
   else:
     # crown: three children spread 120 degrees apart around the axis
     3.times(k):
-      save()
+      let start = pen
       lean right, k.float * 120.0 + (-25.0 .. 25.0)
       lean back, 28.0 + (0.0 .. 14.0)
       branch(depth - 1, (len.float * 0.72).int)
-      restore()
+      pen = start
 
 color = brown
 lean back, 90.0 # point the turtle straight up

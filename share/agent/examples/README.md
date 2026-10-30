@@ -40,4 +40,4 @@ proto from its own script.
 | `coin.nim` | Player.hit, show = false, duration-sleep idle |
 | `dining_chair.nim` + `dining_table.nim` + `furniture_plaza.nim` | `anchor:` blocks; scaled protos; rotate-in-place |
 | `bot_greeter.nim` | bot state machine, wander/tether, say with markdown sign |
-| `sine_sculpture.nim` | save()/restore() fans; dashed drawing |
+| `sine_sculpture.nim` | `pen` save/return fans; dashed drawing |

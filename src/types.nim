@@ -1,4 +1,4 @@
-import std/[tables, monotimes, times, sets, options, macros]
+import std/[tables, monotimes, times, sets, options, macros, hashes]
 
 type
   # A general way to run a query against a thing from another context (another
@@ -105,12 +105,18 @@ type
     ## tuple for now; it will grow into an object.
 
   FrameData* = object
-    ## One animation frame: the unit's whole voxel state as packed chunks —
-    ## the same encoding the sync layer uses. Frames are data; meshes are
-    ## derived per side (see docs/notes/voxel-frame-animation.md).
+    ## One frame's blocks as packed chunks, outside the synced tables: the
+    ## frame file format, and what playback reads a frame through.
     chunks*: Table[Vector3, SnapshotData]
 
-  EditKey* = tuple[id: string, loc: Vector3]
+  FrameChunk* = tuple[frame: int, loc: Vector3]
+    ## A chunk of one frame. `frame` is a frame id, not an index: ids are
+    ## stable while frames are inserted and deleted (see `frame_order`).
+
+  EditKey* = tuple[id: string, frame: int, loc: Vector3]
+
+  FrameOrder* = object
+    ids*: seq[int]
 
 type
   EnuError* = object of CatchableError
@@ -335,7 +341,10 @@ type
     build* {.cursor.}: Build
     edit_snapshots*: EdTable[EditKey, SnapshotData]
     edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
-    chunk_cache*: Table[Vector3, CachedChunk]
+    frame_id*: int
+      ## The frame point reads and writes go to: the one the script draws
+      ## into on the worker, the one on screen on main.
+    chunk_cache*: Table[FrameChunk, CachedChunk]
       ## Lazily decoded chunks (see `cached_chunk` in voxels.nim). Point reads
       ## and writes go through here; snapshot arrival invalidates, delta
       ## arrival pokes. Bulk iteration composes throwaway arrays instead so a
@@ -345,16 +354,20 @@ type
       ## set for interactive point queries); unbounded on the worker (its
       ## scripts and saves touch everything anyway).
     cache_tick*: int
-    local_edits*: Table[Vector3, Table[Vector3, VoxelInfo]]
+    local_edits*: Table[FrameChunk, Table[Vector3, VoxelInfo]]
+      ## Decoded edits, per chunk, filled on first use from the synced edit
+      ## tables (`load_edits`).
+    edits_loaded*: HashSet[FrameChunk]
     pending_chunks*:
-      Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
-    pending_snapshots*: Table[Vector3, SnapshotData]
+      Table[FrameChunk, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
+    pending_snapshots*: Table[FrameChunk, SnapshotData]
       ## Whole chunks staged by the bulk load path (adopt_edit_chunks),
       ## published by the same paced flush_dirty_chunks the per-voxel buffer
       ## uses. Value = the stored blob to publish verbatim, or empty to
       ## re-encode from the cache (holes/deltas changed it). Publishing all
       ## chunks eagerly at load overshot the sync channel in one burst.
-    pending_edits*: Table[Vector3, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
+    pending_edits*:
+      Table[FrameChunk, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
     on_chunk_created*: proc(chunk_id: Vector3) {.gcsafe.}
     snapshots_flushed*: int
     deltas_flushed*: int
@@ -458,8 +471,8 @@ type
     # need no id lookup, and a reload gets fresh ids (no destroy+recreate-same-id
     # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
     # at these.
-    packed_chunks*: EdTable[Vector3, SnapshotData]
-    chunk_deltas*: EdTable[Vector3, EdSeq[DeltaUpdate]]
+    packed_chunks*: EdTable[FrameChunk, SnapshotData]
+    chunk_deltas*: EdTable[FrameChunk, EdSeq[DeltaUpdate]]
     voxels*: VoxelStore
     draw_transform_value*: EdValue[Transform]
     # draw_transform mirrored for the render side (turtle indicator). A separate
@@ -480,22 +493,30 @@ type
     drawing*: bool
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
-    frames*: EdTable[int, FrameData]
-      ## Saved animation frames, keyed by dense 0-based index (the Build API
-      ## keeps keys contiguous). A table rather than a seq so replace is one
-      ## keyed op — ed's positional seq ops don't sync order-safely. Synced
-      ## once as data; playback only moves `current_frame`.
-    frames_dirty*: bool
-      ## Frames changed since the last save_frames (host-local, not synced).
-      ## Loaded frames start clean: re-encoding 24 untouched frames on every
-      ## level save dominated debug-build load times.
+    frame_order_value*: EdValue[FrameOrder]
+      ## The frames, in order, by id. Every voxel row is keyed by frame id, so
+      ## inserting, deleting or moving a frame only rewrites this list.
+      ## Replaced whole on change: ed's positional seq ops don't sync
+      ## order-safely.
+    next_frame_id*: int
+      ## Host-local: the id the next new frame gets. Ids are never reused
+      ## while the build lives; they aren't saved.
+    saved_frames_hash*: Hash
+      ## Host-local: `frames_hash` as of the last frame save or load. Loaded
+      ## frames start clean: re-encoding 24 untouched frames on every level
+      ## save dominated debug-build load times.
     current_frame_value*: EdValue[int]
-      ## Displayed frame, or -1 for the live voxel state. Display-only:
-      ## queries and collisions keep reading the live voxels (use
-      ## `load_frame` to actually restore a frame for editing).
+      ## The frame on screen, by index. Playback moves it; otherwise it
+      ## follows `frame`. Hand edits go to it.
+    frame*: int
+      ## The frame the script draws into, by index. A script run starts on
+      ## frame 0.
     frames_fps_value*: EdValue[float]
       ## > 0 while playing; the server advances `current_frame` at this rate.
     frames_loop_value*: EdValue[bool]
+    frames_first_value*: EdValue[int]
+    frames_last_value*: EdValue[int]
+      ## The frames playback runs through; `play` checks none are missing.
     sealed_frames_value*: EdValue[bool]
       ## Bake frame meshes self-contained: chunk borders treated as open,
       ## so every chunk mesh carries its own boundary skin and any mix of
@@ -723,13 +744,13 @@ proc from_flatty*(s: string, i: var int, n: var EdContext) =
 proc to_flatty*(s: var string, n: EdContext) =
   discard
 
-proc packed_chunks*(self: VoxelStore): EdTable[Vector3, SnapshotData] =
+proc packed_chunks*(self: VoxelStore): EdTable[FrameChunk, SnapshotData] =
   ## Read the Build's table live — never cache it: a reload reincarnates the Ed
   ## field (ed revives it in place), so reading through the Build always sees the
   ## current table; a cached copy would dangle on the destroyed one.
   self.build.packed_chunks
 
-proc chunk_deltas*(self: VoxelStore): EdTable[Vector3, EdSeq[DeltaUpdate]] =
+proc chunk_deltas*(self: VoxelStore): EdTable[FrameChunk, EdSeq[DeltaUpdate]] =
   self.build.chunk_deltas
 
 Ed.register(Player)

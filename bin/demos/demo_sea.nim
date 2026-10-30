@@ -26,11 +26,9 @@ let
   FRAMES = int(env_f("SEA_FRAMES", 0)) # >0: flipbook of N frames over LOOP
   SAVE = get_env("SEA_SAVE") == "1" # persist with the level (else ephemeral)
   # Sea voxels are PERSISTED: they save via the edits sidecar and reload as
-  # real, queryable, collidable state (with no save, nothing hits disk). Frames
-  # are full snapshots layered on top — the persisted base is what shows when
-  # the animation isn't playing. In animated mode each frame is a fresh full
-  # draw, so the generation loop clears edits (clear all = true) between frames
-  # to keep the persisted base one clean sea, not a union of every wave phase.
+  # real, queryable, collidable state (with no save, nothing hits disk). In
+  # animated mode each frame is a fresh full draw into its own empty frame;
+  # the current frame is what shows when the animation isn't playing.
   KIND = PERSISTED
   LOOP = env_f("SEA_LOOP", 4.0) # seconds per animation loop (flipbook mode)
 
@@ -378,11 +376,10 @@ else:
   for f in 0 ..< FRAMES:
     sea_time = LOOP * f.float / FRAMES.float
     if f > 0:
-      build.voxels.clear(all = true)
+      build.go_to_frame(f)
     fill_grids()
     let voxels = draw_sea(build)
-    let index = build.save()
-    echo "frame ", index, ": ", voxels, " voxels"
+    echo "frame ", f, ": ", voxels, " voxels"
     # pace the flood: keep ticking so each frame's chunks drain before the
     # next burst — a sustained blast drops the session. Persisted voxels
     # double the synced writes, so big seas need more headroom (SEA_PACE).

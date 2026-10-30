@@ -1,77 +1,103 @@
-import testing
+import testing, builds_private
 
 speed = 0
 
-let here = me.position
+let
+  here = me.position
+  spot = vec3(1, 0, 0)
+  hand = vec3(2, 0, 0)
+
+proc color_at(offset: Vector3): Color =
+  block_color_at(here + offset)
+
+proc raises(body: proc()): bool =
+  try:
+    body()
+  except CatchableError, Defect:
+    return true
 
 suite "Frame Animation":
-  test "save returns sequential indices":
-    me.draw_voxel(vec3(1, 0, 0), red)
-    check me.save() == 0
-    me.draw_voxel(vec3(1, 0, 0), green)
-    check save() == 1 # bare form, discardable
-    save(at = 1) # discard-free overwrite
-    check me.frame_count == 2
+  test "every build has a frame":
+    me.frames.clear()
+    check me.frames.len == 1
+    check me.frame == 0
 
-  test "load_frame restores a saved pose into the live voxels":
-    me.load_frame(0)
-    check block_color_at(here + vec3(1, 0, 0)) == red
-    me.load_frame(1)
-    check block_color_at(here + vec3(1, 0, 0)) == green
-
-  test "frame= is display-only; live voxels keep answering queries":
+  test "frame = n past the end adds empty frames":
+    me.draw_voxel(spot, red)
+    me.frame = 2
+    check me.frames.len == 3
+    check not has_block_at(here + spot)
     me.frame = 0
-    check block_color_at(here + vec3(1, 0, 0)) == green
-    me.frame = -1
+    check color_at(spot) == red
 
-  test "save(at) replaces a frame in place":
-    me.load_frame(0) # red pose into live voxels; display back to live
-    check me.frame == -1
-    me.draw_voxel(vec3(1, 0, 0), white)
-    check me.save(at = 0) == 0
-    check me.frame_count == 2 # replaced, not appended
-    me.load_frame(0)
-    check block_color_at(here + vec3(1, 0, 0)) == white
+  test "changes go straight into the current frame":
+    me.frame = 1
+    me.draw_voxel(spot, green)
+    me.place_block(hand, red)
+    me.frame = 0
+    check not has_block_at(here + hand)
+    me.frame = 1
+    check color_at(spot) == green
+    check color_at(hand) == red
 
-  test "delete_frame removes and shifts":
-    discard me.save() # a third frame to delete
-    check me.frame_count == 3
-    me.delete_frame(2)
-    check me.frame_count == 2
+  test "assigning a frame copies it":
+    me.frames[2] = me.frames[1]
+    me.frame = 2
+    check color_at(spot) == green
+    check color_at(hand) == red
+    me.frames[4] = me.frames[0]
+    check me.frames.len == 5
+    check me.frames[^1].index == 4
 
-  test "clear_frames drops everything and stops playback":
-    me.clear_frames()
-    check me.frame_count == 0
-    check me.frame == -1
-    # rebuild two frames for the playback test below
-    me.draw_voxel(vec3(1, 0, 0), red)
-    discard me.save()
-    me.draw_voxel(vec3(1, 0, 0), green)
-    discard me.save()
+  test "insert and add copy frames":
+    me.frames.insert(me.frames[0], 1)
+    check me.frames.len == 6
+    check me.frame == 3 # the current frame moves up with the rest
+    me.frames.add me.frames[me.frame]
+    check me.frames.len == 7
+    me.frame = 6
+    check color_at(spot) == green
+    check color_at(hand) == red
 
-  test "save raises at the frame cap":
-    while me.frame_count < 64:
-      discard me.save()
-    var raised = false
-    try:
-      discard me.save()
-    except CatchableError:
-      raised = true
-    check raised
-    # trim back down; playback below wants a small stack
-    me.clear_frames()
-    me.draw_voxel(vec3(1, 0, 0), red)
-    discard me.save()
-    me.draw_voxel(vec3(1, 0, 0), green)
-    discard me.save()
+  test "delete moves later frames down":
+    me.frames.delete(1)
+    check me.frames.len == 6
+    me.frames.delete(3 .. 4)
+    check me.frames.len == 4
+    check me.frame == 3
+    me.frame = 1
+    check color_at(spot) == green
 
-  test "play advances the current frame":
+  test "clear empties one frame and paste lays one over another":
+    me.frame = 3
+    me.frames[3].clear()
+    check not has_block_at(here + hand)
+    check not has_block_at(here + spot)
+    me.frames[3].paste(me.frames[0])
+    check color_at(spot) == red
+    check not has_block_at(here + hand)
+    me.frames[3].paste(me.frames[1])
+    check color_at(spot) == green
+    check color_at(hand) == red
+
+  test "frames past 63 raise":
+    check raises(proc() = me.frame = 64)
+    check raises(proc() = discard me.frames[me.frames.len])
+
+  test "play only changes the display, and the script can draw meanwhile":
+    me.frames.clear()
+    me.draw_voxel(spot, red)
+    me.frame = 2
+    me.draw_voxel(spot, green)
     me.play(fps = 5.0)
-    var waited = 0.0
-    while me.frame < 0 and waited < 5.0:
-      sleep(0.25)
-      waited += 0.25
-    check me.frame >= 0
+    sleep(0.5)
+    check me.frame == 2
+    check color_at(spot) == green
+    me.frame = 0 # the script draws into frame 0 while playback runs on
+    check color_at(spot) == red
+    me.draw_voxel(vec3(3, 0, 0), blue)
     me.stop()
+    check color_at(vec3(3, 0, 0)) == blue
+    me.frames.clear()
 
 test_summary()

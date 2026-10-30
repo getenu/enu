@@ -1,6 +1,6 @@
 import std/[strutils, math]
 ## Commands for building with blocks: shapes like `box`, `ball`, `wall`
-## and `floor`, plus turtle controls like `drawing` and `save`/`restore`.
+## and `floor`, plus turtle controls like `drawing`.
 
 import core, vm_bridge_utils
 
@@ -85,29 +85,26 @@ bridged_to_host:
     use_turtle: bool,
   )
 
-  proc save_frame_impl*(self: Build, at: int): int
-
-  proc delete_frame*(self: Build, index: int)
-    ## Remove a saved frame; later frames shift down one index.
-
+  proc copy_frame*(self: Build, src: int, dst: int)
+  proc insert_frame*(self: Build, src: int, index: int)
+  proc delete_frames*(self: Build, first: int, last: int)
+  proc clear_frame*(self: Build, index: int)
   proc clear_frames*(self: Build)
-    ## Drop every saved frame and stop playback. Frames persist across
-    ## script re-runs (that's the hand-edit flow: pose, run a script that
-    ## calls save, repeat) — so programmatic animations clear first.
-    ## save raises after 64 frames without a clear.
-
-  proc load_frame*(self: Build, index: int)
-    ## Restore a saved frame into the live voxels for editing (this changes
-    ## the real state, unlike `frame=` which only changes the display).
-
-  proc `frame=`*(self: Build, index: int)
-    ## Display a saved frame (-1 = the live voxel state). Display-only.
-
-  proc frame*(self: Build): int
-
+  proc paste_frame*(self: Build, src: int, dst: int)
   proc frames_len*(self: Build): int
 
-  proc play_impl*(self: Build, fps: float, loop: bool)
+  proc `frame=`*(self: Build, index: int)
+    ## Draw into frame `index` from here on. While nothing plays, it's also
+    ## the frame on screen. Past the last frame adds empty frames up to it
+    ## (frames go from 0 to 63). Playback keeps running.
+    ##
+    ## A script run starts on frame 0 and redraws every frame: each frame
+    ## keeps only its hand-placed blocks until the script draws into it.
+
+  proc frame*(self: Build): int
+    ## The frame the script draws into.
+
+  proc play_impl*(self: Build, fps: float, loop: bool, first, last: int)
 
   proc stop_impl*(self: Build)
 
@@ -137,45 +134,111 @@ bridged_to_host:
     ## animation, no speed/ASAP interaction. Used by `wall` / `floor`
     ## to leave the turtle at the far end of the shape.
 
-template frame_count*(self: Build): int =
-  self.frames_len
+type
+  Frames* = object
+    ## A build's frames, used like a `seq`: `me.frames[2]`, `me.frames.len`,
+    ## `me.frames.add(...)`. Every build has at least one.
+    build: Build
 
-proc save*(self: Build, at: int = -1): int {.discardable.} =
-  ## Snapshot the current voxels as an animation frame and return its
-  ## index — appended by default, or overwriting frame `at`. Replace
-  ## workflow: load_frame(3), edit, save(at = 3). Raises past 64
-  ## frames without a clear_frames().
-  self.save_frame_impl(at)
+  Frame* = object
+    ## One frame of a build. Assigning one copies it:
+    ## `me.frames[3] = me.frames[0]`.
+    build: Build
+    index: int
 
-proc play*(self: Build, fps = 8.0, loop = true) =
-  ## Cycle through the saved frames at `fps` (loops by default).
-  self.play_impl(fps, loop)
+proc frames*(self: Build): Frames =
+  Frames(build: self)
+
+proc len*(self: Frames): int =
+  self.build.frames_len
+
+proc low*(self: Frames): int =
+  0
+
+proc high*(self: Frames): int =
+  self.len - 1
+
+proc `[]`*(self: Frames, index: int): Frame =
+  if index < 0 or index >= self.len:
+    raise IndexDefect.init(
+      "no frame " & $index & ": frames go from 0 to " & $self.high
+    )
+  Frame(build: self.build, index: index)
+
+proc `[]`*(self: Frames, index: BackwardsIndex): Frame =
+  self[self.len - index.int]
+
+proc check_same_build(self: Frames, frame: Frame) =
+  if frame.build != self.build:
+    raise ValueError.init("frames can only be copied within one build")
+
+proc `[]=`*(self: Frames, index: int, frame: Frame) =
+  ## Replace frame `index` with a copy of `frame`. Past the last frame adds
+  ## empty frames up to it.
+  self.check_same_build(frame)
+  self.build.copy_frame(frame.index, index)
+
+proc add*(self: Frames, frame: Frame) =
+  ## Add a copy of `frame` after the last frame.
+  self[self.len] = frame
+
+proc insert*(self: Frames, frame: Frame, index = 0) =
+  ## Insert a copy of `frame` at `index`; later frames move up one.
+  self.check_same_build(frame)
+  self.build.insert_frame(frame.index, index)
+
+proc delete*(self: Frames, index: int) =
+  ## Remove frame `index`; later frames move down one. A build always keeps
+  ## one frame, so deleting the last one leaves it empty.
+  self.build.delete_frames(index, index)
+
+proc delete*(self: Frames, slice: Slice[int]) =
+  ## Remove frames `slice.a` to `slice.b`; later frames move down.
+  self.build.delete_frames(slice.a, slice.b)
+
+proc clear*(self: Frames) =
+  ## Drop every frame but the current one, which becomes frame 0.
+  self.build.clear_frames()
+
+proc clear*(self: Frame) =
+  ## Empty the frame: its computed and hand-placed blocks are gone.
+  self.build.clear_frame(self.index)
+
+proc paste*(self: Frame, frame: Frame) =
+  ## Lay `frame`'s blocks over this one's; `frame`'s win where both have
+  ## one.
+  if frame.build != self.build:
+    raise ValueError.init("frames can only be pasted within one build")
+  self.build.paste_frame(frame.index, self.index)
+
+proc index*(self: Frame): int =
+  self.index
+
+iterator items*(self: Frames): Frame =
+  for i in 0 ..< self.len:
+    yield self[i]
+
+iterator pairs*(self: Frames): (int, Frame) =
+  for i in 0 ..< self.len:
+    yield (i, self[i])
+
+proc play*(self: Build, fps = 8.0, loop = true, first = 0, last = -1) =
+  ## Cycle through frames `first` to `last` at `fps` (loops by default).
+  ## `last` defaults to the last frame. Display-only: the script keeps
+  ## drawing into `frame`, and blocks placed by hand go to the frame on
+  ## screen.
+  self.play_impl(fps, loop, first, last)
 
 proc stop*(self: Build) =
-  ## Stop frame playback; the display stays on the current frame.
+  ## Stop frame playback; the display stays on the frame it was showing.
   self.stop_impl()
 
 # bare forms for the active unit, matching the drawing API
-proc save*(at: int = -1): int {.discardable.} =
-  Build(active_thing()).save_frame_impl(at)
-
-proc load_frame*(index: int) =
-  Build(active_thing()).load_frame(index)
-
-proc delete_frame*(index: int) =
-  Build(active_thing()).delete_frame(index)
-
-proc clear_frames*() =
-  Build(active_thing()).clear_frames()
-
-proc play*(fps = 8.0, loop = true) =
-  Build(active_thing()).play_impl(fps, loop)
+proc play*(fps = 8.0, loop = true, first = 0, last = -1) =
+  Build(active_thing()).play_impl(fps, loop, first, last)
 
 proc stop*() =
   Build(active_thing()).stop_impl()
-
-# no bare frame_count(): it would collide with the engine's global frame
-# counter in base_bridge — use me.frame_count
 
 proc pending_block_updates*(self: Thing): int =
   ## How many block changes are still being worked on. `0` means
