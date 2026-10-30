@@ -157,6 +157,30 @@ proc handle_for*(self: Worker, thing: Thing): int =
     self.thing_handles[thing] = result
     debug "mapping thing", handle = result, thing = thing.id
 
+
+proc active_thing*(self: Worker): Thing =
+  self.active_thing_value
+
+proc `active_thing=`*(self: Worker, thing: Thing) =
+  ## Also sets the VM's `active_handle`, so a script's `active_thing()` is a
+  ## lookup rather than a host call. Until the script library loads there's
+  ## nothing to set.
+  self.active_thing_value = thing
+  # The 2.4 compiler's symbol accessors aren't gcsafe. Scripts only run on
+  # the worker thread.
+  {.gcsafe.}:
+    if self.active_handle_interpreter != self.interpreter:
+      self.active_handle_global = self.interpreter.select_unique_symbol(
+        "active_handle", module_name = "base_bridge"
+      )
+      if ?self.active_handle_global:
+        self.active_handle_interpreter = self.interpreter
+    if ?self.active_handle_global:
+      self.interpreter.set_global_value(
+        self.active_handle_global,
+        new_int_node(nkIntLit, self.handle_for(thing)),
+      )
+
 proc thing_for*(self: Worker, handle: int): Thing =
   if handle > 0:
     assert handle < self.handle_things.len, "unknown thing handle " & $handle

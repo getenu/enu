@@ -14,12 +14,18 @@ proc register_active_impl(): int =
 proc active_thing_impl(): int =
   current_active_thing.bridge_handle
 
+# The running thing's handle. The host sets it whenever the running thing
+# changes, so `active_thing()` needs no host call. Exported so the host can
+# find it.
+var active_handle*: int
+
 proc register_active*(self: Thing) =
   self.register_handle(register_active_impl())
   current_active_thing = self
+  active_handle = self.bridge_handle
 
 proc active_thing*(): Thing =
-  thing_for_handle(active_thing_impl())
+  thing_for_handle(active_handle)
 
 proc sees_impl(self: int, target: int, less_than = 100.0): bool =
   discard
@@ -150,10 +156,10 @@ bridged_to_host:
     ## The height of the ground at a spot, the y of the highest solid
     ## block, plus 1.
 
-  proc clear_box*(
+  proc has_blocks_in*(
     x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
   ): bool
-    ## Erase every block inside the box between two corners.
+    ## `true` if any build has a block inside the box between two corners.
 
   proc bounds*(self: Thing): WorldBox
     ## The invisible box around the thing and everything it's made of.
@@ -188,3 +194,8 @@ bridged_to_host:
   proc report_test_results*(passed: int, failed: int, total: int)
     ## Report one script's test tally to the host. The host sums these
     ## across every script for the run's exit code and final summary.
+
+proc clear_box*(
+    x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
+): bool {.deprecated: "use `not has_blocks_in(...)`".} =
+  not has_blocks_in(x1, y1, z1, x2, y2, z2)

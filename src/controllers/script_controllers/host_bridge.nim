@@ -120,9 +120,6 @@ proc exec_instance(self: Worker, thing: Thing) =
   if not ctx.running:
     thing.script_finished
 
-proc active_thing(self: Worker): Thing =
-  self.active_thing
-
 proc wake(self: Thing) =
   self.script_ctx.timer = get_mono_time()
 
@@ -1129,7 +1126,7 @@ proc bounds_at(
 proc box_intersects(a, b: WorldBox): bool {.inline.} =
   # Half-open overlap test ([min, max)): boxes that merely share a boundary
   # plane (a.max == b.min) do NOT overlap. Using strict `<`/`>` here counted
-  # touching as intersecting, so a single-voxel `clear_box` query reported
+  # touching as intersecting, so a single-voxel `has_blocks_in` query reported
   # "occupied" whenever an adjacent cell held a voxel.
   not (
     a.max.x <= b.min.x or a.min.x >= b.max.x or a.max.y <= b.min.y or
@@ -1203,7 +1200,7 @@ proc voxels_in_box*(box: WorldBox): bool =
   ## voxels, so cost scales with the box volume. Rotated/scaled builds —
   ## and degenerately huge query boxes — fall back to scanning the build's
   ## voxels, since their voxel-to-world mapping isn't a grid translation.
-  ## (The old always-scan path made a 12-cell `clear_box` next to the
+  ## (The old always-scan path made a 12-cell `has_blocks_in` next to the
   ## island terrain walk its ~850K voxels: >1s per call in debug.)
   const CELL_PROBE_CAP = 32768
 
@@ -1272,7 +1269,7 @@ proc voxels_in_box*(box: WorldBox): bool =
 proc box_is_free(box: WorldBox): bool =
   ## True if `box` is free of voxels (any Build's voxel data) AND
   ## doesn't intersect any thing's bounds. Use to validate a proposed
-  ## placement. Contrast with `clear_box`, which only checks voxels.
+  ## placement. Contrast with `has_blocks_in`, which only checks voxels.
   if voxels_in_box(box):
     return false
   for u in state.things.value:
@@ -1333,10 +1330,10 @@ proc floor_at(x: float, z: float): int =
           top = max(top, hit.get)
   result = if top == low(int): -1 else: top
 
-proc clear_box(
+proc has_blocks_in(
     x1: float, y1: float, z1: float, x2: float, y2: float, z2: float
 ): bool =
-  ## True if no visible voxel exists anywhere inside the inclusive box
+  ## True if a visible voxel exists anywhere inside the inclusive box
   ## (snapped to the voxel grid). Use before placing a new structure to
   ## confirm the volume is empty.
   let
@@ -1346,7 +1343,7 @@ proc clear_box(
     hi = vec3(
       floor(max(x1, x2)) + 1, floor(max(y1, y2)) + 1, floor(max(z1, z2)) + 1
     )
-  not voxels_in_box((lo, hi))
+  voxels_in_box((lo, hi))
 
 proc find_voxel_overlaps(limit: int = 50): string =
   ## Find world positions where two or more Builds both have a visible
@@ -1775,7 +1772,7 @@ proc bridge_to_vm*(worker: Worker) =
     world_name,
     reset_level, current_colliders, added_things, all_players, all_builds,
     all_bots, all_signs, all_things, report_test_results, now_seconds,
-    dump_stats, find_voxel_overlaps, things_in_box, floor_at, clear_box, bounds,
+    dump_stats, find_voxel_overlaps, things_in_box, floor_at, has_blocks_in, bounds,
     overlaps, things_overlapping, box_is_free, bounds_at, adopt, release
 
   result.bridged_from_vm "base_bridge_private",
