@@ -49,9 +49,9 @@ jobs:
         run: brew install scons yasm
       - name: Install nim
         run: |
-          curl -LO https://github.com/nim-lang/nightlies/releases/download/2026-04-24-version-2-2-bfeb3146d1638b39f69007a4ae5a23e23ae4e5ef/nim-2.2.10-macosx_arm64.tar.xz
-          tar xzf nim-2.2.10-macosx_arm64.tar.xz
-          echo "$(pwd)/nim-2.2.10/bin" >> $GITHUB_PATH
+          curl -LO https://github.com/nim-lang/nightlies/releases/download/2026-09-08-version-2-2-8e8fbf60693418dc95bb0d762fd660231d08a583/nim-2.2.12-macosx_arm64.tar.xz
+          tar xzf nim-2.2.12-macosx_arm64.tar.xz
+          echo "$(pwd)/nim-2.2.12/bin" >> $GITHUB_PATH
       - name: Save SHAs of submodules
         run: "git submodule status > .submodules.tmp"
       - name: prereq cache

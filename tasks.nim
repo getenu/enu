@@ -84,6 +84,12 @@ proc godot_bin(target = target): string =
   if target == "server":
     result = result.replace("godot.server", "godot_server.x11")
 
+proc capture(cmd: string): tuple[output: string, exitCode: int] =
+  ## `gorge_ex` at task run time. Nim 2.4 runs a `gorge_ex` whose argument is a
+  ## constant while this file compiles, so every `nim` invocation here would
+  ## run it, whether or not its task was requested.
+  gorge_ex(cmd)
+
 var generator_path = ""
 proc gen(): string =
   if generator_path == "":
@@ -241,12 +247,12 @@ task client_smoke,
   exec "nim build"
 
   p "Stopping previous harness-launched enu (if any)..."
-  discard gorge_ex(
+  discard capture(
     "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
   )
-  discard gorge_ex("pkill -x enu || true")
+  discard capture("pkill -x enu || true")
   exec "sleep 1"
-  let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
+  let port_check = capture("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
   if port_check.output.strip.len > 0:
     echo "Port 9632 is in use by an enu this harness didn't start — not killing it:"
     echo port_check.output
@@ -264,8 +270,8 @@ task client_smoke,
   exec "sleep 20" # boot + connect + initial sync + scripts
 
   p "Checking logs..."
-  let client_log = gorge_ex("cat /tmp/enu_client.log").output
-  let server_log = gorge_ex("cat /tmp/enu_server.log").output
+  let client_log = capture("cat /tmp/enu_client.log").output
+  let server_log = capture("cat /tmp/enu_server.log").output
 
   var failures: seq[string]
   template expect_check(cond: bool, msg: string) =
@@ -295,7 +301,7 @@ task client_smoke,
     "server: no crashes"
 
   p "Stopping harness enu instances..."
-  discard gorge_ex(
+  discard capture(
     "for f in /tmp/enu_server.pid /tmp/enu_client.pid; do test -f $f && kill $(cat $f) 2>/dev/null; rm -f $f; done; true"
   )
 
@@ -318,12 +324,12 @@ task mcp_repro,
   p "Stopping previous harness-launched enu (if any)..."
   # Only kill instances *this harness* started (pidfile) — never a manually
   # launched enu. If the port is still busy, fail loudly instead.
-  discard gorge_ex(
+  discard capture(
     "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
   )
-  discard gorge_ex("pkill -x enu || true")
+  discard capture("pkill -x enu || true")
   exec "sleep 1"
-  let port_check = gorge_ex("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
+  let port_check = capture("lsof -i :9632 -sTCP:LISTEN 2>/dev/null | tail -n +2")
   if port_check.output.strip.len > 0:
     echo "Port 9632 is in use by an enu this harness didn't start — not killing it:"
     echo port_check.output
@@ -339,7 +345,7 @@ task mcp_repro,
   var fail_count = 0
   for i in 1 .. iterations:
     echo &"\n--- Iteration {i}/{iterations} ---"
-    let result = gorge_ex(
+    let result = capture(
       "ENU_CONNECT_ADDRESS=127.0.0.1 nim c -r tests/mcp/enu_mcp_test.nim 2>&1"
     )
     echo result.output
@@ -354,7 +360,7 @@ task mcp_repro,
       break
 
   p "Stopping harness enu..."
-  discard gorge_ex(
+  discard capture(
     "test -f /tmp/enu_repro.pid && kill $(cat /tmp/enu_repro.pid) 2>/dev/null; rm -f /tmp/enu_repro.pid; true"
   )
 
@@ -406,11 +412,11 @@ task test_sandbox, "verify scripts can't reach host files/env from the VM":
   # Enu inherits our environment through gorge_ex.
   put_env "ENU_SANDBOX_CANARY", "enu-canary-must-not-be-readable-from-vm"
   p &"Running sandbox probe: {level.split_path.tail}"
-  let r = gorge_ex(cmd)
+  let r = capture(cmd)
   echo r.output
   if "SANDBOX-LEAK" in r.output:
     quit "SANDBOX ESCAPE: a script read host file/env data from the VM"
-  if "build_read_probe" notin r.output or "build_env_probe" notin r.output:
+  if ["build_read_probe", "build_env_probe", "build_slurp_probe"].any_it(it notin r.output):
     quit "sandbox probe did not run (level failed to load); cannot verify"
   p "sandbox probe passed: scripts can't read host files or env"
 
@@ -420,7 +426,7 @@ proc run_tests(names: openArray[string]) =
   var failed: seq[string]
   for name in names:
     echo &"\n=== Running {name} ===\n"
-    let r = gorge_ex("nim " & name)
+    let r = capture("nim " & name)
     echo r.output
     if r.exit_code != 0:
       failed.add name
@@ -470,7 +476,7 @@ proc copy_fonts() =
 
 proc mingw_path(): string =
   var pre, match: string
-  let shim_help = gorge_ex("gcc --shimgen-help")
+  let shim_help = capture("gcc --shimgen-help")
   # chocolatey uses shim exes, so we need to parse shimgen-help to find the real
   # gcc path
   if shim_help.exit_code < 1 and
