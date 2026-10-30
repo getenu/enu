@@ -93,33 +93,36 @@ proc load_frames_sidecar*(self: Build, json: JsonNode) =
   let meta = json["frames"]
   let dir = self.data_dir / "frames"
   let count = meta["count"].get_int
+  # `count` is one past the last frame; a missing file is a gap. A delta
+  # file applies to the frame just before it (save_frames writes a keyframe
+  # after every gap).
   var prev = none(FrameData)
-  var loaded = 0
+  var first = -1
   for i in 0 ..< count:
     let path = dir / \"{i:03}.bin"
     if not file_exists(path):
-      warn "frame sidecar file missing; dropping later frames",
-        unit = self.id, frame = i
-      break
+      prev = none(FrameData)
+      continue
     try:
       let frame = decode_frame_file(read_file(path), prev)
       self.frames[i] = frame
       prev = some(frame)
-      inc loaded
+      if first < 0:
+        first = i
     except ValueError as e:
-      warn "frame sidecar file unreadable; dropping later frames",
+      warn "frame sidecar file unreadable; dropping it",
         unit = self.id, frame = i, error = e.msg
-      break
+      prev = none(FrameData)
   self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
   self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
-  info "frames sidecar loaded", unit = self.id, loaded = loaded
-  if loaded > 0:
+  info "frames sidecar loaded", unit = self.id, loaded = self.frames.len
+  if first >= 0:
     # Playback is never auto-resumed — it's a runtime action a script
     # triggers with `play()`. Show the first frame so the unit comes back
     # visible (its voxels are TRANSIENT, so only frames survive on
     # reload); a script then takes over if it plays. fps/loop/current are
     # no longer persisted (script-driven state — see extras_json).
-    self.current_frame = 0
+    self.current_frame = first
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
@@ -268,9 +271,12 @@ proc save_frames(self: Build) =
     return
   create_dir dir
   var prev = none(FrameData)
-  for i in 0 ..< self.frames.len:
+  for i in 0 .. self.last_frame:
+    if i notin self.frames:
+      prev = none(FrameData)
+      continue
     let frame = self.frames[i]
-    let key = i mod FRAME_KEYFRAME_INTERVAL == 0
+    let key = i mod FRAME_KEYFRAME_INTERVAL == 0 or prev.is_none
     let data = encode_frame_file(
       frame,
       if key: none(FrameData) else: prev
@@ -283,7 +289,7 @@ proc save_frames(self: Build) =
       var stale = true
       try:
         let idx = parse_int(name[0 ..^ 5])
-        stale = idx < 0 or idx >= self.frames.len
+        stale = idx notin self.frames
       except ValueError:
         discard
       if stale:
@@ -303,7 +309,7 @@ proc extras_json(self: Thing): string =
     result.add \""",
   "frames": {{
     "version": {FRAME_FILE_VERSION},
-    "count": {build.frames.len},
+    "count": {build.last_frame + 1},
     "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:

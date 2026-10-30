@@ -134,21 +134,27 @@ regardless of visibility, which is exactly the flaw the real feature removes.
 
 ## API (v1: client + VM; UI later)
 
-    build.save()                  # append a frame (raises past 64 frames)
-    build.save(at = 3)            # overwrite frame 3 in place
-    build.load_frame(3)           # restore frame 3 into the live voxels
-    build.frame = 2               # display-only; -1 = live state
-    build.frame_count
-    build.delete_frame(3)         # later frames shift down
+    build.save()                  # write the current frame
+    build.save(3)                 # write frame 3; it becomes current
+    build.frame = 3               # load frame 3 (computed + manual blocks)
+                                  #   into the live voxels; an unsaved
+                                  #   frame keeps them as they are
+    build.frame                   # the current frame (0 on level load)
+    build.frame_count             # saved frames
+    build.last_frame              # highest saved frame, -1 if none
+    build.clear_frame(3)          # leaves a gap
+    build.delete_frame(3)         # later frames move down one
     build.clear_frames()          # explicit — frames persist across script
                                   #   re-runs (hand-edit flow: pose, run a
-                                  #   script calling save, repeat)
-    build.play(fps = 8.0, loop = true)
+                                  #   `save(n)` script, bump n, repeat)
+    build.play(fps = 8.0, loop = true, first = 0, last = -1)
     build.stop()
 
-Script reset stops playback and drops the display but keeps frames;
-programmatic animations call clear_frames() first. The 64-frame cap
-(MAX_FRAMES) keeps an unguarded save loop from growing forever.
+Frames go from 0 to 63 (MAX_FRAMES) and can have gaps. `play` checks its
+range up front and raises `Animation missing frame n` if it crosses one;
+`last = -1` means the last saved frame. Playback is display-only. Script
+reset stops playback and drops the display but keeps frames; programmatic
+animations call clear_frames() first.
 
 ## Milestones
 

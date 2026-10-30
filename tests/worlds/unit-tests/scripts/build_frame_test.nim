@@ -1,77 +1,112 @@
-import testing
+import testing, builds_private
 
 speed = 0
 
-let here = me.position
+let
+  here = me.position
+  spot = vec3(1, 0, 0)
+  hand = vec3(2, 0, 0)
+
+proc color_at(offset: Vector3): Color =
+  block_color_at(here + offset)
 
 suite "Frame Animation":
-  test "save returns sequential indices":
-    me.draw_voxel(vec3(1, 0, 0), red)
-    check me.save() == 0
-    me.draw_voxel(vec3(1, 0, 0), green)
-    check save() == 1 # bare form, discardable
-    save(at = 1) # discard-free overwrite
-    check me.frame_count == 2
-
-  test "load_frame restores a saved pose into the live voxels":
-    me.load_frame(0)
-    check block_color_at(here + vec3(1, 0, 0)) == red
-    me.load_frame(1)
-    check block_color_at(here + vec3(1, 0, 0)) == green
-
-  test "frame= is display-only; live voxels keep answering queries":
-    me.frame = 0
-    check block_color_at(here + vec3(1, 0, 0)) == green
-    me.frame = -1
-
-  test "save(at) replaces a frame in place":
-    me.load_frame(0) # red pose into live voxels; display back to live
-    check me.frame == -1
-    me.draw_voxel(vec3(1, 0, 0), white)
-    check me.save(at = 0) == 0
-    check me.frame_count == 2 # replaced, not appended
-    me.load_frame(0)
-    check block_color_at(here + vec3(1, 0, 0)) == white
-
-  test "delete_frame removes and shifts":
-    discard me.save() # a third frame to delete
-    check me.frame_count == 3
-    me.delete_frame(2)
-    check me.frame_count == 2
-
-  test "clear_frames drops everything and stops playback":
+  test "save writes the current frame":
     me.clear_frames()
-    check me.frame_count == 0
-    check me.frame == -1
-    # rebuild two frames for the playback test below
-    me.draw_voxel(vec3(1, 0, 0), red)
-    discard me.save()
-    me.draw_voxel(vec3(1, 0, 0), green)
-    discard me.save()
+    me.draw_voxel(spot, red)
+    check me.save() == 0
+    me.draw_voxel(spot, green)
+    check save() == 0 # bare form; overwrites rather than adding
+    check me.frame_count == 1
 
-  test "save raises at the frame cap":
-    while me.frame_count < 64:
-      discard me.save()
+  test "save(n) one past the last frame adds it and makes it current":
+    check me.save(1) == 1
+    check me.frame == 1
+    check me.frame_count == 2
+
+  test "frame = n loads the frame's blocks":
+    me.frame = 0
+    me.draw_voxel(spot, blue)
+    me.frame = 1
+    check color_at(spot) == green
+    check me.frame == 1
+
+  test "frames keep blocks placed by hand":
+    me.frame = 0
+    me.place_block(hand, red)
+    save()
+    me.frame = 1
+    check not has_block_at(here + hand)
+    me.frame = 0
+    check color_at(hand) == red
+
+  test "an unsaved frame keeps the blocks":
+    me.frame = 5
+    check color_at(spot) == green
+    check color_at(hand) == red
+    check me.frame == 5
+    check me.frame_count == 2
+
+  test "frames can have gaps":
+    save()
+    check me.frame_count == 3
+    check me.last_frame == 5
+    me.frame = 1
+    check color_at(spot) == green
+
+  test "frames past 63 raise":
     var raised = false
     try:
-      discard me.save()
+      me.frame = 64
     except CatchableError:
       raised = true
     check raised
-    # trim back down; playback below wants a small stack
-    me.clear_frames()
-    me.draw_voxel(vec3(1, 0, 0), red)
-    discard me.save()
-    me.draw_voxel(vec3(1, 0, 0), green)
-    discard me.save()
 
-  test "play advances the current frame":
-    me.play(fps = 5.0)
-    var waited = 0.0
-    while me.frame < 0 and waited < 5.0:
-      sleep(0.25)
-      waited += 0.25
-    check me.frame >= 0
+  test "playing over a gap raises right away":
+    var message = ""
+    try:
+      me.play()
+    except CatchableError as e:
+      message = e.msg
+    check "Animation missing frame 2" in message
+    me.play(first = 0, last = 1)
     me.stop()
+    me.play(first = 5, last = 5)
+    me.stop()
+
+  test "clear_frame leaves a gap":
+    me.clear_frame(0)
+    check me.frame_count == 2
+    check me.last_frame == 5
+    me.frame = 1
+    check color_at(spot) == green
+
+  test "delete_frame moves later frames down":
+    # frames 1 and 5 are saved; deleting the gap at 0 moves them to 0 and 4
+    me.delete_frame(0)
+    check me.frame_count == 2
+    check me.last_frame == 4
+    me.frame = 0
+    check color_at(spot) == green
+    check not has_block_at(here + hand)
+    me.frame = 4
+    check color_at(hand) == red
+
+  test "clear_frames drops everything and goes back to frame 0":
+    me.clear_frames()
+    check me.frame_count == 0
+    check me.last_frame == -1
+    check me.frame == 0
+
+  test "play only changes the display":
+    me.draw_voxel(spot, red)
+    save(0)
+    me.draw_voxel(spot, green)
+    save(1)
+    me.play(fps = 5.0)
+    sleep(0.5)
+    check me.frame == 1
+    me.frame = 0 # stops playback
+    check color_at(spot) == red
 
 test_summary()

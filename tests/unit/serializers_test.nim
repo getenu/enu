@@ -1,9 +1,10 @@
 import unittest2
-import std/[json, jsonutils]
+import std/[json, jsonutils, os]
 import core
 import models/colors
 import models/builds
 import models/bots
+import models/states
 import models/serializers {.all.}
 
 suite "Color Serialization":
@@ -146,3 +147,26 @@ suite "Bot Serialization":
     check restored.start_transform.origin.x == original.start_transform.origin.x
     check restored.start_transform.origin.y == original.start_transform.origin.y
     check restored.start_transform.origin.z == original.start_transform.origin.z
+
+suite "Frame Serialization":
+  test "frames with a gap round-trip":
+    let dir = get_temp_dir() / "enu_frames_gap_test"
+    remove_dir dir
+    state = GameState.init
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    let build = Build.init(id = "build_frames_gap")
+    for (index, color) in [(0, RED), (1, BLUE), (3, GREEN), (4, RED)]:
+      build.draw(vec3(index.float, 0, 0), (TRANSIENT, ACTION_COLORS[color]))
+      build.save(index)
+    build.save_frames()
+    check not file_exists(dir / build.id / "frames" / "002.bin")
+
+    let restored = Build.init(id = "build_frames_gap")
+    restored.load_frames_sidecar(%*{"frames": {"count": build.last_frame + 1}})
+    check restored.frame_count == 4
+    check 2 notin restored.frames
+    for index in [0, 1, 3, 4]:
+      check restored.frames[index].chunks == build.frames[index].chunks
+    remove_dir dir
