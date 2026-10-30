@@ -1,9 +1,11 @@
 import unittest2
-import std/[json, jsonutils]
+import std/[json, jsonutils, os]
 import core
 import models/colors
 import models/builds
 import models/bots
+import models/states
+import models/voxels/store
 import models/serializers {.all.}
 
 suite "Color Serialization":
@@ -146,3 +148,50 @@ suite "Bot Serialization":
     check restored.start_transform.origin.x == original.start_transform.origin.x
     check restored.start_transform.origin.y == original.start_transform.origin.y
     check restored.start_transform.origin.z == original.start_transform.origin.z
+
+suite "Frame Serialization":
+  test "frames round-trip; the current frame is saved as edits":
+    let dir = get_temp_dir() / "enu_frames_test"
+    remove_dir dir
+    state = GameState.init
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    let build = Build.init(id = "build_frames_save")
+    for (index, color) in [(0, RED), (1, BLUE), (2, GREEN), (3, RED), (4, BLUE)]:
+      build.go_to_frame(index)
+      build.draw(vec3(index.float, 0, 0), (TRANSIENT, ACTION_COLORS[color]))
+    build.go_to_frame(2)
+    build.save_frames()
+    check not file_exists(dir / build.id / "frames" / "002.bin")
+
+    let restored = Build.init(id = "build_frames_save")
+    restored.load_frames_sidecar(
+      %*{"frames": {"count": build.frames_len, "frame": build.frame}}
+    )
+    check restored.frames_len == 5
+    check restored.frame == 2
+    for index in [0, 1, 3, 4]:
+      check restored.frames[index].chunks == build.frames[index].chunks
+    remove_dir dir
+
+  test "older frames make frame 0 the live voxels":
+    let dir = get_temp_dir() / "enu_frames_old_test"
+    remove_dir dir
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    let build = Build.init(id = "build_frames_old")
+    build.draw(vec3(0, 0, 0), (PERSISTED, ACTION_COLORS[RED]))
+    build.go_to_frame(1)
+    build.draw(vec3(1, 0, 0), (PERSISTED, ACTION_COLORS[BLUE]))
+    build.go_to_frame(2) # the old live base: not a frame of the animation
+    build.save_frames()
+
+    let restored = Build.init(id = "build_frames_old")
+    restored.load_frames_sidecar(%*{"frames": {"count": 2}})
+    check restored.frame == 0
+    check restored.voxels.get_edit(vec3(0, 0, 0)) ==
+      (PERSISTED, ACTION_COLORS[RED])
+    check not restored.voxels.has_edit(vec3(1, 0, 0))
+    remove_dir dir

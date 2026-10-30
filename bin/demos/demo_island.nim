@@ -847,20 +847,19 @@ echo "TERRAIN=", terrain.id, " voxels=", land_total
 echo "WATER=", water.id, " voxels=", water_total
 
 if FRAMES > 0:
-  # the static pass above IS frame 0 (sea_time = 0); redraw the water for
-  # each later frame from a clean voxel state, demo_sea-style
+  # the static pass above IS frame 0 (sea_time = 0); draw each later frame
+  # into a fresh, empty frame, demo_sea-style
   echo "generating ", FRAMES, " water frames over ", LOOP, "s..."
   for f in 0 ..< FRAMES:
     sea_time = LOOP * f.float / FRAMES.float
     if f > 0:
-      water.voxels.clear(all = true)
+      water.go_to_frame(f)
       fill_water()
       var n = 0
       for bx in countup(0, DIM - 1, BAND):
         n += emit_water(water, bx, min(bx + BAND, DIM))
         discard Enu.client.tick_until(PACE.seconds, false)
-    let index = water.save()
-    echo "frame ", index, " saved"
+    echo "frame ", f, " drawn"
     discard Enu.client.tick_until(FRAME_PACE.seconds, false)
   echo "settling..."
   discard Enu.client.tick_until(5.seconds, false)

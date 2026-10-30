@@ -1699,24 +1699,17 @@ proc cull_down_faces_set(self: Build, value: bool) =
   self.cull_down_faces = value
   self.global_flags += DIRTY
 
-proc frames_len(self: Build): int =
-  self.frame_count
-
-proc save_frame_impl(self: Build, at: int): int =
-  self.save(at)
-
-proc play_impl(self: Build, fps: float, loop: bool) =
-  self.play(fps, loop)
+proc play_impl(self: Build, fps: float, loop: bool, first: int, last: int) =
+  self.play(fps, loop, first, last)
 
 proc stop_impl(self: Build) =
   self.stop()
 
 proc frame(self: Build): int =
-  self.current_frame
+  self.frame
 
 proc `frame=`(self: Build, index: int) =
-  self.current_frame = index
-  self.global_flags += DIRTY # the displayed frame persists
+  self.go_to_frame(index)
 
 proc save_level_now() =
   serializers.save_level(state.config.level_dir, force = true)
@@ -1787,8 +1780,8 @@ proc bridge_to_vm*(worker: Worker) =
     draw_position_set, has_block_at, block_color_at, begin_asap, end_asap,
     draw_voxel, swap_color, save_level_now, reload_thing, box_impl, sphere_impl,
     cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
-    save_frame_impl, load_frame, delete_frame, clear_frames, frame,
-    `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
+    copy_frame, insert_frame, delete_frames, clear_frame, clear_frames,
+    paste_frame, frame, `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
     cull_down_faces_set, sealed_frames, sealed_frames_set
 
   result.bridged_from_vm "builds_private", place_block, asap_mode, initializing, persist

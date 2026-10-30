@@ -324,70 +324,226 @@ template buffer*(self: Build, body: untyped) =
     self.voxels.flush_dirty_edits()
     self.voxels.immediate = was_immediate
 
-proc frame_count*(self: Build): int =
-  self.frames.len
+# A hole is marked (given the color it hides) when a computed block lands in
+# it. Each run starts with every hole unmarked; when a run finishes, the holes
+# still unmarked no longer cut into anything and are dropped. A run that fails
+# never finishes, so it can't drop them.
 
-proc save*(self: Build, at: int = -1): int {.discardable.} =
-  ## Snapshot the current voxels as an animation frame and return its index:
-  ## appended by default, or overwriting frame `at` (replace workflow:
-  ## `load_frame(3)`, edit, `save(at = 3)`). Keyed table writes make
-  ## both cases a single synced op.
+proc unmark_holes(self: Build) =
+  var marked: seq[Vector3]
+  self.voxels.for_all_edits:
+    if info.kind == HOLE and info.color != ACTION_COLORS[ERASER]:
+      marked.add pos
+  for pos in marked:
+    self.voxels.set_edit(pos, (HOLE, ACTION_COLORS[ERASER]))
+
+method collect_garbage*(self: Build) =
+  var stale: seq[Vector3]
+  self.voxels.for_all_edits:
+    if info.kind == HOLE and info.color == ACTION_COLORS[ERASER]:
+      stale.add pos
+  for pos in stale:
+    self.voxels.del_edit(pos)
+  if stale.len > 0:
+    self.global_flags += DIRTY
+
+# Frames: the current frame is the build's live voxels, computed and manual;
+# every other frame is a snapshot in `frames`. A script run owns the computed
+# blocks of the frames it visits: reset clears the current frame's, and the
+# first visit to another frame during the run's top level clears that one's.
+
+proc frames_len*(self: Build): int =
+  max(self.frames.len, self.frame + 1)
+
+proc check_frame_index(self: Build, index: int, grow = false) =
+  let limit = if grow: MAX_FRAMES else: self.frames_len
+  if index < 0 or index >= limit:
+    raise ValueError.init(
+      "no frame " & $index & ": frames go from 0 to " & $(limit - 1)
+    )
+
+proc store_live_frame(self: Build) =
+  self.frames[self.frame] = self.voxels.pack_frame
+
+proc grow_frames(self: Build, index: int) =
+  for i in self.frames.len .. index:
+    if i notin self.frames:
+      self.frames[i] = FrameData()
+
+proc load_live_frame*(self: Build) =
+  ## Replace the live voxels and edits with frame `self.frame`'s.
+  var edits: seq[Vector3]
+  self.voxels.for_all_edits:
+    edits.add pos
+  for pos in edits:
+    self.voxels.del_edit(pos)
+  self.voxels.load_frame(self.frames[self.frame])
+  var manual: seq[tuple[pos: Vector3, info: VoxelInfo]]
+  for pos, info in self.voxels.all_voxels:
+    if info.kind != TRANSIENT:
+      manual.add (pos, info)
+  for (pos, info) in manual:
+    self.voxels.set_edit(pos, info)
+    if info.kind == HOLE:
+      self.voxels.del_voxel(pos)
+  self.reset_bounds()
   self.global_flags += DIRTY
-  self.frames_dirty = true
-  if at >= 0 and at < self.frames.len:
-    self.frames[at] = self.voxels.pack_frame
-    at
-  else:
-    if self.frames.len >= MAX_FRAMES:
-      raise ResourceLimitError.init(
-        "frame limit reached (" & $MAX_FRAMES &
-          "): call clear_frames(), or overwrite with save(at = ...)"
-      )
-    let index = self.frames.len
-    self.frames[index] = self.voxels.pack_frame
-    index
 
-proc load_frame*(self: Build, index: int) =
-  ## Restore a saved frame into the live voxels for editing. Unlike
-  ## `current_frame=`, this changes the real state (and syncs it). Also
-  ## switches the display to the live state, so you see what you edit.
-  self.global_flags += DIRTY
-  if index >= 0 and index < self.frames.len:
-    self.voxels.load_frame(self.frames[index])
-    self.reset_bounds()
-    self.current_frame = -1
-
-proc clear_frames*(self: Build) =
-  ## Drop every saved frame, stop playback, and show the live state.
-  ## Scripts that build an animation programmatically call this first;
-  ## otherwise save keeps appending across script re-runs.
+proc frames_changed(self: Build) =
   self.global_flags += DIRTY
   self.frames_dirty = true
   self.frames_fps = 0.0
   self.current_frame = -1
+
+proc go_to_frame*(self: Build, index: int) =
+  ## Make `index` the current frame, growing the frames with empty ones if
+  ## it's past the end. Stops playback.
+  self.check_frame_index(index, grow = true)
+  if index == self.frame:
+    return
+  let running = SCRIPT_INITIALIZING in self.global_flags
+  if running:
+    self.collect_garbage()
+  self.store_live_frame()
+  self.grow_frames(index)
+  self.frames_changed()
+  self.frame = index
+  self.load_live_frame()
+  if running and index notin self.frames_visited:
+    self.frames_visited.incl index
+    var computed: seq[Vector3]
+    for pos, info in self.voxels.all_voxels:
+      if info.kind == TRANSIENT:
+        computed.add pos
+    for pos in computed:
+      self.voxels.del_voxel(pos)
+    self.unmark_holes()
+
+proc copy_frame*(self: Build, src: int, dst: int) =
+  ## Frame `dst` becomes a copy of frame `src`, growing the frames if `dst`
+  ## is past the end.
+  self.check_frame_index(src)
+  self.check_frame_index(dst, grow = true)
+  self.store_live_frame()
+  self.grow_frames(dst)
+  self.frames_changed()
+  self.frames[dst] = self.frames[src]
+  if dst == self.frame:
+    self.load_live_frame()
+
+proc insert_frame*(self: Build, src: int, index: int) =
+  ## Insert a copy of frame `src` at `index`; later frames move up one.
+  self.check_frame_index(src)
+  if index < 0 or index > self.frames_len:
+    raise ValueError.init(
+      "can't insert a frame at " & $index & ": frames go from 0 to " &
+        $(self.frames_len - 1)
+    )
+  if self.frames_len >= MAX_FRAMES:
+    raise ResourceLimitError.init(
+      "frame limit reached (" & $MAX_FRAMES & ")"
+    )
+  self.store_live_frame()
+  self.grow_frames(index - 1)
+  self.frames_changed()
+  let copy = self.frames[src]
+  for i in countdown(self.frames.len - 1, index):
+    self.frames[i + 1] = self.frames[i]
+  self.frames[index] = copy
+  if self.frame >= index:
+    self.frame = self.frame + 1
+  var visited: HashSet[int]
+  for i in self.frames_visited:
+    visited.incl(if i >= index: i + 1 else: i)
+  self.frames_visited = visited
+
+proc delete_frames*(self: Build, first: int, last: int) =
+  ## Remove frames `first` to `last`; later frames move down. Removing the
+  ## current frame makes the frame that takes its place current. A build
+  ## always keeps one frame, so deleting them all leaves an empty one.
+  self.check_frame_index(first)
+  self.check_frame_index(last)
+  if last < first:
+    return
+  self.store_live_frame()
+  self.frames_changed()
+  let count = last - first + 1
+  let len = self.frames.len
+  for i in first ..< len - count:
+    self.frames[i] = self.frames[i + count]
+  for i in max(first, len - count) ..< len:
+    self.frames.del i
+  if self.frames.len == 0:
+    self.frames[0] = FrameData()
+  var visited: HashSet[int]
+  for i in self.frames_visited:
+    if i < first:
+      visited.incl i
+    elif i > last:
+      visited.incl i - count
+  self.frames_visited = visited
+  if self.frame > last:
+    self.frame = self.frame - count
+  elif self.frame >= first:
+    self.frame = min(first, self.frames.len - 1)
+    self.load_live_frame()
+
+proc clear_frame*(self: Build, index: int) =
+  ## Empty a frame: its computed and manual blocks are gone. Other frames
+  ## keep their indexes.
+  self.check_frame_index(index)
+  self.store_live_frame()
+  self.frames_changed()
+  self.frames[index] = FrameData()
+  if index == self.frame:
+    self.load_live_frame()
+
+proc clear_frames*(self: Build) =
+  ## Drop every frame but the current one, which becomes frame 0.
+  self.store_live_frame()
+  self.frames_changed()
+  let live = self.frames[self.frame]
   self.frames.clear
+  self.frames[0] = live
+  if self.frame in self.frames_visited:
+    self.frames_visited = [0].to_hash_set
+  else:
+    self.frames_visited.clear
+  self.frame = 0
 
-proc delete_frame*(self: Build, index: int) =
-  ## Remove a saved frame; later frames shift down one index (keys stay
-  ## dense: each higher frame rewrites down by one keyed op).
-  self.global_flags += DIRTY
-  self.frames_dirty = true
-  if index >= 0 and index < self.frames.len:
-    let last = self.frames.len - 1
-    for i in index ..< last:
-      self.frames[i] = self.frames[i + 1]
-    self.frames.del last
-    if self.current_frame == index:
-      self.current_frame = -1
-    elif self.current_frame > index:
-      self.current_frame = self.current_frame - 1
+proc paste_frame*(self: Build, src: int, dst: int) =
+  ## Lay frame `src`'s blocks over frame `dst`'s; `src` wins where both
+  ## have one.
+  self.check_frame_index(src)
+  self.check_frame_index(dst)
+  self.store_live_frame()
+  self.frames_changed()
+  var merged = self.frames[dst]
+  merged.paste(self.frames[src])
+  self.frames[dst] = merged
+  if dst == self.frame:
+    self.load_live_frame()
 
-proc play*(self: Build, fps: float = 8.0, loop: bool = true) =
-  ## Start frame playback; the server advances `current_frame` at `fps`.
-  ## `current_frame=` displays a frame without touching the live voxels;
-  ## `load_frame` restores one for editing.
+proc play*(
+    self: Build, fps: float = 8.0, loop: bool = true, first = 0, last = -1
+) =
+  ## Start playing frames `first` to `last` (the last frame by default); the
+  ## server advances `current_frame` at `fps`. Display-only: the live voxels
+  ## stay on the current frame.
+  let last = if last < 0: self.frames_len - 1 else: last
+  self.check_frame_index(first)
+  self.check_frame_index(last)
+  if last < first:
+    raise ValueError.init(
+      "no frames to play from " & $first & " to " & $last
+    )
+  self.store_live_frame()
   self.global_flags += DIRTY
+  self.frames_first = first
+  self.frames_last = last
   self.frames_loop = loop
+  if self.current_frame notin first .. last:
+    self.current_frame = first
   self.frames_fps = fps
 
 proc stop*(self: Build) =
@@ -713,29 +869,6 @@ proc reset_state*(self: Build) =
   self.sync_turtle()
   self.transform = self.start_transform
 
-# A hole is marked (given the color it hides) when a computed block lands in
-# it. Each run starts with every hole unmarked; when a run finishes, the holes
-# still unmarked no longer cut into anything and are dropped. A run that fails
-# never finishes, so it can't drop them.
-
-proc unmark_holes(self: Build) =
-  var marked: seq[Vector3]
-  self.voxels.for_all_edits:
-    if info.kind == HOLE and info.color != ACTION_COLORS[ERASER]:
-      marked.add pos
-  for pos in marked:
-    self.voxels.set_edit(pos, (HOLE, ACTION_COLORS[ERASER]))
-
-method collect_garbage*(self: Build) =
-  var stale: seq[Vector3]
-  self.voxels.for_all_edits:
-    if info.kind == HOLE and info.color == ACTION_COLORS[ERASER]:
-      stale.add pos
-  for pos in stale:
-    self.voxels.del_edit(pos)
-  if stale.len > 0:
-    self.global_flags += DIRTY
-
 method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
@@ -750,6 +883,7 @@ method reset*(self: Build) =
   self.global_flags += RESETTING
   self.global_flags += VISIBLE
   self.reset_state()
+  self.frames_visited = [self.frame].to_hash_set
 
   # a reload stops playback and drops the displayed frame, but saved frames
   # persist — the hand-edit workflow is "pose, re-run a script that calls
@@ -827,6 +961,8 @@ proc init*(
       current_frame_value: EdValue[int].init(-1, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_first_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+      frames_last_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       sealed_frames_value:
         EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       cull_down_faces_value:

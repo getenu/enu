@@ -93,33 +93,33 @@ proc load_frames_sidecar*(self: Build, json: JsonNode) =
   let meta = json["frames"]
   let dir = self.data_dir / "frames"
   let count = meta["count"].get_int
+  self.frame = meta{"frame"}.get_int(0)
+  # The current frame has no file: it's the unit's edits, plus whatever its
+  # script draws. A delta file applies to the frame just before it, and
+  # save_frames writes a keyframe after the current frame.
   var prev = none(FrameData)
-  var loaded = 0
   for i in 0 ..< count:
     let path = dir / \"{i:03}.bin"
+    self.frames[i] = FrameData()
     if not file_exists(path):
-      warn "frame sidecar file missing; dropping later frames",
-        unit = self.id, frame = i
-      break
+      prev = none(FrameData)
+      continue
     try:
       let frame = decode_frame_file(read_file(path), prev)
       self.frames[i] = frame
       prev = some(frame)
-      inc loaded
     except ValueError as e:
-      warn "frame sidecar file unreadable; dropping later frames",
+      warn "frame sidecar file unreadable; dropping it",
         unit = self.id, frame = i, error = e.msg
-      break
+      prev = none(FrameData)
   self.reset_bounds() # frame chunks count toward bounds (see reset_bounds)
   self.frames_dirty = false # loaded verbatim from disk; nothing to re-save
-  info "frames sidecar loaded", unit = self.id, loaded = loaded
-  if loaded > 0:
-    # Playback is never auto-resumed — it's a runtime action a script
-    # triggers with `play()`. Show the first frame so the unit comes back
-    # visible (its voxels are TRANSIENT, so only frames survive on
-    # reload); a script then takes over if it plays. fps/loop/current are
-    # no longer persisted (script-driven state — see extras_json).
-    self.current_frame = 0
+  if "frame" notin meta and count > 0:
+    # Older levels kept the live voxels apart from the frames; now the live
+    # voxels are the current frame, so frame 0 takes their place.
+    self.load_live_frame()
+    self.frames_dirty = true
+  info "frames sidecar loaded", unit = self.id, loaded = self.frames.len
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
@@ -251,15 +251,16 @@ proc count_frame_files(dir: string): int =
 proc save_frames(self: Build) =
   ## Frame animation sidecar: data/<id>/frames/NNN.bin, keyframes every
   ## FRAME_KEYFRAME_INTERVAL frames and per-chunk deltas between. The unit
-  ## JSON carries the metadata (count, fps, loop) and the static palette
-  ## the packed values reference.
+  ## JSON carries the metadata (count, current frame) and the static palette
+  ## the packed values reference. The current frame is saved as the unit's
+  ## edits instead.
   let dir = self.data_dir / "frames"
-  if self.frames.len == 0:
+  if self.frames_len <= 1:
     if dir_exists(dir):
       remove_dir(dir)
     return
   if not self.frames_dirty and dir_exists(dir) and
-      count_frame_files(dir) == self.frames.len:
+      count_frame_files(dir) == self.frames_len - 1:
     # Untouched since load/last save: skip 24 frame re-encodes per save.
     # (Local frame mutations set frames_dirty; client-synced frames are
     # covered by the dir/count checks — a same-count in-place replacement
@@ -268,9 +269,12 @@ proc save_frames(self: Build) =
     return
   create_dir dir
   var prev = none(FrameData)
-  for i in 0 ..< self.frames.len:
+  for i in 0 ..< self.frames_len:
+    if i == self.frame:
+      prev = none(FrameData)
+      continue
     let frame = self.frames[i]
-    let key = i mod FRAME_KEYFRAME_INTERVAL == 0
+    let key = i mod FRAME_KEYFRAME_INTERVAL == 0 or prev.is_none
     let data = encode_frame_file(
       frame,
       if key: none(FrameData) else: prev
@@ -283,7 +287,7 @@ proc save_frames(self: Build) =
       var stale = true
       try:
         let idx = parse_int(name[0 ..^ 5])
-        stale = idx < 0 or idx >= self.frames.len
+        stale = idx < 0 or idx >= self.frames_len or idx == self.frame
       except ValueError:
         discard
       if stale:
@@ -294,16 +298,16 @@ proc extras_json(self: Thing): string =
   ## Optional trailing sections for the unit JSON: frame-animation metadata
   ## and the static color palette (frame files reference palette indices,
   ## so the palette must restore in the same order on load).
-  if self of Build and Build(self).frames.len > 0:
+  if self of Build and Build(self).frames_len > 1:
     let build = Build(self)
-    # Format metadata only. Playback state — fps, loop, and the current
-    # frame — is driven by the script's `play()` and must not persist: the
-    # live playhead churned the JSON on every save, and re-running the
-    # script re-establishes how the animation plays.
+    # Playback state (fps, loop, the displayed frame) is driven by the
+    # script's `play()` and isn't saved: the live playhead churned the JSON
+    # on every save, and re-running the script re-establishes it.
     result.add \""",
   "frames": {{
     "version": {FRAME_FILE_VERSION},
-    "count": {build.frames.len},
+    "count": {build.frames_len},
+    "frame": {build.frame},
     "keyframe_interval": {FRAME_KEYFRAME_INTERVAL}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:
