@@ -15,7 +15,8 @@ proc to_node(n: PNode): PNode = n # for call_proc's varargs
 let script_dir = get_temp_dir() / "enu_script_ctx_test"
 create_dir script_dir
 write_file script_dir / "enu_script_ctx_test.nimble", ""
-write_file script_dir / "host.nim", "proc park*() = discard\n"
+write_file script_dir / "host.nim",
+  "proc park*() = discard\nproc park_in_library*() =\n  park()\n"
 const fuel = 5_000_000
 
 suite "Interpreter":
@@ -116,7 +117,7 @@ proc run_b*(): int =
       proc(a: VmArgs) {.gcsafe.} =
         {.gcsafe.}:
           current.pause()
-          current.after_host_call()
+          current.after_host_call(a)
 
     interp.register_error_hook proc(
         config, info, msg, severity: auto
@@ -166,7 +167,7 @@ proc total*(seed: int) = last_total = walk(8, seed)
       proc(a: VmArgs) {.gcsafe.} =
         {.gcsafe.}:
           current.pause()
-          current.after_host_call()
+          current.after_host_call(a)
 
     var ctxs: seq[ScriptCtx]
     for i in 0 ..< 4:
@@ -219,7 +220,7 @@ proc total*(seed: int) = last_total = walk(8, seed)
     interp.implement_routine "enu_script_ctx_test", "host", "park",
       proc(a: VmArgs) {.gcsafe.} =
         {.gcsafe.}:
-          ctx.after_host_call()
+          ctx.after_host_call(a)
     ctx.load(
       script_dir / "exited.nim",
       "import host\nvar calls* = 0\nproc call_host*() =\n  park()\n  inc calls\n",
@@ -229,3 +230,133 @@ proc total*(seed: int) = last_total = walk(8, seed)
     let call_host = interp.select_routine("call_host", module_name = "exited")
     discard interp.call_routine(call_host, [])
     check ctx.get_var("calls", "exited").int_val == 1
+
+  test "parking records the script's own line":
+    # The line comes from the VM's call stack at the host call: the call site
+    # if the script parked directly, or the script's call into the library
+    # code that did.
+    const script = """
+import host
+proc deeper() =
+  park_in_library()
+proc go*() =
+  park()
+  for i in 0 ..< 2:
+    deeper()
+"""
+    var ctx = ScriptCtx(interpreter: interp)
+    var stacks: seq[seq[string]]
+    interp.implement_routine "enu_script_ctx_test", "host", "park",
+      proc(a: VmArgs) {.gcsafe.} =
+        {.gcsafe.}:
+          stacks.add a.call_stack.map_it(
+            \"{it.info.line}:{(if it.prc.is_nil: \"\" else: it.prc.name.s)}"
+          )
+          ctx.pause()
+          ctx.after_host_call(a)
+    ctx.load(script_dir / "lines.nim", script)
+    check not ctx.run(0)
+    check ctx.call_proc("go").paused
+    check ctx.current_line.line == 5
+    check ctx.resume()
+    # parked in host.nim; the script's line is its call into the library
+    check ctx.current_line.line == 3
+    check stacks[^1] == @["3:park_in_library", "3:deeper", "7:go"]
+    check ctx.resume()
+    check ctx.current_line.line == 3
+    check not ctx.resume()
+
+  test "write_stack_trace writes the call stack, outermost first":
+    const script = """
+import host
+proc deeper() =
+  park_in_library()
+proc go*() =
+  deeper()
+"""
+    var lines: seq[string]
+    interp.config.writeln_hook = proc(s: string) {.gcsafe.} =
+      {.gcsafe.}:
+        lines.add s
+    interp.implement_routine "enu_script_ctx_test", "host", "park",
+      proc(a: VmArgs) {.gcsafe.} =
+        write_stack_trace(a)
+    var ctx = ScriptCtx(interpreter: interp)
+    ctx.load(script_dir / "traced.nim", script)
+    check not ctx.run(0)
+    check not ctx.call_proc("go").paused
+    check lines.len == 4
+    check lines[0] == "stack trace: (most recent call last)"
+    check lines[1].starts_with "traced.nim(5, 9)"
+    check lines[1].ends_with " go"
+    check lines[2].starts_with "traced.nim(3, 18)"
+    check lines[2].ends_with " deeper"
+    check lines[3].starts_with "host.nim(3, 7)"
+    check lines[3].ends_with " park_in_library"
+
+  test "host-heavy code parks instead of hitting the time limit":
+    # A loop that keeps calling the host would otherwise hold the worker until
+    # the time limit failed it. Without a `name`, a whole script is top-level
+    # code, run by the load; instances run theirs through call_proc.
+    const script = """
+import host
+proc spin*() =
+  while true:
+    park()
+while true:
+  park()
+"""
+    var ctx = ScriptCtx(
+      interpreter: interp,
+      time_limit: 200.milliseconds,
+      park_after: 20.milliseconds,
+    )
+    interp.implement_routine "enu_script_ctx_test", "host", "park",
+      proc(a: VmArgs) {.gcsafe.} =
+        {.gcsafe.}:
+          ctx.after_host_call(a)
+    interp.register_error_hook proc(
+        config, info, msg, severity: auto
+    ) {.gcsafe.} =
+      if severity == Severity.Error:
+        raise (ref VMQuit)(info: info, msg: msg)
+    ctx.load(script_dir / "parker.nim", script)
+    var started = get_mono_time()
+    check ctx.run(0)
+    check get_mono_time() - started < 200.milliseconds
+    started = get_mono_time()
+    check ctx.resume()
+    check get_mono_time() - started < 200.milliseconds
+    ctx.stop()
+
+  test "an eval that keeps calling the host hits the time limit":
+    # An eval can't park: whoever asked wants its value now.
+    const script = """
+import host
+"""
+    var ctx = ScriptCtx(
+      interpreter: interp,
+      time_limit: 200.milliseconds,
+      park_after: 20.milliseconds,
+    )
+    interp.implement_routine "enu_script_ctx_test", "host", "park",
+      proc(a: VmArgs) {.gcsafe.} =
+        {.gcsafe.}:
+          ctx.after_host_call(a)
+    interp.register_error_hook proc(
+        config, info, msg, severity: auto
+    ) {.gcsafe.} =
+      if severity == Severity.Error:
+        raise (ref VMQuit)(info: info, msg: msg)
+    ctx.load(script_dir / "eval_spinner.nim", script)
+    check not ctx.run(0)
+    var timeout: ref VMQuit
+    let started = get_mono_time()
+    try:
+      discard ctx.eval("while true:\n  park()")
+    except VMQuit as e:
+      timeout = e
+    let elapsed = get_mono_time() - started
+    check ?timeout and
+      timeout.msg.starts_with "interpretation requires too many iterations"
+    check elapsed >= 200.milliseconds and elapsed < 2.seconds

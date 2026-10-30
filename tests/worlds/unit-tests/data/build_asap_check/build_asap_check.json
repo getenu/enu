@@ -1,0 +1,15 @@
+{
+  "id": "build_asap_check",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [40.0, 0.0, -60.0]
+  },
+  "start_color": "WHITE",
+  "edits": {
+
+  }
+}

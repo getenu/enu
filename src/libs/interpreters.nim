@@ -1,7 +1,7 @@
-import std/[os, strformat, importutils, options]
+import std/[os, strformat, importutils, options, monotimes, times]
 import pkg/compiler/ast except new_node
-import pkg/compiler/[vm, vmdef, lineinfos]
-from pkg/compiler/vm {.all.} import current_exception_msg
+import pkg/compiler/[vm, vmdef, lineinfos, msgs]
+from pkg/compiler/vm {.all.} import current_exception_msg, errTooManyIterations
 from pkg/compiler/options import ConfigRef
 import core, eval, coroutines, vm_exec_state
 
@@ -24,7 +24,9 @@ proc register_exception_ops(i: Interpreter) =
       set_result_ref(a, a.current_exception)
   c.register_callback "stdlib.system.getCurrentExceptionMsg",
     proc(a: VmArgs) {.nimcall.} =
-      set_result(a, current_exception_msg(cast[PCtx](a.ctxp), a.current_exception))
+      set_result(
+        a, current_exception_msg(cast[PCtx](a.ctxp), a.current_exception)
+      )
   c.register_callback "stdlib.system.raiseDefect",
     proc(a: VmArgs) {.nimcall.} =
       discard
@@ -67,7 +69,48 @@ proc seal_top_level(task: ScriptTask) =
   c.code.add TInstr(TInstrType(opcEof))
   c.debug.add c.debug[^1]
 
-proc after_host_call*(ctx: ScriptCtx) =
+proc is_script_line(self: ScriptCtx, c: PCtx, info: TLineInfo): bool =
+  # The script's file index is found the first time one of its lines turns up.
+  let i = info.file_index.int
+  if self.file_index < 0 and i >= 0 and i < c.config.m.file_infos.len and
+      c.config.m.file_infos[i].full_path.string == self.file_name:
+    self.file_index = i
+  self.file_index >= 0 and i == self.file_index
+
+proc call_stack*(a: VmArgs): seq[tuple[info: TLineInfo, prc: PSym]] =
+  ## The VM's call stack at a host call, innermost first: the call site, then
+  ## where each frame was called from.
+  let c = cast[PCtx](a.ctxp)
+  var frame = a.tos
+  result.add (a.current_line_info, frame.prc)
+  while ?frame.next:
+    result.add (c.debug[frame.comes_from], frame.next.prc)
+    frame = frame.next
+
+proc script_line*(self: ScriptCtx, a: VmArgs): TLineInfo =
+  ## The innermost line of the script's own file on the call stack: the call
+  ## itself, or the script's call into the library code making it.
+  let c = cast[PCtx](a.ctxp)
+  for (info, _) in a.call_stack:
+    if self.is_script_line(c, info):
+      return info
+
+proc write_stack_trace*(a: VmArgs) =
+  ## Write the VM's call stack, outermost first, like a script error does.
+  let c = cast[PCtx](a.ctxp)
+  msg_writeln(
+    c.config, "stack trace: (most recent call last)", {msg_no_unit_sep}
+  )
+  let stack = a.call_stack
+  for i in countdown(stack.high, 0):
+    let (info, prc) = stack[i]
+    var s =
+      \"{to_filename(c.config, info)}({to_linenumber(info)}, {to_column(info) + ColOffset})"
+    if ?prc:
+      s.add " ".repeat(max(1, 25 - s.len)) & prc.name.s
+    msg_writeln(c.config, s, {msg_no_unit_sep})
+
+proc after_host_call*(ctx: ScriptCtx, a: VmArgs) =
   ## Called by every bridged host proc before it returns to the VM. Acts on a
   ## pause or exit the call asked for. Host calls made outside the script's
   ## own tasks (e.g. state initializers run with the player active) can't
@@ -77,15 +120,36 @@ proc after_host_call*(ctx: ScriptCtx) =
     return
   if ctx.exit_code.is_some:
     raise ScriptExit.new_exception("script exited")
-  if ctx.pause_requested:
-    ctx.pause_requested = false
+  template park() =
+    let line = ctx.script_line(a)
+    if line.line > 0:
+      ctx.current_line = line
     if task.top_level:
       task.seal_top_level()
     suspend()
 
+  if ctx.pause_requested:
+    ctx.pause_requested = false
+    park()
+  elif task.timed and task.can_park and ctx.park_after > DurationZero and
+      get_mono_time() - ctx.resumed_at > ctx.park_after:
+    park()
+  elif task.timed and ctx.time_limit > DurationZero and
+      get_mono_time() - ctx.resumed_at > ctx.time_limit:
+    # Reported like the VM's own loop budget running out.
+    var line = ctx.script_line(a)
+    if line.line == 0:
+      line = a.current_line_info
+    let c = cast[PCtx](a.ctxp)
+    global_error(
+      c.config, line, errTooManyIterations % $c.config.max_loop_iterations_vm
+    )
+
 proc refuel*(ctx: ScriptCtx, fuel: int) =
-  ## Refill the watchdog budget, live if the script is running.
+  ## Refill the watchdog budget and restart its clock, live if the script is
+  ## running.
   ctx.fuel = fuel
+  ctx.resumed_at = get_mono_time()
   let task = ctx.running_task
   if ?task and task.coroutine.running:
     task.exec.vm.loop_iterations = fuel
@@ -99,8 +163,11 @@ proc step(self: ScriptCtx, task: ScriptTask): bool =
   ## Resume `task` until it parks or finishes. True if it finished. Errors
   ## from the script propagate, after the task is cleaned up.
   task.exec.loop_iterations =
-    if self.fuel > 0: self.fuel.int
-    else: task.exec.vm.config.max_loop_iterations_vm
+    if self.fuel > 0:
+      self.fuel.int
+    else:
+      task.exec.vm.config.max_loop_iterations_vm
+  self.resumed_at = get_mono_time()
   swap(task.exec)
   try:
     task.coroutine.resume()
@@ -123,16 +190,27 @@ proc start(
     self: ScriptCtx,
     top_level: bool,
     then: proc() {.gcsafe.},
+    timed: bool,
+    can_park: bool,
     body: proc(task: ScriptTask),
 ): ScriptTask =
   ## Start `body` as a new innermost task and run it until it parks or
   ## finishes. The task is returned either way; check `finished`.
-  let task =
-    ScriptTask(top_level: top_level, exec: ExecState.init(self.vm), then: then)
+  let task = ScriptTask(
+    top_level: top_level,
+    timed: timed,
+    can_park: can_park,
+    exec: ExecState.init(self.vm),
+    then: then,
+  )
   # Top-level work compiles, and the compiler recurses deeply, so it gets a
   # big stack (address space, committed as touched and unmapped when the task
   # ends). Script bodies are what stay parked, so they get small ones.
-  let stack_size = if top_level: 64 * 1024 * 1024 else: 512 * 1024
+  let stack_size =
+    if top_level:
+      64 * 1024 * 1024
+    else:
+      512 * 1024
   task.coroutine = Coroutine.init(
     proc() {.gcsafe.} =
       # Scripts only run on the worker thread.
@@ -163,6 +241,8 @@ proc load*(self: ScriptCtx, file_name, code: string) =
   self.code = code
   self.module_name = file_name.split_file.name
   self.file_name = file_name
+  self.file_index = -1
+  self.current_line = TLineInfo()
 
   self.dependencies = @[]
 
@@ -191,17 +271,38 @@ proc run*(self: ScriptCtx, me: int): bool =
         "run_script", module_name = self.module_name
       )
       if me > 0 and ?run_script:
-        discard self.start(top_level = false, then = nil) do(task: ScriptTask):
+        discard self.start(
+          top_level = false, then = nil, timed = true, can_park = true
+        ) do(
+          task: ScriptTask
+        ):
           discard self.interpreter.call_routine(
             run_script, [new_int_node(nkIntLit, me), new_int_node(nkIntLit, 0)]
           )
 
   try:
-    discard self.start(top_level = true, then = run_body) do(task: ScriptTask):
+    discard self.start(
+      top_level = true, then = run_body, timed = false, can_park = true
+    ) do(
+      task: ScriptTask
+    ):
+      # Untimed while compiling; a script's top-level code (all of it,
+      # unless it declares a `name`) then runs against the time limit.
       self.interpreter.load_module(
-        self.file_name, self.code, self.pass_context, raw_dependencies
+        self.file_name,
+        self.code,
+        self.pass_context,
+        raw_dependencies,
+        executing = proc() =
+          task.timed = true
+          self.resumed_at = get_mono_time(),
       )
     result = self.parked
+  except VMQuit:
+    # keep its kind: a TIMEOUT mustn't be retried like a transient failure
+    self.running = false
+    self.exit_code = some(99)
+    raise
   except Exception as e:
     self.running = false
     self.exit_code = some(99)
@@ -221,7 +322,9 @@ proc eval*(self: ScriptCtx, code: string): Option[string] =
   ## on ahead of the script itself and nothing is returned.
   self.exit_code = none(int)
   var value: Option[string]
-  let task = self.start(top_level = true, then = nil) do(task: ScriptTask):
+  let task = self.start(
+    top_level = true, then = nil, timed = true, can_park = false
+  ) do(task: ScriptTask):
     value = self.interpreter.eval(self.pass_context, self.file_name, code)
   if task.finished:
     result = value
@@ -236,7 +339,11 @@ proc call_proc*(
       VMError, \"script does not export a proc of the name: '{proc_name}'"
     )
   let args = @args
-  let task = self.start(top_level = false, then = nil) do(task: ScriptTask):
+  let task = self.start(
+    top_level = false, then = nil, timed = true, can_park = true
+  ) do(
+    task: ScriptTask
+  ):
     {.gcsafe.}:
       task.result = self.interpreter.call_routine(foreign_proc, args)
   (self.parked, task.result)

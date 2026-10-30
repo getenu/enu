@@ -34,7 +34,10 @@ proc processModule*(
     stream: PLLStream,
     ctx: var PContext,
     dependencies: var seq[string],
+    executing: proc() {.gcsafe.} = nil,
 ): bool {.discardable.} =
+  ## `executing` is called once the module (and anything it imports) has
+  ## compiled, just before its code starts to run.
   if graph.stopCompile():
     return true
   let bModule = setupEvalGen(graph, module, idgen)
@@ -142,6 +145,8 @@ proc processModule*(
         if name notin dependencies:
           dependencies.add(name)
 
+      if not executing.is_nil:
+        executing()
       discard processPipeline(graph, semNode, bModule)
 
     closeParser(p)
@@ -233,6 +238,7 @@ proc loadModule*(
     fileName, code: string,
     ctx: var PContext,
     dependencies: var seq[string],
+    executing: proc() {.gcsafe.} = nil,
 ) {.gcsafe.} =
   # The 2.4 compiler's symbol accessors go through IC loaders, which use
   # globals, so they aren't gcsafe. Scripts only compile on the worker thread.
@@ -269,7 +275,9 @@ proc loadModule*(
     ctx = preparePContext(i.graph, module, i.idgen)
 
     with_import_stack_recovery(i.graph):
-      if not processModule(i.graph, module, i.idgen, stream, ctx, dependencies):
+      if not processModule(
+        i.graph, module, i.idgen, stream, ctx, dependencies, executing
+      ):
         stderr.write_line "module load incomplete: " & moduleName
 
 proc node_to_str(n: PNode): string =

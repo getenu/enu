@@ -67,16 +67,15 @@ proc advance_thing(self: Worker, thing: Thing, timeout: MonoTime): bool =
       ):
         ctx.timer = MonoTime.high
         ctx.action_running = false
+        # The action is over. Left in place, a finished `sleep` keeps
+        # returning DONE, holding the script to one resume per tick for the
+        # rest of its run (and its next run, after a reload).
+        ctx.callback = nil
         self.active_thing = thing
         ctx.fuel = script_fuel
         ctx.running = ctx.resume()
         if not ctx.running:
-          if thing of Build:
-            Build(thing).end_asap()
-          if not ?thing.clone_of:
-            thing.collect_garbage
-            thing.ensure_visible
-            thing.current_line = 0
+          thing.script_finished
 
         result = ctx.running and task_state == NEXT_TASK
       elif now >= ctx.timer:

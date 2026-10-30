@@ -28,10 +28,8 @@ proc get_last_error(self: Worker): ErrorData =
   result = self.last_exception.from_exception
   self.last_exception = nil
 
-proc write_stack_trace(self: Worker) =
-  # A parked script's frames live on its coroutine's VM stack, out of reach
-  # from a host call. The VM writes a stack trace with every script error.
-  echo "write_stack_trace: stack traces are only written for script errors"
+proc write_stack_trace(a: VmArgs) =
+  interpreters.write_stack_trace(a)
 
 proc get_thing(self: Worker, a: VmArgs, pos: int): Thing {.gcsafe.} =
   self.thing_for(a.get_int(pos).int)
@@ -119,6 +117,8 @@ proc exec_instance(self: Worker, thing: Thing) =
     self.active_thing = active
   ctx.fuel = script_fuel
   ctx.running = ctx.call_proc("run_script", self.handle_for(thing), true).paused
+  if not ctx.running:
+    thing.script_finished
 
 proc active_thing(self: Worker): Thing =
   self.active_thing
@@ -367,11 +367,7 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
   # seconds  > 0 : park for that long.
   #          < 0 : no-arg nap — up to half a second, waking early if the
   #                thing is bumped (ctx.timer is pulled near by a collision).
-  #         == 0 : yield exactly one tick. Used at the end of every script
-  #                (a bare `sleep 0` before the wrapper returns) so control
-  #                returns to the engine once before the VM tears the module
-  #                down; the script then completes on the next tick and
-  #                end_asap publishes its drawing — no 0.5s settle delay.
+  #         == 0 : yield exactly one tick.
   var duration = 0.0
   ctx.callback = proc(delta: float, _: MonoTime): TaskStates =
     duration += delta
@@ -1669,6 +1665,12 @@ proc place_block(self: Build, position: Vector3, color: Color) =
   self.voxels.set_edit(position, info)
   self.global_flags += DIRTY # hand-style edit: persist on the next save
 
+proc asap_mode(self: Build): bool =
+  ASAP_MODE in self.global_flags
+
+proc initializing(self: Build): bool =
+  SCRIPT_INITIALIZING in self.global_flags
+
 proc persist(self: Build) =
   ## Promote every voxel the script has drawn (TRANSIENT) into a PERSISTED edit,
   ## so it's written to the unit's data file and survives even after the drawing
@@ -1792,7 +1794,7 @@ proc bridge_to_vm*(worker: Worker) =
     `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
     cull_down_faces_set, sealed_frames, sealed_frames_set
 
-  result.bridged_from_vm "builds_private", place_block, persist
+  result.bridged_from_vm "builds_private", place_block, asap_mode, initializing, persist
 
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,

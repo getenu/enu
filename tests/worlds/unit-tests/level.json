@@ -10,7 +10,11 @@
     "build_block_tests",
     "build_serialization_test",
     "build_frame_test",
-    "build_swap_color_test"
+    "build_swap_color_test",
+    "build_quit_at_load",
+    "build_quick_box",
+    "build_draws_only",
+    "build_asap_check"
   ],
   "show_prototypes": true
 }
