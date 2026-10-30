@@ -425,11 +425,6 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[st
 proc config*(i: Interpreter): ConfigRef =
   i.graph.config
 
-proc `exit_hook=`*(
-    i: Interpreter, hook: proc(c: PCtx, pc: int, tos: PStackFrame)
-) =
-  (PCtx i.graph.vm).exitHook = hook
-
 proc `enter_hook=`*(
     i: Interpreter,
     hook: proc(c: PCtx, pc: int, tos: PStackFrame, instr: TInstr),

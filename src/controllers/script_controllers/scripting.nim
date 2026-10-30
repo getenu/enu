@@ -165,6 +165,13 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
           "without yielding (instruction budget exhausted)",
       )
 
+    # `slurp`/`staticRead` read host files while a script compiles. It's an
+    # opcode rather than a vmops callback, so the host-IO sandbox can't see it.
+    if instr.opcode == opcSlurp:
+      raise (ref VMQuit)(
+        info: info, msg: "slurp/staticRead isn't available in Enu scripts"
+      )
+
     # We don't care about the line info if we're not in our enu script.
     # Store the file index the first time we hit our file and only change
     # current_line/previous_line if the current instruction has that index.
