@@ -50,7 +50,7 @@ type
   Thing* = ref object of RootObj
     ## Anything that exists in the world: a build, a bot, a sign, or
     ## the player. Most commands work on any thing.
-    id: int
+    bridge_handle: int
     name*: string
     advance_state_machine*: proc(): bool
     rng: Rand

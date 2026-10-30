@@ -11,7 +11,6 @@ switch("path", "$projectDir/../../share/vmlib")
 --tls_emulation:off
 
 --define:no_godot
---define:vmExecHooks
 --define:nimPreviewHashRef
 --define:nimTypeNames
 --define:ed_partial_subscriber

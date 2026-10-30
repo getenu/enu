@@ -23,14 +23,13 @@ bridged_to_host:
 
   proc new_markdown_sign*(
     self: Thing,
-    instance: Sign,
     message: string,
     more = "",
     width = 1.0,
     height = 1.0,
     size = 250 / 1200, # text height in blocks; ≈0.208 == the pre-blocks default
     billboard = false,
-  )
+  ): Sign
 
   proc update_markdown_sign*(
     self: Sign,

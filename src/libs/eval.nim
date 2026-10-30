@@ -16,7 +16,7 @@ export Interpreter, VmArgs, PCtx, PStackFrame, TLineInfo
 # is in `camelCase` rather than `snake_case` like the rest of the project.
 
 # adapted from
-# https://github.com/nim-lang/Nim/blob/v2.2.10/compiler/pipelines.nim#L94
+# https://github.com/nim-lang/Nim/blob/v2.4.0/compiler/pipelines.nim
 # (was originally based on v2.0.2). Normal module loading procedure, but makes
 # PContext a param so it can be passed to extend_module.
 # Recursive proc to find import statements in AST
@@ -109,10 +109,10 @@ proc processModule*(
       if module.name.s != "nimscriptapi":
         processImplicitImports graph,
           graph.config.implicitImports, nkImportStmt, module, ctx, bModule,
-          idgen
+          idgen, nil
         processImplicitImports graph,
           graph.config.implicitIncludes, nkIncludeStmt, module, ctx, bModule,
-          idgen
+          idgen, nil
 
     checkFirstLineIndentation(p)
     block processCode:
@@ -149,32 +149,12 @@ proc processModule*(
       break
 
   assert graph.pipelinePass == EvalPass
-  # Old unusedImports handling logic removed as we processed it above
 
-  # Required: every script's module body must raise VMPause before reaching
-  # here (via exit() at the end of build_code_template.nim.nimf and
-  # bot_code_template.nim.nimf). If a script completes naturally:
-  #   - closePContext below finalizes the PContext and queues generic
-  #     instances (eg. class constructors) into finalNode via
-  #     addCodeForGenerics
-  #   - interpreterCode runs evalStmt+execute on finalNode, which sizes
-  #     tos.slots from the current c.prc.regInfo.len -- often smaller
-  #     than the bytecode the second-execute ends up touching, surfacing
-  #     as cross-script IndexDefects
-  #   - that second-execute also causes spawner scripts to re-run their
-  #     constructor instantiations, producing unbounded thing growth
-  #     (~6.5x over the correct count on the api-test level)
-  # Keeping exit() in the templates is the production fix. Removing it
-  # without first dropping this finalize sequence will re-introduce both
-  # bugs.
+  # The module's closing code. Top-level code still parked mid-module stops at
+  # the spare `opcEof` seal_top_level left after it, rather than running on
+  # into this.
   let finalNode = closePContext(graph, ctx, nil)
   discard interpreterCode(bModule, finalNode)
-
-  if graph.config.backend notin {backendC, backendCpp, backendObjc}:
-    # We only write rod files here if no C-like backend is active.
-    # The C-like backends have been patched to support the IC mechanism.
-    # They are responsible for closing the rod files. See `cbackend.nim`.
-    closeRodFile(graph, module)
   result = true
 
 # from nimeval. Added moduleName
@@ -218,12 +198,13 @@ proc selectRoutine*(i: Interpreter, name: string, module_name: string): PSym =
       moduleName,
     )
 
-proc resetModule*(i: Interpreter, moduleName: string) =
-  for iface in i.graph.ifaces:
-    if iface.module != nil and iface.module.name.s == moduleName:
-      initStrTables(i.graph, iface.module)
-      iface.module.ast = nil
-      break
+proc resetModule*(i: Interpreter, moduleName: string) {.gcsafe.} =
+  {.gcsafe.}: # see loadModule
+    for iface in i.graph.ifaces:
+      if iface.module != nil and iface.module.name.s == moduleName:
+        initStrTables(i.graph, iface.module)
+        iface.module.ast = nil
+        break
 
 template with_import_stack_recovery(graph: ModuleGraph, body: untyped) =
   ## An aborted compile (a VMQuit timeout raised from the exec hook mid-import)
@@ -253,36 +234,40 @@ proc loadModule*(
     ctx: var PContext,
     dependencies: var seq[string],
 ) {.gcsafe.} =
-  assert i != nil
+  # The 2.4 compiler's symbol accessors go through IC loaders, which use
+  # globals, so they aren't gcsafe. Scripts only compile on the worker thread.
+  {.gcsafe.}:
+    assert i != nil
 
-  var module: PSym
-  let moduleName = fileName.splitFile.name
-  for iface in i.graph.ifaces:
-    if iface.module != nil and iface.module.name.s == moduleName and
-        fileName == toFullPath(i.graph.config, iface.module.info):
-      module = iface.module
-      break
+    var module: PSym
+    let moduleName = fileName.splitFile.name
+    for iface in i.graph.ifaces:
+      if iface.module != nil and iface.module.name.s == moduleName and
+          fileName == toFullPath(i.graph.config, iface.module.info):
+        module = iface.module
+        break
 
-  if module.isNil:
-    {.gcsafe.}:
+    if module.isNil:
       module = i.graph.makeModule(fileName)
 
-  initStrTables(i.graph, module)
-  module.ast = nil
-  var stream = llStreamOpen(code)
+    initStrTables(i.graph, module)
+    module.ast = nil
+    var stream = llStreamOpen(code)
 
-  # after some kinds of errors the vm will switch back to emStaticStmt mode,
-  # which causes "cannot evaluate at compile time" issues with some variables.
-  # Force things back to emRepl.
-  PCtx(i.graph.vm).mode = emRepl
-  # A failed eval elsewhere can leave the global error counter latched at or
-  # past errorMax; stopCompile() then makes processModule skip this module's
-  # body without a peep — the script "runs" as an empty module.
-  i.graph.config.errorCounter = 0
+    # after some kinds of errors the vm will switch back to emStaticStmt mode,
+    # which causes "cannot evaluate at compile time" issues with some variables.
+    # Force things back to emRepl.
+    PCtx(i.graph.vm).mode = emRepl
+    # A failed eval elsewhere can leave the global error counter latched at or
+    # past errorMax; stopCompile() then makes processModule skip this module's
+    # body without a peep — the script "runs" as an empty module. The VM's
+    # copy has to match, or it skips the next top-level statement anywhere
+    # (`interpreterCode` won't run code compiled after a new error).
+    i.graph.config.errorCounter = 0
+    PCtx(i.graph.vm).old_error_count = 0
 
-  ctx = preparePContext(i.graph, module, i.idgen)
+    ctx = preparePContext(i.graph, module, i.idgen)
 
-  {.gcsafe.}:
     with_import_stack_recovery(i.graph):
       if not processModule(i.graph, module, i.idgen, stream, ctx, dependencies):
         stderr.write_line "module load incomplete: " & moduleName
@@ -424,12 +409,6 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[st
 
 proc config*(i: Interpreter): ConfigRef =
   i.graph.config
-
-proc `enter_hook=`*(
-    i: Interpreter,
-    hook: proc(c: PCtx, pc: int, tos: PStackFrame, instr: TInstr),
-) =
-  (PCtx i.graph.vm).enterHook = hook
 
 proc error_hook*(
     i: Interpreter,

@@ -3,7 +3,6 @@ import locks except Lock
 import pkg/godot except print, Color
 import pkg/chroma
 import pkg/compiler/vm except get_int
-from pkg/compiler/vm {.all.} import stack_trace_aux
 import pkg/compiler/ast except new_node
 import pkg/compiler/[vmdef, renderer, msgs]
 import pkg/metrics
@@ -29,33 +28,13 @@ proc get_last_error(self: Worker): ErrorData =
   result = self.last_exception.from_exception
   self.last_exception = nil
 
-proc map_thing(self: Worker, thing: Thing, pnode: PNode) =
-  debug "mapping pnode ", hash = pnode.hash, thing = thing.id
-  self.thing_map[pnode] = thing
-  self.node_map[thing] = pnode
-
-proc unmap_thing*(self: Worker, thing: Thing) =
-  if thing in self.node_map:
-    debug "unmapping node ", hash = self.node_map[thing].hash, thing = thing.id
-    self.thing_map.del self.node_map[thing]
-    self.node_map.del thing
-
 proc write_stack_trace(self: Worker) =
-  private_access ScriptCtx
-
-  let ctx = self.active_thing.script_ctx
-  {.gcsafe.}:
-    msg_writeln(
-      ctx.ctx.config, "stack trace: (most recent call last)", {msg_no_unit_sep}
-    )
-
-    stack_trace_aux(ctx.ctx, ctx.tos, ctx.pc)
+  # A parked script's frames live on its coroutine's VM stack, out of reach
+  # from a host call. The VM writes a stack trace with every script error.
+  echo "write_stack_trace: stack traces are only written for script errors"
 
 proc get_thing(self: Worker, a: VmArgs, pos: int): Thing {.gcsafe.} =
-  let pnode = a.get_node(pos)
-  if pnode.kind != nkNilLit:
-    {.gcsafe.}:
-      result = self.thing_map[pnode]
+  self.thing_for(a.get_int(pos).int)
 
 proc get_bot(self: Worker, a: VmArgs, pos: int): Bot =
   let thing = self.get_thing(a, pos)
@@ -67,29 +46,34 @@ proc get_build(self: Worker, a: VmArgs, pos: int): Build =
   assert not thing.is_nil and thing of Build
   Build(thing)
 
+proc get_player(self: Worker, a: VmArgs, pos: int): Player =
+  let thing = self.get_thing(a, pos)
+  assert not thing.is_nil and thing of Player
+  Player(thing)
+
 proc get_sign(self: Worker, a: VmArgs, pos: int): Sign =
-  let pnode = a.get_node(pos)
-  if pnode.kind != nkNilLit:
-    let thing = self.get_thing(a, pos)
-    assert not thing.is_nil and thing of Sign
+  let thing = self.get_thing(a, pos)
+  if ?thing:
+    assert thing of Sign
     result = Sign(thing)
 
-proc to_node(self: Worker, thing: Thing): PNode =
-  if ?thing:
-    if thing notin self.node_map:
-      fail \"thing `{thing.id}` not in node_map"
-    self.node_map[thing]
-  else:
-    ast.new_node(nkNilLit)
+proc handle_result(self: Worker, thing: Thing): BiggestInt =
+  self.handle_for(thing)
 
-proc to_node[T: Thing](self: Worker, things: seq[T]): PNode =
-  var node = ast.new_node(nkBracketExpr)
+proc handle_result[T: Thing](self: Worker, things: seq[T]): PNode =
+  result = ast.new_node(nkBracket)
   for thing in things:
-    if ?thing:
-      node.add self.to_node(thing)
-    else:
-      node.add ast.new_node(nk_nil_lit)
-  result = node
+    result.add new_int_node(nkIntLit, self.handle_for(thing))
+
+proc thing_kind(self: Worker, handle: int): string =
+  ## For a script meeting a thing that no script made: which type to make it.
+  let thing = self.thing_for(handle)
+  assert ?thing, "no thing for handle " & $handle
+  if thing of Bot: "Bot"
+  elif thing of Build: "Build"
+  elif thing of Sign: "Sign"
+  elif thing of Player: "Player"
+  else: raise_assert "unknown thing type for " & thing.id
 
 # Common bindings
 
@@ -104,14 +88,11 @@ proc press_action(self: Worker, name: string) =
 proc release_action(self: Worker, name: string) =
   state.queued_action = "-" & name
 
-proc register_template_node(self: Worker, pnode: PNode, name: string) =
-  self.template_node_map[name] = pnode
-
-proc register_active(self: Worker, pnode: PNode) =
+proc register_active(self: Worker): int =
   assert not self.active_thing.is_nil
-  self.map_thing(self.active_thing, pnode)
+  self.handle_for(self.active_thing)
 
-proc new_instance(self: Worker, src: Thing, dest: PNode) =
+proc new_instance_handle(self: Worker, src: Thing): int =
   let id =
     src.id & "_" & self.active_thing.id & "_instance_" &
     $(self.active_thing.things.len + 1)
@@ -123,7 +104,7 @@ proc new_instance(self: Worker, src: Thing, dest: PNode) =
     owner = clone, clone_of = src, interpreter = self.interpreter
   )
 
-  self.map_thing(clone, dest)
+  result = self.handle_for(clone)
 
   debug "adding to active thing",
     thing = clone.id, active_thing = self.active_thing.id
@@ -137,7 +118,7 @@ proc exec_instance(self: Worker, thing: Thing) =
   defer:
     self.active_thing = active
   ctx.fuel = script_fuel
-  ctx.running = ctx.call_proc("run_script", self.node_map[thing], true).paused
+  ctx.running = ctx.call_proc("run_script", self.handle_for(thing), true).paused
 
 proc active_thing(self: Worker): Thing =
   self.active_thing
@@ -154,7 +135,7 @@ proc keep_alive(ctx: ScriptCtx) =
   ## (eg. spatial queries from eval) that have legitimate work to do but no
   ## reason to yield. Call periodically — the watchdog kicks in when the
   ## budget runs out.
-  ctx.fuel = script_fuel
+  ctx.refuel(script_fuel)
 
 proc yield_script(self: Worker, thing: Thing) =
   let ctx = thing.script_ctx
@@ -308,26 +289,6 @@ proc reset_level(self: Worker) =
     state.config_value.value:
       level_dir = current_level
 
-proc ensure_thing_impl[T: Thing](self: Worker, thing: T) {.gcsafe.} =
-  if thing notin self.node_map:
-    var node = self.template_node_map[$T].copy_tree
-    self.map_thing(thing, node)
-
-method ensure_exists(self: Thing, worker: Worker) {.base, gcsafe.} =
-  raise_assert "ensure_thing not implemented for " & $self.type
-
-method ensure_exists(self: Player, worker: Worker) =
-  worker.ensure_thing_impl(self)
-
-method ensure_exists(self: Bot, worker: Worker) =
-  worker.ensure_thing_impl(self)
-
-method ensure_exists(self: Build, worker: Worker) =
-  worker.ensure_thing_impl(self)
-
-method ensure_exists(self: Sign, worker: Worker) =
-  worker.ensure_thing_impl(self)
-
 proc current_colliders*(self: Worker, thing: Thing, kind: string): seq[Thing] =
   var colliders: seq[Thing]
   state.things.value.walk_tree proc(other: Thing) =
@@ -336,7 +297,6 @@ proc current_colliders*(self: Worker, thing: Thing, kind: string): seq[Thing] =
           kind == "Bot" and other of Bot or kind == "Build" and other of Build or
           kind == "Sign" and other of Sign:
         colliders.add(other)
-        other.ensure_exists(self)
   colliders
 
 proc world_name(): string =
@@ -436,7 +396,6 @@ proc find_all[T: Thing](worker: Worker, _: type T): seq[T] =
   var things: seq[T]
   state.things.value.walk_tree proc(thing: Thing) =
     if thing of T:
-      thing.ensure_exists(worker)
       things.add T(thing)
   things
 
@@ -892,7 +851,6 @@ proc executing_player(worker: Worker): Player =
     if thing of Player:
       let player = Player(thing)
       if player.id == owner_id:
-        player.ensure_exists(worker)
         return player
 
   return nil
@@ -921,7 +879,6 @@ proc `megapixels=`(_: PNode, pixels: float) =
 proc new_markdown_sign(
     self: Worker,
     thing: Thing,
-    pnode: PNode,
     message: string,
     more: string,
     width: float,
@@ -941,7 +898,6 @@ proc new_markdown_sign(
   )
 
   info "creating sign", id = result.id
-  self.map_thing(result, pnode)
   thing.things.add(result)
 
 proc update_markdown_sign(
@@ -988,7 +944,6 @@ proc `open=`(self: Sign, value: bool) =
 proc coding(self: Worker, thing: Thing): Thing =
   if thing == state.player:
     if ?state.open_thing:
-      state.open_thing.ensure_exists(self)
       result = state.open_thing
 
 proc `coding=`(self: Thing, value: Thing) =
@@ -1446,8 +1401,8 @@ proc count_draw(self: Build) =
   ## naturally (they animate in-engine); the immediate ones do all their work
   ## inside the bridged call, so a build script could otherwise run its whole
   ## control flow in one unyielding resume. Pause every draw_yield_interval
-  ## calls: the VMPause fires on the next VM instruction (after this call
-  ## returns), the script resumes next tick with a fresh fuel budget — so no
+  ## calls: the script parks when this call returns, and resumes next tick
+  ## with a fresh fuel budget — so no
   ## legitimate drawing script can exhaust the watchdog, regardless of size.
   if ?self.script_ctx:
     inc self.script_ctx.unyielded_draws
@@ -1783,31 +1738,31 @@ proc bridge_to_vm*(worker: Worker) =
     "base_bridge_private",
     "read_enu_script",
     proc(a: VmArgs) {.gcsafe.} =
-      let filename = get_string(a, 0)
-      let level_dir = state.config_value.value.level_dir
-      let full_path =
-        if filename.is_absolute:
-          filename
-        else:
-          level_dir / "generated" / filename
+      {.gcsafe.}: # the 2.4 VM's value conversions aren't gcsafe
+        let filename = get_string(a, 0)
+        let level_dir = state.config_value.value.level_dir
+        let full_path =
+          if filename.is_absolute:
+            filename
+          else:
+            level_dir / "generated" / filename
 
-      # Confine reads to the current level dir. The previous check only required
-      # the substring "/scripts/" anywhere in the path, which let an absolute
-      # path read any file under any dir named `scripts` (including other
-      # levels'). is_within canonicalizes both sides (symlinks + `..`), so
-      # read_file below resolves to the same file it validated.
-      debug "reading script source", path = full_path
-      if not is_within(level_dir, full_path):
-        raise ValueError.init(
-          "Direct file access blocked for security. Scripts can only be read " &
-            "from within the current level directory. Attempted: " & full_path
-        )
-      set_result(a, to_result(read_file(full_path)))
+        # Only files inside the current level dir can be read. is_within
+        # canonicalizes both sides (symlinks + `..`), so read_file below opens
+        # the same file it checked.
+        debug "reading script source", path = full_path
+        if not is_within(level_dir, full_path):
+          raise ValueError.init(
+            "Direct file access blocked for security. Scripts can only be read " &
+              "from within the current level directory. Attempted: " & full_path
+          )
+        set_result(a, to_result(read_file(full_path)))
 
   result.bridged_from_vm "vm_bridge_utils", get_last_error
+  result.bridged_from_vm "handles", thing_kind
 
   result.bridged_from_vm "base_bridge",
-    register_active, register_template_node, echo_console, new_instance,
+    register_active, echo_console, new_instance_handle,
     pending_block_updates_get,
     exec_instance, capture_start_transform, hit, exit, global, `global=`,
     position, local_position,

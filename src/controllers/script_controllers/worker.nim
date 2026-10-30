@@ -525,6 +525,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         worker.unmap_thing(thing)
 
         if ?thing.script_ctx:
+          thing.script_ctx.stop()
           thing.script_ctx.running = false
           thing.script_ctx.callback = nil
           if not (thing of Player) and LOADING_SCRIPT notin state.local_flags and

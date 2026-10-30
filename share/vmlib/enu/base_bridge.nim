@@ -2,24 +2,30 @@
 ## `color` and `scale`. These commands cross over into the Enu engine
 ## itself.
 
-import types, vm_bridge_utils
+import types, vm_bridge_utils, handles
 
-# NOTE: overridden by ScriptController. Only for tests.
+# NOTE: the `_impl` bodies are overridden by ScriptController. Only for tests.
 var current_active_thing: Thing
-proc register_active_impl(self: Thing) =
-  current_active_thing = self
+var last_test_handle = 0
+proc register_active_impl(): int =
+  inc last_test_handle
+  last_test_handle
 
-proc active_thing_impl(): Thing =
-  current_active_thing
+proc active_thing_impl(): int =
+  current_active_thing.bridge_handle
 
 proc register_active*(self: Thing) =
-  register_active_impl(self)
+  self.register_handle(register_active_impl())
+  current_active_thing = self
 
 proc active_thing*(): Thing =
-  active_thing_impl()
+  thing_for_handle(active_thing_impl())
 
-proc sees_impl*(self: Thing, target: Thing, less_than = 100.0): bool =
+proc sees_impl(self: int, target: int, less_than = 100.0): bool =
   discard
+
+proc sees_handles*(self: Thing, target: Thing, less_than = 100.0): bool =
+  sees_impl(self.bridge_handle, target.bridge_handle, less_than)
 
 bridged_to_host:
   proc now_seconds*(): float
@@ -169,12 +175,11 @@ bridged_to_host:
     ## rotation or scale. Check before you leap.
 
   proc added_things*(): seq[Thing]
-  proc register_template_node*(self: Thing, name: string)
 
   # TODO: These should be in base_bridge_private, but are currently needed outside of base_api.
   proc echo_console*(msg: string)
   proc exit*(exit_code = 0, msg = "")
-  proc new_instance*(src, dest: Thing)
+  proc new_instance_handle*(src: Thing): int
   proc exec_instance*(self: Thing)
   proc capture_start_transform*(self: Thing)
   proc wake*(self: Thing)

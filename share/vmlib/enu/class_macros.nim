@@ -1,5 +1,5 @@
 import std/[macros, strutils, sequtils, os]
-import core, macro_helpers, base_bridge_private
+import core, macro_helpers, base_bridge_private, handles
 
 template with_line_info(node, source: NimNode): NimNode =
   let n = node
@@ -91,7 +91,7 @@ proc build_ctors(
 
     result = `type_name`()
     result.seed = active_thing().seed
-    new_instance(instance, result)
+    result.register_handle(new_instance_handle(instance))
 
   for param in params:
     let prop = param[0]
@@ -443,7 +443,8 @@ macro load_enu_script*(
   inner.add ast
   result.add script_start
   let run_script_def = quote do:
-    proc run_script*(me {.inject.}: me.type, is_instance {.inject.}: bool) =
+    proc run_script*(handle: int, is_instance {.inject.}: bool) =
+      let me {.inject.} = typeof(me)(thing_for_handle(handle))
       var enu_target {.inject.}: Thing = me
       let home {.inject.} = PositionOffset(position: me.local_position)
       var move_mode {.inject.} = 1
@@ -457,9 +458,12 @@ macro load_enu_script*(
       # why, but probably fixable. Sleep before exit as a workaround.
       sleep 0.0
 
-    run_script(me, false)
+  # The host calls `run_script(me.bridge_handle, false)` once the module has
+  # loaded. Running it from here would park the script inside top-level code,
+  # which the VM appends the next module's top-level code over.
+
   # Set the proc body's line info to the script file so nimsuggest's cursorInProc
   # check passes and the body gets processed, enabling go-to-definition in scripts.
   if ast.len > 0:
-    run_script_def[0].body.copy_line_info(ast[0])
+    run_script_def.body.copy_line_info(ast[0])
   result.add run_script_def

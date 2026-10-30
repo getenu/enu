@@ -3,8 +3,6 @@ patch_file "nph", "phrenderer", "patches/phrenderer"
 --threadAnalysis:
   off
 --define:
-  vm_exec_hooks
---define:
   nim_preview_hash_ref
 --define:
   nim_type_names

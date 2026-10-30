@@ -257,7 +257,7 @@ template sees*(target: Thing, less_than = 100.0): bool =
   enu_target.see(target, less_than)
 
 proc sees*(self: Thing, target: Thing, less_than = 100.0): bool =
-  sees_impl(self, target, less_than)
+  sees_handles(self, target, less_than)
 
 proc see*(self: Thing, target: Thing, less_than = 100.0): bool =
   sees(self, target, less_than)
@@ -902,9 +902,6 @@ proc hit*(thing: Thing): bool =
 proc `in`*(thing: Thing): bool =
   thing.hit(active_thing())
 
-proc register_type[T: Thing](thing: T) =
-  register_template_node(thing, $T)
-
 template `as`*[T](q: Query[seq[T]], name: untyped): bool =
   ## Grab a result from a query and give it a name, right inside an
   ## `if`: `if Player.hit as toucher: toucher.bounce`. Only works
@@ -922,7 +919,3 @@ template `as`*[T](q: Query[seq[T]], name: untyped): bool =
       T.default
   result
 
-register_type Player()
-register_type Bot()
-register_type Build()
-register_type Sign()

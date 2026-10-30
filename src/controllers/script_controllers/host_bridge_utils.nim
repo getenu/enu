@@ -139,11 +139,15 @@ macro bridged_from_vm(
           found_local = true
           break
       if not found_local:
-        for candidate in symbol:
-          let params = candidate.get_impl[3]
-          if params.len > 1 and params[1][1].repr == "Thing":
-            chosen = candidate
-            break
+        # `Thing` first, then a specific kind (`size` on a Sign), so the
+        # compiler's own overloads (`ast.size(PType)`) never win.
+        block search:
+          for kinds in [@["Thing"], thing_types[1 .. ^1]]:
+            for candidate in symbol:
+              let params = candidate.get_impl[3]
+              if params.len > 1 and params[1][1].repr in kinds:
+                chosen = candidate
+                break search
     let
       proc_impl = chosen.get_impl
       proc_name = proc_impl[0].str_val
@@ -189,7 +193,7 @@ macro bridged_from_vm(
       call = new_call(
         bind_sym"set_result",
         ident"a",
-        new_call(bind_sym"to_node", ident"script_engine", call),
+        new_call(bind_sym"handle_result", ident"script_engine", call),
       )
     elif return_node.kind == nnk_sym:
       call = new_call(
@@ -210,9 +214,15 @@ macro bridged_from_vm(
           log_scope:
             topics = "scripting"
           debug "calling routine", name = `proc_name`
-          try:
-            `call`
-          except Exception as e:
-            error "Exception calling into host", kind = $e.type, msg = e.msg
-            echo e.get_stack_trace()
-            script_engine.last_exception = e
+          # The 2.4 VM's value conversions aren't gcsafe. Scripts only run on
+          # the worker thread.
+          {.gcsafe.}:
+            try:
+              `call`
+            except Exception as e:
+              error "Exception calling into host", kind = $e.type, msg = e.msg
+              echo e.get_stack_trace()
+              script_engine.last_exception = e
+            let active = script_engine.active_thing
+            if ?active and ?active.script_ctx:
+              active.script_ctx.after_host_call()

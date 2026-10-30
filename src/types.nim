@@ -42,7 +42,7 @@ import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
 import ed
-import models/colors, libs/[eval]
+import models/colors, libs/[eval, coroutines, vm_exec_state]
 
 from pkg/godot import NimGodotObject
 
@@ -574,6 +574,16 @@ type
     runner*: string
     nim*: string
 
+  ScriptTask* = ref object
+    ## One coroutine running VM code for a script, with its own VM stack.
+    coroutine*: Coroutine
+    exec*: ExecState
+    # Running module top-level code (a load or an eval) rather than a proc.
+    top_level*: bool
+    result*: PNode
+    # Started once this task finishes, e.g. a script's body after its load.
+    then*: proc() {.gcsafe.}
+
   ScriptCtx* = ref object
     script*: string
     timer*: MonoTime
@@ -592,11 +602,10 @@ type
     # the worker stall per resume and re-arming `fuel` on resume, so no
     # legitimate drawing script can exhaust the budget.
     unyielded_draws*: int
-    ctx: PCtx
-    pc: int
-    tos: PStackFrame
+    # Running work, innermost last: the script itself, and on top of it
+    # anything started while it was parked (an eval, an instance's ctor).
+    tasks: seq[ScriptTask]
     current_line*: TLineInfo
-    previous_line: TLineInfo
     pause_requested: bool
     module_name*: string
     file_name*: string
@@ -624,7 +633,8 @@ type
     kind*: QuitKind
     location*: string
 
-  VMPause* = object of CatchableError
+  ScriptExit* = object of CatchableError
+    ## Unwinds a script's coroutine after it calls `exit`.
 
   Callback* = proc(delta: float, timeout: MonoTime): TaskStates {.gcsafe.}
 
@@ -638,9 +648,10 @@ type
     retry_failures*: bool
     interpreter*: Interpreter
     active_thing*: Thing
-    thing_map*: Table[PNode, Thing]
-    node_map*: Table[Thing, PNode]
-    template_node_map*: Table[string, PNode]
+    # Things cross the VM bridge as integer handles (0 is nil). Indexed by
+    # handle; handles aren't reused, so a stale one can't alias a new thing.
+    handle_things*: seq[Thing]
+    thing_handles*: Table[Thing, int]
     failed*: seq[tuple[thing: Thing, e: ref VMQuit]]
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
