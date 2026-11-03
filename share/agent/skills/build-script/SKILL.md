@@ -54,8 +54,8 @@ turn 45.0       # turn by degrees
 lean back, 30   # pitch 30°
 lean right, 10  # roll 10°
 
-save()          # save position + orientation + color
-restore()       # restore the save
+let spot = pen  # save position + orientation + color
+pen = spot      # go back to it
 ```
 
 Name locals and proc params carefully: bare words like `height`,

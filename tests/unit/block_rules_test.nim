@@ -1,4 +1,5 @@
 import unittest2
+import std/sets
 import core
 import models
 import models/builds {.all.}
@@ -70,3 +71,71 @@ suite "Computed and manual blocks":
     build.unmark_holes()
     build.collect_garbage()
     check not build.voxels.has_edit(spot)
+
+suite "Frames":
+  let hand = vec3(5, 3, 4)
+
+  test "each frame keeps its own holes and manual blocks":
+    let build = Build.init(id = "build_frames_holes")
+    build.computed(red)
+    build.erase_cell(spot)
+    build.draw(hand, (PERSISTED, blue))
+    build.go_to_frame(1)
+    check build.frames_len == 2
+    check spot notin build
+    check not build.voxels.has_edit(spot)
+    check not build.voxels.has_edit(hand)
+    build.computed(red)
+    build.go_to_frame(0)
+    check build.has_hole
+    check spot notin build
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+    build.go_to_frame(1)
+    check not build.voxels.has_edit(hand)
+    check build.voxel_info(spot) == (TRANSIENT, red)
+
+  test "a script run clears computed blocks the first time it enters a frame":
+    let build = Build.init(id = "build_frames_rerun")
+    build.go_to_frame(1)
+    build.computed(red)
+    build.draw(hand, (PERSISTED, blue))
+    build.go_to_frame(0)
+    build.global_flags += SCRIPT_INITIALIZING
+    build.frames_visited = [0].to_hash_set
+    build.go_to_frame(1)
+    check spot notin build
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+    build.computed(red)
+    build.go_to_frame(0)
+    build.go_to_frame(1) # already visited this run: kept
+    check build.voxel_info(spot) == (TRANSIENT, red)
+
+  test "copy, insert, delete and paste":
+    let build = Build.init(id = "build_frames_ops")
+    build.computed(red) # frame 0
+    build.copy_frame(0, 2) # frame 1 grows empty
+    check build.frames_len == 3
+    build.go_to_frame(2)
+    check build.voxel_info(spot) == (TRANSIENT, red)
+    build.draw(hand, (PERSISTED, blue))
+    build.insert_frame(2, 0) # frames move up; the current one with them
+    check build.frames_len == 4
+    check build.frame == 3
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+    build.delete_frames(1, 2)
+    check build.frames_len == 2
+    check build.frame == 1
+    build.clear_frame(0)
+    build.paste_frame(1, 0)
+    build.go_to_frame(0)
+    check build.voxel_info(spot) == (TRANSIENT, red)
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+
+  test "clearing frames keeps the current one as frame 0":
+    let build = Build.init(id = "build_frames_clear")
+    build.go_to_frame(3)
+    build.computed(red)
+    build.clear_frames()
+    check build.frames_len == 1
+    check build.frame == 0
+    check build.voxel_info(spot) == (TRANSIENT, red)

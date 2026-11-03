@@ -481,21 +481,29 @@ type
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
     frames*: EdTable[int, FrameData]
-      ## Saved animation frames, keyed by dense 0-based index (the Build API
-      ## keeps keys contiguous). A table rather than a seq so replace is one
-      ## keyed op — ed's positional seq ops don't sync order-safely. Synced
-      ## once as data; playback only moves `current_frame`.
+      ## Animation frames, keyed by index (0 ..< MAX_FRAMES, dense). The
+      ## current frame's entry is a snapshot from when it was last stored;
+      ## the live voxels are the real thing. A table rather than a seq so
+      ## replace is one keyed op — ed's positional seq ops don't sync
+      ## order-safely. Playback only moves `current_frame`.
     frames_dirty*: bool
       ## Frames changed since the last save_frames (host-local, not synced).
       ## Loaded frames start clean: re-encoding 24 untouched frames on every
       ## level save dominated debug-build load times.
     current_frame_value*: EdValue[int]
       ## Displayed frame, or -1 for the live voxel state. Display-only:
-      ## queries and collisions keep reading the live voxels (use
-      ## `load_frame` to actually restore a frame for editing).
+      ## queries and collisions keep reading the live voxels.
+    frame*: int
+      ## The current frame: the one the live voxels are. Saved with the
+      ## level, so the next load and script run pick up where this one was.
+    frames_visited*: HashSet[int]
+      ## Frames the current script run has entered (see `go_to_frame`).
     frames_fps_value*: EdValue[float]
       ## > 0 while playing; the server advances `current_frame` at this rate.
     frames_loop_value*: EdValue[bool]
+    frames_first_value*: EdValue[int]
+    frames_last_value*: EdValue[int]
+      ## The frames playback runs through; `play` checks none are missing.
     sealed_frames_value*: EdValue[bool]
       ## Bake frame meshes self-contained: chunk borders treated as open,
       ## so every chunk mesh carries its own boundary skin and any mix of
