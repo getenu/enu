@@ -29,9 +29,6 @@ if host_os == "windows":
 --warning:
   "UseBase:off"
 
---experimental:
-  "dynamic_bind_sym"
-
 --define:
   "nim_preview_hash_ref"
 --define:
