@@ -122,7 +122,7 @@ proc await_future[T](future: Future[T], a: VmArgs) =
 const thing_types = ["Thing", "Bot", "Build", "Sign", "Player"]
 
 macro bridged_from_vm(
-    self: Worker, module_name: string, proc_refs: varargs[untyped]
+    self: Worker, module_name: string, proc_refs: varargs[typed]
 ): untyped =
   result = new_stmt_list()
   result.add quote do:
@@ -130,19 +130,18 @@ macro bridged_from_vm(
       let script_engine {.inject.} = `self`
 
   for proc_ref in proc_refs:
-    let symbol = bind_sym($proc_ref)
-    var chosen = symbol
-    if symbol.kind != nnkSym:
+    var chosen = proc_ref
+    if proc_ref.kind != nnkSym:
       # Overloaded. Prefer, in order: a proc defined in this module — the
       # bridge wraps host_bridge's own procs first (`save` must bind the
       # draw-position save here, not serializers' persist-the-thing save);
       # then a Thing-first overload (procs that live in models, like
       # `rotation`); then the first candidate.
-      chosen = symbol[0]
+      chosen = proc_ref[0]
       var found_local = false
-      for candidate in symbol:
+      for candidate in proc_ref:
         # The impl's line info is the declaration site (the sym's own is
-        # the bind_sym call site — this macro).
+        # the call site).
         if "host_bridge" in candidate.get_impl.line_info:
           chosen = candidate
           found_local = true
@@ -152,7 +151,7 @@ macro bridged_from_vm(
         # compiler's own overloads (`ast.size(PType)`) never win.
         block search:
           for kinds in [@["Thing"], thing_types[1 .. ^1]]:
-            for candidate in symbol:
+            for candidate in proc_ref:
               let params = candidate.get_impl[3]
               if params.len > 1 and params[1][1].repr in kinds:
                 chosen = candidate
@@ -181,10 +180,10 @@ macro bridged_from_vm(
           let getter = "get_" & typ
           pos.inc
           var call = new_call(
-            bind_sym(getter), ident"script_engine", ident"a", new_lit(pos)
+            ident(getter), ident"script_engine", ident"a", new_lit(pos)
           )
           if name == "self":
-            call = new_call(bind_sym("assert_self"), call, new_lit(proc_name))
+            call = new_call(ident"assert_self", call, new_lit(proc_name))
           call
         elif typ in thing_types.map_it(\"type {it}"):
           let type_name = typ.split(" ")[1]
@@ -192,25 +191,25 @@ macro bridged_from_vm(
         else:
           let getter = "get_" & typ
           pos.inc
-          new_call(bind_sym(getter), ident"a", new_lit(pos))
+          new_call(ident(getter), ident"a", new_lit(pos))
       args.add arg
 
-    var call = new_call(proc_ref, args)
+    var call = new_call(chosen, args)
     let return_type = return_node.repr
     if return_type in thing_types or
         return_type in thing_types.map_it(\"seq[{it}]"):
       call = new_call(
-        bind_sym"set_result",
+        ident"set_result",
         ident"a",
-        new_call(bind_sym"handle_result", ident"script_engine", call),
+        new_call(ident"handle_result", ident"script_engine", call),
       )
     elif return_node.kind == nnk_sym:
       call = new_call(
-        bind_sym"set_result", ident"a", new_call(bind_sym"to_result", call)
+        ident"set_result", ident"a", new_call(ident"to_result", call)
       )
     elif return_node.kind == nnk_bracket_expr and return_node.len == 2 and
         return_node[0].str_val == "Future":
-      call = new_call(bind_sym"await_future", call, ident"a")
+      call = new_call(ident"await_future", call, ident"a")
 
     result.add quote do:
       mixin implement_routine
