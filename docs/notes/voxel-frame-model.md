@@ -183,6 +183,17 @@ rows for a chunk in view (`on_block_loaded`). Decisions made on the way:
 - Frame files are rewritten only when `frames_hash` (every frame's edit
   rows, by index) differs from the last save or load.
 
-Open: main's lazily decoded edits aren't invalidated when the worker
-changes them afterwards (and the worker's not between refreshes), so a
-click can be judged against stale edits.
+- Decoded edits are only a cache of the edit rows, and other sides change
+  those rows. Main decodes a chunk's edits again in each frame it needs
+  them, which is cheap since only clicks read them there. The worker reads
+  them on every draw, so it keeps them and drops a chunk when its row
+  changes (a watch on the edit tables and each row's deltas), ignoring its
+  own writes. What's left is the few frames before an edit reaches the
+  other side's rows.
+- Whether a chunk's edits hold a hole, and which frames hold none, is
+  remembered until a row changes. A load learns it while adopting each
+  frame, so the hole passes at the start and end of a run skip a build with
+  no holes (the welcome water) entirely.
+- Likewise, a frame whose blocks are just its restored edits is remembered
+  until a computed block lands in it or its blocks are replaced, so a run
+  doesn't scan every frame to decide whether to rebuild it.

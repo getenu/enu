@@ -726,7 +726,7 @@ gdobj BuildNode of VoxelTerrain:
     let was_skipping_join = dont_join
     dont_join = true
 
-    self.model.init_voxels_if_needed(rebuild_edits = false)
+    self.model.init_voxels_if_needed(watch_edits = false)
     self.model.target_shown_frame()
 
     # Static RGB colors resolve through the process-global library registry;

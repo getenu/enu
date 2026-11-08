@@ -132,7 +132,8 @@ proc continue_stroke*(
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
 proc place_beside(self: Build, local_cell: Vector3) {.gcsafe.}
-proc init_voxels_if_needed*(self: Build, rebuild_edits = true) {.gcsafe.}
+proc init_voxels_if_needed*(self: Build, watch_edits = true) {.gcsafe.}
+proc watch_edit_rows(self: Build) {.gcsafe.}
 
 # =============================================================================
 # Build implementation
@@ -985,7 +986,7 @@ proc init*(
     # Set up edit references after init_thing creates Shared
     self.voxels.edit_snapshots = self.shared.edit_snapshots
     self.voxels.edit_deltas = self.shared.edit_deltas
-    self.voxels.rebuild_local_edits()
+    self.watch_edit_rows()
 
     self.track_chunk_bounds()
 
@@ -1035,18 +1036,39 @@ proc place_beside(self: Build, local_cell: Vector3) =
     add_to.end_asap()
     state.things += add_to
 
-proc init_voxels_if_needed*(self: Build, rebuild_edits = true) =
+proc watch_edit_rows(self: Build) =
+  ## Edits written elsewhere (main's clicks, other players) make this side's
+  ## decoded copy of their chunk stale. A delta added to a row fires only
+  ## that row's seq, so each seq is watched too.
+  proc changed(key: EditKey) =
+    self.voxels.edit_row_changed((key.frame, key.loc))
+
+  proc watch_deltas(key: EditKey, deltas: EdSeq[DeltaUpdate]) =
+    deltas.watch:
+      changed(key)
+
+  for key, deltas in self.voxels.edit_deltas:
+    if key.id == self.id and ?deltas:
+      watch_deltas(key, deltas)
+
+  self.voxels.edit_snapshots.watch:
+    if change.item.key.id == self.id:
+      changed(change.item.key)
+  self.voxels.edit_deltas.watch:
+    let key = change.item.key
+    if key.id == self.id:
+      changed(key)
+      if added and ?change.item.value:
+        watch_deltas(key, change.item.value)
+
+proc init_voxels_if_needed*(self: Build, watch_edits = true) =
   ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
   ## ride the closure, so it's nil after a cross-thread sync). The synced tables
   ## are the Build's own Ed fields — reconnected by reference after sync, so we
   ## just wrap them (no id lookup, no aliasing).
   ##
-  ## `rebuild_edits` decodes every persisted edit chunk into `local_edits`, the
-  ## working set for authoring and saving. Only the worker (the edit/save
-  ## authority) touches it; the display side renders from `packed_chunks` and
-  ## never reads it, so main-thread joins pass `rebuild_edits = false` to skip
-  ## the decode — for a big persisted build (the course terrain: 1345 chunks)
-  ## that eager decode was ~1.3s on the main thread during load.
+  ## `watch_edits` keeps the worker's decoded edits in step with rows written
+  ## elsewhere. Main passes false: it decodes them again each frame.
   self.init_shared()
   if not ?self.shared:
     # Narrow replica whose `shared` (inherited from the parent on a parented
@@ -1071,8 +1093,8 @@ proc init_voxels_if_needed*(self: Build, rebuild_edits = true) =
       edit_snapshots = self.shared.edit_snapshots,
       edit_deltas = self.shared.edit_deltas,
     )
-    if rebuild_edits:
-      self.voxels.rebuild_local_edits()
+    if watch_edits:
+      self.watch_edit_rows()
     self.track_chunk_bounds()
 
 proc setup_packed_chunk_watches(self: Build) =
@@ -1140,9 +1162,7 @@ method worker_thread_joined*(self: Build, worker: Worker) =
 
 method main_thread_joined*(self: Build) =
   proc_call main_thread_joined(Thing(self))
-  # Display side: render from packed_chunks; local_edits (authoring/save set)
-  # stays unbuilt so a big persisted build doesn't decode all its chunks here.
-  self.init_voxels_if_needed(rebuild_edits = false)
+  self.init_voxels_if_needed(watch_edits = false)
   self.setup_packed_chunk_watches()
 
   self.local_flags.watch:

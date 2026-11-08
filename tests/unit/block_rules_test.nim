@@ -2,7 +2,7 @@ import unittest2
 import core
 import models
 import models/builds {.all.}
-import models/voxels/store
+import models/voxels/[store, codec]
 
 # Computed blocks are drawn by a build's script (TRANSIENT); manual ones are
 # placed by hand (PERSISTED). Erasing a computed block leaves a HOLE.
@@ -71,6 +71,53 @@ suite "Computed and manual blocks":
     build.collect_garbage()
     check not build.voxels.has_edit(spot)
 
+proc edit_row(build: Build): EditKey =
+  (build.id, 0, chunk_id_for_pos(spot))
+
+suite "Edits changed elsewhere":
+  # Rows written straight to the synced edit tables stand in for main's
+  # clicks or another player's edits arriving on the worker.
+
+  test "a row changed elsewhere is read again":
+    let build = Build.init(id = "build_edits_changed")
+    build.manual(red)
+    build.voxels.flush_dirty_edits()
+    check build.voxels.has_edit(spot)
+    build.voxels.edit_snapshots.del(build.edit_row)
+    check not build.voxels.has_edit(spot)
+
+  test "a delta added elsewhere is read again":
+    let build = Build.init(id = "build_edits_delta")
+    build.manual(red)
+    build.voxels.flush_dirty_edits()
+    build.draw(spot + vec3(1, 0, 0), (PERSISTED, blue))
+    build.voxels.flush_dirty_edits()
+    check build.edit_row in build.voxels.edit_deltas
+    check build.voxels.has_edit(spot)
+    build.voxels.edit_deltas[build.edit_row].add encode_delta(
+      @[(local_pos_in_chunk(spot), EMPTY_VOXEL)]
+    )
+    check not build.voxels.has_edit(spot)
+
+  test "unflushed edits survive a re-read":
+    let build = Build.init(id = "build_edits_pending")
+    build.manual(red)
+    build.voxels.edit_row_changed((0, chunk_id_for_pos(spot)))
+    check build.voxels.get_edit(spot) == (PERSISTED, red)
+
+  test "a hole made elsewhere is seen by the next run":
+    let build = Build.init(id = "build_edits_remote_hole")
+    build.manual(red)
+    build.voxels.flush_dirty_edits()
+    build.unmark_holes() # the chunk is known to have no holes
+    var cells: array[CHUNK_VOLUME, PackedVoxel]
+    cells[linear_position(spot)] = pack_voxel(ERASER.ord, HOLE.ord)
+    build.voxels.edit_snapshots[build.edit_row] = encode_chunk(cells)
+    check build.has_hole
+    build.unmark_holes()
+    build.collect_garbage()
+    check not build.voxels.has_edit(spot)
+
 proc run(build: Build) =
   ## What a script run does before its script: as reset() with a script.
   build.start_frames_run(scripted = true)
@@ -129,6 +176,21 @@ suite "Frames":
     check spot notin build
     build.go_to_frame(2)
     check not build.has_hole
+
+  test "a run rebuilds a frame only once a script draws into it":
+    let build = Build.init(id = "build_frames_restored")
+    build.go_to_frame(1)
+    build.draw(hand, (PERSISTED, blue))
+    build.run()
+    build.voxels.with_frame(build.frame_id(1)):
+      check not build.voxels.restore_needed
+    build.go_to_frame(1)
+    build.computed(red)
+    check build.voxels.restore_needed
+    build.run()
+    build.go_to_frame(1)
+    check spot notin build
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
 
   test "copy, insert, delete and paste":
     let build = Build.init(id = "build_frames_ops")

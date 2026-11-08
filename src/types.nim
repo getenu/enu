@@ -356,8 +356,21 @@ type
     cache_tick*: int
     local_edits*: Table[FrameChunk, Table[Vector3, VoxelInfo]]
       ## Decoded edits, per chunk, filled on first use from the synced edit
-      ## tables (`load_edits`).
+      ## tables (`load_edits`). The worker keeps them until a row changes
+      ## elsewhere (`edit_row_changed`); main reads them again each frame.
     edits_loaded*: HashSet[FrameChunk]
+    edits_frame*: int
+      ## Main only: the `state.frame_count` its decoded edits were read in.
+    writing_edits*: bool
+      ## Set while this side writes the edit tables, so its own writes don't
+      ## count as changes made elsewhere.
+    hole_chunks*: Table[FrameChunk, bool]
+      ## Whether each chunk's edits hold a hole, where known.
+    hole_free_frames*: HashSet[int]
+      ## Frames known to hold no holes at all.
+    restored_frames*: HashSet[int]
+      ## Frames whose blocks are known to be just their restored edits: no
+      ## computed block since the last restore.
     pending_chunks*:
       Table[FrameChunk, seq[tuple[pos: Vector3, voxel: PackedVoxel]]]
     pending_snapshots*: Table[FrameChunk, SnapshotData]
