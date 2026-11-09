@@ -211,6 +211,40 @@ proc total*(seed: int) = last_total = walk(8, seed)
     check not other.run(0)
     check other.get_var("loaded", "other").int_val == 1
 
+  test "a failed eval leaves the script running":
+    const script = """
+import host
+var steps* = 0
+proc go*() =
+  park()
+  inc steps
+  park()
+  inc steps
+"""
+    var ctx = ScriptCtx(interpreter: interp)
+    interp.implement_routine "enu_script_ctx_test", "host", "park",
+      proc(a: VmArgs) {.gcsafe.} =
+        {.gcsafe.}:
+          ctx.pause()
+          ctx.after_host_call(a)
+    interp.register_error_hook proc(
+        config, info, msg, severity: auto
+    ) {.gcsafe.} =
+      if severity == Severity.Error:
+        ctx.exit_code = some(1)
+        raise (ref VMQuit)(info: info, msg: msg)
+    ctx.load(script_dir / "eval_failing.nim", script)
+    check not ctx.run(0)
+    ctx.running = ctx.call_proc("go").paused
+    check ctx.running
+    expect VMQuit:
+      discard ctx.eval("undeclared_thing = 1")
+    check ctx.running
+    check ctx.exit_code.is_none
+    check ctx.resume()
+    check not ctx.resume()
+    check ctx.get_var("steps", "eval_failing").int_val == 2
+
   test "host calls outside the script's own tasks don't exit it":
     # State initializers call into the VM directly with the player active,
     # possibly while its script has exited.
