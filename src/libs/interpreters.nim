@@ -319,13 +319,21 @@ proc run*(self: ScriptCtx, me: int): bool =
 
 proc eval*(self: ScriptCtx, code: string): Option[string] =
   ## Run `code` in the script's module. If it parks (`forward 5`), it carries
-  ## on ahead of the script itself and nothing is returned.
+  ## on ahead of the script itself and nothing is returned. If it fails, the
+  ## error is the caller's: the script carries on as it was.
+  let (running, exit_code) = (self.running, self.exit_code)
   self.exit_code = none(int)
   var value: Option[string]
-  let task = self.start(
-    top_level = true, then = nil, timed = true, can_park = false
-  ) do(task: ScriptTask):
-    value = self.interpreter.eval(self.pass_context, self.file_name, code)
+  let task =
+    try:
+      self.start(top_level = true, then = nil, timed = true, can_park = false) do(
+        task: ScriptTask
+      ):
+        value = self.interpreter.eval(self.pass_context, self.file_name, code)
+    except CatchableError:
+      self.running = running
+      self.exit_code = exit_code
+      raise
   if task.finished:
     result = value
 

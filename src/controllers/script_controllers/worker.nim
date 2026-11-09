@@ -356,7 +356,7 @@ proc watch_code(self: Worker, thing: Thing) =
         if state.config.auto_show_console:
           state.push_flags CONSOLE_VISIBLE
 
-      if removed and state.config.auto_show_console:
+      if removed and change.item.log and state.config.auto_show_console:
         state.pop_flags CONSOLE_VISIBLE
   thing.errors.bind_lifetime(thing.require_lifetime, errors_zid)
 
@@ -590,7 +590,13 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         else:
           let indented = code.split_lines.map_it("  " & it).join("\n")
           "(block:\n" & indented & "\n)"
-      (worker.eval(thing, wrapped).get(""), "")
+      let error_count = thing.errors.len
+      try:
+        (worker.eval(thing, wrapped).get(""), "")
+      finally:
+        # Errors go back to the caller; they aren't the unit's.
+        while thing.errors.len > error_count:
+          thing.errors.del(thing.errors.len - 1)
     except VMQuit as e:
       (
         "",
