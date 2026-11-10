@@ -106,17 +106,16 @@ There is one path: the terrain shows `shown_frame`.
 
 ### Persistence
 
-- A build with one frame and fewer than `EDITS_SIDECAR_THRESHOLD` manual
-  blocks keeps its edits in the unit JSON.
+- A build with one frame and at most `EDITS_JSON_LIMIT` manual blocks keeps
+  its edits in the unit JSON.
 - Otherwise each frame's manual blocks go to `data/<id>/frames/NNN.bin` in
   `frame_order` order. A keyframe is written every 8 frames, with deltas in
   between, as today.
 - The JSON meta keeps `count` and the shown/target frame.
 - Loading installs each file a chunk at a time, straight into the edit
   tables and the chunk tables (`adopt_edit_chunks`, generalized per frame).
-  Big terrain loads as fast as `edits.bin` does today.
-- `edits.bin` is still read for migration and is replaced by `frames/000.bin`
-  on the next save.
+  Big single-frame builds, like the welcome terrain, are one `000.bin`.
+- `edits.bin` is gone. It postdates 0.2.2, so nothing shipped needs it.
 - Computed blocks are never written, except by `bake` (#107).
 
 ### Network
@@ -151,7 +150,7 @@ Each phase lands with its tests green.
    tables. Hand edits go to the shown frame while playing. Check in the world
    on the welcome water and gulls (release build).
 4. **Persistence.** Per-frame files, chunk-level load, `edits.bin`
-   migration. Tests: serializers, plus a save and reload of the tutorial in a
+   removed. Tests: serializers, plus a save and reload of the tutorial in a
    real instance.
 5. **Network paging** per `(FrameId, chunk)`. Check with a second instance
    connected.

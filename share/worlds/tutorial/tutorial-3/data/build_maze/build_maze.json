@@ -9,5 +9,11 @@
     "origin": [-1.0, 0.0, -6.0]
   },
   "start_color": "BLACK",
-  "edits_file": "edits.bin"
+  "edits": {
+    
+  },
+  "frames": {
+    "count": 1,
+    "frame": 0
+  }
 }

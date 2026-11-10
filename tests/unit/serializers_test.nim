@@ -1,5 +1,5 @@
 import unittest2
-import std/[json, jsonutils, os, options]
+import std/[json, jsonutils, os]
 import core
 import models/colors
 import models/builds
@@ -163,7 +163,7 @@ suite "Frame Serialization":
       build.draw(vec3(index.float, 0, 0), (PERSISTED, ACTION_COLORS[color]))
       build.draw(vec3(index.float, 1, 0), (TRANSIENT, ACTION_COLORS[color]))
     build.go_to_frame(2)
-    build.save_frames()
+    build.save_frames(true)
     check file_exists(dir / build.id / "frames" / "002.bin")
     check build.id notin parse_json($build)["edits"]
 
@@ -185,33 +185,25 @@ suite "Frame Serialization":
       check saved.chunks.len == 1
     remove_dir dir
 
-  test "older frame files keep their computed blocks when there's no script":
-    let dir = get_temp_dir() / "enu_frames_old_test"
+  test "a big single-frame build saves its blocks as one frame file":
+    let dir = get_temp_dir() / "enu_frames_big_test"
     remove_dir dir
     var config = state.config
     config.data_dir = dir
     state.config = config
-    let build = Build.init(id = "build_frames_old")
-    let frames_dir = build.data_dir / "frames"
-    create_dir frames_dir
-    for i, kind in [TRANSIENT, PERSISTED]:
-      var cells: array[CHUNK_VOLUME, PackedVoxel]
-      cells[linear_position(i, 0, 0)] = pack_voxel(int(RED), kind.ord)
-      var frame: FrameData
-      frame.chunks[vec3()] = encode_chunk(cells)
-      write_file(
-        frames_dir / ("00" & $i & ".bin"),
-        encode_frame_file(frame, none(FrameData)),
-      )
+    let build = Build.init(id = "build_frames_big")
+    for x in 0 .. EDITS_JSON_LIMIT:
+      build.draw(vec3(x.float, 0, 0), (PERSISTED, ACTION_COLORS[RED]))
+    build.save
+    check file_exists(dir / build.id / "frames" / "000.bin")
+    let json = parse_json(read_file(build.data_file))
+    check json["frames"]["count"].get_int == 1
+    check build.id notin json["edits"]
 
-    let restored = Build.init(id = "build_frames_old")
-    restored.load_frames_sidecar(%*{"frames": {"count": 2}})
+    let restored = Build.init(id = "build_frames_big")
+    restored.load_frames_sidecar(json)
     restored.restore_edits
-    check restored.frame == 0
-    check restored.voxels.get_edit(vec3(0, 0, 0)) ==
-      (PERSISTED, ACTION_COLORS[RED])
-    check vec3(0, 0, 0) in restored
-    restored.go_to_frame(1)
-    check restored.voxels.get_edit(vec3(1, 0, 0)) ==
+    check restored.frames_len == 1
+    check restored.voxels.get_edit(vec3(EDITS_JSON_LIMIT.float, 0, 0)) ==
       (PERSISTED, ACTION_COLORS[RED])
     remove_dir dir

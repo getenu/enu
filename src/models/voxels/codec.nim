@@ -449,55 +449,10 @@ proc encode_delta*(
       bytes.add voxel.uint8
   result.data = bytes.to_string
 
-const
-  EDITS_FILE_VERSION* = 1'u8
-  EDITS_SIDECAR_THRESHOLD* = 1000
-    ## Units with more edited voxels than this persist their edits as a
-    ## packed-chunk sidecar (data/<id>/edits.bin, ~30-40x smaller) instead
-    ## of the per-voxel JSON list (~50KB at the threshold). Small builds
-    ## keep the readable, diffable JSON.
-
-proc encode_edits_file*(
-    edits: Table[string, Table[Vector3, SnapshotData]]
-): string =
-  ## A unit tree's hand edits as packed chunks, keyed by unit id — the
-  ## same content the JSON "edits" object carries, minus the per-voxel
-  ## expansion. Static colors reference the palette saved in the unit JSON.
-  result.add char(EDITS_FILE_VERSION)
-  result.add_i32 edits.len
-  for thing_id, chunks in edits:
-    result.add_i32 thing_id.len
-    result.add thing_id
-    result.add_i32 chunks.len
-    for chunk_id, snapshot in chunks:
-      result.add_i32 chunk_id.x.int
-      result.add_i32 chunk_id.y.int
-      result.add_i32 chunk_id.z.int
-      result.add_i32 snapshot.data.len
-      result.add snapshot.data
-
-proc decode_edits_file*(
-    data: string
-): Table[string, Table[Vector3, SnapshotData]] =
-  if data.len < 5 or data[0].uint8 != EDITS_FILE_VERSION:
-    raise ValueError.init("unsupported edits file")
-  var i = 1
-  let unit_count = read_i32(data, i)
-  for _ in 0 ..< unit_count:
-    let id_len = read_i32(data, i)
-    let thing_id = data[i ..< i + id_len]
-    i += id_len
-    let chunk_count = read_i32(data, i)
-    var chunks: Table[Vector3, SnapshotData]
-    for _ in 0 ..< chunk_count:
-      let x = read_i32(data, i)
-      let y = read_i32(data, i)
-      let z = read_i32(data, i)
-      let len = read_i32(data, i)
-      chunks[vec3(x.float, y.float, z.float)] =
-        SnapshotData(data: data[i ..< i + len])
-      i += len
-    result[thing_id] = chunks
+const EDITS_JSON_LIMIT* = 1000
+  ## Builds with more manual blocks than this keep them in frame files
+  ## (packed chunks, ~30-40x smaller) instead of the per-voxel JSON list
+  ## (~50KB at the limit). Small builds keep the readable, diffable JSON.
 
 proc pack_and_store_edited_voxels*(
     shared: Shared, id: string, edits: openArray[(Vector3, VoxelInfo)],
