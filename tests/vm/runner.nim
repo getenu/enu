@@ -225,6 +225,25 @@ proc setup_mock_functions(interp: Interpreter) =
       {.cast(gcsafe).}:
         mock_tools = {}
 
+  # Toolbar colors: the VM's own Color nodes, stored and handed back as-is.
+  # `index` is arg 1, `color` arg 2.
+  var mock_tool_colors {.global.}: seq[PNode]
+  interp.implement_routine pkg,
+    "players",
+    "tool_color_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        args.set_result(mock_tool_colors[args.get_int(1)])
+  interp.implement_routine pkg,
+    "players",
+    "set_tool_color_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        let index = args.get_int(1)
+        if mock_tool_colors.len <= index:
+          mock_tool_colors.set_len(index + 1)
+        mock_tool_colors[index] = args.get_node(2)
+
 proc run_test_script(script_path: string): TestResult =
   result.name = script_path.extract_filename.change_file_ext("")
 

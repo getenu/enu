@@ -828,6 +828,21 @@ proc tools_excl(self: Thing, tool: int) =
 proc tools_clear(self: Thing) =
   state.tools.clear()
 
+proc check_tool_color_index(index: int) =
+  if index notin 0 .. DEFAULT_TOOL_COLORS.high:
+    raise ValueError.init(
+      \"There are {DEFAULT_TOOL_COLORS.len} toolbar colors, numbered 0 to " &
+        \"{DEFAULT_TOOL_COLORS.high}. There isn't one numbered {index}."
+    )
+
+proc tool_color(self: Thing, index: int): Color =
+  check_tool_color_index(index)
+  state.tool_colors[index]
+
+proc set_tool_color(self: Thing, index: int, color: Color) =
+  check_tool_color_index(index)
+  state.tool_colors[index] = color
+
 proc open_sign(self: Thing): Sign =
   state.open_sign
 
@@ -1800,7 +1815,8 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,
     `can_fly=`, boost, tool, `tool=`,
-    tools_has, tools_incl, tools_excl, tools_clear, coding,
+    tools_has, tools_incl, tools_excl, tools_clear, tool_color, set_tool_color,
+    coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log
 

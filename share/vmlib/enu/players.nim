@@ -13,6 +13,8 @@ bridged_to_host:
   proc tools_incl*(self: Player, tool: Tools)
   proc tools_excl*(self: Player, tool: Tools)
   proc tools_clear*(self: Player)
+  proc tool_color*(self: Player, index: int): Color
+  proc set_tool_color*(self: Player, index: int, color: Color)
   proc playing*(self: Player): bool
     ## `true` in play mode, `false` in edit mode. Assign to switch.
 
@@ -120,6 +122,53 @@ proc `$`*(tools: ToolSet): string =
       result &= ", "
     result &= $tool
   result &= "}"
+
+type ToolColors* = distinct Player
+  ## The colors of the toolbar's six block buttons, numbered 0 to 5 from
+  ## left to right. Each level starts with the usual colors.
+
+proc colors*(self: Player): ToolColors =
+  ## The colors of the toolbar's block buttons. Change one so the player
+  ## can place blocks of any color by hand:
+  ## `player.colors[0] = "#1e90ff"`.
+  ToolColors(self)
+
+proc `[]`*(colors: ToolColors, index: int): Color =
+  Player(colors).tool_color(index)
+
+proc `[]=`*(colors: ToolColors, index: int, color: Color) =
+  ## Set a button's color: `player.colors[3] = red`.
+  Player(colors).set_tool_color(index, color)
+
+proc `[]=`*(colors: ToolColors, index: int, hex: string) =
+  ## Set a button's color from its hex code: `player.colors[3] = "#ff8800"`.
+  Player(colors).set_tool_color(index, col(hex))
+
+proc len*(colors: ToolColors): int =
+  6
+
+iterator items*(colors: ToolColors): Color =
+  for i in 0 ..< colors.len:
+    yield colors[i]
+
+proc `$`*(colors: ToolColors): string =
+  var parts: seq[string]
+  for color in colors:
+    parts.add $color
+  "[" & parts.join(", ") & "]"
+
+proc `colors=`*(self: Player, value: openArray[Color]) =
+  ## Set the buttons' colors left to right:
+  ## `player.colors = [black, white, red]`. Buttons past the end keep
+  ## their color.
+  for i, color in value:
+    self.set_tool_color(i, color)
+
+proc `colors=`*(self: Player, value: openArray[string]) =
+  ## The same, from hex codes:
+  ## `player.colors = ["#000000", "#123456"]`.
+  for i, hex in value:
+    self.set_tool_color(i, col(hex))
 
 proc `tools=`*(self: Player, value: set[Tools]) =
   ## Replace the whole toolbar at once:

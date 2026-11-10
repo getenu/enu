@@ -19,6 +19,27 @@ proc init*[T: Exception](
   ## `raise ValueError.init("that's not going to work")`.
   (ref kind)(msg: message, parent: parent)
 
+proc col*(hex: string): Color =
+  ## A color from its hex code, like `col"#1e90ff"` for dodger blue. The
+  ## `#` is optional.
+  let digits = if hex.starts_with("#"): hex[1 .. ^1] else: hex
+  let value =
+    try:
+      if digits.len == 6: parse_hex_int(digits) else: -1
+    except ValueError:
+      -1
+  if value < 0:
+    raise ValueError.init(
+      "'" & hex & "' isn't a color. Colors look like \"#1e90ff\": a # and six " &
+        "hex digits."
+    )
+  (
+    r: float32((value shr 16) and 0xff) / 255,
+    g: float32((value shr 8) and 0xff) / 255,
+    b: float32(value and 0xff) / 255,
+    a: 1.0'f32,
+  )
+
 proc now*(): Timestamp =
   ## The time right now. Subtract two of these to see how much time
   ## passed:
