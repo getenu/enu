@@ -1,6 +1,6 @@
 import unittest2
 import core
-import models/states
+import models/[states, colors]
 
 suite "Tool availability":
   setup:
@@ -60,3 +60,21 @@ suite "Tool availability":
     state.push_flag BLOCK_TARGET_VISIBLE
     check BLOCK_TARGET_VISIBLE notin state.local_flags
     check RETICLE_VISIBLE in state.local_flags
+
+suite "Tool colors":
+  setup:
+    state = GameState.init
+
+  test "the block tools start with the named colors":
+    state.tool = BLUE_BLOCK
+    check state.selected_color == ACTION_COLORS[BLUE]
+    state.tool = BROWN_BLOCK
+    check state.selected_color == ACTION_COLORS[BROWN]
+
+  test "a block tool places its own color":
+    let orange = col"ff8800"
+    state.tool_colors[1] = orange
+    state.tool = RED_BLOCK
+    check state.selected_color == orange
+    state.tool = BLUE_BLOCK
+    check state.selected_color == ACTION_COLORS[BLUE]

@@ -239,6 +239,9 @@ type
     open_thing_value*: EdValue[Thing]
     tool_value*: EdValue[Tools]
     tools*: EdSet[Tools]
+    tool_colors*: EdSeq[Color]
+      ## The block tools' colors, BLUE_BLOCK .. BROWN_BLOCK in order. Scripts
+      ## can change them; every level load resets them to DEFAULT_TOOL_COLORS.
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
     screenshot_camera*: Node
