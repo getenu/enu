@@ -465,8 +465,10 @@ proc display_pending*(self: FramePlayer): bool =
   ## write, bakes outstanding, or staged meshes awaiting the flip commit.
   ## Frame bakes bypass the terrain pipeline, so the engine's pending counter
   ## can't see this — build_node folds it into the published
-  ## pending_block_updates while the spawn gate is up.
-  self.queue.len > 0 or self.missing.len > 0 or self.staged.len > 0
+  ## pending_block_updates while the spawn gate is up. Meshes staged ahead for
+  ## the next frame don't count: they wait for playback, which the gate holds.
+  self.queue.len > 0 or self.missing.len > 0 or
+    (self.staged.len > 0 and self.commit_index == self.model.current_frame)
 
 proc forget_display*(self: FramePlayer, chunk_id: Vector3) =
   ## The chunk's mesh block was (re)created by pairing: whatever we recorded
