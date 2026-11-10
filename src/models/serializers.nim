@@ -1206,13 +1206,15 @@ proc load_level*(worker: Worker, level_dir: string) =
         player.transform = t
         player.rotation = rotation
 
-  # Seed the available tools before scripts run and the player can interact:
-  # full set by default, empty when the level opts out (its script adds back
-  # what it needs). Happens inside LOADING_LEVEL so the toolbar snaps, no slide.
+  # Seed the available tools and their colors before scripts run and the player
+  # can interact: full set by default, empty when the level opts out (its script
+  # adds back what it needs). Happens inside LOADING_LEVEL so the toolbar snaps,
+  # no slide.
   if state.show_tools:
     state.tools.value = {CODE_MODE .. PLACE_BOT}
   else:
     state.tools.clear()
+  state.tool_colors.value = DEFAULT_TOOL_COLORS
 
   worker.run_state_initializers()
 

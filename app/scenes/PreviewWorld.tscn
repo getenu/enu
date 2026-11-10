@@ -1,6 +1,6 @@
 [gd_scene load_steps=8 format=2]
 
-[ext_resource path="res://materials/blue-block-grid.tres" type="Material" id=1]
+[ext_resource path="res://materials/block_preview.tres" type="Material" id=1]
 [ext_resource path="res://components/BotNode.tscn" type="PackedScene" id=2]
 
 [sub_resource type="CubeMesh" id=1]

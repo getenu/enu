@@ -1,7 +1,7 @@
-## Process-global registry of static RGB voxel colors. Each distinct color
-## gets a runtime `VoxelLibrary` entry (cube geometry, vertex-colored via the
-## shared `material_id` 6 rgb material) deduped across every build. Main
-## thread only — driven by the render paths in build_node.
+## Process-global registry of voxel colors. The named colors take their own
+## slots; every other distinct color gets one on first use, deduped across
+## every build. All of them are cubes, vertex-colored by the one build
+## material. Main thread only — driven by the render paths in build_node.
 import std/[tables, monotimes, times]
 import pkg/godot except print, Color
 import pkg/chroma
@@ -9,11 +9,11 @@ import godotapi/[voxel_library, voxel]
 import core, models/colors, gdutils
 
 const
-  RGB_MATERIAL_ID = 6
+  MATERIAL_ID = 0
   FIRST_DYNAMIC_SLOT = 16 # 7..15 stay spare for named-palette growth
   MAX_DYNAMIC_SLOTS = 8192
   GEOMETRY_CUBE = 1
-  COLLISION_MASK = 2 # matches the named cube entries in BuildNode.tscn
+  COLLISION_MASK = 2 # matches the invisible entry in BuildNode.tscn
 
 # Main-thread only; threadvars keep watch bodies (compiled gcsafe) happy.
 var
@@ -31,7 +31,7 @@ proc register(color: Color, slot: int64) =
     registry_library.voxel_count = slot + 1
   let voxel = registry_library.create_voxel(slot, "rgb_" & color.to_html_hex)
   voxel.color = color
-  voxel.material_id = RGB_MATERIAL_ID
+  voxel.material_id = MATERIAL_ID
   voxel.geometry_type = GEOMETRY_CUBE
   var aabbs = new_array()
   aabbs.add init_aabb(vec3(0, 0, 0), vec3(1, 1, 1)).to_variant
@@ -79,6 +79,8 @@ proc set_registry_library*(library: VoxelLibrary) =
     return
   registry_library = library
   registry_library_id = library_id
+  for named in BLUE .. BROWN:
+    register(ACTION_COLORS[named], named.ord)
   for color, slot in slots:
     register(color, slot)
   flush_registry()

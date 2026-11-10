@@ -13,9 +13,6 @@ const
   highlight_glow = 1.0
   default_glow = 0.0
   error_flash_time = 0.5.seconds
-  rgb_material_index = 6
-    ## material/6: the shared vertex-color material static RGB voxels render
-    ## with (materials 0..5 stay the uniform-tinted named colors).
 
 # Material iteration reads the terrain node's own slots (bounded by the
 # engine's MAX_MATERIALS = 8), never the (dynamically growing) library and
@@ -36,8 +33,6 @@ let perf_log = get_env("ENU_PERF_LOG") != ""
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
 var hidden_shader {.threadvar.}: Shader
-var rgb_shader {.threadvar.}: Shader
-var hidden_rgb_shader {.threadvar.}: Shader
 
 proc to_pool_byte_array(s: string): PoolByteArray =
   result = new_pool_byte_array()
@@ -171,6 +166,9 @@ gdobj BuildNode of VoxelTerrain:
 
   proc set_highlight() =
     self.each_material(i, m):
+      m.set_shader_param(
+        "tint_emission", (not self.error_highlight_on).to_variant
+      )
       if self.error_highlight_on:
         m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
       elif i < self.model.shared.emission_colors.len:
@@ -192,14 +190,12 @@ gdobj BuildNode of VoxelTerrain:
       self.visible = true
 
       self.each_material(i, material):
-        material.shader =
-          if i == rgb_material_index: rgb_shader else: shader
+        material.shader = shader
     elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
       self.visible = true
 
       self.each_material(i, material):
-        material.shader =
-          if i == rgb_material_index: hidden_rgb_shader else: hidden_shader
+        material.shader = hidden_shader
     else:
       self.visible = false
 
@@ -830,7 +826,4 @@ proc init*(_: type BuildNode): BuildNode =
     build_scene = load("res://components/BuildNode.tscn") as PackedScene
     shader = load("res://shaders/terrain_voxel.shader") as Shader
     hidden_shader = load("res://shaders/terrain_voxel_hidden.shader") as Shader
-    rgb_shader = load("res://shaders/terrain_voxel_rgb.shader") as Shader
-    hidden_rgb_shader =
-      load("res://shaders/terrain_voxel_hidden_rgb.shader") as Shader
   result = build_scene.instance() as BuildNode

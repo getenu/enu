@@ -75,6 +75,15 @@ const ACTION_COLORS* = [
   INVISIBLE: chroma.Color(r: 0.0, g: 0.0, b: 0.0, a: 0.5),
 ]
 
+const DEFAULT_TOOL_COLORS* = @[
+  ACTION_COLORS[BLUE],
+  ACTION_COLORS[RED],
+  ACTION_COLORS[GREEN],
+  ACTION_COLORS[BLACK],
+  ACTION_COLORS[WHITE],
+  ACTION_COLORS[BROWN],
+]
+
 proc action_index*(self: Color): Colors =
   for key, value in ACTION_COLORS:
     if value == self:

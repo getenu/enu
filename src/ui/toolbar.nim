@@ -7,12 +7,17 @@ import pkg/[godot]
 import core
 import gdutils, ui/preview_maker
 
-type PreviewResult = tuple[color: string, preview: Image]
+type PreviewResult = tuple[button: string, preview: Image]
+
+const block_buttons = ["blue", "red", "green", "black", "white", "brown"]
+  ## The block tools' button names, in DEFAULT_TOOL_COLORS order.
 
 gdobj Toolbar of HBoxContainer:
   var
     preview_maker: PreviewMaker
-    blocks = @["green", "red", "blue", "black", "white", "brown"]
+    shown_colors: seq[Color]
+      ## The color each block button's icon shows (or is being made for).
+    blocks: seq[int] ## block buttons waiting for a new icon
     objects = @["bot"]
     preview_result: Option[PreviewResult]
     waiting = false
@@ -36,6 +41,10 @@ gdobj Toolbar of HBoxContainer:
       if added:
         self.show_pressed change.item
 
+    self.update_block_icons()
+    state.tool_colors.changes:
+      self.update_block_icons()
+
     self.apply_visibility()
     state.tools.changes:
       # Level load seeds the tool set before the scene is interactive — snap to
@@ -44,6 +53,15 @@ gdobj Toolbar of HBoxContainer:
         self.apply_tools()
       else:
         self.animate_tools()
+
+  proc update_block_icons() =
+    let colors = state.tool_colors.value
+    self.shown_colors.set_len(colors.len)
+    for i, color in colors:
+      if color != self.shown_colors[i]:
+        self.shown_colors[i] = color
+        if i notin self.blocks:
+          self.blocks.add i
 
   proc apply_visibility() =
     for tool in CODE_MODE .. PLACE_BOT:
@@ -102,25 +120,25 @@ gdobj Toolbar of HBoxContainer:
     if self.preview_result.is_some:
       let
         p = self.preview_result.get
-        b = self.get_node("Button-" & p.color) as Button
+        b = self.get_node("Button-" & p.button) as Button
       self.preview_result = none(PreviewResult)
       var tex = gdnew[ImageTexture]()
       tex.create_from_image(p.preview)
       b.icon = tex
 
     if not self.waiting and self.blocks.len > 0:
-      var color = self.blocks.pop()
+      let index = self.blocks.pop()
       self.waiting = true
-      self.preview_maker.generate_block_preview \"{color}-block-grid",
+      self.preview_maker.generate_block_preview self.shown_colors[index],
         proc(preview: Image) =
-          self.preview_result = some (color: color, preview: preview)
+          self.preview_result = some (button: block_buttons[index], preview: preview)
           self.waiting = false
     if not self.waiting and self.blocks.len == 0 and self.objects.len > 0:
       let obj = self.objects.pop()
       self.waiting = true
       self.preview_maker.generate_object_preview obj,
         proc(preview: Image) =
-          self.preview_result = some (color: obj, preview: preview)
+          self.preview_result = some (button: obj, preview: preview)
           self.waiting = false
 
   method on_action_changed*(button_name: string) =

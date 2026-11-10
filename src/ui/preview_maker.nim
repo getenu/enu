@@ -1,7 +1,7 @@
 import
   godotapi/[
     viewport, camera, mesh_instance, material, camera, viewport_texture, image,
-    resource_loader, engine
+    resource_loader, engine, spatial_material
   ]
 import godot
 import ".."/[core, gdutils]
@@ -11,6 +11,7 @@ gdobj PreviewMaker of Viewport:
     camera: Camera
     cube: MeshInstance
     bot: Spatial
+    block_material: SpatialMaterial
     callback: proc(img: Image) {.gcsafe.}
     frames_drawn_at_request = int64.high
 
@@ -18,6 +19,8 @@ gdobj PreviewMaker of Viewport:
     self.camera = self.find_node("Camera") as Camera
     self.cube = self.find_node("Cube") as MeshInstance
     self.bot = self.find_node("bot") as Spatial
+    self.block_material =
+      load("res://materials/block_preview.tres") as SpatialMaterial
     assert not self.camera.is_nil
     assert not self.cube.is_nil
     assert not self.bot.is_nil
@@ -33,9 +36,14 @@ gdobj PreviewMaker of Viewport:
       self.callback = nil
 
   proc generate_block_preview*(
-      material_name: string, callback: proc(preview: Image) {.gcsafe.}
+      color: Color, callback: proc(preview: Image) {.gcsafe.}
   ) =
-    let material = load(\"res://materials/{material_name}.tres") as Material
+    let material = self.block_material.duplicate as SpatialMaterial
+    # The preview light is much brighter than the world's; dimmed like this,
+    # an icon looks like the block it places.
+    material.albedo_color =
+      Color(r: color.r * 0.56, g: color.g * 0.56, b: color.b * 0.56, a: 1.0)
+    material.emission = color
     self.cube.visible = true
     self.bot.visible = false
     self.cube.set_surface_material(0, material)

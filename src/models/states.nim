@@ -132,7 +132,10 @@ proc `-=`*(
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc selected_color*(self: GameState): Color =
-  ACTION_COLORS[Colors(ord self.tool)]
+  if self.tool in BLUE_BLOCK .. BROWN_BLOCK:
+    self.tool_colors[ord(self.tool) - ord(BLUE_BLOCK)]
+  else:
+    ACTION_COLORS[Colors(ord self.tool)]
 
 proc select_tool*(self: GameState, tool: Tools) =
   ## Make `tool` active, but only when it's available. Selecting an
@@ -166,6 +169,7 @@ proc init*(_: type GameState): GameState =
     config_value: EdValue[Config].init(flags = flags, id = "config"),
     tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
     tools: Ed.init({CODE_MODE .. PLACE_BOT}, flags = {SYNC_LOCAL, SYNC_REMOTE}),
+    tool_colors: Ed.init(DEFAULT_TOOL_COLORS, flags = {SYNC_LOCAL, SYNC_REMOTE}),
     gravity: -80.0,
     show_prototypes: true,
     show_tools: true,
