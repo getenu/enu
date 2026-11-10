@@ -13,10 +13,8 @@
     
   },
   "frames": {
-    "version": 1,
     "count": 24,
-    "frame": 0,
-    "keyframe_interval": 8
+    "frame": 0
   },
   "palette": [
     "#082F66",

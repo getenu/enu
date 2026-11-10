@@ -9,7 +9,13 @@
     "origin": [0.0, 0.0, 100.0]
   },
   "start_color": "BLUE",
-  "edits_file": "edits.bin",
+  "edits": {
+    
+  },
+  "frames": {
+    "count": 1,
+    "frame": 0
+  },
   "palette": [
     "#977F5F",
     "#776F4F",
