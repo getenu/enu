@@ -530,7 +530,9 @@ task setup_checksums, "setup checksum module in nim dependency":
   p "Setting up Nim checksums..."
   with_dir dep_dir("Nim"):
     exec "nim c koch"
-    let koch_cmd = if host_os == "windows": "koch.exe" else: "./koch"
+    # explicit relative path: cmd won't search the current dir when
+    # NoDefaultCurrentDirectoryInExePath is set
+    let koch_cmd = if host_os == "windows": ".\\koch.exe" else: "./koch"
     exec koch_cmd & " checksums"
 
 task prereqs,

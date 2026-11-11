@@ -262,7 +262,10 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
       # — but only for project scripts. Files loaded from outside the project
       # (e.g. the bundled players.nim) are evaluated for the VM but never written
       # to disk, so we don't scribble into the shipped library.
-      if not script_dir.starts_with(state.config.lib_dir / "vmlib"):
+      # is_relative_to, not starts_with: on Windows script_dir can carry mixed
+      # separators, so a string prefix check misses and we'd write into the
+      # install dir (Access denied under Program Files).
+      if not script_dir.is_relative_to(state.config.lib_dir / "vmlib"):
         let generated_dir = script_dir.parentDir / "generated"
         create_dir(generated_dir)
         # if_changed: a plain write touched every unit's stub mtime on every
