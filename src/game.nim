@@ -458,6 +458,13 @@ gdobj Game of Node:
       if i > -1:
         test_mode = true
         args.delete(i)
+    var check_bakes = false
+    block:
+      let i = args.find("--check-bakes")
+      if i > -1:
+        test_mode = true
+        check_bakes = true
+        args.delete(i)
     block:
       let i = args.find("--minimized")
       if i > -1:
@@ -606,6 +613,8 @@ gdobj Game of Node:
     if test_mode:
       notice "test mode enabled"
       state.push_flag TEST_MODE
+    if check_bakes:
+      state.push_flag CHECK_BAKES
 
     let god_mode = uc.god_mode ||= false
 

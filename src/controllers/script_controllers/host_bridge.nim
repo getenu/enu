@@ -9,7 +9,8 @@ import pkg/metrics
 
 import godotapi/[spatial, ray_cast]
 import
-  core, models/[states, bots, builds, things, colors, signs, serializers, voxels]
+  core,
+  models/[states, bots, builds, bakes, things, colors, signs, serializers, voxels]
 import libs/[interpreters, eval]
 import enu/shared/errors
 
@@ -1793,7 +1794,8 @@ proc bridge_to_vm*(worker: Worker) =
     cylinder_impl, advance, rendered_voxel_count_get, pending_block_updates_get,
     copy_frame, insert_frame, delete_frames, clear_frame, clear_frames,
     paste_frame, frame, `frame=`, frames_len, play_impl, stop_impl, cull_down_faces,
-    cull_down_faces_set, sealed_frames, sealed_frames_set
+    cull_down_faces_set, sealed_frames, sealed_frames_set, bake_begin, bake_end,
+    clear_bakes, clear_all_bakes
 
   result.bridged_from_vm "builds_private", place_block, asap_mode, initializing, persist
 

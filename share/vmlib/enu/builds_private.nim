@@ -16,11 +16,10 @@ bridged_to_host:
     ## Whether the build is still hidden while its script starts. For tests.
 
   proc persist*(self: Build)
-    ## Promote everything the script has drawn (normally TRANSIENT, dropped and
-    ## regenerated each reload) into saved PERSISTED voxels, then mark the build
-    ## dirty so they're written to disk. After calling this you can delete the
-    ## drawing code and the voxels stay. An authoring tool for baking a build:
-    ## draw it, `persist()`, `save_level_now()`, then strip the drawing code.
+    ## Turn everything the script has drawn into hand-placed blocks and save
+    ## them. Use it once, right before you delete the code that drew them: the
+    ## blocks stay, but the script can no longer regenerate them cleanly. To
+    ## avoid redrawing something slow on every run, use `bake:` instead.
 
 proc fill_square*(length = 1) =
   Build(active_thing()).fill_square(length)

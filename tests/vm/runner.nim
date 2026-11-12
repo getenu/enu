@@ -100,6 +100,27 @@ proc setup_mock_functions(interp: Interpreter) =
         total
 
   # Mock has_block_at - returns false (no blocks in test environment)
+  # A bake cache keyed by site (or key) and inputs: a script sees a body run
+  # only the first time its key comes up, or every time for `rebake`.
+  var bake_keys {.global.}: seq[string]
+  interp.implement_routine pkg,
+    "builds",
+    "bake_begin_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        let named = args.get_string(3)
+        let site =
+          if named != "": "#" & named
+          else: args.get_string(1) & ":" & $args.get_int(2)
+        let key = site & "|" & args.get_string(4)
+        args.set_result(not args.get_bool(5) and key in bake_keys)
+        bake_keys.add key
+
+  interp.implement_routine pkg,
+    "builds",
+    "bake_end_impl",
+    proc(args: VmArgs) = discard
+
   interp.implement_routine pkg,
     "builds",
     "has_block_at_impl",

@@ -42,7 +42,8 @@ import pkg/core/godotcoretypes except Color
 import pkg/core/[vector3, basis, aabb, godotbase]
 import pkg/compiler/[ast, lineinfos, semdata]
 import ed
-import models/colors, libs/[eval, coroutines, vm_exec_state]
+import models/colors, libs/[eval, coroutines, vm_exec_state, bake_sites]
+export BakeSite
 
 from pkg/godot import NimGodotObject
 
@@ -109,6 +110,28 @@ type
     ## frame file format, and what playback reads a frame through.
     chunks*: Table[Vector3, SnapshotData]
 
+  BakeEntry* = object
+    ## One `bake` key's recorded blocks, relative to the turtle pose and frame
+    ## its block started on.
+    frames*: Table[int, FrameData]
+      ## By frame offset. Chunks are in the start pose's space.
+    end_pose*: Transform
+      ## Where the turtle ended, relative to where it started.
+    end_frame*: int
+    color*: Option[Color]
+      ## The pen color the body left, if it changed it.
+    drawing*: Option[bool]
+      ## Likewise whether the turtle draws.
+
+  BakeCapture* = object
+    ## A `bake` block whose body is running: what it has drawn so far.
+    key*: string
+    start*: Transform
+    start_frame*: int
+    start_color*: Color
+    start_drawing*: bool
+    cells*: Table[int, Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]]
+
   FrameChunk* = tuple[frame: int, loc: Vector3]
     ## A chunk of one frame. `frame` is a frame id, not an index: ids are
     ## stable while frames are inserted and deleted (see `frame_order`).
@@ -157,6 +180,9 @@ type
     EDITOR_OPENING
     EDITOR_CLOSING
     TEST_MODE
+    CHECK_BAKES
+      ## Test mode that only checks a level's saved bakes still match its
+      ## scripts: a bake that would have to run its body fails it.
     SPAWN_HELD
       ## LOCAL (never synced): this main thread is holding its player at the
       ## spawn — frozen (no gravity/movement/look) with the splash up — until
@@ -519,6 +545,18 @@ type
       ## Host-local: the id the next new frame gets. Ids are never reused
       ## while the build lives; they aren't saved.
     saved_frames_hash*: Hash
+    bakes*: Table[string, BakeEntry]
+      ## Host-local: what each `bake` key drew, so a run can replay it.
+    baking*: seq[BakeCapture]
+      ## Host-local: the `bake` blocks whose bodies are running, innermost
+      ## last.
+    bake_key_sites*: Table[string, string]
+      ## Host-local: where each keyed `bake` this run was called from, so two
+      ## blocks can't share a key.
+    bakes_serial*: int
+    saved_bakes_serial*: int
+      ## Host-local: `bakes_serial` changes with the bakes; the save writes
+      ## them when it differs from this.
       ## Host-local: `frames_hash` as of the last frame save or load. Loaded
       ## frames start clean: re-encoding 24 untouched frames on every level
       ## save dominated debug-build load times.
@@ -672,6 +710,15 @@ type
     last_ran*: MonoTime
     file_index*: int
     dependencies*: seq[string]
+    bake_sites*: seq[BakeSite]
+      ## The `bake` blocks in this script, as last compiled.
+    bakes_known*: bool
+      ## `bake_sites` is filled: the script has compiled at least once.
+    source_keys*: Table[string, string]
+      ## Hashes of the script files keyless bakes depend on, by path, since
+      ## the last compile.
+    compiled*: proc() {.gcsafe.}
+      ## Called once the script has compiled, before any of it runs.
     last_saved_mtime*: Time
     last_saved_json_mtime*: Time
 

@@ -202,6 +202,19 @@ let spot = pen        # save turtle pose + color
 pen = spot            # and go back to it
 ```
 
+**Slow generators:** wrap expensive drawing (terrain, water, a forest) in
+`bake:`. The body runs once and its blocks are recorded; later runs replay
+them relative to the turtle. A keyless `bake:` draws again whenever its
+script (or a script it imports) changes. A keyed one, `bake "sea-v2":`,
+draws again only when you change the key, so bump it after editing the code
+it calls. Values the drawing depends on go after the key, `bake kind,
+height:`, one recording per set. Write `rebake` while working on a bake to
+redraw every run, then change it back. `me.clear_bakes()` and
+`clear_all_bakes()` forget recordings. Only blocks, the turtle and the pen
+come back, so code after a `bake` mustn't rely on variables its body set.
+Restructure frames (`frames.clear()`, copies) before the `bake`, not inside
+it.
+
 `size` accepts ints or floats; rasterisation is voxel-centred, so
 effective widths are odd (`size = 4` and `5` both span 5 voxels) and
 fractional sizes make smooth tapers. Avoid naming locals/proc params

@@ -4,6 +4,7 @@ from pkg/ed/utils/misc import init
 import compiler/[syntaxes, reorder, vmdef, msgs, renderer, vm]
 import compiler/passes {.all.}
 import compiler/lineinfos
+import ./bake_sites
 
 {.warning[UnusedImport]: off.}
 include compiler/[nimeval, pipelines]
@@ -34,6 +35,7 @@ proc processModule*(
     stream: PLLStream,
     ctx: var PContext,
     dependencies: var seq[string],
+    sites: var seq[BakeSite],
     executing: proc() {.gcsafe.} = nil,
 ): bool {.discardable.} =
   ## `executing` is called once the module (and anything it imports) has
@@ -139,6 +141,7 @@ proc processModule*(
       var semNode = semWithPContext(ctx, sl)
 
       findDependencies(semNode)
+      sites.add bake_sites(semNode)
 
       # Collect deps before processPipeline so they are preserved even if we pause
       for name in pendingModules:
@@ -238,6 +241,7 @@ proc loadModule*(
     fileName, code: string,
     ctx: var PContext,
     dependencies: var seq[string],
+    sites: var seq[BakeSite],
     executing: proc() {.gcsafe.} = nil,
 ) {.gcsafe.} =
   # The 2.4 compiler's symbol accessors go through IC loaders, which use
@@ -276,7 +280,8 @@ proc loadModule*(
 
     with_import_stack_recovery(i.graph):
       if not processModule(
-        i.graph, module, i.idgen, stream, ctx, dependencies, executing
+        i.graph, module, i.idgen, stream, ctx, dependencies, sites,
+        executing,
       ):
         stderr.write_line "module load incomplete: " & moduleName
 

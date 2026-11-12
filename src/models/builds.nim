@@ -353,7 +353,7 @@ method collect_garbage*(self: Build) =
 proc frames_len*(self: Build): int =
   self.frame_order.ids.len
 
-proc frame_id(self: Build, index: int): int =
+proc frame_id*(self: Build, index: int): int =
   self.frame_order.ids[index]
 
 proc target_frame*(self: Build) =
@@ -370,6 +370,14 @@ proc follow_frame(self: Build) =
   ## While nothing plays, the screen shows the frame the script draws into.
   if self.frames_fps <= 0 and self.current_frame != self.frame:
     self.current_frame = self.frame
+
+proc check_not_baking(self: Build, action: string) =
+  ## Restructuring frames moves or wipes whole frames, manual blocks
+  ## included, which a `bake` can't record or replay.
+  if self.baking.len > 0:
+    raise ValueError.init(
+      "can't " & action & " inside a `bake`: do it before the `bake` block"
+    )
 
 proc check_frame_index(self: Build, index: int, grow = false) =
   let limit = if grow: MAX_FRAMES else: self.frames_len
@@ -428,6 +436,7 @@ proc go_to_frame*(self: Build, index: int) =
 proc copy_frame*(self: Build, src: int, dst: int) =
   ## Frame `dst` becomes a copy of frame `src`, growing the frames if `dst`
   ## is past the end.
+  self.check_not_baking("copy a frame")
   self.check_frame_index(src)
   self.check_frame_index(dst, grow = true)
   self.refresh_edits()
@@ -437,6 +446,7 @@ proc copy_frame*(self: Build, src: int, dst: int) =
 
 proc insert_frame*(self: Build, src: int, index: int) =
   ## Insert a copy of frame `src` at `index`; later frames move up one.
+  self.check_not_baking("insert a frame")
   self.check_frame_index(src)
   if index < 0 or index > self.frames_len:
     raise ValueError.init(
@@ -468,6 +478,7 @@ proc delete_frames*(self: Build, first: int, last: int) =
   ## Remove frames `first` to `last`; later frames move down. Removing the
   ## current frame makes the frame that takes its place current. A build
   ## always keeps one frame, so deleting them all leaves an empty one.
+  self.check_not_baking("delete frames")
   self.check_frame_index(first)
   self.check_frame_index(last)
   if last < first:
@@ -488,12 +499,14 @@ proc delete_frames*(self: Build, first: int, last: int) =
 proc clear_frame*(self: Build, index: int) =
   ## Empty a frame: its computed and manual blocks are gone. Other frames
   ## keep their indexes.
+  self.check_not_baking("clear a frame")
   self.check_frame_index(index)
   self.voxels.drop_frame(self.frame_id(index))
   self.frames_changed()
 
 proc clear_frames*(self: Build) =
   ## Drop every frame but the current one, which becomes frame 0.
+  self.check_not_baking("clear frames")
   let keep = self.frame_id(self.frame)
   for id in self.frame_order.ids:
     if id != keep:
@@ -506,6 +519,7 @@ proc clear_frames*(self: Build) =
 proc paste_frame*(self: Build, src: int, dst: int) =
   ## Lay frame `src`'s blocks over frame `dst`'s; `src` wins where both
   ## have one.
+  self.check_not_baking("paste a frame")
   self.check_frame_index(src)
   self.check_frame_index(dst)
   self.refresh_edits()
@@ -574,7 +588,25 @@ proc start_frames_run(self: Build, scripted: bool) =
         self.restore_edits()
       self.unmark_holes()
 
+proc record_bake(self: Build, position: Vector3, color: Color) =
+  ## A computed block landed while `bake` bodies run: each of them records it
+  ## relative to the pose and frame it started on.
+  let packed = pack_voxel(pack_color_index(self.shared, color), TRANSIENT.ord)
+  for capture in self.baking.mitems:
+    let local = capture.start.xform_inv_vector3(position)
+    let cell = vec3(local.x.round, local.y.round, local.z.round)
+    capture.cells
+      .mget_or_put(
+        self.frame - capture.start_frame,
+        Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]].init,
+      )
+      .mget_or_put(chunk_id_for_pos(cell), default(array[CHUNK_VOLUME, PackedVoxel]))[
+        linear_position(local_pos_in_chunk(cell))
+      ] = packed
+
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
+  if voxel.kind == TRANSIENT and self.baking.len > 0:
+    self.record_bake(position, voxel.color)
   if voxel.kind == TRANSIENT:
     if self.voxels.has_edit(position):
       var edit = self.voxels.get_edit(position)
@@ -880,6 +912,8 @@ method reset*(self: Build) =
   self.global_flags += RESETTING
   self.global_flags += VISIBLE
   self.reset_state()
+  self.baking.set_len(0)
+  self.bake_key_sites.clear
 
   # A run stops playback and redraws every frame from frame 0. A build with
   # NO script has no rerun to re-establish playback or display — its frames
