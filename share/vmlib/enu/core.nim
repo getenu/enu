@@ -899,6 +899,10 @@ proc len*[T: Thing](self: Query[seq[T]]): int =
 proc `[]`*[T: Thing](self: Query[seq[T]], index: int): T =
   self.result[index]
 
+proc `[]`*[T: Thing](self: Query[seq[T]], index: BackwardsIndex): T =
+  ## Count from the end: `Player.all[^1]` is the newest player.
+  self.result[index]
+
 proc first*[T: Thing](_: type T): T =
   ## The first thing of a kind: `Player.first` is the first player,
   ## `Bot.first` the first bot. `nil` if there aren't any.
