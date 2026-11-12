@@ -377,16 +377,22 @@ gdobj BuildNode of VoxelTerrain:
       self.model.target_shown_frame()
       self.frames.render(self.model.current_frame)
 
+  proc set_terrain_bounds(bounds: AABB) =
+    # The terrain rejects empty_bounds' negative size; an empty box clips the
+    # same nothing.
+    self.bounds =
+      if bounds == empty_bounds(): init_aabb(vec3(), vec3()) else: bounds
+
   proc track_changes() =
     self.model.glow_value.watch:
       if added:
         self.set_glow(change.item)
 
-    self.bounds = self.model.bounds
+    self.set_terrain_bounds(self.model.bounds)
     self.model.bounds_value.watch:
       if added:
         notice "changing bounds", new = change.item, id = self.model.id
-        self.bounds = change.item
+        self.set_terrain_bounds(change.item)
 
     # Watch packed_chunks for new snapshots
     self.model.voxels.packed_chunks.watch:
