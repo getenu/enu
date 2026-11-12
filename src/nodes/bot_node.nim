@@ -528,6 +528,10 @@ gdobj BotNode of KinematicBody:
     # composed), so it must not run for nested bots.
     if ?self.model.parent:
       return
+    # An agent's camera bot is put where a shot needs it, often mid-air; it
+    # mustn't drop to the ground before the picture is taken.
+    if VOXEL_VIEWER in self.model.global_flags:
+      return
     # Fell out of the world (genuinely bottomless): reset high instead of a
     # runaway free-fall to -inf.
     if self.translation.y < -50:
