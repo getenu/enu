@@ -151,7 +151,9 @@ proc load_frames*(self: Build, json: JsonNode) =
   self.saved_frames_hash = self.frames_hash
   info "frames loaded", unit = self.id, loaded = count
 
-const BAKES_FILE_VERSION = 1'u8
+const
+  BAKES_FILE = "bakes.bin"
+  BAKES_FILE_VERSION = 1'u8
 
 proc bake_meta_json(entry: BakeEntry): JsonNode =
   result = %*{"end": entry.end_pose.to_json_hook, "frame": entry.end_frame}
@@ -185,7 +187,7 @@ proc load_bakes(self: Build, json: JsonNode) =
     return
   if state.is_nil or not state.config_value.loaded:
     return
-  let path = self.data_dir / "bakes.bin"
+  let path = self.data_dir / BAKES_FILE
   if not file_exists(path):
     return
   try:
@@ -449,7 +451,7 @@ proc save_bakes(self: Build) =
   ## bake's frames are keyframes every FRAME_KEYFRAME_INTERVAL and deltas
   ## between, like frame files. Skipped when nothing changed since the last
   ## save or load.
-  let path = self.data_dir / "bakes.bin"
+  let path = self.data_dir / BAKES_FILE
   if self.bakes.len == 0 or self.bakes_inline:
     if file_exists(path):
       remove_file path
@@ -1115,7 +1117,8 @@ proc backup_level*(level_dir: string) =
   ## BEFORE Enu writes (the boot call runs ahead of load_level, which saves
   ## at its end). Skipped when nothing changed since the last backup (the
   ## manifest), so idle sessions cost nothing; the heavy compression runs
-  ## on its own thread (see backup_write).
+  ## on its own thread (see backup_write). Bakes are left out: a script
+  ## records them again, and the welcome water's alone is tens of MB.
   if SERVER notin state.local_flags:
     return
   if backup_thread_started:
@@ -1131,6 +1134,8 @@ proc backup_level*(level_dir: string) =
 
   var lines: seq[string]
   for path in walk_dir_rec(level_dir, relative = true):
+    if path.extract_filename == BAKES_FILE:
+      continue
     let full = level_dir / path
     try:
       lines.add path & "|" & $get_last_modification_time(full).to_unix & "|" &
@@ -1150,6 +1155,9 @@ proc backup_level*(level_dir: string) =
 
   let archive = ZipArchive()
   archive.add_dir(level_dir)
+  for path in archive.contents.keys.to_seq:
+    if path.ends_with("/" & BAKES_FILE):
+      archive.contents.del path
   live_backup = LevelBackup(
     archive: archive,
     dest:
