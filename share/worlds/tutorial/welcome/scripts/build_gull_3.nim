@@ -2,40 +2,14 @@ lock = true
 speed = 0
 
 # Gull circling the sky just north of the spawn, so birds drift through the
-# opening view after a moment. Same 4-frame flap as the other gulls; all
-# voxels sit inside one chunk (offsets 5..11) so a pose that vacates a chunk
-# never leaves a stale mesh behind.
-
-proc body() =
-  place(8, 8, 8, white)
-  place(8, 8, 9, white)
-  place(8, 8, 7, black)
-
-proc wings_down(col: Color) =
-  place(7, 8, 8, col); place(6, 7, 8, col); place(5, 7, 8, col)
-  place(9, 8, 8, col); place(10, 7, 8, col); place(11, 7, 8, col)
-
-proc wings_mid(col: Color) =
-  place(7, 8, 8, col); place(6, 8, 8, col); place(5, 8, 8, col)
-  place(9, 8, 8, col); place(10, 8, 8, col); place(11, 8, 8, col)
-
-proc wings_up(col: Color) =
-  place(7, 9, 8, col); place(6, 10, 8, col); place(5, 10, 8, col)
-  place(9, 9, 8, col); place(10, 10, 8, col); place(11, 10, 8, col)
+# opening view after a moment. Same hand-placed 4-frame flap as the other
+# gulls; every pose sits inside one chunk (offsets 5..11) so a pose that
+# vacates a chunk never leaves a stale mesh behind.
 
 anchor:
   right 8
   up 8
   back 8
-
-place(0, 0, 0, eraser)  # cover the origin default block
-body(); wings_down(white)
-frame = 1
-body(); wings_mid(white)
-frame = 2
-body(); wings_up(white)
-frame = 3
-body(); wings_mid(white)
 
 play(8.0)
 
