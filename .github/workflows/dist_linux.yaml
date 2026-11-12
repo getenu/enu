@@ -6,7 +6,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  linux:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out repository code
