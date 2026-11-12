@@ -100,4 +100,14 @@ suite "Frame Animation":
     check color_at(vec3(3, 0, 0)) == blue
     me.frames.clear()
 
+  test "mesh options read back":
+    check me.sealed_frames
+    me.sealed_frames = false
+    check not me.sealed_frames
+    me.sealed_frames = true
+    check not me.cull_down_faces
+    me.cull_down_faces = true
+    check me.cull_down_faces
+    me.cull_down_faces = false
+
 test_summary()

@@ -1701,17 +1701,17 @@ proc persist(self: Build) =
     self.global_flags += DIRTY
 
 proc sealed_frames(self: Build): bool =
-  self.sealed_frames
+  self.sealed_frames_value.value
 
 proc sealed_frames_set(self: Build, value: bool) =
-  self.sealed_frames = value
+  self.sealed_frames_value.value = value
   self.global_flags += DIRTY
 
 proc cull_down_faces(self: Build): bool =
-  self.cull_down_faces
+  self.cull_down_faces_value.value
 
 proc cull_down_faces_set(self: Build, value: bool) =
-  self.cull_down_faces = value
+  self.cull_down_faces_value.value = value
   self.global_flags += DIRTY
 
 proc play_impl(self: Build, fps: float, loop: bool, first: int, last: int) =
