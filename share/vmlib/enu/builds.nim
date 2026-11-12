@@ -1,4 +1,4 @@
-import std/[strutils, math]
+import std/[strutils, math, macros]
 ## Commands for building with blocks: shapes like `box`, `ball`, `wall`
 ## and `floor`, plus turtle controls like `drawing`.
 
@@ -123,6 +123,22 @@ bridged_to_host:
 
   proc rendered_voxel_count_get*(self: Build): int
 
+  proc bake_begin(
+    self: Build,
+    file: string,
+    line: int,
+    key: string,
+    inputs: string,
+    rebake: bool,
+    enu_key: string,
+  ): bool
+  proc bake_end(self: Build, finished: bool)
+  proc clear_bakes*(self: Build)
+    ## Forget everything this build's `bake` blocks recorded. They draw again
+    ## the next time they run.
+  proc clear_all_bakes*()
+    ## Forget what every `bake` block in the level recorded.
+
   proc pending_block_updates_get*(self: Thing): int
     ## Unfinished voxel pipeline work (queued, in-flight, or awaiting
     ## apply) for the thing and its descendants. 0 = every submitted edit
@@ -232,6 +248,75 @@ proc play*(self: Build, fps = 8.0, loop = true, first = 0, last = -1) =
 proc stop*(self: Build) =
   ## Stop frame playback; the display stays on the frame it was showing.
   self.stop_impl()
+
+const ENU_BAKE_KEY* = "1"
+  ## Part of every bake's key. Changing it makes every bake draw again, for
+  ## when Enu draws differently than it did.
+
+proc bake_block(args: NimNode, rebake: bool): NimNode {.compile_time.} =
+  if args.len == 0:
+    error("`bake` needs a body", args)
+  let body = args[^1]
+  var first = 0
+  var key = ""
+  if args.len > 1 and args[0].kind in {nnk_str_lit, nnk_r_str_lit, nnk_triple_str_lit}:
+    key = args[0].str_val
+    first = 1
+  var inputs = new_lit("")
+  for i in first ..< args.len - 1:
+    let arg = args[i]
+    inputs = quote:
+      `inputs` & $(`arg`) & "\x1f"
+  let site = body.line_info_obj
+  let begin = bind_sym"bake_begin"
+  let finish = bind_sym"bake_end"
+  let build = gensym(nsk_let, "build")
+  let finished = gensym(nsk_var, "finished")
+  let (file, line, key_lit, rebake_lit, enu) = (
+    new_lit(site.filename), new_lit(site.line), new_lit(key), new_lit(rebake),
+    new_lit(ENU_BAKE_KEY),
+  )
+  result = quote:
+    let `build` = Build(active_thing())
+    if not `begin`(`build`, `file`, `line`, `key_lit`, `inputs`, `rebake_lit`, `enu`):
+      var `finished` = false
+      try:
+        `body`
+        `finished` = true
+      finally:
+        `finish`(`build`, `finished`)
+
+macro bake*(args: varargs[untyped]): untyped =
+  ## Draw something once and remember it. The first time a `bake` block
+  ## runs, it records every block its body draws. After that the body is
+  ## skipped and the same blocks appear again, wherever the turtle is, which
+  ## is much faster for slow drawing like terrain or water.
+  ##
+  ## ```nim
+  ## bake:
+  ##   draw_island()            # draws again when this file changes
+  ## bake "sea-v2":
+  ##   draw_sea()               # draws again when the key changes
+  ## bake kind, height:
+  ##   draw_tree(kind, height)  # one recording per kind and height
+  ## ```
+  ##
+  ## A `bake` without a key draws again whenever its script, or a script it
+  ## imports, changes. One with a key (a string first) draws again only when
+  ## the key changes: change `"sea-v2"` to `"sea-v3"` after editing the code
+  ## it calls. Inputs after the key are values the drawing depends on; each
+  ## set gets its own recording. To redraw while you work on it, write
+  ## `rebake` instead of `bake`.
+  ##
+  ## A body can switch frames to bake a whole animation. Only blocks, the
+  ## turtle and the pen come back: variables the body sets, `echo` and the
+  ## like don't, so code after a `bake` shouldn't rely on them.
+  bake_block(args, rebake = false)
+
+macro rebake*(args: varargs[untyped]): untyped =
+  ## Like `bake`, but the body always runs and replaces what was recorded.
+  ## Use it while working on a bake's drawing, then change it back to `bake`.
+  bake_block(args, rebake = true)
 
 # bare forms for the active unit, matching the drawing API
 proc play*(fps = 8.0, loop = true, first = 0, last = -1) =

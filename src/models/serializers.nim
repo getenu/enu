@@ -151,6 +151,67 @@ proc load_frames*(self: Build, json: JsonNode) =
   self.saved_frames_hash = self.frames_hash
   info "frames loaded", unit = self.id, loaded = count
 
+const BAKES_FILE_VERSION = 1'u8
+
+proc bake_meta_json(entry: BakeEntry): JsonNode =
+  result = %*{"end": entry.end_pose.to_json_hook, "frame": entry.end_frame}
+  if entry.color.is_some:
+    result["color"] = json_utils.to_json(entry.color.get)
+  if entry.drawing.is_some:
+    result["drawing"] = %entry.drawing.get
+
+proc bake_from_meta(json: JsonNode): BakeEntry =
+  result = BakeEntry(
+    end_pose: json["end"].json_to(Transform),
+    end_frame: json["frame"].get_int,
+  )
+  if "color" in json:
+    result.color = some(json["color"].json_to(Color))
+  if "drawing" in json:
+    result.drawing = some(json["drawing"].get_bool)
+
+proc load_bakes(self: Build, json: JsonNode) =
+  ## A build's bakes come from the unit JSON's `bakes`, or from
+  ## data/<id>/bakes.bin when there are too many blocks for the JSON.
+  if "bakes" in json:
+    for key, node in json["bakes"]:
+      var entry = bake_from_meta(node)
+      for frame in node["frames"]:
+        var cells: seq[(Vector3, VoxelInfo)]
+        for cell in frame[1]:
+          cells.add (cell[0].json_to(Vector3), (TRANSIENT, cell[1].json_to(Color)))
+        entry.frames[frame[0].get_int] = pack_frame(self.shared, cells)
+      self.bakes[key] = entry
+    return
+  if state.is_nil or not state.config_value.loaded:
+    return
+  let path = self.data_dir / "bakes.bin"
+  if not file_exists(path):
+    return
+  try:
+    let data = read_file(path)
+    if data.len < 1 or data[0].uint8 != BAKES_FILE_VERSION:
+      raise ValueError.init("unsupported bakes file")
+    var i = 1
+    proc read_str(): string =
+      let len = read_i32(data, i)
+      result = data[i ..< i + len]
+      i += len
+    for _ in 0 ..< read_i32(data, i):
+      let key = read_str()
+      var entry = bake_from_meta(read_str().parse_json)
+      var prev = none(FrameData)
+      for _ in 0 ..< read_i32(data, i):
+        let offset = read_i32(data, i)
+        let frame = decode_frame_file(read_str(), prev)
+        entry.frames[offset] = frame
+        prev = some(frame)
+      self.bakes[key] = entry
+  except ValueError, IndexDefect, JsonParsingError:
+    let e = get_current_exception()
+    warn "bakes file unreadable; dropping it", unit = self.id, error = e.msg
+    self.bakes.clear
+
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
   self = Build.init(
@@ -181,6 +242,8 @@ proc from_json_hook(self: var Build, json: JsonNode) =
 
   if "frames" in json:
     self.load_frames(json)
+
+  self.load_bakes(json)
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared thing serializer), but tolerate
@@ -328,6 +391,94 @@ proc inline_frames_json(self: Build): string =
         "[\n" & entries.join(",\n").indent(2) & "\n]"
   ",\n    \"edits\": [\n" & frames.join(",\n").indent(6) & "\n    ]"
 
+proc sorted_offsets(entry: BakeEntry): seq[int] =
+  for offset in entry.frames.keys:
+    result.add offset
+  result.sort
+
+proc sorted_keys(self: Build): seq[string] =
+  for key in self.bakes.keys:
+    result.add key
+  result.sort
+
+proc bakes_inline(self: Build): bool =
+  ## Whether the build's bakes fit in the unit JSON.
+  state.is_nil or not state.config_value.loaded or
+    self.baked_voxel_count(EDITS_JSON_LIMIT) <= EDITS_JSON_LIMIT
+
+proc bakes_json(self: Build): string =
+  ## Each bake's blocks as `[offset, [[[x, y, z], color], ...]]` per frame.
+  if self.bakes.len == 0 or not self.bakes_inline:
+    return
+  var entries: seq[string]
+  for key in self.sorted_keys:
+    let entry = self.bakes[key]
+    let meta = entry.bake_meta_json
+    var frames: seq[string]
+    for offset in entry.sorted_offsets:
+      var cells: seq[tuple[pos: Vector3, color: Color]]
+      for chunk_id, packed in entry.frames[offset].chunks:
+        let decoded = decode_chunk(packed)
+        for linear in 0 ..< CHUNK_VOLUME:
+          if decoded[linear] != EMPTY_VOXEL:
+            cells.add (
+              chunk_id * ChunkDim.float + from_linear(linear),
+              resolve_color(self.shared, unpack_voxel(decoded[linear])[0]),
+            )
+      cells.sort do(a, b: auto) -> int:
+        cmp((a.pos.y, a.pos.x, a.pos.z), (b.pos.y, b.pos.x, b.pos.z))
+      let lines = cells.map_it(
+        \"[{$[it.pos.x, it.pos.y, it.pos.z]}, {$it.color}]"
+      )
+      frames.add \"[{offset}, [\n" & lines.join(",\n").indent(2) & "\n]]"
+    var pen = ""
+    for field in ["color", "drawing"]:
+      if field in meta:
+        pen.add \",\n  \"{field}\": {$meta[field]}"
+    entries.add \"""{key.escape_json}: {{
+  "end": {$meta["end"]},
+  "frame": {entry.end_frame}{pen},
+  "frames": [
+{frames.join(",\n").indent(4)}
+  ]
+}}"""
+  ",\n  \"bakes\": {\n" & entries.join(",\n").indent(4) & "\n  }"
+
+proc save_bakes(self: Build) =
+  ## data/<id>/bakes.bin, when the bakes don't fit in the unit JSON. Each
+  ## bake's frames are keyframes every FRAME_KEYFRAME_INTERVAL and deltas
+  ## between, like frame files. Skipped when nothing changed since the last
+  ## save or load.
+  let path = self.data_dir / "bakes.bin"
+  if self.bakes.len == 0 or self.bakes_inline:
+    if file_exists(path):
+      remove_file path
+    self.saved_bakes_serial = self.bakes_serial
+    return
+  if self.bakes_serial == self.saved_bakes_serial and file_exists(path):
+    return
+  var data = $char(BAKES_FILE_VERSION)
+  proc add_str(value: string) =
+    data.add_i32 value.len
+    data.add value
+  data.add_i32 self.bakes.len
+  for key in self.sorted_keys:
+    let entry = self.bakes[key]
+    add_str key
+    add_str $entry.bake_meta_json
+    let offsets = entry.sorted_offsets
+    data.add_i32 offsets.len
+    var prev = none(FrameData)
+    for i, offset in offsets:
+      let frame = entry.frames[offset]
+      data.add_i32 offset
+      let keyframe = i mod FRAME_KEYFRAME_INTERVAL == 0
+      add_str encode_frame_file(frame, if keyframe: none(FrameData) else: prev)
+      prev = some(frame)
+  create_dir self.data_dir
+  write_file_if_changed(path, data)
+  self.saved_bakes_serial = self.bakes_serial
+
 proc in_frames(self: Thing, frame_files: bool): bool =
   ## Whether the build's own edits live in its `frames` section rather than
   ## the JSON's top-level `edits`.
@@ -349,6 +500,8 @@ proc extras_json(self: Thing, frame_files: bool): string =
     "count": {build.frames_len},
     "frame": {build.frame}{inline}
   }}"""
+  if self of Build:
+    result.add Build(self).bakes_json
   if ?self.shared and self.shared.palette.len > 0:
     # One color per line: a gradient build's palette runs to hundreds of
     # entries, and a single wrapped line is unreadable / undiffable.
@@ -421,6 +574,7 @@ proc save*(thing: Thing) =
     write_file_if_changed(thing.data_file, data)
     if thing of Build:
       Build(thing).save_frames(frame_files)
+      Build(thing).save_bakes()
 
     for thing in thing.things:
       thing.save

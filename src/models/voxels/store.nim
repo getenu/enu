@@ -836,6 +836,45 @@ proc apply_delta*(self: VoxelStore, fc: FrameChunk, delta: DeltaUpdate) =
         inc entry[].count
       entry[].cells[linear] = packed_voxel
 
+proc has_edits(self: VoxelStore, fc: FrameChunk): bool =
+  if fc in self.pending_edits or
+      (fc in self.local_edits and self.local_edits[fc].len > 0):
+    return true
+  if ?self.edit_snapshots:
+    let key = self.edit_key(fc)
+    key in self.edit_snapshots or
+      (key in self.edit_deltas and self.edit_deltas[key].len > 0)
+  else:
+    false
+
+proc stamp_chunk*(self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData): bool =
+  ## Lay a chunk of computed blocks over chunk `fc` whole: a replayed `bake`
+  ## at a chunk-aligned spot. An empty chunk takes the blob as is. False,
+  ## changing nothing, when the chunk holds edits: holes and manual blocks
+  ## need the per-block rules.
+  if self.has_edits(fc):
+    return false
+  self.note_chunk(fc.loc)
+  self.restored_frames.excl fc.frame
+  let cells = decode_chunk(snapshot)
+  let empty =
+    fc notin self.chunk_cache and fc notin self.pending_chunks and
+    fc notin self.pending_snapshots and
+    (not ?self.build or (fc notin self.packed_chunks and fc notin self.chunk_deltas))
+  let chunk = if empty: CachedChunk() else: self.cached_chunk(fc)
+  for linear in 0 ..< CHUNK_VOLUME:
+    if cells[linear] != EMPTY_VOXEL:
+      if chunk.cells[linear] == EMPTY_VOXEL:
+        inc chunk.count
+      chunk.cells[linear] = cells[linear]
+  if empty:
+    inc self.cache_tick
+    chunk.tick = self.cache_tick
+    self.chunk_cache[fc] = chunk
+  # an empty blob re-encodes from the cells when it flushes
+  self.pending_snapshots[fc] = if empty: snapshot else: SnapshotData()
+  true
+
 # Whole frames. These take frame ids, not indexes.
 
 proc frame_data*(self: VoxelStore, frame_id: int): FrameData =

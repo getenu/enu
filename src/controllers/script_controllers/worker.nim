@@ -363,6 +363,10 @@ proc watch_code(self: Worker, thing: Thing) =
   if thing.script_ctx.is_nil:
     thing.script_ctx =
       ScriptCtx.init(owner = thing, interpreter = self.interpreter)
+    if thing of Build:
+      let build = Build(thing)
+      thing.script_ctx.compiled = proc() {.gcsafe.} =
+        build.drop_stale_bakes()
 
     thing.script_ctx.script = script_file_for thing
     try:
@@ -937,6 +941,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           notice "test mode running",
             elapsed = elapsed, scripts = running_scripts
 
+        check_bakes()
         if QUITTING in state.local_flags:
           discard # already finishing; wait for it to propagate
         elif elapsed > test_timeout:

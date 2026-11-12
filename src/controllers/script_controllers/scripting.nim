@@ -6,7 +6,7 @@ import
   pkg/compiler/
     [lineinfos, renderer, msgs, vmdef, pathutils, modulegraphs, idents, vm]
 import godotapi/[spatial, ray_cast, voxel_terrain]
-import core, models/[states, bots, builds, things, signs, players]
+import core, models/[states, bots, builds, bakes, things, signs, players]
 import libs/[interpreters, eval, fd_tracking]
 import ./vars
 

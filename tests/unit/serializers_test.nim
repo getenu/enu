@@ -1,11 +1,12 @@
 import unittest2
-import std/[json, jsonutils, os]
+import std/[json, jsonutils, os, options, tables]
 import core
 import models/colors
 import models/builds
 import models/bots
 import models/states
 import models/voxels/[store, codec]
+import models/bakes
 import models/serializers {.all.}
 
 suite "Color Serialization":
@@ -260,3 +261,87 @@ suite "Frame Serialization":
     for index in 0 ..< 3:
       check restored.voxels.frame_edits(restored.frame_order.ids[index]).chunks ==
         build.voxels.frame_edits(build.frame_order.ids[index]).chunks
+
+suite "Bake Serialization":
+  dont_join = true
+
+  test "bakes round-trip in the JSON, or in bakes.bin when they're big":
+    let dir = get_temp_dir() / "enu_bakes_test"
+    remove_dir dir
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    for (id, count) in [
+      ("build_bakes_small", 10), ("build_bakes_big", EDITS_JSON_LIMIT + 1)
+    ]:
+      let build = Build.init(id = id)
+      var cells: seq[(Vector3, VoxelInfo)]
+      for x in 0 ..< count:
+        cells.add (vec3(x.float, 0, 0), (TRANSIENT, ACTION_COLORS[RED]))
+      var entry = BakeEntry(
+        end_pose: Transform.init(origin = vec3(2, 0, 0)),
+        end_frame: 1,
+        color: some(ACTION_COLORS[GREEN]),
+      )
+      entry.frames[0] = pack_frame(build.shared, cells)
+      entry.frames[1] = pack_frame(build.shared, cells[0 ..< 1])
+      build.bakes["key"] = entry
+      inc build.bakes_serial
+      build.save
+      let big = count > EDITS_JSON_LIMIT
+      check file_exists(dir / id / "bakes.bin") == big
+      let json = parse_json(read_file(build.data_file))
+      check ("bakes" in json) == not big
+
+      var restored: Build
+      restored.from_json(json)
+      check "key" in restored.bakes
+      let back = restored.bakes["key"]
+      check back.frames == entry.frames
+      check back.end_pose.origin == vec3(2, 0, 0)
+      check back.end_frame == 1
+      check back.color == some(ACTION_COLORS[GREEN])
+      check back.drawing.is_none
+    remove_dir dir
+
+  test "script colors keep their palette slots through a save and load":
+    # colors a script computes aren't 8-bit exact, but the palette saves as
+    # #rrggbb: they're snapped when packed, so the saved indices still match
+    let build = Build.init(id = "build_palette_round_trip")
+    let colors = [
+      Color(r: 0.12, g: 0.5678, b: 0.8, a: 1.0),
+      Color(r: 0.1215, g: 0.5679, b: 0.8001, a: 1.0), # same #rrggbb
+      Color(r: 0.7, g: 0.2, b: 0.31, a: 0.5),
+    ]
+    var indices: seq[int]
+    for color in colors:
+      indices.add pack_color_index(build.shared, color)
+    check indices[0] == indices[1]
+    let json = parse_json(build.to_json_string(frame_files = false))
+    var restored: Build
+    restored.from_json(json)
+    check restored.shared.palette.len == build.shared.palette.len
+    for i, color in colors:
+      check resolve_color(restored.shared, indices[i]) ==
+        resolve_color(build.shared, indices[i])
+      check pack_color_index(restored.shared, color) == indices[i]
+
+suite "Bake Cleanup":
+  test "a compile drops recordings whose key is gone or out of date":
+    let build = Build.init(id = "build_bake_cleanup")
+    let keys = [
+      bake_key("1", "#live", ""),
+      bake_key("1", "#live", "7"), # an input variant: kept
+      bake_key("1", "#renamed", ""),
+      bake_key("0", "#live", ""), # an older Enu bake key
+    ]
+    for key in keys:
+      build.bakes[key] = BakeEntry()
+    build.script_ctx = ScriptCtx(
+      bake_sites: @[(file: "", line: 1, key: "live", enu: "1")],
+      bakes_known: true,
+    )
+    build.drop_stale_bakes()
+    check build.bakes.len == 2
+    check keys[0] in build.bakes
+    check keys[1] in build.bakes

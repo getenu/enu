@@ -252,6 +252,17 @@ proc run*(self: ScriptCtx, me: int): bool =
   self.exit_code = none(int)
 
   var raw_dependencies = newSeq[string]()
+  var bake_sites = newSeq[BakeSite]()
+  proc record_dependencies() =
+    self.dependencies = @[]
+    let script_dir = self.file_name.split_file.dir
+    for dep in raw_dependencies:
+      if dep == "players":
+        continue
+      let expected_path = script_dir / (dep & ".nim")
+      if file_exists(expected_path):
+        self.dependencies.add(expected_path.relative_path(script_dir))
+
   # Breadcrumb for a rare, traceless worker-thread SIGSEGV (read-from-nil) seen
   # during the player's first script load, inside load_module. It's ~1-in-50 and
   # disappears under a debugger or --stacktrace:on (a timing-sensitive Heisenbug),
@@ -293,9 +304,16 @@ proc run*(self: ScriptCtx, me: int): bool =
         self.code,
         self.pass_context,
         raw_dependencies,
+        bake_sites,
         executing = proc() =
           task.timed = true
-          self.resumed_at = get_mono_time(),
+          self.resumed_at = get_mono_time()
+          self.bake_sites = bake_sites
+          self.source_keys.clear
+          self.bakes_known = true
+          record_dependencies()
+          if not self.compiled.is_nil:
+            self.compiled(),
       )
     result = self.parked
   except VMQuit:
@@ -308,14 +326,7 @@ proc run*(self: ScriptCtx, me: int): bool =
     self.exit_code = some(99)
     raise VMQuit.new_exception("Unhandled err", e)
   finally:
-    self.dependencies = @[]
-    let script_dir = self.file_name.split_file.dir
-    for dep in raw_dependencies:
-      if dep == "players":
-        continue
-      let expected_path = script_dir / (dep & ".nim")
-      if file_exists(expected_path):
-        self.dependencies.add(expected_path.relative_path(script_dir))
+    record_dependencies()
 
 proc eval*(self: ScriptCtx, code: string): Option[string] =
   ## Run `code` in the script's module. If it parks (`forward 5`), it carries

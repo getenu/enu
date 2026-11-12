@@ -117,7 +117,8 @@ There is one path: the terrain shows `shown_frame`.
   tables and the chunk tables (`adopt_edit_chunks`, generalized per frame).
   Big single-frame builds, like the welcome terrain, are one `000.bin`.
 - `edits.bin` is gone. It postdates 0.2.2, so nothing shipped needs it.
-- Computed blocks are never written, except by `bake` (#107).
+- Computed blocks are never written to frame files. `bake` (#107) keeps its
+  recordings separately, in the unit JSON or `bakes.bin`.
 
 ### Network
 

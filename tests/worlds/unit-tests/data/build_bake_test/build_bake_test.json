@@ -1,0 +1,15 @@
+{
+  "id": "build_bake_test",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [0.0, 20.0, 100.0]
+  },
+  "start_color": "BLUE",
+  "edits": {
+    
+  }
+}

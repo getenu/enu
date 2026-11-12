@@ -243,6 +243,26 @@ task test_world,
           " --enu-test --minimized scenes/game.tscn --temp-workdir"
     exec cmd
 
+task check_bakes,
+  "check that every shipped level's saved bakes still match its scripts":
+  # A stale bake doesn't break anything; the level just regenerates on its
+  # first load, which for the welcome terrain and water takes minutes.
+  for world in list_dirs(this_dir() / "share/worlds"):
+    for level in list_dirs(world):
+      var baked = false
+      for unit in list_dirs(level / "data"):
+        let json = unit / unit.split_path.tail & ".json"
+        if file_exists(unit / "bakes.bin") or
+            (file_exists(json) and "\"bakes\"" in read_file(json)):
+          baked = true
+          break
+      if not baked:
+        continue
+      p &"Checking bakes: {world.split_path.tail}/{level.split_path.tail}"
+      exec "cd app && " & godot_bin() & " --world " & world & " --level " &
+        level.split_path.tail &
+        " --check-bakes --minimized scenes/game.tscn --temp-workdir"
+
 task client_smoke,
   "Two-instance smoke: server + partial-replica client; verify sync via logs":
   p "Building enu..."
@@ -442,7 +462,9 @@ task test, "fast default tests (unit + vm); run test_all for the full suite":
   run_tests ["test_unit", "test_vm"]
 
 task test_all, "full test suite (unit + vm + world + sandbox + mcp)":
-  run_tests ["test_unit", "test_vm", "test_world", "test_sandbox", "test_mcp"]
+  run_tests [
+    "test_unit", "test_vm", "test_world", "test_sandbox", "test_mcp", "check_bakes"
+  ]
 
 proc find_and_copy_dlls(dep_path, dest: string, dlls: varargs[string]) =
   for dep in dlls:

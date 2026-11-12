@@ -52,6 +52,10 @@ proc pack_color_index*(shared: Shared, color: Color): int =
   let renamed = color.action_index
   if renamed != ERASER:
     return renamed.ord
+  # Snapped to the 8 bits a channel keeps in the saved palette (`#rrggbb`):
+  # otherwise the color reloads as a slightly different one, and the saved
+  # indices that point past it no longer line up.
+  color = color.rgb.color
 
   if shared.is_nil:
     # bare stores (tests) have no palette; keep the legacy quantization
@@ -181,14 +185,14 @@ proc read_u16(data: openArray[byte], i: var int): PackedVoxel =
   result = PackedVoxel(data[i].uint16 or (data[i + 1].uint16 shl 8))
   i += 2
 
-proc add_i32(s: var string, v: int) =
+proc add_i32*(s: var string, v: int) =
   let u = cast[uint32](int32(v))
   s.add char(u and 0xff)
   s.add char((u shr 8) and 0xff)
   s.add char((u shr 16) and 0xff)
   s.add char((u shr 24) and 0xff)
 
-proc read_i32(s: string, i: var int): int =
+proc read_i32*(s: string, i: var int): int =
   let u =
     uint32(s[i].byte) or (uint32(s[i + 1].byte) shl 8) or
     (uint32(s[i + 2].byte) shl 16) or (uint32(s[i + 3].byte) shl 24)
