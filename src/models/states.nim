@@ -17,7 +17,6 @@ const groups =
       VIEWPORT_FOCUSED,
     },
     {RETICLE_VISIBLE, BLOCK_TARGET_VISIBLE},
-    {PLAYING, FLYING},
   ]
 
 proc resolve_flags*(
@@ -32,9 +31,11 @@ proc resolve_flags*(
           result.excl f
     result.incl flag
 
+  # Flags resolve before the worker creates this instance's player.
+  let player = self.player
   # CODE_MODE and NONE (no tool) don't target blocks: hide the block target and
   # keep the reticle up, like play mode.
-  if self.tool in {CODE_MODE, NONE}:
+  if ?player and player.tool in {CODE_MODE, NONE}:
     for flag in groups[1]:
       result.excl(flag)
     result.incl(RETICLE_VISIBLE)
@@ -56,7 +57,7 @@ proc resolve_flags*(
         SETTINGS_VISIBLE in result:
       result.excl(MOUSE_CAPTURED)
 
-  if PLAYING in result:
+  if ?player and PLAYING in player.flags:
     result.excl(BLOCK_TARGET_VISIBLE)
     result.excl(EDITOR_VISIBLE)
     result.incl(RETICLE_VISIBLE)
@@ -69,7 +70,7 @@ proc resolve_flags*(
 
   debug "resolved flags", flags = result
 
-proc resolve_flags(self: GameState) =
+proc resolve_flags*(self: GameState) =
   let result = self.resolve_flags(self.wants.value)
   self.local_flags.value = result
 
@@ -131,13 +132,22 @@ proc `-=`*(
   self: EdSet[LocalStateFlags], flag: LocalStateFlags
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
-proc selected_color*(self: GameState): Color =
+proc set_flag*(self: Player, flag: PlayerFlags, value: bool) =
+  if value:
+    self.flags += flag
+  else:
+    self.flags -= flag
+
+proc toggle_flag*(self: Player, flag: PlayerFlags) =
+  self.set_flag flag, flag notin self.flags
+
+proc selected_color*(self: Player): Color =
   if self.tool in BLUE_BLOCK .. BROWN_BLOCK:
     self.tool_colors[ord(self.tool) - ord(BLUE_BLOCK)]
   else:
     ACTION_COLORS[Colors(ord self.tool)]
 
-proc select_tool*(self: GameState, tool: Tools) =
+proc select_tool*(self: Player, tool: Tools) =
   ## Make `tool` active, but only when it's available. Selecting an
   ## unavailable tool is a no-op so the player can't pick a hidden tool.
   if tool in self.tools:
@@ -165,17 +175,12 @@ proc init*(_: type GameState): GameState =
       id = "root_things",
       flags = DEFAULT_FLAGS + {OWNS_MEMBERS},
     ),
-    open_thing_value: EdValue[Thing].init(flags = flags),
     config_value: EdValue[Config].init(flags = flags, id = "config"),
-    tool_value: EdValue[Tools].init(BLUE_BLOCK, flags = flags),
-    tools: Ed.init({CODE_MODE .. PLACE_BOT}, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-    tool_colors: Ed.init(DEFAULT_TOOL_COLORS, flags = {SYNC_LOCAL, SYNC_REMOTE}),
     gravity: -80.0,
     show_prototypes: true,
     show_tools: true,
     start_transform: Transform.init(origin = vec3(0, 1, 0)),
     console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
-    open_sign_value: EdValue[Sign].init(flags = flags),
     wants: EdSeq[LocalStateFlags].init(flags = flags),
     level_name_value: EdValue[string].init("", id = "level_name"),
     queued_action_value: EdValue[string].init("", flags = flags),
@@ -192,19 +197,6 @@ proc init*(_: type GameState): GameState =
   self.init_logger
 
   result = self
-  self.open_thing_value.changes:
-    if added and change.item != nil:
-      self.push_flags EDITOR_VISIBLE, EDITOR_OPENING
-    elif added:
-      self.push_flag EDITOR_OPENING
-      self.pop_flag EDITOR_VISIBLE
-
-  self.tools.changes:
-    # Lose the active tool when it's removed; stay in NONE until something is
-    # explicitly selected (no auto-recovery when tools come back).
-    if removed and change.item == self.tool:
-      self.tool = NONE
-
   self.local_flags.changes:
     if EDITOR_VISIBLE.added:
       self.push_flag EDITOR_FOCUSED
@@ -220,6 +212,22 @@ proc init*(_: type GameState): GameState =
       self.pop_flag SETTINGS_FOCUSED
 
   result = self
+
+proc watch_player*(self: GameState) =
+  ## The UI flags that follow this instance's player: the editor opens for
+  ## whatever it's coding, and play mode changes what the reticle shows.
+  let player = self.player
+  player.own:
+    player.coding_value.changes:
+      if added and ?change.item:
+        self.push_flags EDITOR_VISIBLE, EDITOR_OPENING
+      elif added:
+        self.push_flag EDITOR_OPENING
+        self.pop_flag EDITOR_VISIBLE
+
+    player.flags.changes:
+      if change.item == PLAYING:
+        self.resolve_flags
 
 when is_main_module:
   import pkg/print
@@ -280,7 +288,7 @@ when is_main_module:
   state.push_flag MOUSE_CAPTURED
   assert MOUSE_CAPTURED in state.local_flags
 
-  state.open_thing = Thing()
+  state.push_flags EDITOR_VISIBLE, EDITOR_OPENING
   assert MOUSE_CAPTURED notin state.local_flags
 
   state.push_flag COMMAND_MODE
@@ -289,7 +297,8 @@ when is_main_module:
   state.pop_flag MOUSE_CAPTURED
   assert MOUSE_CAPTURED in state.local_flags
 
-  state.open_thing = nil
+  state.push_flag EDITOR_OPENING
+  state.pop_flag EDITOR_VISIBLE
   assert MOUSE_CAPTURED in state.local_flags
 
   state.pop_flag COMMAND_MODE

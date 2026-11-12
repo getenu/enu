@@ -61,8 +61,8 @@ proc get_network_stats(): string =
       \"net: {conn_count} conn, sent: {format_bytes(bytes_sent)}, recv: {format_bytes(bytes_recv)}"
 
 # saved state when restarting worker thread
-const savable_flags =
-  {CONSOLE_VISIBLE, MOUSE_CAPTURED, FLYING, GOD, ALT_WALK_SPEED, ALT_FLY_SPEED}
+const savable_flags = {CONSOLE_VISIBLE, MOUSE_CAPTURED, ALT_FLY_SPEED}
+const savable_player_flags = {FLYING, GOD, RUNNING}
 
 const SPAWN_GATE_TIMEOUT = 10.seconds
   ## Backstop on how long the reveal waits for the pre-PLAYERS builds to
@@ -600,7 +600,7 @@ gdobj Game of Node:
       notice "test mode enabled"
       state.push_flag TEST_MODE
 
-    state.set_flag(GOD, uc.god_mode ||= false)
+    let god_mode = uc.god_mode ||= false
 
     if minimized:
       # Launch out of the way (test runs, MCP-managed instances): minimize and
@@ -633,6 +633,21 @@ gdobj Game of Node:
 
     self.node_controller = NodeController.init
     self.script_controller = ScriptController.init
+    # The worker made this instance's player before launch_worker returned.
+    # Take it in now, so everything built from here on can use it.
+    while state.player.is_nil:
+      Ed.thread_ctx.tick
+    state.watch_player
+    if god_mode:
+      state.player.flags += GOD
+    if saved_state.restarting:
+      state.player.transform = saved_state.transform
+      state.player.rotation = saved_state.rotation
+      for flag in saved_state.flags:
+        state.push_flag(flag)
+      for flag in saved_state.player_flags:
+        state.player.flags += flag
+      saved_state.restarting = false
 
     save_user_config(uc)
     info "game.init() complete"
@@ -806,16 +821,6 @@ gdobj Game of Node:
         self.gate.deadline = self.gate.started + SPAWN_GATE_TIMEOUT
         info "spawn gate: waiting for local render", gate_ids = ids
 
-    state.player_value.changes:
-      if added and ?change.item and saved_state.restarting:
-        change.item.transform = saved_state.transform
-        change.item.rotation = saved_state.rotation
-
-        for flag in saved_state.flags:
-          state.push_flag(flag)
-
-        saved_state.restarting = false
-
     state.local_flags.changes(false):
       if QUITTING.added:
         # We don't quit until the worker thread acks by popping the `Quitting`
@@ -850,12 +855,10 @@ gdobj Game of Node:
       if NEEDS_RESTART.removed:
         saved_state.transform = state.player.transform
         saved_state.rotation = state.player.rotation
-        saved_state.flags = {}
         saved_state.connect_address = state.config.connect_address
 
-        for flag in state.local_flags:
-          if flag in savable_flags:
-            saved_state.flags.incl(flag)
+        saved_state.flags = state.local_flags.value * savable_flags
+        saved_state.player_flags = state.player.flags.value * savable_player_flags
 
         saved_state.restarting = true
         discard self.get_tree.reload_current_scene()
@@ -997,7 +1000,7 @@ gdobj Game of Node:
     elif event.is_action_pressed("prev_level"):
       self.switch_world(-1)
     elif event.is_action_pressed("save_and_reload"):
-      state.pop_flag PLAYING
+      state.player.flags -= PLAYING
       state.push_flag RESETTING_VM
       self.switch_world(0)
       state.pop_flag RESETTING_VM
@@ -1026,40 +1029,40 @@ gdobj Game of Node:
         state.set_flag MOUSE_CAPTURED, MOUSE_CAPTURED notin state.local_flags
         self.get_tree().set_input_as_handled()
 
-    if state.tool != DISABLED:
+    if state.player.tool != DISABLED:
       if event.is_action_pressed("toggle_code_mode"):
-        if state.tool != CODE_MODE:
-          if state.tool in state.tools:
-            self.last_tool = state.tool
-          state.select_tool CODE_MODE
+        if state.player.tool != CODE_MODE:
+          if state.player.tool in state.player.tools:
+            self.last_tool = state.player.tool
+          state.player.select_tool CODE_MODE
         else:
-          state.select_tool self.last_tool
+          state.player.select_tool self.last_tool
       elif event.is_action_pressed("mode_1"):
-        state.select_tool CODE_MODE
+        state.player.select_tool CODE_MODE
       elif event.is_action_pressed("mode_2"):
-        state.select_tool BLUE_BLOCK
+        state.player.select_tool BLUE_BLOCK
       elif event.is_action_pressed("mode_3"):
-        state.select_tool RED_BLOCK
+        state.player.select_tool RED_BLOCK
       elif event.is_action_pressed("mode_4"):
-        state.select_tool GREEN_BLOCK
+        state.player.select_tool GREEN_BLOCK
       elif event.is_action_pressed("mode_5"):
-        state.select_tool BLACK_BLOCK
+        state.player.select_tool BLACK_BLOCK
       elif event.is_action_pressed("mode_6"):
-        state.select_tool WHITE_BLOCK
+        state.player.select_tool WHITE_BLOCK
       elif event.is_action_pressed("mode_7"):
-        state.select_tool BROWN_BLOCK
+        state.player.select_tool BROWN_BLOCK
       elif event.is_action_pressed("mode_8"):
-        state.select_tool PLACE_BOT
+        state.player.select_tool PLACE_BOT
 
   method on_meta_clicked(url: string) =
     if url.starts_with("nim://"):
-      assert ?state.open_sign
-      state.open_sign.owner.eval = url[6 ..^ 1]
+      assert ?state.player.open_sign
+      state.player.open_sign.owner.eval = url[6 ..^ 1]
     elif url.starts_with("thing://"):
       let id = url[7 ..^ 1]
       for thing in state.things:
         if thing.id == id:
-          state.open_thing = thing
+          state.player.coding = thing
           return
       logger("err", \"Unable to open thing {id}")
     elif shell_open(url) != godotcoretypes.Error.OK:

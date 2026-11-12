@@ -60,11 +60,16 @@ gdobj GUI of Control:
       self.bind_signal(button, "button_up", button.name)
       self.bind_signal(button, "button_down", button.name)
 
-    state.local_flags.changes:
+    proc update_touch_controls() =
       self.left_stick.visible = TOUCH_CONTROLS in state.local_flags
       self.up.visible = TOUCH_CONTROLS in state.local_flags
       self.down.visible =
-        TOUCH_CONTROLS in state.local_flags and FLYING in state.local_flags
+        TOUCH_CONTROLS in state.local_flags and FLYING in state.player.flags
+
+    state.local_flags.changes:
+      update_touch_controls()
+    state.player.flags.changes:
+      update_touch_controls()
 
   method on_button_up(name: string) =
     var ev = gdnew[InputEventAction]()
@@ -149,10 +154,10 @@ gdobj GUI of Control:
       player.jump_down = true
       let toggle = ?player.jump_time and time < player.jump_time.get + fly_toggle
 
-      if toggle and PLAYING notin state.local_flags and
-          FLY_DISABLED notin state.local_flags:
+      if toggle and PLAYING notin state.player.flags and
+          FLY_DISABLED notin state.player.flags:
         player.jump_time = nil_time
-        state.toggle_flag(FLYING)
+        state.player.toggle_flag(FLYING)
       elif player.is_on_floor():
         # Jump, inheriting the floor build's velocity so a jump off a moving
         # platform carries its momentum through the arc. Zero on a static floor
@@ -170,7 +175,7 @@ gdobj GUI of Control:
 
       if ?self.crouch_time and time < self.crouch_time.get + fly_toggle:
         self.crouch_time = nil_time
-        state.set_flag(FLYING, false)
+        state.player.flags -= FLYING
       else:
         self.crouch_time = some time
 
@@ -184,7 +189,7 @@ gdobj GUI of Control:
         if player.flying:
           state.toggle_flag(ALT_FLY_SPEED)
         else:
-          state.toggle_flag(ALT_WALK_SPEED)
+          state.player.toggle_flag(RUNNING)
       else:
         self.run_time = some time
       self.alt_speed = true
@@ -192,7 +197,7 @@ gdobj GUI of Control:
       self.get_tree().set_input_as_handled()
       self.alt_speed = false
 
-    if event of InputEventPanGesture and state.tool notin {CODE_MODE, PLACE_BOT}:
+    if event of InputEventPanGesture and state.player.tool notin {CODE_MODE, PLACE_BOT}:
       let pan = event as InputEventPanGesture
       self.pan_delta += pan.delta.y
       if self.pan_delta > 2:
@@ -225,9 +230,9 @@ gdobj GUI of Control:
       if SETTINGS_FOCUSED in flags:
         state.pop_flags SETTINGS_FOCUSED, SETTINGS_VISIBLE
       elif EDITOR_FOCUSED in flags:
-        state.open_thing = nil
+        state.player.coding = nil
       elif DOCS_FOCUSED in flags:
-        state.open_sign = nil
+        state.player.open_sign = nil
 
     if event of InputEventKey or event of InputEventAction:
       self.handle_player_input(event)

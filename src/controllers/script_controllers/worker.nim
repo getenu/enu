@@ -700,7 +700,6 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
 
   state.player.things += sign
   sign.global_flags -= VISIBLE
-  sign.local_flags += HIDE
 
   var running = true
   if NEEDS_RESTART in state.local_flags:

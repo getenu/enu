@@ -382,12 +382,12 @@ proc destroy_impl*(self: Bot | Build | Sign) =
             error "unowned Ed field at destroy (missing id.own:/own:?)",
               thing = self.id, field_id = fid, field_type
 
-  if state.open_thing == self:
-    state.open_thing = nil
+  if state.player.coding == self:
+    state.player.coding = nil
 
   when self is Sign:
-    if state.open_sign_value.valid and state.open_sign == self:
-      state.open_sign = nil
+    if state.player.open_sign_value.valid and state.player.open_sign == self:
+      state.player.open_sign = nil
 
   # Unlink from the parent (syncs REMOVED). parent is a {.cursor.} — no cycle to
   # break by nil-ing it, and ORC owns the memory now.

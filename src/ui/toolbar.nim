@@ -29,24 +29,25 @@ gdobj Toolbar of HBoxContainer:
     self.preview_maker = self.get_node("../PreviewMaker") as PreviewMaker
     assert not self.preview_maker.is_nil
 
-    state.local_flags.changes:
+    let player = state.player
+    player.flags.changes:
       if PLAYING.added:
         self.visible = false
-        state.tool = DISABLED
+        player.tool = DISABLED
       if PLAYING.removed:
         self.visible = true
-        state.tool = if BLUE_BLOCK in state.tools: BLUE_BLOCK else: NONE
+        player.tool = if BLUE_BLOCK in player.tools: BLUE_BLOCK else: NONE
 
-    self.zid = state.tool_value.changes:
+    self.zid = state.player.tool_value.changes:
       if added:
         self.show_pressed change.item
 
     self.update_block_icons()
-    state.tool_colors.changes:
+    state.player.tool_colors.changes:
       self.update_block_icons()
 
     self.apply_visibility()
-    state.tools.changes:
+    state.player.tools.changes:
       # Level load seeds the tool set before the scene is interactive — snap to
       # it instead of sliding, so a customized level doesn't open with a switch.
       if LOADING_LEVEL in state.global_flags:
@@ -55,7 +56,7 @@ gdobj Toolbar of HBoxContainer:
         self.animate_tools()
 
   proc update_block_icons() =
-    let colors = state.tool_colors.value
+    let colors = state.player.tool_colors.value
     self.shown_colors.set_len(colors.len)
     for i, color in colors:
       if color != self.shown_colors[i]:
@@ -67,7 +68,7 @@ gdobj Toolbar of HBoxContainer:
     for tool in CODE_MODE .. PLACE_BOT:
       let b = self.get_child(int tool) as Button
       if ?b:
-        b.visible = tool in state.tools
+        b.visible = tool in state.player.tools
 
   proc show_pressed(tool: Tools) =
     if tool in {CODE_MODE .. PLACE_BOT}:
@@ -85,7 +86,7 @@ gdobj Toolbar of HBoxContainer:
     # Runs at the bottom of the slide, while the toolbar is off-screen, so the
     # button set changes out of sight.
     self.apply_visibility()
-    self.show_pressed state.tool
+    self.show_pressed state.player.tool
 
   proc animate_tools() =
     # Slide the toolbar down and back up, swapping in the updated tool set at the
@@ -142,21 +143,21 @@ gdobj Toolbar of HBoxContainer:
           self.waiting = false
 
   method on_action_changed*(button_name: string) =
-    state.tool_value.pause(self.zid):
+    state.player.tool_value.pause(self.zid):
       case button_name[7 ..^ 1]
       of "code":
-        state.tool = CODE_MODE
+        state.player.tool = CODE_MODE
       of "blue":
-        state.tool = BLUE_BLOCK
+        state.player.tool = BLUE_BLOCK
       of "red":
-        state.tool = RED_BLOCK
+        state.player.tool = RED_BLOCK
       of "green":
-        state.tool = GREEN_BLOCK
+        state.player.tool = GREEN_BLOCK
       of "black":
-        state.tool = BLACK_BLOCK
+        state.player.tool = BLACK_BLOCK
       of "white":
-        state.tool = WHITE_BLOCK
+        state.player.tool = WHITE_BLOCK
       of "brown":
-        state.tool = BROWN_BLOCK
+        state.player.tool = BROWN_BLOCK
       of "bot":
-        state.tool = PLACE_BOT
+        state.player.tool = PLACE_BOT

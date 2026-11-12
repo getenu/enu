@@ -1,27 +1,49 @@
 import std/[math]
 import godotapi/spatial
-import core, models/things
+import core, models/[things, states, colors]
 
-proc init*(_: type Player): Player =
-  let player_id = \"player-{Ed.thread_ctx.id}"
-  player_id.own:
+proc init*(_: type Player, id = "player-" & Ed.thread_ctx.id): Player =
+  id.own:
     let self = Player(
-      id: player_id,
+      id: id,
       rotation_value: ed(0.0),
       boost_value: EdValue[Vector3].init(),
       start_transform: Transform.init(origin = vec3(0, 1, 0)),
       input_direction_value: EdValue[Vector3].init(),
       cursor_position_value: ed((0, 0)),
       block_log_entries: EdSeq[BlockLogEntry].init(flags = {SYNC_LOCAL}),
+      tool_value: ed(BLUE_BLOCK),
+      tools: Ed.init({CODE_MODE .. PLACE_BOT}),
+      tool_colors: Ed.init(DEFAULT_TOOL_COLORS),
+      flags: EdSet[PlayerFlags].init(),
+      coding_value: EdValue[Thing].init(),
+      open_sign_value: EdValue[Sign].init(),
     )
     self.init_thing(shared = false)
     self.global_flags += GLOBAL
     self.global_flags += EPHEMERAL
 
-    self.own: # callback on external state, scoped to the player's lifetime
+    self.own:
       state.local_flags.changes:
         if RESETTING_VM.added:
           self.frame_created = state.frame_count
+
+      self.tools.changes:
+        # Lose the active tool when it's removed; stay in NONE until something
+        # is explicitly selected (no auto-recovery when tools come back).
+        if removed and change.item == self.tool:
+          self.tool = NONE
+
+      self.flags.changes:
+        # Playing and flying exclude each other, and no flying while it's
+        # disabled.
+        if PLAYING.added:
+          self.flags -= FLYING
+        elif FLYING.added:
+          self.flags -= (if FLY_DISABLED in self.flags: FLYING else: PLAYING)
+        elif FLY_DISABLED.added:
+          self.flags -= FLYING
+
     result = self
 
 method on_begin_turn*(
@@ -61,3 +83,14 @@ method destroy*(self: Player) =
   if self.things.len > 0:
     Sign(self.things[0]).owner = nil
     self.things.clear
+
+proc reset_toolbar*(self: Player, show_tools: bool) =
+  ## The toolbar a level starts with: every tool, or none when the level's
+  ## script adds back what it needs, in the usual colors.
+  self.tools.value = if show_tools: {CODE_MODE .. PLACE_BOT} else: {}
+  self.tool_colors.value = DEFAULT_TOOL_COLORS
+
+method worker_thread_joined*(self: Player, worker: Worker) =
+  # Someone joining mid-level gets the level's toolbar.
+  if SERVER in state.local_flags and self != state.player:
+    self.reset_toolbar(state.show_tools)

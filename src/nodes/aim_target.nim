@@ -17,7 +17,7 @@ gdobj AimTarget of Sprite3D:
       elif BLOCK_TARGET_VISIBLE.removed:
         self.visible = false
 
-    state.tool_value.watch(state.player):
+    state.player.tool_value.watch(state.player):
       # tool changed. Retarget.
       if self.target_model != nil:
         self.target_model.local_flags -= HOVER
@@ -75,7 +75,7 @@ gdobj AimTarget of Sprite3D:
       # Locked bots stay inert.
       if not (
         thing == nil or (thing of Sign and Sign(thing).more == "") or (
-          GOD notin state.local_flags and thing of Bot and
+          GOD notin state.player.flags and thing of Bot and
           LOCK in Thing(thing).find_root.global_flags
         )
       ):

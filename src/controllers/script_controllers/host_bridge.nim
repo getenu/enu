@@ -675,7 +675,7 @@ proc sees(
 ): Future[bool] =
   result = Future.init(bool, "sees")
 
-  if target == state.player and FLYING in state.local_flags:
+  if target of Player and FLYING in Player(target).flags:
     result.complete(false)
     return
 
@@ -775,58 +775,56 @@ proc pen_set(self: Build, value: Pen) =
 
 # Player binding
 
-proc playing(self: Thing): bool =
-  PLAYING in state.local_flags
+proc playing(self: Player): bool =
+  PLAYING in self.flags
 
-proc `playing=`*(self: Thing, value: bool) =
-  state.set_flag PLAYING, value
+proc `playing=`*(self: Player, value: bool) =
+  self.set_flag PLAYING, value
 
-proc god(self: Thing): bool =
-  GOD in state.local_flags
+proc god(self: Player): bool =
+  GOD in self.flags
 
-proc `god=`*(self: Thing, value: bool) =
-  state.set_flag GOD, value
+proc `god=`*(self: Player, value: bool) =
+  self.set_flag GOD, value
 
-proc flying(self: Thing): bool =
-  FLYING in state.local_flags
+proc flying(self: Player): bool =
+  FLYING in self.flags
 
-proc `flying=`*(self: Thing, value: bool) =
-  state.set_flag FLYING, value
+proc `flying=`*(self: Player, value: bool) =
+  self.set_flag FLYING, value
 
-proc boost(self: Thing, impulse: Vector3) =
-  Player(self).boost_value.touch(impulse)
+proc boost(self: Player, impulse: Vector3) =
+  self.boost_value.touch(impulse)
 
-proc can_fly(self: Thing): bool =
-  FLY_DISABLED notin state.local_flags
+proc can_fly(self: Player): bool =
+  FLY_DISABLED notin self.flags
 
-proc `can_fly=`*(self: Thing, value: bool) =
-  state.set_flag FLY_DISABLED, not value
-  if not value:
-    state.set_flag FLYING, false
+proc `can_fly=`*(self: Player, value: bool) =
+  self.set_flag FLY_DISABLED, not value
 
-proc running(self: Thing): bool =
-  ALT_WALK_SPEED in state.local_flags
+proc running(self: Player): bool =
+  RUNNING in self.flags
 
-proc `running=`*(self: Thing, value: bool) =
-  state.set_flag ALT_WALK_SPEED, value
+proc `running=`*(self: Player, value: bool) =
+  self.set_flag RUNNING, value
 
-proc tool(self: Thing): int =
-  int(state.tool)
+proc tool(self: Player): int =
+  int(self.tool_value.value)
 
-proc `tool=`(self: Thing, value: int) =
-  state.tool = Tools(value)
+proc `tool=`(self: Player, value: int) =
+  self.tool_value.value = Tools(value)
 
-proc tools_has(self: Thing, tool: int): bool =
-  Tools(tool) in state.tools
+proc tools_has(self: Player, tool: int): bool =
+  Tools(tool) in self.tools
 
-proc tools_incl(self: Thing, tool: int) =
-  state.tools += Tools(tool)
+proc tools_incl(self: Player, tool: int) =
+  self.tools += Tools(tool)
 
-proc tools_excl(self: Thing, tool: int) =
-  state.tools -= Tools(tool)
+proc tools_excl(self: Player, tool: int) =
+  self.tools -= Tools(tool)
 
-proc tools_clear(self: Thing) =
-  state.tools.clear()
+proc tools_clear(self: Player) =
+  self.tools.clear()
 
 proc check_tool_color_index(index: int) =
   if index notin 0 .. DEFAULT_TOOL_COLORS.high:
@@ -835,19 +833,19 @@ proc check_tool_color_index(index: int) =
         \"{DEFAULT_TOOL_COLORS.high}. There isn't one numbered {index}."
     )
 
-proc tool_color(self: Thing, index: int): Color =
+proc tool_color(self: Player, index: int): Color =
   check_tool_color_index(index)
-  state.tool_colors[index]
+  self.tool_colors[index]
 
-proc set_tool_color(self: Thing, index: int, color: Color) =
+proc set_tool_color(self: Player, index: int, color: Color) =
   check_tool_color_index(index)
-  state.tool_colors[index] = color
+  self.tool_colors[index] = color
 
-proc open_sign(self: Thing): Sign =
-  state.open_sign
+proc open_sign(self: Player): Sign =
+  self.open_sign_value.value
 
-proc `open_sign=`(self: Thing, value: Sign) =
-  state.open_sign = value
+proc `open_sign=`(self: Player, value: Sign) =
+  self.open_sign_value.value = value
 
 proc executing_player(worker: Worker): Player =
   let active = worker.active_thing
@@ -941,21 +939,19 @@ proc message(self: Sign): string =
   self.message_value.value
 
 proc open(self: Sign): bool =
-  state.open_sign == self
+  state.player.open_sign == self
 
 proc `open=`(self: Sign, value: bool) =
   if value:
-    state.open_sign = self
+    state.player.open_sign = self
   elif not value and self.open:
-    state.open_sign = nil
+    state.player.open_sign = nil
 
-proc coding(self: Worker, thing: Thing): Thing =
-  if thing == state.player:
-    if ?state.open_thing:
-      result = state.open_thing
+proc coding(self: Player): Thing =
+  self.coding_value.value
 
-proc `coding=`(self: Thing, value: Thing) =
-  state.open_thing = value
+proc `coding=`(self: Player, value: Thing) =
+  self.coding_value.value = value
 
 proc report_test_results(self: Worker, passed: int, failed: int, total: int) =
   # Scripts report cumulative, VM-module-global running totals (they share the

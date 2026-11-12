@@ -664,13 +664,13 @@ proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
       self.erase_cell(cell)
       self.log_block_placement(cell, ACTION_COLORS[ERASER])
   of STROKE_PLACE:
-    if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
+    if LOCK in self.find_root.global_flags and GOD notin state.player.flags:
       stroke.painted.incl cell
       self.place_beside(cell)
     elif endpoint or cell notin self:
       stroke.painted.incl cell
-      self.draw(cell, (PERSISTED, state.selected_color))
-      self.log_block_placement(cell, state.selected_color)
+      self.draw(cell, (PERSISTED, state.player.selected_color))
+      self.log_block_placement(cell, state.player.selected_color)
 
 proc remove_if_empty(self: Build) =
   if self.things.len == 0 and not self.has_visible_voxels:
@@ -680,9 +680,9 @@ proc remove_if_empty(self: Build) =
       self.parent.things -= self
 
 proc remove(self: Build) =
-  if LOCK in self.find_root.global_flags and GOD notin state.local_flags:
+  if LOCK in self.find_root.global_flags and GOD notin state.player.flags:
     return
-  if state.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
     let cell = (self.target_point - self.target_normal * 0.5).floor
     anchor_stroke(
       STROKE_REMOVE, self.id, cell, self.target_normal, self.target_point
@@ -696,27 +696,27 @@ proc fire(self: Build) =
   # drops the rotation, so the dropped bot lands blocks from the aim target.
   let global_point = self.target_point.world_from(self)
   let locked =
-    LOCK in self.find_root.global_flags and GOD notin state.local_flags
-  if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+    LOCK in self.find_root.global_flags and GOD notin state.player.flags
+  if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     let cell = (self.target_point + (self.target_normal * 0.5)).floor
     anchor_stroke(
       STROKE_PLACE, self.id, cell, self.target_normal, self.target_point
     )
     if stroke.active:
       self.paint_cell(cell, endpoint = true)
-  elif state.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
+  elif state.player.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
     state.things += Bot.init(transform = transform)
-  elif state.tool == CODE_MODE and not locked:
+  elif state.player.tool == CODE_MODE and not locked:
     let root = self.find_root
-    state.open_thing = root
+    state.player.coding = root
 
 proc stroke_frame*(self: Build) =
   ## Per-frame stroke continuation while a button is held and the ray is on
   ## this build: paint the aimed cell if it's on the stroke's plane,
   ## otherwise charge the dwell timer toward re-anchoring here.
-  if state.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     return
   if stroke.unit_id == self.id and self.target_normal.is_axis_aligned:
     let inside = (self.target_point - self.target_normal * 0.5).floor
@@ -1023,13 +1023,13 @@ proc place_beside(self: Build, local_cell: Vector3) =
     else:
       state.things.find_first(point.surrounding)
   if ?add_to:
-    add_to.draw(point.local_to(add_to), (PERSISTED, state.selected_color))
-    add_to.log_block_placement(point.local_to(add_to), state.selected_color)
+    add_to.draw(point.local_to(add_to), (PERSISTED, state.player.selected_color))
+    add_to.log_block_placement(point.local_to(add_to), state.player.selected_color)
   else:
     add_to = Build.init(
       transform = Transform.init(origin = point),
       global = true,
-      color = state.selected_color,
+      color = state.player.selected_color,
     )
     # A placed build has no script; render its voxels directly instead of
     # waiting out the ASAP paste batching (see Ground.fire).
@@ -1166,10 +1166,10 @@ method main_thread_joined*(self: Build) =
   self.setup_packed_chunk_watches()
 
   self.local_flags.watch:
-    if HOVER.added and state.tool == CODE_MODE:
-      if PLAYING notin state.local_flags and
+    if HOVER.added and state.player.tool == CODE_MODE:
+      if PLAYING notin state.player.flags and
           TOUCH_CONTROLS notin state.local_flags and (
-            LOCK notin self.find_root.global_flags or GOD in state.local_flags
+            LOCK notin self.find_root.global_flags or GOD in state.player.flags
           ):
         let root = self.find_root(true)
         root.walk_tree proc(thing: Thing) =
@@ -1178,7 +1178,7 @@ method main_thread_joined*(self: Build) =
       let root = self.find_root(true)
       root.walk_tree proc(thing: Thing) =
         thing.local_flags -= HIGHLIGHT
-    if change.item in {TARGET_MOVED, HOVER} and state.tool == PLACE_BOT:
+    if change.item in {TARGET_MOVED, HOVER} and state.player.tool == PLACE_BOT:
       if self.target_normal == UP:
         state.push_flag BLOCK_TARGET_VISIBLE
       else:
@@ -1192,6 +1192,8 @@ method main_thread_joined*(self: Build) =
         self.remove
     if PRIMARY_DOWN.removed or SECONDARY_DOWN.removed:
       end_stroke()
+
+  state.player.flags.watch:
     if PLAYING.added:
       self.local_flags -= HIGHLIGHT
     elif PLAYING.removed:

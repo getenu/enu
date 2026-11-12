@@ -97,10 +97,10 @@ gdobj PlayerNode of KinematicBody:
     KinematicBody(self).is_on_floor()
 
   proc flying*(): bool =
-    FLYING in state.local_flags
+    FLYING in state.player.flags
 
   proc flying*(value: bool) =
-    state.set_flag FLYING, value
+    state.player.set_flag FLYING, value
 
   proc get_look_direction(): Vector2 =
     if EDITOR_VISIBLE notin state.local_flags or COMMAND_MODE in state.local_flags or
@@ -139,9 +139,9 @@ gdobj PlayerNode of KinematicBody:
       flying, alt_speed: bool,
   ): Vector3 =
     let speed =
-      if not flying and not (alt_speed xor ALT_WALK_SPEED in state.local_flags):
+      if not flying and not (alt_speed xor RUNNING in state.player.flags):
         vec3(state.config.walk_speed)
-      elif not flying and (alt_speed xor ALT_WALK_SPEED in state.local_flags):
+      elif not flying and (alt_speed xor RUNNING in state.player.flags):
         vec3(state.config.alt_walk_speed)
       elif flying and not (alt_speed xor ALT_FLY_SPEED in state.local_flags):
         vec3(state.config.fly_speed)
@@ -189,7 +189,9 @@ gdobj PlayerNode of KinematicBody:
     state.local_flags.watch:
       if MOUSE_CAPTURED.removed:
         self.skip_next_mouse_move = true
-      elif change.item == FLYING:
+
+    state.player.flags.watch:
+      if change.item == FLYING:
         for i in [0, 1, 2]:
           let collision_enabled = FLYING.removed
           self.set_collision_mask_bit(i, collision_enabled)
@@ -454,7 +456,7 @@ gdobj PlayerNode of KinematicBody:
   proc update_raycast*() =
     if not ?self.camera or not ?self.aim_target:
       return
-    let ray_length = if state.tool == CODE_MODE: 200.0 else: 100.0
+    let ray_length = if state.player.tool == CODE_MODE: 200.0 else: 100.0
     if MOUSE_CAPTURED notin state.local_flags:
       let
         mouse_pos =
@@ -569,7 +571,7 @@ gdobj PlayerNode of KinematicBody:
   #     self.get_tree().set_input_as_handled()
   #     self.alt_speed = false
   #
-  #   if event of InputEventPanGesture and state.tool notin {CodeMode, PlaceBot}:
+  #   if event of InputEventPanGesture and state.player.tool notin {CodeMode, PlaceBot}:
   #     let pan = event as InputEventPanGesture
   #     self.pan_delta += pan.delta.y
   #     if self.pan_delta > 2:

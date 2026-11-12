@@ -104,7 +104,7 @@ gdobj BotNode of KinematicBody:
     if VISIBLE in self.model.global_flags:
       self.visible = true
       self.set_color(color)
-    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
+    elif VISIBLE notin self.model.global_flags and GOD in state.player.flags:
       self.visible = true
       color.a = 0.0
       SpatialMaterial(self.material).albedo_color = color
@@ -149,7 +149,7 @@ gdobj BotNode of KinematicBody:
       elif HIGHLIGHT.removed:
         self.set_default_material()
 
-    state.local_flags.watch:
+    state.player.flags.watch:
       if change.item == GOD:
         self.set_visibility
 
