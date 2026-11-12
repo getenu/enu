@@ -222,7 +222,11 @@ proc edits_to_string(shared: Shared, skip: string): string =
           chunk_id.y * ChunkDim + local_pos.y,
           chunk_id.z * ChunkDim + local_pos.z,
         )
-        let info = (VoxelKind(kind_ord), resolve_color(shared, color_idx))
+        let kind = VoxelKind(kind_ord)
+        let color =
+          if kind == HOLE: ACTION_COLORS[ERASER]
+          else: resolve_color(shared, color_idx)
+        let info = (kind, color)
         if thing_id notin by_thing:
           by_thing[thing_id] = @[]
         by_thing[thing_id].add((world_pos, info))
@@ -259,7 +263,7 @@ proc save_frames(self: Build, frame_files: bool) =
   create_dir dir
   var prev = none(FrameData)
   for i in 0 ..< self.frames_len:
-    let frame = self.voxels.frame_edits(self.frame_order.ids[i])
+    let frame = self.voxels.saved_frame_edits(self.frame_order.ids[i])
     let key = i mod FRAME_KEYFRAME_INTERVAL == 0
     let data = encode_frame_file(frame, if key: none(FrameData) else: prev)
     write_file_if_changed(dir / \"{i:03}.bin", data)

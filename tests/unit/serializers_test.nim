@@ -207,3 +207,27 @@ suite "Frame Serialization":
     check restored.voxels.get_edit(vec3(EDITS_JSON_LIMIT.float, 0, 0)) ==
       (PERSISTED, ACTION_COLORS[RED])
     remove_dir dir
+
+  test "holes save unmarked":
+    let dir = get_temp_dir() / "enu_frames_holes_test"
+    remove_dir dir
+    var config = state.config
+    config.data_dir = dir
+    state.config = config
+    let build = Build.init(id = "build_frames_holes")
+    build.draw(vec3(0, 0, 0), (HOLE, ACTION_COLORS[ERASER]))
+    build.draw(vec3(0, 0, 0), (TRANSIENT, ACTION_COLORS[RED]))
+    check build.voxels.get_edit(vec3(0, 0, 0)) == (HOLE, ACTION_COLORS[RED])
+
+    build.voxels.flush_edits_for_save()
+    let edits = parse_json($build)["edits"][build.id]
+    check edits[0][1] == %*[HOLE.ord, ""]
+
+    build.go_to_frame(1)
+    build.save_frames(true)
+    let restored = Build.init(id = "build_frames_holes")
+    restored.load_frames_sidecar(%*{"frames": {"count": 2, "frame": 1}})
+    restored.go_to_frame(0)
+    restored.restore_edits
+    check restored.voxels.get_edit(vec3(0, 0, 0)) == (HOLE, ACTION_COLORS[ERASER])
+    remove_dir dir

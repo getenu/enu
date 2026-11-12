@@ -861,6 +861,24 @@ proc frame_edits*(self: VoxelStore, frame_id: int): FrameData =
     if not packed.is_empty:
       result.chunks[chunk_id] = packed
 
+proc saved_frame_edits*(self: VoxelStore, frame_id: int): FrameData =
+  ## `frame_edits` with every hole unmarked. A hole's mark only lasts for a
+  ## run, so saving it would make the file depend on when the save landed.
+  result = self.frame_edits(frame_id)
+  const UNMARKED = pack_voxel(ERASER.ord, HOLE.ord)
+  for chunk_id, packed in result.chunks.mpairs:
+    if not self.has_holes((frame_id, chunk_id)):
+      continue
+    var cells = decode_chunk(packed)
+    var changed = false
+    for v in cells.mitems:
+      if v != EMPTY_VOXEL and v != UNMARKED and
+          VoxelKind(unpack_voxel(v)[1]) == HOLE:
+        v = UNMARKED
+        changed = true
+    if changed:
+      packed = encode_chunk(cells)
+
 proc drop_frame*(self: VoxelStore, frame_id: int) =
   ## Remove every row of a frame: its blocks and its edits.
   if ?self.build:
