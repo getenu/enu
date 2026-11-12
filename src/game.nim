@@ -488,7 +488,14 @@ gdobj Game of Node:
     if ?get_env("ENU_CONNECT_ADDRESS") and not ?connect_address_override:
       connect_address_override = get_env("ENU_CONNECT_ADDRESS")
     if ?listen_address_override and ?connect_address_override:
-      fail "Cannot set both ENU_LISTEN_ADDRESS and ENU_CONNECT_ADDRESS"
+      let msg =
+        "Enu can't listen and connect at once (--listen/ENU_LISTEN_ADDRESS " &
+        "and --connect/ENU_CONNECT_ADDRESS). A client joins a host's world, " &
+        "so only the host listens."
+      error "game.init() failed", msg
+      stderr.write_line msg
+      flush_file stderr
+      c_exit(1)
 
     if ?saved_state.connect_address:
       connect_address_override = saved_state.connect_address
