@@ -106,8 +106,9 @@ There is one path: the terrain shows `shown_frame`.
 
 ### Persistence
 
-- A build with one frame and at most `EDITS_JSON_LIMIT` manual blocks keeps
-  its edits in the unit JSON.
+- A build with at most `EDITS_JSON_LIMIT` manual blocks across all its frames
+  keeps them in the unit JSON: under `edits` for a single frame, or one list
+  per frame under `frames.edits`.
 - Otherwise each frame's manual blocks go to `data/<id>/frames/NNN.bin` in
   `frame_order` order. A keyframe is written every 8 frames, with deltas in
   between, as today.

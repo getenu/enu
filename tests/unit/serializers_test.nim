@@ -150,7 +150,10 @@ suite "Bot Serialization":
     check restored.start_transform.origin.z == original.start_transform.origin.z
 
 suite "Frame Serialization":
-  test "frames round-trip with only their manual blocks":
+  # placed blocks would otherwise join the builds of earlier tests
+  dont_join = true
+
+  test "frame files round-trip with only their manual blocks":
     let dir = get_temp_dir() / "enu_frames_test"
     remove_dir dir
     state = GameState.init
@@ -168,7 +171,7 @@ suite "Frame Serialization":
     check build.id notin parse_json($build)["edits"]
 
     let restored = Build.init(id = "build_frames_save")
-    restored.load_frames_sidecar(
+    restored.load_frames(
       %*{"frames": {"count": build.frames_len, "frame": build.frame}}
     )
     restored.restore_edits
@@ -201,7 +204,7 @@ suite "Frame Serialization":
     check build.id notin json["edits"]
 
     let restored = Build.init(id = "build_frames_big")
-    restored.load_frames_sidecar(json)
+    restored.load_frames(json)
     restored.restore_edits
     check restored.frames_len == 1
     check restored.voxels.get_edit(vec3(EDITS_JSON_LIMIT.float, 0, 0)) ==
@@ -226,8 +229,34 @@ suite "Frame Serialization":
     build.go_to_frame(1)
     build.save_frames(true)
     let restored = Build.init(id = "build_frames_holes")
-    restored.load_frames_sidecar(%*{"frames": {"count": 2, "frame": 1}})
+    restored.load_frames(%*{"frames": {"count": 2, "frame": 1}})
     restored.go_to_frame(0)
     restored.restore_edits
     check restored.voxels.get_edit(vec3(0, 0, 0)) == (HOLE, ACTION_COLORS[ERASER])
     remove_dir dir
+
+  test "small animated builds keep every frame's blocks in the JSON":
+    let build = Build.init(id = "build_frames_inline")
+    for (index, color) in [(0, RED), (1, BLUE), (2, GREEN)]:
+      build.go_to_frame(index)
+      build.draw(vec3(index.float, 0, 0), (PERSISTED, ACTION_COLORS[color]))
+      build.draw(vec3(index.float, 1, 0), (TRANSIENT, ACTION_COLORS[color]))
+    build.go_to_frame(1)
+    build.voxels.flush_edits_for_save()
+    let json = parse_json(build.to_json_string(frame_files = false))
+    check build.id notin json["edits"]
+    check json["frames"]["count"].get_int == 3
+    check json["frames"]["edits"].len == 3
+    check json["frames"]["edits"][2].len == 1
+
+    let restored = Build.init(id = "build_frames_inline")
+    restored.load_frames(json)
+    restored.restore_edits
+    check restored.frames_len == 3
+    check restored.frame == 1
+    check restored.voxels.get_edit(vec3(1, 0, 0)) ==
+      (PERSISTED, ACTION_COLORS[BLUE])
+    check vec3(1, 1, 0) notin restored
+    for index in 0 ..< 3:
+      check restored.voxels.frame_edits(restored.frame_order.ids[index]).chunks ==
+        build.voxels.frame_edits(build.frame_order.ids[index]).chunks
