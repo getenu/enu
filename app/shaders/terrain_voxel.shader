@@ -60,8 +60,10 @@ vec3 srgb_to_linear(vec3 c) {
 }
 
 vec3 glow_color(vec3 color) {
-  // Lifted, so dark voxels still visibly glow.
-  return mix(color, vec3(1.0), 0.2);
+  // Lifted, so dark voxels still visibly glow, and scaled to the
+  // environments' exposure: at full strength the voxel's own color blew
+  // every face out to white.
+  return mix(color, vec3(1.0), 0.2) * 0.1;
 }
 
 void fragment() {
