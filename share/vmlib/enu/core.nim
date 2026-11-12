@@ -789,7 +789,7 @@ template `\`*(s: string): string =
   f
 
 proc init*[T](_: type Query, results: open_array[T]): Query[seq[T]] =
-  result.result = results.to_seq
+  result.result = @results
   result.truthy = results.len > 0
 
 template `?`*[T: ref](self: T): Query[T] =

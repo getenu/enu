@@ -294,6 +294,17 @@ proc run_integration_tests() =
       echo "FAIL: expected '42' in output, got: " & text
       quit 1
 
+  test "eval: a kind's first .all compiles":
+    var s = open_session()
+    defer:
+      s.close()
+    s.connect_session()
+    # Only statement-only code hit the failure; an expression compiled fine.
+    let text = s.do_call_tool("eval", %*{"code": "echo Sign.all.len"}).tool_text
+    if "Error" in text:
+      echo "FAIL: " & text
+      quit 1
+
   test "eval: 3 sequential calls all succeed":
     var s = open_session()
     defer:
