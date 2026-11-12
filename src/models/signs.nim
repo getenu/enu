@@ -38,7 +38,7 @@ method main_thread_joined*(self: Sign) =
 
   state.local_flags.watch:
     if PRIMARY_DOWN.added and HOVER in self.local_flags:
-      state.open_sign = self
+      state.player.open_sign = self
 
   self.local_flags.watch:
     if HOVER.added:

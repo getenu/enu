@@ -109,9 +109,9 @@ gdobj Editor of MarginContainer:
       if not (event of InputEventJoypadButton) or
           COMMAND_MODE notin state.local_flags:
         # only push code (and so save + re-run the script) if it changed
-        if self.text_edit.text != state.open_thing.code.nim:
-          state.open_thing.code = Code.init(self.text_edit.text)
-        state.open_thing = nil
+        if self.text_edit.text != state.player.coding.code.nim:
+          state.player.coding.code = Code.init(self.text_edit.text)
+        state.player.coding = nil
         self.get_tree().set_input_as_handled()
 
   proc clear_errors() =
@@ -120,8 +120,8 @@ gdobj Editor of MarginContainer:
 
   proc highlight_errors() =
     self.text_edit.clear_executing_line()
-    if ?state.open_thing:
-      for err in state.open_thing.errors:
+    if ?state.player.coding:
+      for err in state.player.coding.errors:
         self.text_edit.set_line_as_marked(int64(err.info.line - 1), true)
 
   proc `executing_line=`*(line: int) =
@@ -227,9 +227,9 @@ gdobj Editor of MarginContainer:
 
   proc watch_open_thing() =
     var line_zid, code_zid: EID
-    state.open_thing_value.changes:
+    state.player.coding_value.changes:
       if removed:
-        let thing = state.open_thing
+        let thing = state.player.coding
         if thing.is_nil:
           Ed.thread_ctx.untrack(line_zid)
           Ed.thread_ctx.untrack(code_zid)
@@ -240,7 +240,7 @@ gdobj Editor of MarginContainer:
           line_zid = thing.current_line_value.changes:
             if added:
               # only update the executing line if the code hasn't been changed.
-              if self.text_edit.text == state.open_thing.code.nim:
+              if self.text_edit.text == state.player.coding.code.nim:
                 self.executing_line = change.item - 1
               else:
                 self.text_edit.clear_executing_line()
@@ -252,7 +252,7 @@ gdobj Editor of MarginContainer:
                 self.text_edit.text = new_code
                 state.player.open_code = new_code
 
-          self.text_edit.text = state.open_thing.code.nim
+          self.text_edit.text = state.player.coding.code.nim
           state.player.open_code = self.text_edit.text
 
           if COMMAND_MODE in state.local_flags:
@@ -282,7 +282,7 @@ gdobj Editor of MarginContainer:
         self.left_panel.raisee()
       if COMMAND_MODE.added:
         if EDITOR_VISIBLE in state.local_flags:
-          state.open_thing.code = Code.init(self.text_edit.text)
+          state.player.coding.code = Code.init(self.text_edit.text)
 
           self.ghost()
           self.text_edit.release_focus()
@@ -399,15 +399,15 @@ gdobj Editor of MarginContainer:
     self.enable_idle
 
   method on_close() =
-    if ?state.open_thing:
-      if self.text_edit.text != state.open_thing.code.nim:
-        state.open_thing.code = Code.init(self.text_edit.text)
-      state.open_thing = nil
+    if ?state.player.coding:
+      if self.text_edit.text != state.player.coding.code.nim:
+        state.player.coding.code = Code.init(self.text_edit.text)
+      state.player.coding = nil
 
   method on_run() =
-    if ?state.open_thing:
-      state.open_thing.code = Code.init("")
-      state.open_thing.code = Code.init(self.text_edit.text)
+    if ?state.player.coding:
+      state.player.coding.code = Code.init("")
+      state.player.coding.code = Code.init(self.text_edit.text)
 
   method on_child_focused(event: InputEvent) =
     self.grab_focus()

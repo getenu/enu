@@ -8,12 +8,12 @@ proc place_cell(self: Ground, cell: Vector3, endpoint = false) {.gcsafe.} =
   if ?add_to:
     let local = cell.local_to(add_to)
     if endpoint or local notin add_to:
-      add_to.draw(local, (PERSISTED, state.selected_color))
+      add_to.draw(local, (PERSISTED, state.player.selected_color))
   else:
     add_to = Build.init(
       transform = Transform.init(origin = cell),
       global = true,
-      color = state.selected_color,
+      color = state.player.selected_color,
     )
     # Builds default to ASAP for script drawing, but its paste batching
     # (2s) would make hand-placed blocks appear late. A placed build has
@@ -24,7 +24,7 @@ proc place_cell(self: Ground, cell: Vector3, endpoint = false) {.gcsafe.} =
 
 proc fire(self: Ground) {.gcsafe.} =
   let point = (self.target_point - vec3(0.5, 0, 0.5)).trunc
-  if state.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     dont_join = true
     # Check if we should stick to the last modified build (within 500ms)
     let now = get_mono_time()
@@ -35,7 +35,7 @@ proc fire(self: Ground) {.gcsafe.} =
       add_to = state.things.find_first(point.surrounding)
     anchor_stroke(STROKE_PLACE, GROUND_ID, point, UP, self.target_point)
     self.place_cell(point, endpoint = true)
-  elif state.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
+  elif state.player.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
     var t = Transform.init(origin = self.target_point)
     state.things += Bot.init(transform = t)
 
@@ -43,7 +43,7 @@ proc stroke_frame*(self: Ground) =
   ## Per-frame stroke continuation while a button is held and the ray is on
   ## the ground: paint the aimed cell if the stroke is anchored here,
   ## otherwise charge the dwell timer toward re-anchoring.
-  if state.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     return
   let cell = (self.target_point - vec3(0.5, 0, 0.5)).trunc
   if stroke.unit_id == GROUND_ID and self.target_point.y == stroke.face and

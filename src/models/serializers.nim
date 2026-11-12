@@ -1041,7 +1041,9 @@ proc run_state_initializers*(worker: Worker) =
 proc unload_level*(worker: Worker) =
   state.global_flags += LOADING_LEVEL
   state.push_flag LOADING_SCRIPT
-  state.pop_flag PLAYING
+  for thing in state.things:
+    if thing of Player:
+      Player(thing).flags -= PLAYING
   state.things.clear_all
   state.pop_flag LOADING_SCRIPT
   state.global_flags -= LOADING_LEVEL
@@ -1138,15 +1140,13 @@ proc load_level*(worker: Worker, level_dir: string) =
         player.transform = t
         player.rotation = rotation
 
-  # Seed the available tools and their colors before scripts run and the player
+  # Seed every player's tools and their colors before scripts run and anyone
   # can interact: full set by default, empty when the level opts out (its script
   # adds back what it needs). Happens inside LOADING_LEVEL so the toolbar snaps,
   # no slide.
-  if state.show_tools:
-    state.tools.value = {CODE_MODE .. PLACE_BOT}
-  else:
-    state.tools.clear()
-  state.tool_colors.value = DEFAULT_TOOL_COLORS
+  for thing in state.things:
+    if thing of Player:
+      Player(thing).reset_toolbar(state.show_tools)
 
   worker.run_state_initializers()
 

@@ -135,7 +135,7 @@ gdobj TurtleOverlay of ViewportContainer:
       self.overlay.size = self.rect_size
 
     var show = false
-    let thing = state.open_thing
+    let thing = state.player.coding
     # Follow a draw slow enough to watch, but not an ASAP one: the turtle
     # leaps between batches. It reappears where the script left it.
     if ?thing and thing of Build and ?thing.node and

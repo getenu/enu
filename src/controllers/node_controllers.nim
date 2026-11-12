@@ -75,7 +75,9 @@ proc add_to_scene(thing: Thing) =
   elif thing of Build:
     Build(thing).add(BuildNode, parent_node)
   elif thing of Sign:
-    Sign(thing).add(SignNode, parent_node)
+    # Our own coding sign is for other players; it's never drawn here.
+    if Sign(thing).owner != state.player:
+      Sign(thing).add(SignNode, parent_node)
   elif thing of Player:
     let player = Player(thing)
     # TODO: PlayerNode should work for connected players as well
@@ -167,6 +169,10 @@ proc watch_things(self: NodeController, thing: Thing) {.gcsafe.} =
     elif GLOBAL.removed:
       thing.set_global(false)
 
+proc can_add(thing: Thing): bool =
+  # game.init takes in this instance's player before the scene is ready.
+  thing.sync_ready and ?state.nodes.data
+
 proc add_or_defer(self: NodeController, thing: Thing) {.gcsafe.} =
   ## Narrow partial replicas: a thing can arrive before its data (placeholder
   ## containers). Defer the scene add until the core containers fill — the
@@ -177,7 +183,7 @@ proc add_or_defer(self: NodeController, thing: Thing) {.gcsafe.} =
     # being freshly spawned). Don't re-instance or re-watch — the live node is
     # reparented by `set_global` when the synced GLOBAL change lands.
     return
-  if thing.sync_ready:
+  if thing.can_add:
     thing.add_to_scene()
     self.watch_things(thing)
   else:
@@ -191,7 +197,7 @@ proc drain_pending*(self: NodeController) =
   for thing in self.pending:
     if thing.destroyed:
       continue
-    if thing.sync_ready:
+    if thing.can_add:
       thing.add_to_scene()
       self.watch_things(thing)
     else:

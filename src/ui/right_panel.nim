@@ -49,7 +49,7 @@ gdobj RightPanel of MarginContainer:
           self.label.markdown = ""
           self.label.update
 
-    state.open_sign_value.changes:
+    state.player.open_sign_value.changes:
       if added and change.item != nil:
         state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
         var sign = change.item
@@ -62,7 +62,7 @@ gdobj RightPanel of MarginContainer:
       if removed and change.item != nil:
         if change.item.more_value.valid:
           change.item.more_value.untrack(self.zid)
-      if removed and not ?state.open_sign:
+      if removed and not ?state.player.open_sign:
         state.pop_flags DOCS_FOCUSED, DOCS_VISIBLE
 
     state.local_flags.changes:
@@ -113,11 +113,11 @@ gdobj RightPanel of MarginContainer:
         find("Close", Control).mouse_filter = MOUSE_FILTER_STOP
 
   method on_close() =
-    state.open_sign = nil
+    state.player.open_sign = nil
 
   method unhandled_input*(event: InputEvent) =
     if DOCS_FOCUSED in state.local_flags and event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
           COMMAND_MODE notin state.local_flags:
-        state.open_sign = nil
+        state.player.open_sign = nil
         self.get_tree().set_input_as_handled()

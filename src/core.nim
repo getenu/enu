@@ -357,11 +357,11 @@ proc init*(_: type Code, nim: string, runner = state.server_ctx_name): Code =
 proc update_action_index*(state: GameState, change: int) =
   # Cycle through the available tools only, skipping NONE/DISABLED and any tool
   # the scripts have hidden.
-  let available = to_seq(CODE_MODE .. PLACE_BOT).filter_it(it in state.tools)
+  let available = to_seq(CODE_MODE .. PLACE_BOT).filter_it(it in state.player.tools)
   if available.len == 0:
     return
 
-  var index = available.find(state.tool)
+  var index = available.find(state.player.tool)
   if index == -1:
     # Not currently on an available tool (e.g. NONE) — step in from the edge.
     index = if change >= 0: -1 else: 0
@@ -369,7 +369,7 @@ proc update_action_index*(state: GameState, change: int) =
   if index < 0:
     index += available.len
 
-  state.tool = available[index]
+  state.player.tool = available[index]
 
 proc require_lifetime*(thing: Thing): Lifetime =
   ## The Thing's owner Lifetime, created on demand. Locally built things get one in

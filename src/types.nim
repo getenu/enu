@@ -121,6 +121,13 @@ type
 type
   EnuError* = object of CatchableError
   ResourceLimitError* = object of CatchableError
+  PlayerFlags* = enum
+    PLAYING
+    FLYING
+    GOD
+    RUNNING
+    FLY_DISABLED
+
   LocalStateFlags* = enum
     COMMAND_MODE
     EDITOR_VISIBLE
@@ -137,10 +144,6 @@ type
     DOCS_FOCUSED
     SETTINGS_FOCUSED
     VIEWPORT_FOCUSED
-    PLAYING
-    FLYING
-    GOD
-    ALT_WALK_SPEED
     ALT_FLY_SPEED
     LOADING_SCRIPT
     SERVER
@@ -154,7 +157,6 @@ type
     EDITOR_OPENING
     EDITOR_CLOSING
     TEST_MODE
-    FLY_DISABLED
     SPAWN_HELD
       ## LOCAL (never synced): this main thread is holding its player at the
       ## spawn — frozen (no gravity/movement/look) with the splash up — until
@@ -180,7 +182,6 @@ type
     HOVER
     TARGET_MOVED
     HIGHLIGHT
-    HIDE
 
   GlobalModelFlags* = enum
     GLOBAL
@@ -242,12 +243,6 @@ type
     wants*: EdSeq[LocalStateFlags]
     global_flags*: EdSet[GlobalStateFlags]
     config_value*: EdValue[Config]
-    open_thing_value*: EdValue[Thing]
-    tool_value*: EdValue[Tools]
-    tools*: EdSet[Tools]
-    tool_colors*: EdSeq[Color]
-      ## The block tools' colors, BLUE_BLOCK .. BROWN_BLOCK in order. Scripts
-      ## can change them; every level load resets them to DEFAULT_TOOL_COLORS.
     gravity*: float
     nodes*: tuple[game: Node, data: Node, player: Node]
     screenshot_camera*: Node
@@ -271,7 +266,6 @@ type
       ## level loads in (and, later, streams in) stays stable and authorable.
     frame_count*: int
     disable_packed_chunks*: bool # Runtime toggle for packed chunk format
-    open_sign_value*: EdValue[Sign]
     queued_action_value*: EdValue[string]
     scale_factor*: float
     worker_ctx_name*: string
@@ -469,6 +463,13 @@ type
     input_direction_value*: EdValue[Vector3]
     cursor_position_value*: EdValue[tuple[line: int, col: int]]
     block_log_entries*: EdSeq[BlockLogEntry]
+    tool_value*: EdValue[Tools]
+    tools*: EdSet[Tools]
+    tool_colors*: EdSeq[Color]
+      ## The block tools' colors, BLUE_BLOCK .. BROWN_BLOCK in order.
+    flags*: EdSet[PlayerFlags]
+    coding_value*: EdValue[Thing]
+    open_sign_value*: EdValue[Sign]
 
   Bot* = ref object of Thing
     animation_value*: EdValue[string]
@@ -738,6 +739,7 @@ type
     transform*: Transform
     rotation*: float
     flags*: set[LocalStateFlags]
+    player_flags*: set[PlayerFlags]
     restarting*: bool
     connect_address*: string
     error_message*: string

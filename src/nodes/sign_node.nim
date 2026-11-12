@@ -29,12 +29,12 @@ gdobj SignNode of Spatial:
   var expanded: bool
 
   proc set_visibility() =
-    if HIDE in self.model.local_flags:
-      self.visible = false
-    elif VISIBLE in self.model.global_flags:
+    if VISIBLE in self.model.global_flags:
       self.visible = true
       self.material.params_blend_mode = spatial_material.BLEND_MODE_MIX
-    elif VISIBLE notin self.model.global_flags and GOD in state.local_flags:
+    elif GOD in state.player.flags and not (self.model.owner of Player):
+      # God mode reveals hidden things scripts can change. A player's sign only
+      # shows what they're coding, so it stays hidden.
       self.visible = true
       self.material.params_blend_mode = spatial_material.BLEND_MODE_ADD
     else:
@@ -153,8 +153,8 @@ gdobj SignNode of Spatial:
       ) or SCRIPT_INITIALIZING.removed:
         self.set_visibility
 
-    state.local_flags.watch:
-      if GOD.removed:
+    state.player.flags.watch:
+      if change.item == GOD:
         self.set_visibility
 
     self.model.local_flags.watch:

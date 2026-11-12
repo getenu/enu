@@ -156,10 +156,10 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
       ed_id = self.local_flags.id
 
     if HOVER in self.local_flags:
-      if PRIMARY_DOWN.added and state.tool == CODE_MODE:
+      if PRIMARY_DOWN.added and state.player.tool == CODE_MODE:
         let root = self.find_root(true)
-        state.open_thing = root
-      if SECONDARY_DOWN.added and state.tool == PLACE_BOT:
+        state.player.coding = root
+      if SECONDARY_DOWN.added and state.player.tool == PLACE_BOT:
         # :(
         for thing in self.things:
           if thing of Sign:
@@ -182,7 +182,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
 
     if HOVER.added:
       state.push_flag RETICLE_VISIBLE
-      if state.tool in {CODE_MODE, PLACE_BOT}:
+      if state.player.tool in {CODE_MODE, PLACE_BOT}:
         let root = self.find_root(true)
         root.walk_tree proc(thing: Thing) =
           thing.local_flags += HIGHLIGHT
