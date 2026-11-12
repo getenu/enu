@@ -48,4 +48,9 @@ suite "Bot Movement":
   #   down 2
   #   check me.position.y < pos.y
 
+suite "Queries":
+  test "all indexes from the end":
+    check Player.all[^1] == Player.all[Player.all.len - 1]
+    check Bot.all[^1] == Bot.all[Bot.all.len - 1]
+
 test_summary()
