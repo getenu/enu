@@ -89,38 +89,59 @@ proc from_json_hook*(self: var VoxelInfo, json: JsonNode) =
   self.kind = VoxelKind(json[0].get_int)
   self.color = json[1].json_to(Color)
 
-proc load_frames_sidecar*(self: Build, json: JsonNode) =
-  ## Each file holds one frame's manual blocks; the script draws the rest. A
-  ## delta file applies to the frame just before it. Frames get fresh ids,
-  ## 0 ..< count.
+proc parse_edit_entries(json: JsonNode): seq[(Vector3, VoxelInfo)] =
+  for edit in json:
+    result.add (edit[0].json_to(Vector3), edit[1].json_to(VoxelInfo))
+
+proc pack_frame(shared: Shared, edits: seq[(Vector3, VoxelInfo)]): FrameData =
+  var chunks: Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]
+  for (pos, info) in edits:
+    chunks.mget_or_put(chunk_id_for_pos(pos), default(
+      array[CHUNK_VOLUME, PackedVoxel]
+    ))[linear_position(local_pos_in_chunk(pos))] =
+      pack_voxel(pack_color_index(shared, info.color), info.kind.ord)
+  for chunk_id, cells in chunks:
+    let packed = encode_chunk(cells)
+    if not packed.is_empty:
+      result.chunks[chunk_id] = packed
+
+proc load_frames*(self: Build, json: JsonNode) =
+  ## A build's frames hold its manual blocks; the script draws the rest. They
+  ## come inline (`frames.edits`, one list per frame) or from
+  ## data/<id>/frames/NNN.bin, where a delta file applies to the frame just
+  ## before it. Frames get fresh ids, 0 ..< count.
   let meta = json["frames"]
   let dir = self.data_dir / "frames"
+  let inline = meta{"edits"}
   let count = max(meta["count"].get_int, 1)
-  # the build's own edits are in the frame files, not the JSON
+  # the build's own edits are in the frames, not the JSON's `edits`
   self.voxels.drop_frame(0)
   let current = meta{"frame"}.get_int(0).clamp(0, count - 1)
   var order = FrameOrder()
   var prev = none(FrameData)
   for i in 0 ..< count:
     order.ids.add i
-    let path = dir / \"{i:03}.bin"
-    if not file_exists(path):
-      warn "frame sidecar file missing", unit = self.id, frame = i
-      prev = none(FrameData)
-      continue
-    try:
-      let frame = decode_frame_file(read_file(path), prev)
-      prev = some(frame)
-      # the current frame's blocks come with the build's restore_edits
-      self.voxels.load_frame_edits(
-        i,
-        frame,
-        adopt = i != current,
-      )
-    except ValueError as e:
-      warn "frame sidecar file unreadable; dropping it",
-        unit = self.id, frame = i, error = e.msg
-      prev = none(FrameData)
+    var frame: FrameData
+    if ?inline:
+      if i >= inline.len:
+        continue
+      frame = pack_frame(self.shared, parse_edit_entries(inline[i]))
+    else:
+      let path = dir / \"{i:03}.bin"
+      if not file_exists(path):
+        warn "frame file missing", unit = self.id, frame = i
+        prev = none(FrameData)
+        continue
+      try:
+        frame = decode_frame_file(read_file(path), prev)
+        prev = some(frame)
+      except ValueError as e:
+        warn "frame file unreadable; dropping it",
+          unit = self.id, frame = i, error = e.msg
+        prev = none(FrameData)
+        continue
+    # the current frame's blocks come with the build's restore_edits
+    self.voxels.load_frame_edits(i, frame, adopt = i != current)
   self.frame_order = order
   self.next_frame_id = count
   self.frame = current
@@ -128,7 +149,7 @@ proc load_frames_sidecar*(self: Build, json: JsonNode) =
   self.target_frame()
   self.reset_bounds()
   self.saved_frames_hash = self.frames_hash
-  info "frames sidecar loaded", unit = self.id, loaded = count
+  info "frames loaded", unit = self.id, loaded = count
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
@@ -159,7 +180,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
   self.voxels.rebuild_local_edits()
 
   if "frames" in json:
-    self.load_frames_sidecar(json)
+    self.load_frames(json)
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared thing serializer), but tolerate
@@ -281,19 +302,52 @@ proc save_frames(self: Build, frame_files: bool) =
         remove_file path
   self.saved_frames_hash = hash
 
+proc frame_entries(self: Build, index: int): seq[string] =
+  ## A frame's manual blocks and holes as unit JSON edit entries, by position.
+  var entries: seq[tuple[pos: Vector3, info: VoxelInfo]]
+  for chunk_id, packed in self.voxels.saved_frame_edits(self.frame_order.ids[index]).chunks:
+    let cells = decode_chunk(packed)
+    for linear in 0 ..< CHUNK_VOLUME:
+      if cells[linear] != EMPTY_VOXEL:
+        let (color_idx, kind_ord) = unpack_voxel(cells[linear])
+        entries.add (
+          chunk_id * ChunkDim.float + from_linear(linear),
+          (VoxelKind(kind_ord), resolve_color(self.shared, color_idx)),
+        )
+  entries.sort do(a, b: auto) -> int:
+    cmp((a.pos.y, a.pos.x, a.pos.z), (b.pos.y, b.pos.x, b.pos.z))
+  entries.map_it($(it.pos, it.info))
+
+proc inline_frames_json(self: Build): string =
+  let frames = collect:
+    for i in 0 ..< self.frames_len:
+      let entries = self.frame_entries(i)
+      if entries.len == 0:
+        "[]"
+      else:
+        "[\n" & entries.join(",\n").indent(2) & "\n]"
+  ",\n    \"edits\": [\n" & frames.join(",\n").indent(6) & "\n    ]"
+
+proc in_frames(self: Thing, frame_files: bool): bool =
+  ## Whether the build's own edits live in its `frames` section rather than
+  ## the JSON's top-level `edits`.
+  self of Build and (frame_files or Build(self).frames_len > 1)
+
 proc extras_json(self: Thing, frame_files: bool): string =
-  ## Optional trailing sections for the unit JSON: frame metadata and the
-  ## static color palette (frame files reference palette indices, so the
-  ## palette must restore in the same order on load).
-  if frame_files:
+  ## Optional trailing sections for the unit JSON: frame metadata (and, for a
+  ## build whose frames fit in the JSON, each frame's edits) and the static
+  ## color palette (frame files reference palette indices, so the palette must
+  ## restore in the same order on load).
+  if self.in_frames(frame_files):
     let build = Build(self)
+    let inline = if frame_files: "" else: build.inline_frames_json
     # Playback state (fps, loop, the displayed frame) is driven by the
     # script's `play()` and isn't saved: the live playhead churned the JSON
     # on every save, and re-running the script re-establishes it.
     result.add \""",
   "frames": {{
     "count": {build.frames_len},
-    "frame": {build.frame}
+    "frame": {build.frame}{inline}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:
     # One color per line: a gradient build's palette runs to hundreds of
@@ -308,17 +362,16 @@ proc extras_json(self: Thing, frame_files: bool): string =
 
 proc frame_files(self: Thing): bool =
   ## Whether the build's manual blocks go to frame files rather than the unit
-  ## JSON: it has more than one frame, or more than EDITS_JSON_LIMIT blocks.
+  ## JSON: there are more than EDITS_JSON_LIMIT of them across all its frames.
   if not (self of Build):
     return false
-  if Build(self).frames_len > 1:
-    return true
   if state.is_nil or not state.config_value.loaded:
     # No level dir (a bare `$unit` in a unit test): keep the edits inline.
     return false
+  let build = Build(self)
   var count = 0
-  for key, packed in self.shared.edit_snapshots.value:
-    if key.id == self.id:
+  for i in 0 ..< build.frames_len:
+    for packed in build.voxels.frame_edits(build.frame_order.ids[i]).chunks.values:
       let decoded = decode_chunk(packed)
       for linear in 0 ..< CHUNK_VOLUME:
         if decoded[linear] != EMPTY_VOXEL:
@@ -330,7 +383,8 @@ proc to_json_string(self: Thing, frame_files: bool): string =
   let elements =
     self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
   let origin = self.start_transform.origin
-  let edits = edits_to_string(self.shared, if frame_files: self.id else: "")
+  let edits =
+    edits_to_string(self.shared, if self.in_frames(frame_files): self.id else: "")
   result = \"""
 {{
   "id": "{self.id}",
