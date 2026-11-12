@@ -3,7 +3,7 @@
     "enu": {
       "type": "stdio",
       "command": "nim",
-      "args": ["r", "bin/enu.nim", "mcp"]
+      "args": ["r", "--hints:off", "bin/mcp_dev.nim"]
     }
   }
 }
