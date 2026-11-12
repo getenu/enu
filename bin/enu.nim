@@ -50,10 +50,23 @@ proc glide(thing: Thing, target: Vector3, rotation = 0.0, instant = false) =
         break
   Enu.client.tick
 
+proc version_mismatch(reason: string): string =
+  ## The tool error for an Enu that refused us because it was built from
+  ## different types. Starts with a fixed marker so a supervisor can spot it.
+  "Error: version mismatch — " & reason & ". This MCP server and Enu were " &
+    "built from different versions. Restart the MCP server (/mcp, then " &
+    "reconnect) so it matches; if Enu is the older one, restart Enu instead."
+
 proc run(q: ThingQuery, agent_id = "", flag_errors = true): string =
+  if not Enu.client.connected and not Enu.client.ctx.is_nil:
+    # We had a session and lost it (Enu restarted, maybe rebuilt): try once
+    # more, so a changed Enu shows up as a version mismatch, not "not connected".
+    Enu.client.reconnect
   if not Enu.client.connected:
     if flag_errors:
       mark_tool_error()
+    if Enu.client.refusal != "":
+      return version_mismatch(Enu.client.refusal)
     return "Error: not connected to Enu — call connect or launch_and_connect first"
   Enu.client.online:
     let answered =
@@ -298,7 +311,13 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## Attach to a running Enu. `address` defaults to $ENU_CONNECT_ADDRESS,
       ## then 127.0.0.1 (ed's default port). The Enu must be listening (started
       ## with --listen). Use when collaborating with a user who has Enu open.
-      if Enu.connect(address, id = ctx_id):
+      let connected =
+        try:
+          Enu.connect(address, id = ctx_id)
+        except SchemaMismatchError as e:
+          mark_tool_error()
+          return version_mismatch(e.msg)
+      if connected:
         "connected to " & Enu.client.address
       else:
         mark_tool_error()
@@ -315,6 +334,9 @@ let enu_server = mcp_server("enu", "1.0.0"):
       ## server exits.
       try:
         "connected to " & Enu.launch_and_connect(world, level, id = ctx_id)
+      except SchemaMismatchError as e:
+        mark_tool_error()
+        version_mismatch(e.msg)
       except CatchableError as e:
         mark_tool_error()
         "Error: " & e.msg
@@ -357,8 +379,13 @@ elif cli_args.len == 0 or cli_args[0] in ["help", "--help", "-h"]:
 else:
   proc connect_to_enu(): bool {.gcsafe.} =
     Enu.client(id = ctx_id).connect
-    result = Enu.client.tick_until(3.seconds, Enu.client.connected)
-    if not result:
+    discard Enu.client.tick_until(
+      3.seconds, Enu.client.connected or Enu.client.refusal != ""
+    )
+    result = Enu.client.connected
+    if Enu.client.refusal != "":
+      stderr.write_line version_mismatch(Enu.client.refusal)
+    elif not result:
       stderr.write_line "Error: can't reach Enu at " & Enu.client.address &
         " (is Enu running?)"
 

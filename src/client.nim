@@ -158,14 +158,19 @@ proc connect*(_: type Enu, address = "", id = ""): bool {.discardable.} =
   ## "127.0.0.1" on ed's default port). Drops any current connection / managed
   ## process first; does NOT launch anything. Returns whether it connected. The
   ## target Enu must be listening (started with --listen); the client's
-  ## connect_timeout bounds the attempt so an absent peer fails fast.
+  ## connect_timeout bounds the attempt so an absent peer fails fast. Raises
+  ## `SchemaMismatchError` when the Enu refuses us because it was built from
+  ## different types.
   Enu.disconnect
   let resolved =
     if address != "": address else: get_env("ENU_CONNECT_ADDRESS", "127.0.0.1")
   Enu.client(address = resolved, id = id).connect
   result = Enu.client.connected
   if not result:
+    let refusal = Enu.client.refusal
     Enu.disconnect
+    if refusal != "":
+      raise SchemaMismatchError.init(refusal)
 
 proc server_ctx_id*(_: type Enu): string =
   ## The connected server's ed context id, from the client's remote
@@ -218,8 +223,14 @@ proc launch_and_connect*(
   # Retry until the launched Enu boots and answers; each attempt is bounded by
   # the client's connect_timeout.
   Enu.client(address = address, id = id).connect
-  if not Enu.client.tick_until(timeout, Enu.client.connected):
+  discard Enu.client.tick_until(
+    timeout, Enu.client.connected or Enu.client.refusal != ""
+  )
+  if not Enu.client.connected:
+    let refusal = Enu.client.refusal
     Enu.disconnect
+    if refusal != "":
+      raise SchemaMismatchError.init(refusal)
     raise ValueError.init("Launched Enu but could not connect at " & address)
   address
 
