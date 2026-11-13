@@ -201,7 +201,10 @@ proc script_finished*(thing: Thing) =
   if thing of Build:
     Build(thing).end_asap()
   if not ?thing.clone_of:
-    thing.collect_garbage
+    # A run cut short by `exit` (including a `name` rename) didn't draw
+    # everything, so it can't tell which holes are stale.
+    if thing.script_ctx.exit_code.is_none:
+      thing.collect_garbage
     thing.ensure_visible
     thing.current_line = 0
 

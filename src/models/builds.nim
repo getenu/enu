@@ -320,9 +320,12 @@ template buffer*(self: Build, body: untyped) =
     self.voxels.immediate = was_immediate
 
 # A hole is marked (given the color it hides) when a computed block lands in
-# it. Each run starts with every hole unmarked; when a run finishes, the holes
-# still unmarked no longer cut into anything and are dropped. A run that fails
-# never finishes, so it can't drop them. Each frame has its own holes.
+# it. Each run starts with every hole unmarked. Holes only survive a run's
+# initial batch of drawing: once it ends — the build first moves itself or
+# sleeps, or the script finishes — the holes still unmarked no longer cut into
+# anything and are dropped. A run that fails or exits early (a reload, a
+# rename) never gets there, so it can't drop them. Each frame has its own
+# holes.
 
 proc unmark_holes(self: Build) =
   var marked: seq[Vector3]
@@ -343,6 +346,11 @@ method collect_garbage*(self: Build) =
         self.voxels.del_edit(pos)
       if stale.len > 0:
         self.global_flags += DIRTY
+
+proc settle_holes*(self: Build) =
+  if not self.holes_settled and not ?self.clone_of:
+    self.holes_settled = true
+    self.collect_garbage
 
 # Frames. Every voxel row is keyed by frame id, and `frame_order` lists the
 # ids by index, so switching frames copies nothing and inserting or deleting
@@ -791,6 +799,7 @@ method on_begin_move*(
   let move = self.is_moving(move_mode)
   if move:
     self.end_asap() # Exit ASAP mode when switching to movement
+    self.settle_holes()
     let steps = steps.float
     var duration = 0.0
     let
@@ -855,6 +864,7 @@ method on_begin_turn*(
   let move = self.is_moving(move_mode)
   if move:
     self.end_asap()
+    self.settle_holes()
     self.voxels_per_frame = 0
     var duration = 0.0
     let axis = self.transform.basis.orthonormalized.xform(axis)
@@ -940,6 +950,7 @@ method reset*(self: Build) =
   if rebuild:
     self.restore_edits
   self.unmark_holes()
+  self.holes_settled = false
   self.draw(vec3(), (TRANSIENT, self.start_color))
 
 method ensure_visible*(self: Build) =

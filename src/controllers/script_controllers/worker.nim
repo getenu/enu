@@ -149,8 +149,6 @@ proc change_code(self: Worker, thing: Thing, code: Code) =
   debug "code changing", thing = thing.id
   thing.errors.clear
   thing.global_flags -= HIGHLIGHT_ERROR
-  if ?thing.script_ctx and thing.script_ctx.running and not ?thing.clone_of:
-    thing.collect_garbage
 
   thing.reset()
   if LOADING_SCRIPT notin state.local_flags and code.nim.strip == "":

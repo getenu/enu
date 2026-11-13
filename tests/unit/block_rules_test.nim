@@ -71,6 +71,36 @@ suite "Computed and manual blocks":
     build.collect_garbage()
     check not build.voxels.has_edit(spot)
 
+  test "moving itself ends the initial drawing, keeping holes drawn into":
+    let build = Build.init(id = "build_rules_hole_move_kept")
+    build.computed(red)
+    build.erase_cell(spot)
+    build.unmark_holes() # the next run starts
+    build.holes_settled = false
+    build.computed(blue)
+    discard build.on_begin_move(FORWARD, 1, move_mode = 2)
+    check build.holes_settled
+    check build.has_hole
+
+  test "moving itself ends the initial drawing, dropping stale holes":
+    let build = Build.init(id = "build_rules_hole_move_dropped")
+    build.computed(red)
+    build.erase_cell(spot)
+    build.unmark_holes() # the next run starts
+    build.holes_settled = false
+    discard build.on_begin_turn(LEFT, 90, lean = false, move_mode = 2)
+    check not build.voxels.has_edit(spot)
+
+  test "holes drawn into after the initial drawing don't count":
+    let build = Build.init(id = "build_rules_hole_late")
+    build.computed(red)
+    build.erase_cell(spot)
+    build.unmark_holes() # the next run starts
+    build.holes_settled = false
+    build.settle_holes()
+    build.computed(blue)
+    check spot in build
+
 proc edit_row(build: Build): EditKey =
   (build.id, 0, chunk_id_for_pos(spot))
 

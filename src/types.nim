@@ -533,6 +533,8 @@ type
     auto_ramp_started*: bool
     auto_ramp_done*: bool
     auto_ramp_start*: MonoTime
+    holes_settled*: bool
+      ## This run's initial batch of drawing is over (see settle_holes).
     drawing*: bool
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool

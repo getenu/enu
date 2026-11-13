@@ -376,6 +376,8 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
     else:
       DONE
   ctx.last_ran = MonoTime.default
+  if self.active_thing of Build:
+    Build(self.active_thing).settle_holes()
   self.pause_script()
 
 proc hit(self: Thing, thing_b: Thing): bool =
