@@ -360,10 +360,10 @@ proc load_script_and_dependents*(self: Worker, thing: Thing) =
     for other in state.things.value:
       if other notin things_to_reload and ?other.script_ctx:
         for dep in other.script_ctx.dependencies:
-          # dependencies are full paths. Check if they match any reloading thing's file.
+          # dependencies are relative to the script dir, file_name is absolute
           var found = false
           for reloading in things_to_reload:
-            if reloading.script_ctx.file_name == dep:
+            if reloading.script_ctx.file_name.extract_filename == dep:
               found = true
               break
           if found:
