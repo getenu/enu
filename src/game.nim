@@ -1,4 +1,6 @@
-import std/[monotimes, os, json, math, random, net, strformat]
+import std/[monotimes, os, json, math, random, net, strformat, strutils]
+when defined(posix):
+  from std/posix import kill, Pid, errno, ESRCH
 import pkg/[godot, metrics, osdialog]
 when defined(metrics):
   import metrics_server
@@ -128,6 +130,10 @@ gdobj Game of Node:
     rescale_at = get_mono_time()
     update_metrics_at = get_mono_time()
     force_quit_at = MonoTime.high
+    # --exit-with: a launcher that owns this instance (a test, an MCP server);
+    # we quit when it's gone, however it went
+    launcher_pid: int
+    launcher_check_at = MonoTime.high
     node_controller: NodeController
     script_controller: ScriptController
     left_stick: VirtualJoystick
@@ -318,6 +324,14 @@ gdobj Game of Node:
     if time > self.force_quit_at:
       state.pop_flag QUITTING
 
+    if time > self.launcher_check_at:
+      self.launcher_check_at = time + 1.seconds
+      when defined(posix):
+        if posix.kill(Pid(self.launcher_pid), 0) != 0 and errno == ESRCH:
+          notice "launcher is gone; quitting", launcher = self.launcher_pid
+          self.launcher_check_at = MonoTime.high
+          state.push_flag QUITTING
+
     if SCENE_READY notin state.local_flags:
       state.push_flag SCENE_READY
 
@@ -477,6 +491,12 @@ gdobj Game of Node:
     # explicit request from a saved value.
     var world_override = ""
     var level_override = ""
+    block:
+      let i = args.find("--exit-with")
+      if i > -1 and args.len > i + 1:
+        self.launcher_pid = parse_int(args[i + 1])
+        self.launcher_check_at = get_mono_time()
+        args.delete(i .. i + 1)
     block:
       let i = args.find("--world")
       if i > -1 and args.len > i + 1:
