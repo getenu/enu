@@ -523,6 +523,51 @@ proc run_hang_repro() =
   echo ""
   echo "  PASS (" & $iterations & " calls without hang)"
 
+proc run_reload_tests() =
+  echo ""
+  echo "Reload tests:"
+
+  test "editing a proto reloads the scripts compiled against it":
+    # #52: a spawner passing a ReloadDoor to ReloadButton (whose `door =
+    # ReloadDoor` param embeds the door's type) failed with a type mismatch
+    # once the door's module reloaded without its dependents.
+    var s = open_session()
+    defer:
+      s.close()
+    s.connect_session()
+    let level = s.do_call_tool("get_level_dir", %*{}).tool_text
+    const fixture = current_source_path().parent_dir / "proto_reload"
+    copy_dir(fixture / "data", level / "data")
+    copy_dir(fixture / "scripts", level / "scripts")
+
+    proc wait_for(s: var McpSession, id: string): string =
+      # new things are picked up by the file watcher, so they may not exist yet
+      let deadline = epoch_time() + 30
+      while true:
+        result = s.do_call_tool(
+          "wait_for_script", %*{"thing_id": id}, timeout_ms = 35000
+        ).tool_text
+        if not result.starts_with("Error: thing not found") or
+            epoch_time() > deadline:
+          return
+        sleep 500
+
+    for id in ["build_reload_door", "build_reload_button", "build_reload_spawner"]:
+      let text = s.wait_for(id)
+      if text.starts_with("Error"):
+        echo "FAIL: " & id & " didn't load: " & text
+        quit 1
+
+    let door = level / "scripts" / "build_reload_door.nim"
+    door.write_file door.read_file.replace("door_height = 8", "door_height = 9")
+    discard s.wait_for("build_reload_door")
+    let spawner = level / "scripts" / "build_reload_spawner.nim"
+    spawner.write_file spawner.read_file & "\n"
+    let text = s.wait_for("build_reload_spawner")
+    if text.starts_with("Error"):
+      echo "FAIL: spawner after the door reloaded: " & text
+      quit 1
+
 # ---- Main -----------------------------------------------------------------
 
 echo "=== enu_mcp test suite ==="
@@ -553,6 +598,7 @@ if external or managed:
   run_integration_tests()
   run_reconnect_tests()
   run_hang_repro()
+  run_reload_tests()
 else:
   echo ""
   echo "(skipping integration tests — set ENU_CONNECT_ADDRESS or launch one)"

@@ -1,0 +1,6 @@
+{
+  "id": "build_reload_spawner",
+  "start_transform": {"basis": [[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]], "origin": [60.0, 0.0, 80.0]},
+  "start_color": "BLUE",
+  "edits": {}
+}
