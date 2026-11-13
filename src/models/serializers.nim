@@ -964,7 +964,7 @@ proc level_json(self: LevelInfo): string =
 """
 
 proc save_level*(level_dir: string, save_all = false, force = false) =
-  if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
+  if SERVER in state.local_flags or force:
     # The whole level is in load_order now — script-less units (terrain and
     # other pure-JSON builds) included, keyed by id. Build the dependency graph,
     # the error set, and the script-less set (all scripted-vs-not decisions key

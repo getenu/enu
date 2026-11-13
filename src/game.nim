@@ -397,6 +397,7 @@ gdobj Game of Node:
 
     var args = get_cmdline_args().to_seq
     var temp_workdir = false
+    var isolated = true
     let work_dir = block:
       let i = args.find("--temp-workdir")
       if i > -1:
@@ -405,7 +406,15 @@ gdobj Game of Node:
         let temp = get_temp_dir() / ("enu-test-" & $get_current_process_id())
         create_dir temp
         temp
+      elif (let w = args.find("--workdir"); w > -1 and w + 1 < args.len):
+        # Like --temp-workdir, but a dir that outlives the run, so a test can
+        # reopen what an earlier run saved.
+        let dir = absolute_path(args[w + 1])
+        args.delete(w .. w + 1)
+        create_dir dir
+        dir
       else:
+        isolated = false
         get_user_data_dir()
 
     var initial_user_config = load_user_config(work_dir)
@@ -465,6 +474,12 @@ gdobj Game of Node:
         test_mode = true
         check_bakes = true
         args.delete(i)
+    if test_mode and not isolated:
+      # Test runs save, so they'd dirty whatever world they opened.
+      stderr.write_line "--enu-test and --check-bakes need --temp-workdir or " &
+        "--workdir <dir>"
+      flush_file stderr
+      c_exit(2)
     block:
       let i = args.find("--minimized")
       if i > -1:
@@ -859,10 +874,10 @@ gdobj Game of Node:
           # freeing render resources it never allocated (NULL RID frees in
           # visual_server_raster). The tests have already finished and their
           # exit code is known, so exit the process directly rather than
-          # letting Godot's shutdown crash and mask the result. --temp-workdir
-          # means there's nothing to persist. We're inside a flag-change
-          # callback holding ed's lock, so we can't use Nim's `quit` (its
-          # teardown re-enters the lock); c_exit terminates with no cleanup.
+          # letting Godot's shutdown crash and mask the result. We're inside a
+          # flag-change callback holding ed's lock, so we can't use Nim's
+          # `quit` (its teardown re-enters the lock); c_exit terminates with
+          # no cleanup.
           flush_file stdout
           flush_file stderr
           c_exit(exit_code.cint)
