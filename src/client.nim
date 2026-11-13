@@ -6,7 +6,9 @@
 ##
 ## This is purely an app-facing helper — regular Enu doesn't use it.
 
-import std/[os, osproc, net, strutils, sequtils]
+import std/[os, osproc, net, strutils, sequtils, exitprocs]
+when not defined(windows):
+  from std/posix import kill, Pid, SIGTERM
 import pkg/ed
 import core, models/things
 
@@ -73,6 +75,9 @@ proc eval*(thing: Thing, code: string, top_level = false): string =
 var enu_process {.threadvar.}: Process
   ## The Enu we launched, if any. Only this process may be terminated on
   ## `disconnect` — we never touch an Enu the user is running.
+var managed_pid: int
+  ## Its pid, for the exit hook (which can run on any thread).
+var exit_hook_added: bool
 
 const exe_ext = when defined(windows): ".exe" else: ""
 
@@ -123,6 +128,7 @@ proc launch_spec(): tuple[exe, workdir: string, args: seq[string]] =
 
 proc terminate_managed() =
   ## Stop the Enu we launched, if any. Never touches an Enu the user runs.
+  managed_pid = 0
   if not enu_process.is_nil:
     enu_process.terminate()
     discard enu_process.wait_for_exit(timeout = 3000)
@@ -205,7 +211,9 @@ proc launch_and_connect*(
     flags =
       @["--world", world] & (if ?level: @["--level", level] else: @[]) &
       @["--listen", address, "--minimized"] &
-      (if temp_workdir: @["--temp-workdir"] else: @[])
+      (if temp_workdir: @["--temp-workdir"] else: @[]) &
+      # it quits if we die without cleaning up (a crash, kill -9)
+      @["--exit-with", $get_current_process_id()]
     log = get_temp_dir() / "enu_managed.log"
   when defined(windows):
     # TODO: Windows managed launch (no /bin/sh; needs output redirection).
@@ -220,6 +228,13 @@ proc launch_and_connect*(
       " 2>&1"
     enu_process =
       start_process("/bin/sh", working_dir = spec.workdir, args = ["-c", cmd])
+    managed_pid = enu_process.process_id
+    if not exit_hook_added:
+      # a failing test's `quit 1` exits without reaching `disconnect`
+      exit_hook_added = true
+      add_exit_proc proc() {.noconv.} =
+        if managed_pid > 0:
+          discard posix.kill(Pid(managed_pid), SIGTERM)
   # Retry until the launched Enu boots and answers; each attempt is bounded by
   # the client's connect_timeout.
   Enu.client(address = address, id = id).connect
