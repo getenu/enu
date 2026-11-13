@@ -213,6 +213,12 @@ gdobj PlayerNode of KinematicBody:
       if added:
         self.velocity = change.item
 
+    self.model.teleport_value.watch:
+      if added or touched:
+        self.translation = change.item
+        self.velocity = vec3()
+        self.model.transform = self.transform
+
     self.model.boost_value.watch:
       if added or touched:
         self.pending_boost = some(change.item)

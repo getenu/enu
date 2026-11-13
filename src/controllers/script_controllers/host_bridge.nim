@@ -480,6 +480,9 @@ proc position_set(self: Thing, position: Vector3) =
     self.set_pivot_local(position)
   else:
     self.set_pivot_local(position.local_to(self.parent))
+  if self of Player:
+    # set_pivot_local keeps the move readable right away; the node applies it
+    Player(self).teleport_value.touch(self.transform.origin)
 
 proc start_position_set(self: Thing, position: Vector3) =
   if GLOBAL in self.global_flags:
