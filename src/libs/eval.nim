@@ -416,6 +416,11 @@ proc eval*(i: Interpreter, ctx: var PContext, fileName, code: string): Option[st
     ctx.currentScope = ctx.topLevelScope
     pushProcCon(ctx, module)
     pushOwner(ctx, module)
+  # A failed eval leaves the error counter ahead of the VM's copy, and
+  # `interpreterCode` silently skips the next top-level statement until they
+  # match again (see load_module).
+  i.graph.config.errorCounter = 0
+  PCtx(i.graph.vm).old_error_count = 0
   let s = llStreamOpen(code)
   with_import_stack_recovery(i.graph):
     result = extendModule(i.graph, module, i.idgen, s, ctx)
