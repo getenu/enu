@@ -1,5 +1,11 @@
 # Durable Persistence — enu on the ed store
 
+> **Superseded direction (2026-11-13):** see `world-repos.md`. This doc predates
+> voxel frames and bakes (its claim that computed voxels are never saved is no
+> longer true), uses the old `Unit` names, and makes ed's op log the source of
+> truth, where `world-repos.md` splits editable source files from efficient
+> state in git. Its restart-and-checkpoint script model still stands.
+
 > Status: **design / plan.** How enu adopts ed's durable store (log + snapshots +
 > restore — ed PR #30) for world, player, and script persistence. Companion to
 > ed's `docs/persistence.md` (the store mechanics) and
