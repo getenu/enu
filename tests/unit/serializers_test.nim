@@ -265,7 +265,7 @@ suite "Frame Serialization":
 suite "Bake Serialization":
   dont_join = true
 
-  test "bakes round-trip in the JSON, or in bakes.bin when they're big":
+  test "bakes round-trip through bakes.bin, never the JSON":
     let dir = get_temp_dir() / "enu_bakes_test"
     remove_dir dir
     var config = state.config
@@ -288,10 +288,9 @@ suite "Bake Serialization":
       build.bakes["key"] = entry
       inc build.bakes_serial
       build.save
-      let big = count > EDITS_JSON_LIMIT
-      check file_exists(dir / id / "bakes.bin") == big
+      check file_exists(dir / id / "bakes.bin")
       let json = parse_json(read_file(build.data_file))
-      check ("bakes" in json) == not big
+      check "bakes" notin json
 
       var restored: Build
       restored.from_json(json)

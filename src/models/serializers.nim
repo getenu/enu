@@ -172,19 +172,9 @@ proc bake_from_meta(json: JsonNode): BakeEntry =
   if "drawing" in json:
     result.drawing = some(json["drawing"].get_bool)
 
-proc load_bakes(self: Build, json: JsonNode) =
-  ## A build's bakes come from the unit JSON's `bakes`, or from
-  ## data/<id>/bakes.bin when there are too many blocks for the JSON.
-  if "bakes" in json:
-    for key, node in json["bakes"]:
-      var entry = bake_from_meta(node)
-      for frame in node["frames"]:
-        var cells: seq[(Vector3, VoxelInfo)]
-        for cell in frame[1]:
-          cells.add (cell[0].json_to(Vector3), (TRANSIENT, cell[1].json_to(Color)))
-        entry.frames[frame[0].get_int] = pack_frame(self.shared, cells)
-      self.bakes[key] = entry
-    return
+proc load_bakes(self: Build) =
+  ## A build's bakes come from data/<id>/bakes.bin. They're never edited, so
+  ## they stay out of the unit JSON.
   if state.is_nil or not state.config_value.loaded:
     return
   let path = self.data_dir / BAKES_FILE
@@ -245,7 +235,7 @@ proc from_json_hook(self: var Build, json: JsonNode) =
   if "frames" in json:
     self.load_frames(json)
 
-  self.load_bakes(json)
+  self.load_bakes()
 
 proc from_json_hook(self: var Bot, json: JsonNode) =
   # `start_color` is always written (the shared thing serializer), but tolerate
@@ -403,56 +393,12 @@ proc sorted_keys(self: Build): seq[string] =
     result.add key
   result.sort
 
-proc bakes_inline(self: Build): bool =
-  ## Whether the build's bakes fit in the unit JSON.
-  state.is_nil or not state.config_value.loaded or
-    self.baked_voxel_count(EDITS_JSON_LIMIT) <= EDITS_JSON_LIMIT
-
-proc bakes_json(self: Build): string =
-  ## Each bake's blocks as `[offset, [[[x, y, z], color], ...]]` per frame.
-  if self.bakes.len == 0 or not self.bakes_inline:
-    return
-  var entries: seq[string]
-  for key in self.sorted_keys:
-    let entry = self.bakes[key]
-    let meta = entry.bake_meta_json
-    var frames: seq[string]
-    for offset in entry.sorted_offsets:
-      var cells: seq[tuple[pos: Vector3, color: Color]]
-      for chunk_id, packed in entry.frames[offset].chunks:
-        let decoded = decode_chunk(packed)
-        for linear in 0 ..< CHUNK_VOLUME:
-          if decoded[linear] != EMPTY_VOXEL:
-            cells.add (
-              chunk_id * ChunkDim.float + from_linear(linear),
-              resolve_color(self.shared, unpack_voxel(decoded[linear])[0]),
-            )
-      cells.sort do(a, b: auto) -> int:
-        cmp((a.pos.y, a.pos.x, a.pos.z), (b.pos.y, b.pos.x, b.pos.z))
-      let lines = cells.map_it(
-        \"[{$[it.pos.x, it.pos.y, it.pos.z]}, {$it.color}]"
-      )
-      frames.add \"[{offset}, [\n" & lines.join(",\n").indent(2) & "\n]]"
-    var pen = ""
-    for field in ["color", "drawing"]:
-      if field in meta:
-        pen.add \",\n  \"{field}\": {$meta[field]}"
-    entries.add \"""{key.escape_json}: {{
-  "end": {$meta["end"]},
-  "frame": {entry.end_frame}{pen},
-  "frames": [
-{frames.join(",\n").indent(4)}
-  ]
-}}"""
-  ",\n  \"bakes\": {\n" & entries.join(",\n").indent(4) & "\n  }"
-
 proc save_bakes(self: Build) =
-  ## data/<id>/bakes.bin, when the bakes don't fit in the unit JSON. Each
-  ## bake's frames are keyframes every FRAME_KEYFRAME_INTERVAL and deltas
-  ## between, like frame files. Skipped when nothing changed since the last
-  ## save or load.
+  ## data/<id>/bakes.bin. Each bake's frames are keyframes every
+  ## FRAME_KEYFRAME_INTERVAL and deltas between, like frame files. Skipped
+  ## when nothing changed since the last save or load.
   let path = self.data_dir / BAKES_FILE
-  if self.bakes.len == 0 or self.bakes_inline:
+  if self.bakes.len == 0:
     if file_exists(path):
       remove_file path
     self.saved_bakes_serial = self.bakes_serial
@@ -502,8 +448,6 @@ proc extras_json(self: Thing, frame_files: bool): string =
     "count": {build.frames_len},
     "frame": {build.frame}{inline}
   }}"""
-  if self of Build:
-    result.add Build(self).bakes_json
   if ?self.shared and self.shared.palette.len > 0:
     # One color per line: a gradient build's palette runs to hundreds of
     # entries, and a single wrapped line is unreadable / undiffable.
