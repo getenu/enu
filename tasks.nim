@@ -251,9 +251,7 @@ task check_bakes,
     for level in list_dirs(world):
       var baked = false
       for unit in list_dirs(level / "data"):
-        let json = unit / unit.split_path.tail & ".json"
-        if file_exists(unit / "bakes.bin") or
-            (file_exists(json) and "\"bakes\"" in read_file(json)):
+        if file_exists(unit / "bakes.bin"):
           baked = true
           break
       if not baked:

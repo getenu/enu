@@ -236,15 +236,3 @@ proc clear_all_bakes*() =
   state.things.value.walk_tree proc(thing: Thing) =
     if thing of Build:
       Build(thing).clear_bakes()
-
-proc baked_voxel_count*(self: Build, limit = int.high): int =
-  ## Blocks across every bake, counting no further than past `limit`.
-  for entry in self.bakes.values:
-    for frame in entry.frames.values:
-      for packed in frame.chunks.values:
-        let cells = decode_chunk(packed)
-        for v in cells:
-          if v != EMPTY_VOXEL:
-            inc result
-            if result > limit:
-              return
