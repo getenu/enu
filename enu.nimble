@@ -8,7 +8,7 @@ src_dir = "src"
 
 requires "https://github.com/getenu/Nim#729087a2",
   "godot 0.8.6",
-  "ed 0.32.0",
+  "ed 0.33.0",
   "nanoid >= 0.2.1",
   "pretty", "cligen", "chroma", "markdown",
   "chronicles", "dotenv", "nimibook", "metrics#a1296ca", "zippy", "unittest2",
