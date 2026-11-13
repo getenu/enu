@@ -36,4 +36,26 @@ suite "Pen":
     pen = first
     check me.draw_position == first.position.origin + me.position
 
+suite "save and restore (deprecated)":
+  test "restore returns to the default save point":
+    color = green
+    save()
+    let spot = pen
+    color = black
+    forward 4
+    restore()
+    check pen == spot
+
+  test "named save points are separate":
+    save "a"
+    let a = pen
+    forward 2
+    save "b"
+    let b = pen
+    forward 2
+    restore "a"
+    check pen == a
+    restore "b"
+    check pen == b
+
 test_summary()

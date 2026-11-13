@@ -1,3 +1,4 @@
+import std/[tables, sets]
 import core, builds, vm_bridge_utils
 
 bridged_to_host:
@@ -28,3 +29,32 @@ proc persist*() =
   Build(active_thing()).persist()
 
 
+
+# 0.2.2's named save points. Remove in 0.4.
+
+var
+  save_points: Table[string, Table[string, Pen]]
+  warned_about_save: HashSet[string]
+
+proc warn_about_save(self: Build) =
+  if self.id notin warned_about_save:
+    warned_about_save.incl self.id
+    echo "`save` and `restore` are deprecated and will be removed in 0.4. ",
+      "Use `var spot = pen` to save and `pen = spot` to restore. ",
+      "See https://getenu.com/docs/api/enu_api.html"
+
+proc save*(self: Build, name = "default") {.deprecated: "use `var spot = pen`".} =
+  ## Deprecated: use `var spot = pen`.
+  self.warn_about_save
+  save_points.mget_or_put(self.id, init_table[string, Pen]())[name] = self.pen
+
+proc restore*(self: Build, name = "default") {.deprecated: "use `pen = spot`".} =
+  ## Deprecated: use `pen = spot`.
+  self.warn_about_save
+  self.pen = save_points[self.id][name]
+
+proc save*(name = "default") {.deprecated: "use `var spot = pen`".} =
+  Build(active_thing()).save(name)
+
+proc restore*(name = "default") {.deprecated: "use `pen = spot`".} =
+  Build(active_thing()).restore(name)
