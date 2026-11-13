@@ -362,6 +362,22 @@ proc run_integration_tests() =
       echo "FAIL: eval after screenshot failed, got: " & text
       quit 1
 
+  test "eval: a statement after a failed eval still runs":
+    var s = open_session()
+    defer:
+      s.close()
+    s.connect_session()
+    let failed =
+      s.do_call_tool("eval", %*{"code": "echo nope_undeclared"}).tool_text
+    if not failed.starts_with("Error"):
+      echo "FAIL: expected an error, got: " & failed
+      quit 1
+    discard s.do_call_tool("eval", %*{"code": "echo \"ran_after_error\""})
+    let console = s.do_call_tool("get_console", %*{}).tool_text
+    if "ran_after_error" notin console:
+      echo "FAIL: the statement after the failed eval didn't run"
+      quit 1
+
   test "eval player.position = vec3(0, 5, -30)":
     var s = open_session()
     defer:
