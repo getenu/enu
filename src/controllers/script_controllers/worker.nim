@@ -302,6 +302,15 @@ proc update_files*(self: Worker) =
         load_thing_from_json(thing_id, json_file)
       except Exception as e:
         error "Failed to load new thing from JSON", thing_id, error = e
+    for (thing_id, _) in new_things:
+      self.pending_renames.excl thing_id
+    if self.pending_renames.card == 0:
+      for other in self.rename_dependents:
+        if ?other.script_ctx and other.code.nim != "":
+          self.interpreter.reset_module(other.script_ctx.module_name)
+          self.module_names.excl other.script_ctx.module_name
+          other.code_value.touch Code.init(other.code.nim)
+      self.rename_dependents = @[]
     self.retry_failed_scripts()
     self.retry_failures = false
     state.pop_flag LOADING_SCRIPT

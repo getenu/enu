@@ -761,6 +761,14 @@ type
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
     module_names*: HashSet[string]
+    renaming*: HashSet[string]
+      ## Modules of prototypes that renamed themselves, until the rename's
+      ## files move. Nothing new imports them.
+    pending_renames*: HashSet[string]
+      ## New ids of renamed prototypes the file watcher hasn't loaded yet.
+    rename_dependents*: seq[Thing]
+      ## Scripts that use a renamed prototype, or failed while one was
+      ## pending. They run again once it's loaded under its new name.
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
     eval_proc*: proc(

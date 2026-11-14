@@ -83,6 +83,9 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
   # aren't compiled yet, which falls back to compiling the raw script files
   # off disk and fails on unwrapped user code (issue #51).
   self.module_names.clear()
+  self.renaming.clear()
+  self.pending_renames.clear()
+  self.rename_dependents = @[]
   # Likewise handles: the new interpreter's script-side registry is empty.
   self.handle_things.set_len(0)
   self.thing_handles.clear()
@@ -245,7 +248,7 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
       # ('undeclared identifier: speed'). A real cross-script reference to a
       # not-yet-loaded thing now fails on the user's own symbol instead, and
       # converges through the normal retry pass. (github issue #51)
-      var others = self.module_names
+      var others = self.module_names - self.renaming
       others.excl module_name
       # Only inject imports for modules whose script files exist in the current
       # script dir. Stale entries (e.g. from a previous level) are silently
@@ -347,7 +350,12 @@ proc retry_failed_scripts*(self: Worker) {.gcsafe.} =
       failed_count = self.failed.len
 
   for f in prev_failed:
-    self.script_error(f.thing, f.e)
+    if self.pending_renames.card > 0:
+      # It may be waiting on a prototype that's being renamed.
+      if f.thing notin self.rename_dependents:
+        self.rename_dependents.add f.thing
+    else:
+      self.script_error(f.thing, f.e)
   self.failed = @[]
 
 proc load_script_and_dependents*(self: Worker, thing: Thing) =

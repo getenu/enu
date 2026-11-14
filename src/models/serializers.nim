@@ -588,6 +588,9 @@ proc topo_sort(
     visited = initHashSet[string]()
     temp_visited = initHashSet[string]()
     order = newSeq[string]()
+  # A dependency on something not being ordered (a renamed prototype's old id,
+  # or a unit on the other side of PLAYERS) mustn't be added to the order.
+  let known = nodes.to_hash_set
 
   proc visit(node: string) =
     if node in temp_visited:
@@ -601,7 +604,9 @@ proc topo_sort(
 
     if node in graph:
       for dep_path in graph[node]:
-        visit(dep_path.extract_filename)
+        let dep = dep_path.extract_filename
+        if dep in known:
+          visit(dep)
 
     temp_visited.excl(node)
     visited.incl(node)
