@@ -1,11 +1,16 @@
 import std/[strutils, wrapnils, options]
 import pkg/[godot]
-import godotapi/[sprite_3d, ray_cast, spatial]
+import godotapi/[sprite_3d, ray_cast, spatial, input, global_constants]
 import gdutils, core, nodes/helpers, models
 
-const BLOCK_TOOLS = {BLUE_BLOCK .. BROWN_BLOCK}
-
-type JoinKey = tuple[model: Model, cell: Vector3, tool: Tools, last, drag: Build]
+type JoinKey = tuple[
+  model: Model,
+  cell: Vector3,
+  tool: Tools,
+  last, drag: Build,
+  choice: CreateChoice,
+  held: bool,
+]
 
 gdobj AimTarget of Sprite3D:
   var
@@ -28,13 +33,16 @@ gdobj AimTarget of Sprite3D:
         HOVER notin thing.local_flags or not (thing of Build or thing of Ground):
       self.join_key = JoinKey.default
       self.glow(nil)
+      refresh_create_mode()
       return
     let cell =
       if thing of Build:
         Build(thing).placement_cell
       else:
         Ground(thing).placement_cell
-    let key: JoinKey = (thing, cell, tool, last_edited, stroke.target)
+    let key: JoinKey = (
+      thing, cell, tool, last_edited, stroke.target, create_choice, create_held
+    )
     if key == self.join_key:
       return
     self.join_key = key
@@ -42,7 +50,7 @@ gdobj AimTarget of Sprite3D:
       if stroke.active and ?stroke.target:
         stroke.target
       else:
-        join_target(thing, cell)
+        aim_at(thing, cell)
     )
 
   method ready*() =
@@ -65,6 +73,8 @@ gdobj AimTarget of Sprite3D:
         self.target_model = nil
 
   proc update*(ray: RayCast) =
+    create_held =
+      is_key_pressed(if host_os == "macosx": KEY_META else: KEY_CONTROL)
     ray.force_raycast_update()
     let collider =
       if ray.is_colliding():

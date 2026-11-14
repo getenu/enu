@@ -183,6 +183,9 @@ type
     CHECK_BAKES
       ## Test mode that only checks a level's saved bakes still match its
       ## scripts: a bake that would have to run its body fails it.
+    CREATE_MODE
+      ## The next block placed starts a new unit, whatever it's next to.
+      ## Cleared once it has.
     SPAWN_HELD
       ## LOCAL (never synced): this main thread is holding its player at the
       ## spawn — frozen (no gravity/movement/look) with the splash up — until

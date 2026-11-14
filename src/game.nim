@@ -1076,19 +1076,23 @@ gdobj Game of Node:
       elif event.is_action_pressed("mode_1"):
         state.player.select_tool CODE_MODE
       elif event.is_action_pressed("mode_2"):
-        state.player.select_tool BLUE_BLOCK
+        state.select_or_modify BLUE_BLOCK
       elif event.is_action_pressed("mode_3"):
-        state.player.select_tool RED_BLOCK
+        state.select_or_modify RED_BLOCK
       elif event.is_action_pressed("mode_4"):
-        state.player.select_tool GREEN_BLOCK
+        state.select_or_modify GREEN_BLOCK
       elif event.is_action_pressed("mode_5"):
-        state.player.select_tool BLACK_BLOCK
+        state.select_or_modify BLACK_BLOCK
       elif event.is_action_pressed("mode_6"):
-        state.player.select_tool WHITE_BLOCK
+        state.select_or_modify WHITE_BLOCK
       elif event.is_action_pressed("mode_7"):
-        state.player.select_tool BROWN_BLOCK
+        state.select_or_modify BROWN_BLOCK
       elif event.is_action_pressed("mode_8"):
         state.player.select_tool PLACE_BOT
+      elif event.is_action_pressed("stack_up"):
+        state.set_create_mode true
+      elif event.is_action_pressed("stack_down"):
+        state.set_create_mode false
 
   method on_meta_clicked(url: string) =
     if url.starts_with("nim://"):

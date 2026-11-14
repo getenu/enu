@@ -77,6 +77,9 @@ type
     target*: Build
       ## Where blocks placed off the ground or a locked unit go: the unit
       ## picked at anchor, or the one the stroke's first block started.
+    creating*: bool
+      ## Anchored in create mode: every block goes through `target`, which
+      ## starts out nil, even on an editable unit's face.
 
 var stroke* {.threadvar.}: Stroke
 
@@ -224,6 +227,60 @@ proc join_target*(hovered: Model, world_cell: Vector3): Build =
         most = faces
         touching = Build(thing)
   touching
+
+var aim_join* {.threadvar.}: Build
+  ## join_target where the player last aimed.
+
+proc next_block*(rules_pick: Build): Build =
+  ## The unit the next block goes to, given join_target's pick and the
+  ## player's create mode choice, or nil for a new unit.
+  if create_held or create_choice == CREATE_ON:
+    nil
+  elif ?rules_pick:
+    rules_pick
+  elif create_choice == CREATE_OFF:
+    last_edited
+  else:
+    nil
+
+proc refresh_create_mode*() =
+  ## Show create mode on exactly when the next block starts a new unit.
+  if create_choice == CREATE_OFF and not (?last_edited and last_edited.editable):
+    create_choice = CREATE_AUTO
+  let on = state.player.tool in BLOCK_TOOLS and next_block(aim_join).is_nil
+  if on != (CREATE_MODE in state.local_flags):
+    state.set_flag CREATE_MODE, on
+
+proc aim_at*(hovered: Model, world_cell: Vector3): Build =
+  ## Aim at `world_cell`: the unit a block placed there goes to, or nil for a
+  ## new unit.
+  aim_join = join_target(hovered, world_cell)
+  refresh_create_mode()
+  next_block(aim_join)
+
+proc set_create_mode*(self: GameState, on: bool) =
+  ## Turn create mode on or off by hand, which sticks until the rules agree.
+  ## It can't turn off with no unit to join. Block tools only.
+  if self.player.tool in BLOCK_TOOLS:
+    let rules_on = aim_join.is_nil
+    create_choice =
+      if on == rules_on:
+        CREATE_AUTO
+      elif on:
+        CREATE_ON
+      else:
+        CREATE_OFF
+    refresh_create_mode()
+
+proc toggle_create_mode*(self: GameState) =
+  self.set_create_mode CREATE_MODE notin self.local_flags
+
+proc select_or_modify*(self: GameState, tool: Tools) =
+  ## Select `tool`, or toggle its modifier if it's already selected.
+  if tool == self.player.tool:
+    self.toggle_create_mode
+  else:
+    self.player.select_tool tool
 
 proc empty_bounds*(): AABB {.inline.} =
   ## The "no chunks yet" sentinel. Its size is negative, so it can't be fed
@@ -701,7 +758,7 @@ proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
       self.log_block_placement(cell, ACTION_COLORS[ERASER])
       last_edited = self
   of STROKE_PLACE:
-    if not self.editable:
+    if not self.editable or stroke.creating:
       stroke.painted.incl cell
       place_at(cell.world_from(self).round, endpoint)
     elif endpoint or cell notin self:
@@ -739,8 +796,8 @@ proc fire(self: Build) =
       STROKE_PLACE, self.id, cell, self.target_normal, self.target_point
     )
     if stroke.active:
-      if not self.editable:
-        stroke.target = join_target(self, self.placement_cell)
+      stroke.target = next_block(join_target(self, self.placement_cell))
+      stroke.creating = stroke.target.is_nil
       self.paint_cell(cell, endpoint = true)
   elif state.player.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
@@ -1070,6 +1127,8 @@ proc place_at*(world_cell: Vector3, endpoint = true) =
     stroke.target.end_asap()
     state.things += stroke.target
     stroke.target.log_block_placement(vec3(), color)
+    if create_choice == CREATE_ON:
+      create_choice = CREATE_AUTO
   last_edited = stroke.target
 
 proc watch_edit_rows(self: Build) =

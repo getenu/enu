@@ -141,8 +141,22 @@ proc set_flag*(self: Player, flag: PlayerFlags, value: bool) =
 proc toggle_flag*(self: Player, flag: PlayerFlags) =
   self.set_flag flag, flag notin self.flags
 
+const BLOCK_TOOLS* = {BLUE_BLOCK .. BROWN_BLOCK}
+
+type CreateChoice* = enum
+  CREATE_AUTO ## the join rules decide whether a block starts a new unit
+  CREATE_ON ## turned on by hand: the next block starts a new unit
+  CREATE_OFF
+    ## turned off by hand: blocks the rules would start a new unit with join
+    ## the last edited unit instead
+
+var
+  create_choice* {.threadvar.}: CreateChoice
+  create_held* {.threadvar.}: bool
+    ## Cmd (macOS) / Ctrl (elsewhere) is held: a click starts a new unit.
+
 proc selected_color*(self: Player): Color =
-  if self.tool in BLUE_BLOCK .. BROWN_BLOCK:
+  if self.tool in BLOCK_TOOLS:
     self.tool_colors[ord(self.tool) - ord(BLUE_BLOCK)]
   else:
     ACTION_COLORS[Colors(ord self.tool)]
@@ -228,6 +242,13 @@ proc watch_player*(self: GameState) =
     player.flags.changes:
       if change.item == PLAYING:
         self.resolve_flags
+        if added:
+          create_choice = CREATE_AUTO
+
+    player.tool_value.changes:
+      if added and change.item notin BLOCK_TOOLS:
+        create_choice = CREATE_AUTO
+        self.pop_flag CREATE_MODE
 
 when is_main_module:
   import pkg/print

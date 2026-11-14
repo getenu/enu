@@ -14,6 +14,8 @@ proc remove_from_scene(thing: Thing) =
     return
   if thing == last_edited:
     last_edited = nil
+  if thing == aim_join:
+    aim_join = nil
   if thing == stroke.target:
     stroke.target = nil
 
@@ -127,6 +129,8 @@ proc set_global(thing: Thing, global: bool) =
 
 proc reset_nodes() =
   last_edited = nil
+  aim_join = nil
+  create_choice = CREATE_AUTO
   end_stroke()
 
 proc find_nested_changes(parent: Change[Thing]) =
