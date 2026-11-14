@@ -22,6 +22,12 @@ proc register_handle*(self: Thing, handle: int) =
     registry.set_len(handle + 1)
   registry[handle] = self
 
+proc forget_handles*(first: int) =
+  ## Drop the objects for `first` and every handle after it: they belong to a
+  ## level that's gone. Handles aren't reused, so the slots just go empty.
+  for i in first ..< registry.len:
+    registry[i] = nil
+
 proc thing_for_handle*(handle: int): Thing =
   ## The object for `handle`. Things the host made without a script (the
   ## player, a sign another script dropped) get one on first use.
