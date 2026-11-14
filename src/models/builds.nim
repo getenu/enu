@@ -33,7 +33,7 @@ var last_edited* {.threadvar.}: Build
 
 const
   GROUND_ID* = "ground"
-  JOIN_RANGE = 3
+  JOIN_RANGE = 2
     ## A block placed this many cells or fewer from the last edited unit
     ## joins it.
 
