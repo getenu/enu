@@ -208,6 +208,8 @@ type
     HOVER
     TARGET_MOVED
     HIGHLIGHT
+    JOIN_TARGET
+      ## The unit a block placed now would go to. Glows like HIGHLIGHT.
 
   GlobalModelFlags* = enum
     GLOBAL

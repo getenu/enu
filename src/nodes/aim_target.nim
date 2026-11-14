@@ -3,8 +3,47 @@ import pkg/[godot]
 import godotapi/[sprite_3d, ray_cast, spatial]
 import gdutils, core, nodes/helpers, models
 
+const BLOCK_TOOLS = {BLUE_BLOCK .. BROWN_BLOCK}
+
+type JoinKey = tuple[model: Model, cell: Vector3, tool: Tools, last, drag: Build]
+
 gdobj AimTarget of Sprite3D:
-  var target_model: Model
+  var
+    target_model: Model
+    glowing: Build
+    join_key: JoinKey
+
+  proc glow(target: Build) =
+    if target != self.glowing:
+      if ?self.glowing and not self.glowing.local_flags.destroyed:
+        self.glowing.local_flags -= JOIN_TARGET
+      if ?target:
+        target.local_flags += JOIN_TARGET
+      self.glowing = target
+
+  proc update_glow(thing: Model) =
+    ## Light up the unit a block placed now would go to.
+    let tool = state.player.tool
+    if tool notin BLOCK_TOOLS or PLAYING in state.player.flags or thing.is_nil or
+        HOVER notin thing.local_flags or not (thing of Build or thing of Ground):
+      self.join_key = JoinKey.default
+      self.glow(nil)
+      return
+    let cell =
+      if thing of Build:
+        Build(thing).placement_cell
+      else:
+        Ground(thing).placement_cell
+    let key: JoinKey = (thing, cell, tool, last_edited, stroke.target)
+    if key == self.join_key:
+      return
+    self.join_key = key
+    self.glow(
+      if stroke.active and ?stroke.target:
+        stroke.target
+      else:
+        join_target(thing, cell)
+    )
 
   method ready*() =
     self.set_as_top_level(true)
@@ -54,6 +93,7 @@ gdobj AimTarget of Sprite3D:
         state.pop_flag BLOCK_TARGET_VISIBLE
         self.target_model = nil
       self.visible = false
+      self.update_glow(nil)
       return
 
     if ?self.target_model:
@@ -120,6 +160,8 @@ gdobj AimTarget of Sprite3D:
           thing.local_flags.touch TARGET_MOVED
         else:
           thing.local_flags -= TARGET_MOVED
+
+    self.update_glow(thing)
 
     if PRIMARY_DOWN notin state.local_flags and
         SECONDARY_DOWN notin state.local_flags:

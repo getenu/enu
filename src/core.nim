@@ -286,7 +286,8 @@ proc world_from*(self: Vector3, thing: Thing): Vector3 =
   result = self
   var thing = thing
   while thing != nil:
-    result = thing.transform.xform_vector3(result)
+    let transform = thing.transform
+    result = transform.basis.xform(result) + transform.origin
     thing = thing.parent
 
 proc local_into*(self: Vector3, thing: Thing): Vector3 =

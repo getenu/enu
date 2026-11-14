@@ -1314,13 +1314,11 @@ proc load_level*(worker: Worker, level_dir: string) =
 
   worker.run_state_initializers()
 
-  dont_join = true
   worker.retry_failures = true
   load_things(nil, load_order)
 
   worker.retry_failed_scripts()
   worker.retry_failures = false
-  dont_join = false
 
   # Save after retry so the load_order and any script-resolved deps are
   # captured. save_all=false: only things dirtied during the load are

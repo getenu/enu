@@ -28,13 +28,14 @@ const
   AUTO_RAMP_START_SPEED = 1.0
   AUTO_RAMP_END_SPEED = 50.0
 
-var
-  current_build* {.threadvar.}: Build
-  previous_build* {.threadvar.}: Build
-  last_placement_time* {.threadvar.}: MonoTime
-  dont_join*: bool
+var last_edited* {.threadvar.}: Build
+  ## The unit this player last placed or removed a block in by hand.
 
-const GROUND_ID* = "ground"
+const
+  GROUND_ID* = "ground"
+  JOIN_RANGE = 3
+    ## A block placed this many cells or fewer from the last edited unit
+    ## joins it.
 
 const STROKE_DWELL_MS = 500
   ## Holding the aim on a target the current stroke can't touch for this
@@ -73,6 +74,9 @@ type
     dwell_unit*: string
     dwell_target*: Vector3
     dwell_since*: MonoTime
+    target*: Build
+      ## Where blocks placed off the ground or a locked unit go: the unit
+      ## picked at anchor, or the one the stroke's first block started.
 
 var stroke* {.threadvar.}: Stroke
 
@@ -131,7 +135,7 @@ proc continue_stroke*(
   true
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.}
-proc place_beside(self: Build, local_cell: Vector3) {.gcsafe.}
+proc place_at*(world_cell: Vector3, endpoint = true) {.gcsafe.}
 proc init_voxels_if_needed*(self: Build, watch_edits = true) {.gcsafe.}
 proc watch_edit_rows(self: Build) {.gcsafe.}
 
@@ -153,70 +157,73 @@ proc voxel_info*(self: Build, position: Vector3): VoxelInfo =
 proc find_voxel*(self: Build, position: Vector3): Option[VoxelInfo] =
   self.voxels.find_voxel(position)
 
-proc find_first*(things: EdSeq[Thing], positions: open_array[Vector3]): Build =
-  for thing in things:
-    if thing of Build:
-      if LOCK in thing.find_root.global_flags:
-        # locked things behave like the ground: placements next to them
-        # start (or extend) a separate thing, never join the locked one
-        continue
-      let thing = Build(thing)
-      let offset = vec3().global_from(thing)
-      for position in positions:
-        var loc = position - offset
-        if loc in thing:
-          var info = thing.voxels.voxel_info(loc)
-          if info.kind != HOLE and info.color != ACTION_COLORS[ERASER]:
-            return thing
-      let first = thing.things.find_first(positions)
-      if ?first:
-        return first
+proc editable*(self: Build): bool =
+  ## Whether the player's blocks can go into this unit.
+  LOCK notin self.find_root.global_flags or GOD in state.player.flags
 
-proc add_build(self, source: Build) =
-  dont_join = true
-  for pos, info in source.voxels.all_voxels:
-    var position = pos.global_from(source)
-    position = position.local_to(self)
-    self.draw(position, info)
+type ToLocal = tuple[basis: Basis, origin: Vector3]
+  ## World -> local for one unit, in pure math: Transform's own methods
+  ## call into Godot, and this runs hundreds of times a check.
 
-  if source.parent.is_nil:
-    state.things -= source
-  else:
-    source.parent.things -= source
-  dont_join = false
+proc to_local(self: Thing): ToLocal =
+  var
+    basis = self.transform.basis
+    origin = self.transform.origin
+    parent = self.parent
+  while parent != nil:
+    origin = parent.transform.basis.xform(origin) + parent.transform.origin
+    basis = parent.transform.basis * basis
+    parent = parent.parent
+  (basis.inverse, origin)
 
-proc maybe_join_previous_build(
-    self: Build, position: Vector3, voxel: VoxelInfo
-) =
-  if self != current_build:
-    previous_build = current_build
-    current_build = self
-    last_placement_time = get_mono_time()
+proc apply(self: ToLocal, world: Vector3): Vector3 =
+  self.basis.xform(world - self.origin)
 
-  if ?previous_build and previous_build != self:
-    var partner = previous_build
-    let root = previous_build.find_root
-    if root of Build:
-      partner = Build(root)
+proc has_block_at(self: Build, to_local: ToLocal, world_cell: Vector3): bool =
+  let local = to_local.apply(world_cell).round
+  if local notin self:
+    return false
+  let info = self.voxels.voxel_info(local)
+  info.kind != HOLE and info.color != ACTION_COLORS[ERASER]
 
-    if LOCK in partner.global_flags:
-      return
+proc near(self: Build, world_cell: Vector3, range: int): bool =
+  let to_local = self.to_local
+  for x in -range .. range:
+    for y in -range .. range:
+      for z in -range .. range:
+        if self.has_block_at(to_local, world_cell + vec3(x, y, z)):
+          return true
 
-    if partner != self:
-      for position in position.global_from(self).surrounding:
-        if position.local_to(partner) in partner:
-          var source, dest: Build
-          if partner.code.nim.strip == "":
-            source = partner
-            dest = self
-          elif self.code.nim.strip == "":
-            source = self
-            dest = partner
+const FACES = [LEFT, RIGHT, UP, DOWN, FORWARD, BACK]
 
-          if ?source and ?dest:
-            dest.add_build(source)
-            current_build = dest
-            return
+proc placement_cell*(self: Build): Vector3 =
+  ## The world cell a block placed on the aimed face would fill.
+  (self.target_point + self.target_normal * 0.5).floor.world_from(self).round
+
+proc join_target*(hovered: Model, world_cell: Vector3): Build =
+  ## The unit a block placed at `world_cell` goes to, aiming at `hovered`,
+  ## or nil for a new unit. In order: the editable unit aimed at, the last
+  ## edited unit if it's within JOIN_RANGE, the unit sharing the most faces
+  ## with the cell.
+  if hovered of Build and Build(hovered).editable:
+    return Build(hovered)
+  if ?last_edited and last_edited.editable and
+      last_edited.near(world_cell, JOIN_RANGE):
+    return last_edited
+  var
+    most = 0
+    touching: Build
+  state.things.value.walk_tree proc(thing: Thing) =
+    if thing of Build and Build(thing).editable:
+      let to_local = thing.to_local
+      var faces = 0
+      for face in FACES:
+        if Build(thing).has_block_at(to_local, world_cell + face):
+          inc faces
+      if faces > most:
+        most = faces
+        touching = Build(thing)
+  touching
 
 proc empty_bounds*(): AABB {.inline.} =
   ## The "no chunks yet" sentinel. Its size is negative, so it can't be fed
@@ -640,9 +647,6 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
   if position == vec3(0, 0, 0) and voxel.kind != TRANSIENT:
     self.start_color = voxel.color
 
-  if not dont_join and voxel.kind == PERSISTED:
-    self.maybe_join_previous_build(position, voxel)
-
 proc sync_turtle*(self: Build) =
   # Mirror draw_transform for the render side. Called once per batch of
   # draw_transform writes, not per voxel — see turtle_transform in types.nim.
@@ -695,14 +699,16 @@ proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
     if endpoint or cell in self:
       self.erase_cell(cell)
       self.log_block_placement(cell, ACTION_COLORS[ERASER])
+      last_edited = self
   of STROKE_PLACE:
-    if LOCK in self.find_root.global_flags and GOD notin state.player.flags:
+    if not self.editable:
       stroke.painted.incl cell
-      self.place_beside(cell)
+      place_at(cell.world_from(self).round, endpoint)
     elif endpoint or cell notin self:
       stroke.painted.incl cell
       self.draw(cell, (PERSISTED, state.player.selected_color))
       self.log_block_placement(cell, state.player.selected_color)
+      last_edited = self
 
 proc remove_if_empty(self: Build) =
   if self.things.len == 0 and not self.has_visible_voxels:
@@ -712,7 +718,7 @@ proc remove_if_empty(self: Build) =
       self.parent.things -= self
 
 proc remove(self: Build) =
-  if LOCK in self.find_root.global_flags and GOD notin state.player.flags:
+  if not self.editable:
     return
   if state.player.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
     let cell = (self.target_point - self.target_normal * 0.5).floor
@@ -727,20 +733,20 @@ proc fire(self: Build) =
   # Full transform, not global_from: on a rotated platform the origin-only sum
   # drops the rotation, so the dropped bot lands blocks from the aim target.
   let global_point = self.target_point.world_from(self)
-  let locked =
-    LOCK in self.find_root.global_flags and GOD notin state.player.flags
   if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     let cell = (self.target_point + (self.target_normal * 0.5)).floor
     anchor_stroke(
       STROKE_PLACE, self.id, cell, self.target_normal, self.target_point
     )
     if stroke.active:
+      if not self.editable:
+        stroke.target = join_target(self, self.placement_cell)
       self.paint_cell(cell, endpoint = true)
   elif state.player.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
       state.bot_at(global_point).is_nil:
     let transform = Transform.init(origin = global_point)
     state.things += Bot.init(transform = transform)
-  elif state.player.tool == CODE_MODE and not locked:
+  elif state.player.tool == CODE_MODE and self.editable:
     let root = self.find_root
     state.player.coding = root
 
@@ -1045,30 +1051,26 @@ proc init*(_: type Build, x, y, z: float, save = false): Build =
   result.end_asap()
   result.voxels.immediate = true
 
-proc place_beside(self: Build, local_cell: Vector3) =
-  ## Ground-style placement for locked builds: the cell goes to an adjacent
-  ## unlocked build (find_first skips locked trees), or starts a new unit —
-  ## the locked build itself never changes.
-  let point = local_cell.world_from(self).round
-  let now = get_mono_time()
-  var add_to =
-    if ?current_build and (now - last_placement_time).in_milliseconds <= 500:
-      current_build
-    else:
-      state.things.find_first(point.surrounding)
-  if ?add_to:
-    add_to.draw(point.local_to(add_to), (PERSISTED, state.player.selected_color))
-    add_to.log_block_placement(point.local_to(add_to), state.player.selected_color)
+proc place_at*(world_cell: Vector3, endpoint = true) =
+  ## Place a block off the ground or a locked unit: into the stroke's
+  ## target, or a new unit that becomes its target. Interpolated cells
+  ## (endpoint = false) skip ones already filled.
+  let color = state.player.selected_color
+  if ?stroke.target:
+    let local = stroke.target.to_local.apply(world_cell).round
+    if endpoint or local notin stroke.target:
+      stroke.target.draw(local, (PERSISTED, color))
+      stroke.target.log_block_placement(local, color)
   else:
-    add_to = Build.init(
-      transform = Transform.init(origin = point),
-      global = true,
-      color = state.player.selected_color,
+    stroke.target = Build.init(
+      transform = Transform.init(origin = world_cell), global = true, color = color
     )
     # A placed build has no script; render its voxels directly instead of
-    # waiting out the ASAP paste batching (see Ground.fire).
-    add_to.end_asap()
-    state.things += add_to
+    # waiting out the ASAP paste batching.
+    stroke.target.end_asap()
+    state.things += stroke.target
+    stroke.target.log_block_placement(vec3(), color)
+  last_edited = stroke.target
 
 proc watch_edit_rows(self: Build) =
   ## Edits written elsewhere (main's clicks, other players) make this side's

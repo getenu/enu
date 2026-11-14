@@ -177,6 +177,7 @@ gdobj BuildNode of VoxelTerrain:
         )
 
       if HIGHLIGHT in self.model.local_flags or
+          JOIN_TARGET in self.model.local_flags or
           (
             HIGHLIGHT_ERROR in self.model.global_flags and
             self.error_highlight_on
@@ -564,7 +565,7 @@ gdobj BuildNode of VoxelTerrain:
             self.show_current_frame()
 
     self.model.local_flags.watch:
-      if change.item == HIGHLIGHT:
+      if change.item in {HIGHLIGHT, JOIN_TARGET}:
         self.set_highlight
 
     state.player.flags.watch:
@@ -725,9 +726,6 @@ gdobj BuildNode of VoxelTerrain:
       state.server_ctx_name == state.worker_ctx_name
 
   proc setup*() =
-    let was_skipping_join = dont_join
-    dont_join = true
-
     self.model.init_voxels_if_needed(watch_edits = false)
     self.model.target_shown_frame()
 
@@ -808,7 +806,6 @@ gdobj BuildNode of VoxelTerrain:
 
     self.track_changes
 
-    dont_join = was_skipping_join
     if not self.model.bot_collisions:
       var layer = 0
       layer.set_bits(2)

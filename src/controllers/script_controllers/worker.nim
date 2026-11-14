@@ -112,10 +112,8 @@ proc load_thing_from_json(thing_id, json_file: string) =
     error "Unknown thing type for new JSON file", thing_id
     return
   new_thing.global_flags += SCRIPT_INITIALIZING
-  dont_join = true
   state.things.add(new_thing)
   load_things(new_thing, @[])
-  dont_join = false
   if new_thing of Build:
     Build(new_thing).reset_bounds
     Build(new_thing).restore_edits
