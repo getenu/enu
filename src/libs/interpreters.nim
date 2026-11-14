@@ -279,7 +279,7 @@ proc run*(self: ScriptCtx, me: int): bool =
   proc run_body() {.gcsafe.} =
     {.gcsafe.}:
       let run_script = self.interpreter.select_routine(
-        "run_script", module_name = self.module_name
+        "run_script", module_name = self.module_name, file_name = self.file_name
       )
       if me > 0 and ?run_script:
         discard self.start(
@@ -352,7 +352,9 @@ proc call_proc*(
     self: ScriptCtx, proc_name: string, args: varargs[PNode, `to_node`]
 ): tuple[paused: bool, result: PNode] =
   let foreign_proc =
-    self.interpreter.select_routine(proc_name, module_name = self.module_name)
+    self.interpreter.select_routine(
+      proc_name, module_name = self.module_name, file_name = self.file_name
+    )
   if foreign_proc == nil:
     raise new_exception(
       VMError, \"script does not export a proc of the name: '{proc_name}'"
