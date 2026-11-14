@@ -7,10 +7,14 @@ import godot
 import ".."/[core, gdutils]
 
 gdobj ActionButton of Button:
+  var size_scale* {.gdExport.} = 1.0
+    ## This button's size relative to the toolbar size setting.
+
   proc update_size(size: float) =
     var toolbar_size = state.config.toolbar_size * state.config.screen_scale
     if (toolbar_size + 4) * 8 > self.get_viewport().size.x:
       toolbar_size = self.get_viewport().size.x / 8 - 4
+    toolbar_size *= self.size_scale
     self.rect_min_size = vec2(toolbar_size, toolbar_size)
     for style in ["hover", "pressed", "focus", "normal"]:
       var stylebox = self.get_stylebox(style).as(StyleBoxFlat)
