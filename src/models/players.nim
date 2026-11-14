@@ -19,7 +19,10 @@ proc init*(_: type Player, id = "player-" & Ed.thread_ctx.id): Player =
       coding_value: EdValue[Thing].init(),
       open_sign_value: EdValue[Sign].init(),
     )
-    self.init_thing(shared = false)
+    # The node writes the body's transform and velocity every physics frame;
+    # REJECT_STALE keeps a script's move or stop from losing to a frame that
+    # was already on its way (getenu/enu#50).
+    self.init_thing(shared = false, body_flags = DEFAULT_FLAGS + {REJECT_STALE})
     self.global_flags += GLOBAL
     self.global_flags += EPHEMERAL
 

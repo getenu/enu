@@ -41,17 +41,21 @@ proc init_shared*(self: Thing) =
       # it owns — down everywhere, no synced ownership state required.
       Ed.thread_ctx.set_owner(self.shared, self.id)
 
-proc init_thing*[T: Thing](self: T, shared = true) =
+proc init_thing*[T: Thing](
+    self: T, shared = true, body_flags = DEFAULT_FLAGS
+) =
+  ## `body_flags` go on the transform and velocity.
   self.lifetime = new_lifetime()
   with self:
     # OWNS_MEMBERS: children belong to us — membership drives ed's owned index,
     # so our destroy cascades into them (and removal un-registers them).
     things = EdSeq[Thing].init(flags = DEFAULT_FLAGS + {OWNS_MEMBERS})
-    transform_value = ed(self.start_transform)
+    transform_value =
+      EdValue[Transform].init(self.start_transform, flags = body_flags)
     global_flags = EdSet[GlobalModelFlags].init()
     local_flags = EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL})
     code_value = EdValue[Code].init()
-    velocity_value = EdValue[Vector3].init()
+    velocity_value = EdValue[Vector3].init(flags = body_flags)
     scale_value = ed(1.0)
     glow_value = EdValue[float].init()
     speed_value = ed(0.0) # draw ASAP unless the script sets a speed
