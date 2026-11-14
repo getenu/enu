@@ -77,6 +77,9 @@ type
     target*: Build
       ## Where blocks placed off the ground or a locked unit go: the unit
       ## picked at anchor, or the one the stroke's first block started.
+    creating*: bool
+      ## Anchored in create mode: every block goes through `target`, which
+      ## starts out nil, even on an editable unit's face.
 
 var stroke* {.threadvar.}: Stroke
 
@@ -701,7 +704,7 @@ proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
       self.log_block_placement(cell, ACTION_COLORS[ERASER])
       last_edited = self
   of STROKE_PLACE:
-    if not self.editable:
+    if not self.editable or stroke.creating:
       stroke.painted.incl cell
       place_at(cell.world_from(self).round, endpoint)
     elif endpoint or cell notin self:
@@ -739,7 +742,8 @@ proc fire(self: Build) =
       STROKE_PLACE, self.id, cell, self.target_normal, self.target_point
     )
     if stroke.active:
-      if not self.editable:
+      stroke.creating = CREATE_MODE in state.local_flags
+      if not self.editable and not stroke.creating:
         stroke.target = join_target(self, self.placement_cell)
       self.paint_cell(cell, endpoint = true)
   elif state.player.tool == PLACE_BOT and BLOCK_TARGET_VISIBLE in state.local_flags and
@@ -1070,6 +1074,7 @@ proc place_at*(world_cell: Vector3, endpoint = true) =
     stroke.target.end_asap()
     state.things += stroke.target
     stroke.target.log_block_placement(vec3(), color)
+    state.pop_flag CREATE_MODE
   last_edited = stroke.target
 
 proc watch_edit_rows(self: Build) =

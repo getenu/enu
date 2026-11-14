@@ -9,8 +9,12 @@ import gdutils, ui/preview_maker
 
 type PreviewResult = tuple[button: string, preview: Image]
 
-const block_buttons = ["blue", "red", "green", "black", "white", "brown"]
-  ## The block tools' button names, in DEFAULT_TOOL_COLORS order.
+const
+  block_buttons = ["blue", "red", "green", "black", "white", "brown"]
+    ## The block tools' button names, in DEFAULT_TOOL_COLORS order.
+  STACK_GAP = 6.0
+  STACK_IDLE_ALPHA = 0.6
+    ## How much of the stack shows while its modifier is off.
 
 gdobj Toolbar of HBoxContainer:
   var
@@ -23,11 +27,21 @@ gdobj Toolbar of HBoxContainer:
     waiting = false
     zid: EID
     tween: SceneTreeTween
+    stack: Button
+      ## The selected block tool's stack: one "+" that turns on create mode.
 
   method ready*() =
     self.bind_signals self, "action_changed"
     self.preview_maker = self.get_node("../PreviewMaker") as PreviewMaker
     assert not self.preview_maker.is_nil
+    self.stack = self.get_node("Button-new") as Button
+    # floats above the selected tool instead of taking a place in the row
+    self.stack.set_as_toplevel(true)
+    state.local_flags.changes:
+      if CREATE_MODE.added:
+        self.stack.set_pressed true
+      elif CREATE_MODE.removed:
+        self.stack.set_pressed false
 
     let player = state.player
     player.flags.changes:
@@ -117,7 +131,27 @@ gdobj Toolbar of HBoxContainer:
       .set_trans(TRANS_EXPO)
       .set_ease(EASE_IN_OUT)
 
+  proc place_stack() =
+    let tool = state.player.tool
+    let button =
+      if tool in BLOCK_TOOLS:
+        self.get_child(int tool) as Button
+      else:
+        nil
+    self.stack.visible = self.visible and ?button and button.visible
+    if self.stack.visible:
+      let size = self.stack.rect_size
+      self.stack.rect_global_position =
+        button.rect_global_position +
+        vec2((button.rect_size.x - size.x) / 2, -size.y - STACK_GAP)
+      self.stack.modulate =
+        if CREATE_MODE in state.local_flags:
+          init_color(1.0, 1.0, 1.0, 1.0)
+        else:
+          init_color(1.0, 1.0, 1.0, STACK_IDLE_ALPHA)
+
   method process*(delta: float) =
+    self.place_stack()
     if self.preview_result.is_some:
       let
         p = self.preview_result.get
@@ -148,16 +182,18 @@ gdobj Toolbar of HBoxContainer:
       of "code":
         state.player.tool = CODE_MODE
       of "blue":
-        state.player.tool = BLUE_BLOCK
+        state.select_or_modify BLUE_BLOCK
       of "red":
-        state.player.tool = RED_BLOCK
+        state.select_or_modify RED_BLOCK
       of "green":
-        state.player.tool = GREEN_BLOCK
+        state.select_or_modify GREEN_BLOCK
       of "black":
-        state.player.tool = BLACK_BLOCK
+        state.select_or_modify BLACK_BLOCK
       of "white":
-        state.player.tool = WHITE_BLOCK
+        state.select_or_modify WHITE_BLOCK
       of "brown":
-        state.player.tool = BROWN_BLOCK
+        state.select_or_modify BROWN_BLOCK
       of "bot":
         state.player.tool = PLACE_BOT
+      of "new":
+        state.toggle_create_mode

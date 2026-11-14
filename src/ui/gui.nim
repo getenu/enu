@@ -5,6 +5,7 @@ import
     input_event_action, input, button, gd_os, input_event_key,
     input_event_joypad_button, input_event_mouse_motion,
     input_event_mouse_button, input_event_pan_gesture, global_constants,
+    input_event_with_modifiers,
   ]
 import core, nodes/player_node, gdutils
 import std/times
@@ -32,6 +33,8 @@ gdobj GUI of Control:
     touch_position: Option[Vector2]
     delete_timer = MonoTime.high
     deleting = false
+    create_click: bool
+      ## This click was Cmd/Ctrl-clicked, so it turned on create mode.
 
   # Helper to check for active joypad input (moved from PlayerNode)
   proc has_active_input(device: int): bool =
@@ -210,10 +213,18 @@ gdobj GUI of Control:
     if event.is_action_pressed("fire"):
       if EDITOR_VISIBLE in state.local_flags:
         self.skip_release = true
+      if event of InputEventWithModifiers and
+          InputEventWithModifiers(event).command:
+        self.create_click = true
+        state.push_flag CREATE_MODE
       state.push_flag PRIMARY_DOWN
     elif event.is_action_released("fire"):
       self.skip_release = false
       state.pop_flag PRIMARY_DOWN
+      if self.create_click:
+        # one-shot, even if the click didn't place anything
+        self.create_click = false
+        state.pop_flag CREATE_MODE
 
     if event.is_action_pressed("remove"):
       state.push_flag SECONDARY_DOWN
