@@ -151,9 +151,6 @@ suite "Bot Serialization":
     check restored.start_transform.origin.z == original.start_transform.origin.z
 
 suite "Frame Serialization":
-  # placed blocks would otherwise join the builds of earlier tests
-  dont_join = true
-
   test "frame files round-trip with only their manual blocks":
     let dir = get_temp_dir() / "enu_frames_test"
     remove_dir dir
@@ -263,8 +260,6 @@ suite "Frame Serialization":
         build.voxels.frame_edits(build.frame_order.ids[index]).chunks
 
 suite "Bake Serialization":
-  dont_join = true
-
   test "bakes round-trip through bakes.bin, never the JSON":
     let dir = get_temp_dir() / "enu_bakes_test"
     remove_dir dir

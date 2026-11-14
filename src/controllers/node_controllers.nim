@@ -12,10 +12,10 @@ proc remove_from_scene(thing: Thing) =
     thing.destroy
     thing.parent = nil
     return
-  if thing == previous_build:
-    previous_build = nil
-  if thing == current_build:
-    current_build = nil
+  if thing == last_edited:
+    last_edited = nil
+  if thing == stroke.target:
+    stroke.target = nil
 
   # Untrack the thing's watchers up front — before the teardown below mutates
   # flags / clears children — so no watcher fires against the node we're about
@@ -126,8 +126,8 @@ proc set_global(thing: Thing, global: bool) =
         thing.transform.origin - thing.start_transform.origin
 
 proc reset_nodes() =
-  current_build = nil
-  previous_build = nil
+  last_edited = nil
+  end_stroke()
 
 proc find_nested_changes(parent: Change[Thing]) =
   for change in parent.triggered_by:

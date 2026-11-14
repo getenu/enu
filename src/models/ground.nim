@@ -1,40 +1,16 @@
 import godotapi/spatial
-import std/[monotimes, times, options]
+import std/[options]
 import core, states, bots, builds
 
-var add_to {.threadvar.}: Build
-
-proc place_cell(self: Ground, cell: Vector3, endpoint = false) {.gcsafe.} =
-  if ?add_to:
-    let local = cell.local_to(add_to)
-    if endpoint or local notin add_to:
-      add_to.draw(local, (PERSISTED, state.player.selected_color))
-  else:
-    add_to = Build.init(
-      transform = Transform.init(origin = cell),
-      global = true,
-      color = state.player.selected_color,
-    )
-    # Builds default to ASAP for script drawing, but its paste batching
-    # (2s) would make hand-placed blocks appear late. A placed build has
-    # no script; render its voxels directly.
-    add_to.end_asap()
-
-    state.things += add_to
+proc placement_cell*(self: Ground): Vector3 =
+  (self.target_point - vec3(0.5, 0, 0.5)).trunc
 
 proc fire(self: Ground) {.gcsafe.} =
-  let point = (self.target_point - vec3(0.5, 0, 0.5)).trunc
+  let point = self.placement_cell
   if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
-    dont_join = true
-    # Check if we should stick to the last modified build (within 500ms)
-    let now = get_mono_time()
-    let time_since_last = (now - last_placement_time).in_milliseconds
-    if ?current_build and time_since_last <= 500:
-      add_to = current_build
-    else:
-      add_to = state.things.find_first(point.surrounding)
     anchor_stroke(STROKE_PLACE, GROUND_ID, point, UP, self.target_point)
-    self.place_cell(point, endpoint = true)
+    stroke.target = join_target(self, point)
+    place_at(point)
   elif state.player.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
     var t = Transform.init(origin = self.target_point)
     state.things += Bot.init(transform = t)
@@ -45,13 +21,13 @@ proc stroke_frame*(self: Ground) =
   ## otherwise charge the dwell timer toward re-anchoring.
   if state.player.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     return
-  let cell = (self.target_point - vec3(0.5, 0, 0.5)).trunc
+  let cell = self.placement_cell
   if stroke.unit_id == GROUND_ID and self.target_point.y == stroke.face and
       cell.y == stroke.plane:
     discard continue_stroke(
       cell,
       proc(cell: Vector3, endpoint: bool) =
-        self.place_cell(cell, endpoint),
+        place_at(cell, endpoint),
     )
   elif stroke_miss(GROUND_ID, self.target_point) and
       PRIMARY_DOWN in state.local_flags:
@@ -67,7 +43,6 @@ proc init*(_: type Ground, node: Spatial): Ground =
     if PRIMARY_DOWN.added and HOVER in self.local_flags:
       self.fire()
     if PRIMARY_DOWN.removed or SECONDARY_DOWN.removed:
-      dont_join = false
       end_stroke()
 
   result = self

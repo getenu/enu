@@ -7,9 +7,6 @@ import models/voxels/[store, codec]
 # Computed blocks are drawn by a build's script (TRANSIENT); manual ones are
 # placed by hand (PERSISTED). Erasing a computed block leaves a HOLE.
 
-# these builds share no world; don't try to join manual blocks across them
-dont_join = true
-
 let
   red = ACTION_COLORS[RED]
   blue = ACTION_COLORS[BLUE]
