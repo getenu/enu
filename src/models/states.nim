@@ -141,8 +141,10 @@ proc set_flag*(self: Player, flag: PlayerFlags, value: bool) =
 proc toggle_flag*(self: Player, flag: PlayerFlags) =
   self.set_flag flag, flag notin self.flags
 
+const BLOCK_TOOLS* = {BLUE_BLOCK .. BROWN_BLOCK}
+
 proc selected_color*(self: Player): Color =
-  if self.tool in BLUE_BLOCK .. BROWN_BLOCK:
+  if self.tool in BLOCK_TOOLS:
     self.tool_colors[ord(self.tool) - ord(BLUE_BLOCK)]
   else:
     ACTION_COLORS[Colors(ord self.tool)]
@@ -228,6 +230,28 @@ proc watch_player*(self: GameState) =
     player.flags.changes:
       if change.item == PLAYING:
         self.resolve_flags
+
+    player.tool_value.changes:
+      if added and change.item notin BLOCK_TOOLS:
+        self.pop_flag CREATE_MODE
+
+proc set_create_mode*(self: GameState, on: bool) =
+  ## Create mode is a modifier on the block tools: it only turns on with one
+  ## selected.
+  if not on:
+    self.pop_flag CREATE_MODE
+  elif self.player.tool in BLOCK_TOOLS:
+    self.push_flag CREATE_MODE
+
+proc toggle_create_mode*(self: GameState) =
+  self.set_create_mode CREATE_MODE notin self.local_flags
+
+proc select_or_modify*(self: GameState, tool: Tools) =
+  ## Select `tool`, or toggle its modifier if it's already selected.
+  if tool == self.player.tool:
+    self.toggle_create_mode
+  else:
+    self.player.select_tool tool
 
 when is_main_module:
   import pkg/print

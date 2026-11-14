@@ -9,7 +9,9 @@ proc fire(self: Ground) {.gcsafe.} =
   let point = self.placement_cell
   if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
     anchor_stroke(STROKE_PLACE, GROUND_ID, point, UP, self.target_point)
-    stroke.target = join_target(self, point)
+    stroke.creating = CREATE_MODE in state.local_flags
+    if not stroke.creating:
+      stroke.target = join_target(self, point)
     place_at(point)
   elif state.player.tool == PLACE_BOT and state.bot_at(self.target_point).is_nil:
     var t = Transform.init(origin = self.target_point)

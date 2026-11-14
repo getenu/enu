@@ -1,9 +1,13 @@
 import std/[strutils, wrapnils, options]
 import pkg/[godot]
-import godotapi/[sprite_3d, ray_cast, spatial]
+import godotapi/[sprite_3d, ray_cast, spatial, input, global_constants]
 import gdutils, core, nodes/helpers, models
 
-const BLOCK_TOOLS = {BLUE_BLOCK .. BROWN_BLOCK}
+proc creating(): bool =
+  ## The next click starts a new unit: create mode is on, or Cmd (macOS) /
+  ## Ctrl (elsewhere) is held for a create click.
+  CREATE_MODE in state.local_flags or
+    is_key_pressed(if host_os == "macosx": KEY_META else: KEY_CONTROL)
 
 type JoinKey = tuple[model: Model, cell: Vector3, tool: Tools, last, drag: Build]
 
@@ -24,7 +28,8 @@ gdobj AimTarget of Sprite3D:
   proc update_glow(thing: Model) =
     ## Light up the unit a block placed now would go to.
     let tool = state.player.tool
-    if tool notin BLOCK_TOOLS or PLAYING in state.player.flags or thing.is_nil or
+    if tool notin BLOCK_TOOLS or PLAYING in state.player.flags or creating() or
+        thing.is_nil or
         HOVER notin thing.local_flags or not (thing of Build or thing of Ground):
       self.join_key = JoinKey.default
       self.glow(nil)

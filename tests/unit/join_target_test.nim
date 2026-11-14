@@ -1,6 +1,7 @@
 import unittest2
 import core
 import models
+import models/builds {.all.}
 
 # Which unit a block placed by hand goes to (see join_target).
 
@@ -90,3 +91,60 @@ suite "Which unit a block joins":
     check stroke.target == made
     place_at(vec3(12, 0, 0))
     check made.voxel_info(vec3(2, 0, 0)).color == color
+
+suite "Create mode":
+  setup:
+    state = GameState.init
+    state.player = Player.init(id = "player-me")
+    state.watch_player
+    last_edited = nil
+    end_stroke()
+
+  test "it only turns on with a block tool":
+    state.player.tool = CODE_MODE
+    state.set_create_mode true
+    check CREATE_MODE notin state.local_flags
+    state.player.tool = BLUE_BLOCK
+    state.set_create_mode true
+    check CREATE_MODE in state.local_flags
+    state.set_create_mode true
+    check CREATE_MODE in state.local_flags
+    state.set_create_mode false
+    check CREATE_MODE notin state.local_flags
+
+  test "pressing the selected color again toggles it":
+    state.player.tool = RED_BLOCK
+    state.select_or_modify RED_BLOCK
+    check CREATE_MODE in state.local_flags
+    state.select_or_modify RED_BLOCK
+    check CREATE_MODE notin state.local_flags
+
+  test "leaving block mode turns it off":
+    state.player.tool = BLUE_BLOCK
+    state.set_create_mode true
+    state.player.tool = GREEN_BLOCK
+    check CREATE_MODE in state.local_flags
+    state.player.tool = CODE_MODE
+    check CREATE_MODE notin state.local_flags
+
+  test "a block next to a unit starts a new one, then it turns off":
+    let unit = unit_at(0, 0, 0, vec3())
+    state.player.tool = BLUE_BLOCK
+    state.set_create_mode true
+    stroke.creating = true
+    place_at(vec3(1, 0, 0))
+    check stroke.target != unit
+    check last_edited == stroke.target
+    check vec3(1, 0, 0) notin unit
+    check CREATE_MODE notin state.local_flags
+
+  test "a block on a unit's face starts a new one":
+    let unit = unit_at(0, 0, 0, vec3())
+    state.player.tool = BLUE_BLOCK
+    state.set_create_mode true
+    anchor_stroke(STROKE_PLACE, unit.id, vec3(0, 1, 0), UP, vec3(0, 0.5, 0))
+    stroke.creating = CREATE_MODE in state.local_flags
+    unit.paint_cell(vec3(0, 1, 0), endpoint = true)
+    check vec3(0, 1, 0) notin unit
+    check stroke.target != unit
+    check stroke.target.voxel_info(vec3()).color == state.player.selected_color

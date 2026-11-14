@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=2]
+[gd_scene load_steps=25 format=2]
 
 [ext_resource path="res://components/Editor.tscn" type="PackedScene" id=1]
 [ext_resource path="res://components/Console.tscn" type="PackedScene" id=2]
@@ -15,6 +15,7 @@
 [ext_resource path="res://joystick/virtual_joystick.tscn" type="PackedScene" id=13]
 [ext_resource path="res://scenes/GUI.gdns" type="Script" id=14]
 [ext_resource path="res://themes/icons.otf" type="DynamicFontData" id=17]
+[ext_resource path="res://textures/new_unit.png" type="Texture" id=18]
 
 [sub_resource type="ButtonGroup" id=1]
 
@@ -111,6 +112,15 @@ margin_right = 1174.0
 margin_bottom = 50.0
 group = SubResource( 1 )
 icon = null
+
+[node name="Button-new" parent="Toolbar" instance=ExtResource( 3 )]
+margin_left = 1178.0
+margin_right = 1228.0
+margin_bottom = 50.0
+hint_tooltip = "Start a new unit with the next block"
+group = null
+icon = ExtResource( 18 )
+size_scale = 0.6
 
 [node name="HBoxContainer" type="HBoxContainer" parent="."]
 anchor_right = 1.0
