@@ -43,6 +43,12 @@ proc warn_about_save(self: Build) =
       "Use `var spot = pen` to save and `pen = spot` to restore. ",
       "See https://getenu.com/docs/api/enu_api.html"
 
+register_level_reset(
+  proc() =
+    save_points.clear
+    warned_about_save.clear
+)
+
 proc save*(self: Build, name = "default") {.deprecated: "use `var spot = pen`".} =
   ## Deprecated: use `var spot = pen`.
   self.warn_about_save

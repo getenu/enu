@@ -53,6 +53,13 @@ proc init*(
 proc vm(self: ScriptCtx): PCtx =
   PCtx(self.interpreter.get_graph.vm)
 
+proc vm_size*(i: Interpreter): tuple[code: int, heap_bytes: int, modules: int] =
+  ## How much a long-lived VM has grown: its bytecode, its heap, and the
+  ## modules its graph has compiled.
+  let g = i.get_graph
+  let c = PCtx(g.vm)
+  (c.code.len, c.mem.bytes_in_use, g.ifaces.len)
+
 proc pause*(ctx: ScriptCtx) =
   ## Park the script once the current host call returns. See `after_host_call`.
   ctx.pause_requested = true
