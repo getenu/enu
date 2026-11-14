@@ -95,4 +95,7 @@ suite "A level saved by 0.2.2":
       check block_color_at(manual.at(i)) == manual_colors[i div 3]
       i += 3
 
+  test "scripts can use the renamed maze":
+    check maze.id == "build_maze"
+
 test_summary()
