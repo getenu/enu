@@ -378,18 +378,28 @@ proc run_integration_tests() =
       echo "FAIL: the statement after the failed eval didn't run"
       quit 1
 
-  test "eval player.position = vec3(0, 5, -30)":
+  test "eval player.position = ... sticks":
+    # #50: a scripted teleport raced the player node's per-frame transform
+    # write and snapped back. The race needs the node to be writing (a
+    # settling player), so this doesn't reliably reproduce it here; it checks
+    # that teleports land.
     var s = open_session()
     defer:
       s.close()
     s.connect_session()
-    let resp = s.do_call_tool(
-      "eval",
-      %*{"code": "player.position = vec3(0, 5, -30)"},
-      timeout_ms = 30000,
-    )
-    let text = resp.tool_text
-    echo "(result: '" & text & "') "
+    for i in 1 .. 4:
+      let x = if i mod 2 == 0: 0 else: 20
+      discard s.do_call_tool(
+        "eval",
+        %*{"code": "player.position = vec3(" & $x & ", 5, -30)"},
+        timeout_ms = 30000,
+      )
+      sleep 700
+      let text =
+        s.do_call_tool("eval", %*{"code": "player.position.x"}).tool_text
+      if abs(text.parse_float - x.float) > 0.5:
+        echo "FAIL: teleport " & $i & " to x " & $x & " reverted to x " & text
+        quit 1
 
   test "set_position moves MCP bot (no id = default bot)":
     var s = open_session()
