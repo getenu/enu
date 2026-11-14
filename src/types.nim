@@ -778,6 +778,12 @@ type
     pending_renames*: HashSet[string]
       ## New ids of renamed prototypes the file watcher hasn't loaded yet.
     rename_dependents*: seq[Thing]
+    base_module_names*: HashSet[string]
+      ## What `module_names` held once the base API loaded; a level switch
+      ## that keeps the VM goes back to it.
+    first_level_handle*: int
+      ## The first handle a level's things got. Earlier ones (the player)
+      ## outlive a level switch.
       ## Scripts that use a renamed prototype, or failed while one was
       ## pending. They run again once it's loaded under its new name.
     watch_files_at*: MonoTime

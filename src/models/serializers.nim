@@ -10,6 +10,7 @@ import models/voxels
 import controllers/script_controllers/scripting
 import controllers/script_controllers/vars
 import libs/eval
+from pkg/compiler/ast import new_int_node, TNodeKind
 
 proc to_json_hook(self: Vector3): JsonNode =
   %[self.x, self.y, self.z]
@@ -1215,6 +1216,38 @@ proc run_state_initializers*(worker: Worker) =
   except VMQuit as e:
     state.err(e.msg)
 
+  worker.active_thing = nil
+
+proc reset_level_vm_state*(worker: Worker) =
+  ## Forget what the last level left in a VM that's kept for the next one: its
+  ## modules, its things' handles, and the base API's per-level state.
+  for name in worker.module_names:
+    if name notin worker.base_module_names:
+      worker.interpreter.reset_module(name)
+  worker.module_names = worker.base_module_names
+  worker.renaming.clear()
+  worker.pending_renames.clear()
+  worker.rename_dependents = @[]
+
+  for handle in worker.first_level_handle ..< worker.handle_things.len:
+    let thing = worker.handle_things[handle]
+    if not thing.is_nil:
+      worker.thing_handles.del thing
+      worker.handle_things[handle] = nil
+
+  let reset_proc =
+    worker.interpreter.select_routine("reset_level_state", "core")
+  assert not reset_proc.is_nil, "reset_level_state not found in core"
+  assert worker.active_thing.is_nil, "active_thing should be nil at this point"
+  worker.active_thing = state.player
+  state.player.script_ctx.fuel = script_fuel
+  try:
+    {.gcsafe.}:
+      discard worker.interpreter.call_routine(
+        reset_proc, [new_int_node(nkIntLit, worker.first_level_handle)]
+      )
+  except VMQuit as e:
+    state.err(e.msg)
   worker.active_thing = nil
 
 proc unload_level*(worker: Worker) =
