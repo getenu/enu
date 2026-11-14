@@ -1,4 +1,4 @@
-import std/[tables, bitops, times, options, sets, hashes, os]
+import std/[tables, bitops, times, options, sets, hashes, os, math, monotimes]
 import pkg/godot except print, Color
 import
   godotapi/[
@@ -13,6 +13,17 @@ const
   highlight_glow = 1.0
   default_glow = 0.0
   error_flash_time = 0.5.seconds
+  PULSE_LOW = 0.1
+  PULSE_HIGH = 0.5
+  PULSE_PERIOD = 2.0
+    ## Seconds per cycle of the glow on a unit that's selected (code mode)
+    ## or will take the next block.
+
+proc pulse_glow(): float =
+  ## The selection glow right now, shared by every unit so they pulse together.
+  let seconds = get_mono_time().ticks.float / 1e9
+  let wave = 0.5 - 0.5 * cos(2 * PI * seconds / PULSE_PERIOD)
+  PULSE_LOW + (PULSE_HIGH - PULSE_LOW) * wave
 
 # Material iteration reads the terrain node's own slots (bounded by the
 # engine's MAX_MATERIALS = 8), never the (dynamically growing) library and
@@ -160,6 +171,9 @@ gdobj BuildNode of VoxelTerrain:
 
     self.tracked_delta_seqs[fc] = zid
 
+  proc selected(): bool =
+    HIGHLIGHT in self.model.local_flags or JOIN_TARGET in self.model.local_flags
+
   proc set_glow(glow: float) =
     self.each_material(i, m):
       m.set_shader_param("emission_energy", glow.to_variant)
@@ -176,13 +190,12 @@ gdobj BuildNode of VoxelTerrain:
           "emission", self.model.shared.emission_colors[i].to_variant
         )
 
-      if HIGHLIGHT in self.model.local_flags or
-          JOIN_TARGET in self.model.local_flags or
-          (
-            HIGHLIGHT_ERROR in self.model.global_flags and
-            self.error_highlight_on
-          ):
+      if HIGHLIGHT_ERROR in self.model.global_flags and self.error_highlight_on:
         m.set_shader_param("emission_energy", highlight_glow.to_variant)
+      elif self.selected:
+        m.set_shader_param(
+          "emission_energy", max(self.model.glow, pulse_glow()).to_variant
+        )
       else:
         m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
@@ -649,6 +662,10 @@ gdobj BuildNode of VoxelTerrain:
         self.error_highlight_on = not self.error_highlight_on
         self.toggle_error_highlight_at = get_mono_time() + error_flash_time
         self.set_highlight()
+      elif self.selected and not (
+        HIGHLIGHT_ERROR in self.model.global_flags and self.error_highlight_on
+      ):
+        self.set_glow(max(self.model.glow, pulse_glow()))
 
       # Opt-in perf sampling (ENU_PERF_LOG): per-terrain cumulative counters.
       # `meshed` counts pipeline meshes actually applied — the number prefill
