@@ -38,14 +38,14 @@ suite "Which unit a block joins":
     last_edited = unit_at(0, 0, 0, vec3())
     check join_target(nil, vec3(4, 0, 0)).is_nil
 
-  test "the last edited unit wins within 3 cells":
+  test "the last edited unit wins within 2 cells":
     discard unit_at(0, 0, 0, vec3())
-    last_edited = unit_at(3, 0, 3, vec3())
+    last_edited = unit_at(3, 0, 2, vec3())
     check join_target(nil, vec3(1, 0, 0)) == last_edited
 
-  test "past 3 cells, a touching unit wins":
+  test "past 2 cells, a touching unit wins":
     let touching = unit_at(0, 0, 0, vec3())
-    last_edited = unit_at(5, 0, 0, vec3())
+    last_edited = unit_at(4, 0, 0, vec3())
     check join_target(nil, vec3(1, 0, 0)) == touching
 
   test "the unit touching the most faces wins":
