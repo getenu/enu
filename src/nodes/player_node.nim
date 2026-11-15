@@ -456,7 +456,7 @@ gdobj PlayerNode of KinematicBody:
   proc update_raycast*() =
     if not ?self.camera or not ?self.aim_target:
       return
-    let ray_length = if state.player.tool == CODE_MODE: 200.0 else: 100.0
+    let ray_length = if state.player.tool in CODE_TOOLS: 200.0 else: 100.0
     if MOUSE_CAPTURED notin state.local_flags:
       let
         mouse_pos =

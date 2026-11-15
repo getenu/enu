@@ -276,11 +276,30 @@ proc toggle_create_mode*(self: GameState) =
   self.set_create_mode CREATE_MODE notin self.local_flags
 
 proc select_or_modify*(self: GameState, tool: Tools) =
-  ## Select `tool`, or toggle its modifier if it's already selected.
-  if tool == self.player.tool:
-    self.toggle_create_mode
+  ## Select `tool`'s toolbar button. If it's already selected, toggle create
+  ## mode, or bring down the next code tool.
+  if tool == self.player.tool.slot:
+    if tool in BLOCK_TOOLS:
+      self.toggle_create_mode
+    elif tool == CODE_MODE:
+      self.player.turn_code_stack(up = true)
   else:
-    self.player.select_tool tool
+    self.player.select_tool(if tool == CODE_MODE: code_tools()[0] else: tool)
+
+proc stack_up*(self: GameState) =
+  ## Turn create mode on, or bring down the next code tool.
+  if self.player.tool in BLOCK_TOOLS:
+    self.set_create_mode true
+  elif self.player.tool in CODE_TOOLS:
+    self.player.turn_code_stack(up = true)
+
+proc stack_down*(self: GameState) =
+  ## Turn create mode off, or bring down the code tool from the top of the
+  ## stack.
+  if self.player.tool in BLOCK_TOOLS:
+    self.set_create_mode false
+  elif self.player.tool in CODE_TOOLS:
+    self.player.turn_code_stack(up = false)
 
 proc empty_bounds*(): AABB {.inline.} =
   ## The "no chunks yet" sentinel. Its size is negative, so it can't be fed
@@ -777,7 +796,7 @@ proc remove_if_empty(self: Build) =
 proc remove(self: Build) =
   if not self.editable:
     return
-  if state.player.tool notin {Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool notin CODE_TOOLS + {Tools.NONE, PLACE_BOT}:
     let cell = (self.target_point - self.target_normal * 0.5).floor
     anchor_stroke(
       STROKE_REMOVE, self.id, cell, self.target_normal, self.target_point
@@ -790,7 +809,7 @@ proc fire(self: Build) =
   # Full transform, not global_from: on a rotated platform the origin-only sum
   # drops the rotation, so the dropped bot lands blocks from the aim target.
   let global_point = self.target_point.world_from(self)
-  if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool notin CODE_TOOLS + {DISABLED, Tools.NONE, PLACE_BOT}:
     let cell = (self.target_point + (self.target_normal * 0.5)).floor
     anchor_stroke(
       STROKE_PLACE, self.id, cell, self.target_normal, self.target_point
@@ -811,7 +830,7 @@ proc stroke_frame*(self: Build) =
   ## Per-frame stroke continuation while a button is held and the ray is on
   ## this build: paint the aimed cell if it's on the stroke's plane,
   ## otherwise charge the dwell timer toward re-anchoring here.
-  if state.player.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool in CODE_TOOLS + {DISABLED, Tools.NONE, PLACE_BOT}:
     return
   if stroke.unit_id == self.id and self.target_normal.is_axis_aligned:
     let inside = (self.target_point - self.target_normal * 0.5).floor

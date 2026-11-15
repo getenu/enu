@@ -19,6 +19,24 @@ const groups =
     {RETICLE_VISIBLE, BLOCK_TARGET_VISIBLE},
   ]
 
+const
+  BLOCK_TOOLS* = {BLUE_BLOCK .. BROWN_BLOCK}
+  CODE_TOOLS* = {CODE_MODE, MOVE_TOOL, LIFT_TOOL, TURN_TOOL}
+    ## The tools that share the code tool's place in the toolbar.
+
+var code_stack {.threadvar.}: seq[Tools]
+
+proc code_tools*(): seq[Tools] =
+  ## CODE_TOOLS in toolbar order: the first is in the toolbar, the rest are
+  ## stacked above it, bottom to top.
+  if code_stack.len == 0:
+    code_stack = @[CODE_MODE, MOVE_TOOL, LIFT_TOOL, TURN_TOOL]
+  code_stack
+
+proc slot*(tool: Tools): Tools =
+  ## The toolbar button `tool` is shown on.
+  if tool in CODE_TOOLS: CODE_MODE else: tool
+
 proc resolve_flags*(
     self: GameState, wants: seq[LocalStateFlags]
 ): set[LocalStateFlags] =
@@ -33,9 +51,9 @@ proc resolve_flags*(
 
   # Flags resolve before the worker creates this instance's player.
   let player = self.player
-  # CODE_MODE and NONE (no tool) don't target blocks: hide the block target and
+  # The code tools and NONE (no tool) don't target blocks: hide the block target and
   # keep the reticle up, like play mode.
-  if ?player and player.tool in {CODE_MODE, NONE}:
+  if ?player and player.tool in CODE_TOOLS + {Tools.NONE}:
     for flag in groups[1]:
       result.excl(flag)
     result.incl(RETICLE_VISIBLE)
@@ -141,8 +159,6 @@ proc set_flag*(self: Player, flag: PlayerFlags, value: bool) =
 proc toggle_flag*(self: Player, flag: PlayerFlags) =
   self.set_flag flag, flag notin self.flags
 
-const BLOCK_TOOLS* = {BLUE_BLOCK .. BROWN_BLOCK}
-
 type CreateChoice* = enum
   CREATE_AUTO ## the join rules decide whether a block starts a new unit
   CREATE_ON ## turned on by hand: the next block starts a new unit
@@ -159,13 +175,42 @@ proc selected_color*(self: Player): Color =
   if self.tool in BLOCK_TOOLS:
     self.tool_colors[ord(self.tool) - ord(BLUE_BLOCK)]
   else:
-    ACTION_COLORS[Colors(ord self.tool)]
+    ACTION_COLORS[ERASER]
 
 proc select_tool*(self: Player, tool: Tools) =
   ## Make `tool` active, but only when it's available. Selecting an
   ## unavailable tool is a no-op so the player can't pick a hidden tool.
-  if tool in self.tools:
+  ## The code tools are available with the code tool.
+  if tool.slot in self.tools:
+    if tool in CODE_TOOLS:
+      let tools = code_tools()
+      let i = tools.find(tool)
+      code_stack = tools[i ..^ 1] & tools[0 ..< i]
     self.tool = tool
+
+proc update_action_index*(state: GameState, change: int) =
+  # Cycle through the available tools only, skipping NONE/DISABLED and any tool
+  # the scripts have hidden. The code tools share one stop.
+  let available = to_seq(CODE_MODE .. PLACE_BOT).filter_it(it in state.player.tools)
+  if available.len == 0:
+    return
+
+  var index = available.find(state.player.tool.slot)
+  if index == -1:
+    # Not currently on an available tool (e.g. NONE) — step in from the edge.
+    index = if change >= 0: -1 else: 0
+  index = (index + change) mod available.len
+  if index < 0:
+    index += available.len
+
+  let tool = available[index]
+  state.player.tool = if tool == CODE_MODE: code_tools()[0] else: tool
+
+proc turn_code_stack*(self: Player, up: bool) =
+  ## Bring the next code tool down into the toolbar, sending the one there
+  ## to the top of the stack; or, going down, the reverse.
+  let tools = code_tools()
+  self.select_tool(if up: tools[1] else: tools[^1])
 
 proc init_logger*(self: GameState) =
   self.logger = proc(level, msg: string) {.closure.} =

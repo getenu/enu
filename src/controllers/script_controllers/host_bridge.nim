@@ -813,7 +813,8 @@ proc `running=`*(self: Player, value: bool) =
   self.set_flag RUNNING, value
 
 proc tool(self: Player): int =
-  int(self.tool_value.value)
+  # Scripts don't know the code tool's stack: they're all CodeMode to them.
+  int(self.tool_value.value.slot)
 
 proc `tool=`(self: Player, value: int) =
   self.tool_value.value = Tools(value)
