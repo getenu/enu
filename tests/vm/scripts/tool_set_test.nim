@@ -23,6 +23,10 @@ for tool in p.tools:
   seen.add tool
 assert seen == @[BlueBlock, RedBlock]
 
+p.tools = {PlaceBot, CodeMode}
+assert PlaceBot in p.tools and CodeMode in p.tools
+assert BlueBlock notin p.tools and RedBlock notin p.tools
+
 p.tools.clear()
 assert p.tools.len == 0
 assert BlueBlock notin p.tools

@@ -245,6 +245,16 @@ proc setup_mock_functions(interp: Interpreter) =
     proc(args: VmArgs) =
       {.cast(gcsafe).}:
         mock_tools = {}
+  interp.implement_routine pkg,
+    "players",
+    "tools_assign_impl",
+    proc(args: VmArgs) =
+      {.cast(gcsafe).}:
+        mock_tools = {}
+        let tools = args.get_int(1)
+        for tool in 0'u8 .. 7'u8:
+          if (tools and (1 shl tool)) != 0:
+            mock_tools.incl tool
 
   # Toolbar colors: the VM's own Color nodes, stored and handed back as-is.
   # `index` is arg 1, `color` arg 2.
