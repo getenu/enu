@@ -6,7 +6,7 @@ import
     input_event_joypad_button, input_event_mouse_motion,
     input_event_mouse_button, input_event_pan_gesture, global_constants,
   ]
-import core, nodes/player_node, gdutils
+import core, nodes/player_node, gdutils, models/thing_tools
 import std/times
 
 const
@@ -222,6 +222,10 @@ gdobj GUI of Control:
 
   method unhandled_input*(event: InputEvent) =
     if TEST_MODE in state.local_flags:
+      return
+    if ?held and event.is_action_pressed("ui_cancel"):
+      put_back()
+      self.get_tree().set_input_as_handled()
       return
     if COMMAND_MODE notin state.local_flags and
         event.is_action_pressed("ui_cancel") and

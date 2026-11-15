@@ -41,7 +41,10 @@ proc handle_catchable_error(self: Worker, thing: Thing, e: ref Exception) =
 
 proc advance_thing(self: Worker, thing: Thing, timeout: MonoTime): bool =
   let ctx = thing.script_ctx
-  if ?ctx and ctx.running:
+  if ?ctx and ctx.running and HELD in thing.global_flags:
+    # Waits while a player holds it, picking up where it was after.
+    ctx.last_ran = get_mono_time()
+  elif ?ctx and ctx.running:
     if ASAP_MODE notin thing.global_flags:
       thing.current_line = ctx.current_line.line.int
     if thing of Build:
@@ -336,6 +339,15 @@ proc watch_code(self: Worker, thing: Thing) =
           remove_file thing.script_ctx.script
         else:
           thing.write_script_file(change.item.nim)
+
+  thing.placed_value.changes:
+    if added:
+      # Move the start transform with it, so it starts where it was put.
+      let placed = change.item
+      let moved = placed.after * placed.before.affine_inverse
+      thing.start_transform = moved * thing.start_transform
+      thing.transform = placed.after
+      thing.global_flags += DIRTY
 
   thing.eval_value.changes:
     if added or touched and change.item != "":

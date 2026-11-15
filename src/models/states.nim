@@ -21,8 +21,13 @@ const groups =
 
 const
   BLOCK_TOOLS* = {BLUE_BLOCK .. BROWN_BLOCK}
-  CODE_TOOLS* = {CODE_MODE, MOVE_TOOL, LIFT_TOOL, TURN_TOOL}
+  THING_TOOLS* = {MOVE_TOOL, LIFT_TOOL, TURN_TOOL}
+    ## The tools that pick a thing up and put it down somewhere else.
+  CODE_TOOLS* = {CODE_MODE} + THING_TOOLS
     ## The tools that share the code tool's place in the toolbar.
+
+var held* {.threadvar.}: Thing
+  ## The thing a move, lift or turn tool has picked up.
 
 var code_stack {.threadvar.}: seq[Tools]
 
@@ -51,9 +56,11 @@ proc resolve_flags*(
 
   # Flags resolve before the worker creates this instance's player.
   let player = self.player
-  # The code tools and NONE (no tool) don't target blocks: hide the block target and
-  # keep the reticle up, like play mode.
-  if ?player and player.tool in CODE_TOOLS + {Tools.NONE}:
+  # The code tools (but the move tool, holding something) and NONE (no tool)
+  # don't target blocks: hide the block target and keep the reticle up, like
+  # play mode.
+  if ?player and player.tool in CODE_TOOLS + {Tools.NONE} and
+      not (player.tool == MOVE_TOOL and ?held):
     for flag in groups[1]:
       result.excl(flag)
     result.incl(RETICLE_VISIBLE)

@@ -182,7 +182,8 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
 
     if HOVER.added:
       state.push_flag RETICLE_VISIBLE
-      if state.player.tool in {CODE_MODE, PLACE_BOT}:
+      if state.player.tool in {CODE_MODE, PLACE_BOT} or
+          (state.player.tool in THING_TOOLS and held.is_nil):
         let root = self.find_root(true)
         root.walk_tree proc(thing: Thing) =
           thing.local_flags += HIGHLIGHT

@@ -1280,7 +1280,10 @@ method main_thread_joined*(self: Build) =
   self.setup_packed_chunk_watches()
 
   self.local_flags.watch:
-    if HOVER.added and state.player.tool == CODE_MODE:
+    if HOVER.added and (
+      state.player.tool == CODE_MODE or
+      (state.player.tool in THING_TOOLS and held.is_nil)
+    ):
       if PLAYING notin state.player.flags and
           TOUCH_CONTROLS notin state.local_flags and (
             LOCK notin self.find_root.global_flags or GOD in state.player.flags
