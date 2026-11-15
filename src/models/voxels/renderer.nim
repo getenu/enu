@@ -333,6 +333,7 @@ proc erase_chunk_direct*(voxel_tool: VoxelTool, chunk_id: Vector3) =
   voxel_tool.paste(chunk_min, buffer, 1, 0)
 
 const ASAP_PASTE_INTERVAL = init_duration(seconds = 2)
+const ASAP_SETTLE_TIME = init_duration(milliseconds = 100)
 
 proc init*(
     _: type VoxelRenderer,
@@ -436,6 +437,7 @@ proc buffer_snapshot*(
       )
       inc result
   self.dirty = true
+  self.last_write_time = get_mono_time()
 
 proc buffer_delta*(
     self: VoxelRenderer, chunk_id: Vector3, delta: DeltaUpdate
@@ -460,6 +462,7 @@ proc buffer_delta*(
       )
       inc result
   self.dirty = true
+  self.last_write_time = get_mono_time()
 
 proc begin_asap*(self: VoxelRenderer) =
   # If a previous cycle's buffer wasn't pasted yet, paste it now
@@ -495,14 +498,19 @@ proc buffer_erase*(self: VoxelRenderer, chunk_id: Vector3) =
           continue
         self.buffer.set_voxel(0, pos.x.int64, pos.y.int64, pos.z.int64)
   self.dirty = true
+  self.last_write_time = get_mono_time()
 
-proc tick*(self: VoxelRenderer, is_local: bool) =
+proc tick*(self: VoxelRenderer, is_local: bool, eager = false) =
   ## Periodic paste for local ASAP mode only (visual progress feedback).
   ## Remote ASAP buffers without periodic paste - final paste via end_asap().
+  ## `eager` is for when nobody can see the drawing yet: rather than wait out
+  ## the interval, paste once the buffer stops changing, since every paste
+  ## remeshes all of it.
   if self.asap_active and is_local:
     let now = get_mono_time()
     let elapsed = now - self.last_paste_time
-    if elapsed >= ASAP_PASTE_INTERVAL and ?self.buffer and self.dirty:
+    let settled = eager and now - self.last_write_time >= ASAP_SETTLE_TIME
+    if (settled or elapsed >= ASAP_PASTE_INTERVAL) and ?self.buffer and self.dirty:
       # The clock only advances when something pastes: an empty tick must
       # not consume begin_asap's backdate, or the run's first content ends
       # up waiting for end_asap — recognized a full sleep-park after the
