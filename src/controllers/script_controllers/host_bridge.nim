@@ -845,6 +845,14 @@ proc tools_excl(self: Player, tool: int) =
 proc tools_clear(self: Player) =
   self.tools.clear()
 
+proc tools_assign(self: Player, tools: int) =
+  ## One write, so the toolbar sees only what changed.
+  var value: set[Tools]
+  for tool in CODE_MODE .. PLACE_BOT:
+    if (tools and (1 shl ord(tool))) != 0:
+      value.incl tool
+  self.tools.value = value
+
 proc check_tool_color_index(index: int) =
   if index notin 0 .. DEFAULT_TOOL_COLORS.high:
     raise ValueError.init(
@@ -1824,7 +1832,7 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,
     `can_fly=`, boost, tool, `tool=`,
-    tools_has, tools_incl, tools_excl, tools_clear, tool_color, set_tool_color,
+    tools_has, tools_incl, tools_excl, tools_clear, tools_assign, tool_color, set_tool_color,
     coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log
