@@ -672,7 +672,9 @@ gdobj BuildNode of VoxelTerrain:
 
       let is_local = self.model.code.owner == state.worker_ctx_name
       let tick_start = get_mono_time()
-      self.renderer.tick(is_local)
+      # Behind the loading splash nobody sees the drawing progress, and the
+      # spawn gate is waiting on it.
+      self.renderer.tick(is_local, eager = SPAWN_HELD in state.local_flags)
       flush_registry()
       let tick_took = (get_mono_time() - tick_start).in_milliseconds
       if tick_took > 10:
@@ -696,7 +698,9 @@ gdobj BuildNode of VoxelTerrain:
           # coming, and an unbounded floor there is a wedge — a build that
           # published 1 and then went quiet held the whole spawn gate to its
           # timeout, splash up, with the level fully loaded behind it.
-          if get_mono_time() < self.stream_floor_until:
+          if self.out_of_view():
+            discard
+          elif get_mono_time() < self.stream_floor_until:
             pending = max(pending, 1)
           elif not self.stream_floor_expired:
             self.stream_floor_expired = true
@@ -712,6 +716,20 @@ gdobj BuildNode of VoxelTerrain:
           pending.inc
         if pending != self.model.pending_block_updates:
           self.model.pending_block_updates = pending
+
+  proc out_of_view(): bool =
+    ## Every paired viewer that wants meshes has worked out what it needs from
+    ## this terrain, and it's nothing: the build is out of range, so its stream
+    ## won't start until someone comes closer.
+    let viewers = self.get_debug_paired_viewers()
+    for i in 0 ..< viewers.len - 1: # the last entry is the terrain's bounds
+      let viewer = viewers[i].as_dictionary
+      if viewer["requires_meshes"].as_bool and
+          viewer["view_distance_voxels"].as_int > 0:
+        let size = viewer["mesh_box_size"].as_vector3
+        if size.x > 0 and size.y > 0 and size.z > 0:
+          return false
+        result = true
 
   proc publishes_pending(): bool =
     ## Whether this machine's node is the authority for the build's synced
