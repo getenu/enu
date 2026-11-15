@@ -1250,11 +1250,10 @@ method main_thread_joined*(self: Build) =
 method on_collision*(self: Build, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)
 
-method off_collision*(self: Thing, partner: Model) =
-  if self.collisions.valid:
-    for collision in self.collisions.value.dup:
-      if collision.id == partner.id:
-        self.collisions -= collision
+method off_collision*(self: Build, partner: Model) =
+  for collision in self.collisions.dup:
+    if collision.id == partner.id:
+      self.collisions -= collision
 
 method clone*(self: Build, clone_to: Thing, id: string): Thing =
   var transform = clone_to.transform
