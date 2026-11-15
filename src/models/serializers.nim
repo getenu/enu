@@ -706,6 +706,14 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
       if has_script:
         thing.code = Code.init(read_file(thing.script_ctx.script))
 
+      # A script that replayed a bake during its load staged the frames
+      # rather than publishing them. Publish them now, so ed ordering
+      # delivers them ahead of LOAD_SCREEN's removal and the spawn gate
+      # waits on them, and so playback never shows a frame missing chunks.
+      thing.walk_tree proc(thing: Thing) =
+        if thing of Build and ?Build(thing).voxels:
+          Build(thing).voxels.flush_dirty_chunks()
+
       let took = (get_mono_time() - unit_started).in_milliseconds
       if took > 100:
         info "slow unit load", thing_id, ms = took
