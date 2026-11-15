@@ -78,6 +78,7 @@ var enu_process {.threadvar.}: Process
 var managed_pid: int
   ## Its pid, for the exit hook (which can run on any thread).
 var exit_hook_added: bool
+var managed_workdir {.threadvar.}: string
 
 const exe_ext = when defined(windows): ".exe" else: ""
 
@@ -137,6 +138,9 @@ proc terminate_managed() =
       discard enu_process.wait_for_exit()
     enu_process.close()
     enu_process = nil
+  if managed_workdir != "":
+    remove_dir managed_workdir
+    managed_workdir = ""
 
 proc disconnect*(_: type Enu) =
   ## Drop the client connection. If we launched the Enu (via launch_and_connect)
@@ -201,17 +205,26 @@ proc launch_and_connect*(
   ## minimized), connect to it, and return its "host:port" address. The instance
   ## is ours: `disconnect` (or process exit) kills it. `world` is required.
   ## `temp_workdir` runs against a throwaway copy of the world (for tests) so the
-  ## source is never modified.
+  ## source is never modified. Otherwise the world is edited in place, but the
+  ## instance keeps its settings in a private dir so it can't overwrite the
+  ## user's config. A relative `world` is taken from the current directory.
   if world == "":
     raise ValueError.init("launch_and_connect requires a world")
   Enu.disconnect
   let
     address = "127.0.0.1:" & $free_port()
+    port = address.split(':')[^1]
     spec = launch_spec()
+    workdir_flags =
+      if temp_workdir:
+        @["--temp-workdir"]
+      else:
+        managed_workdir =
+          get_temp_dir() / ("enu-mcp-" & $get_current_process_id() & "-" & port)
+        @["--workdir", managed_workdir]
     flags =
-      @["--world", world] & (if ?level: @["--level", level] else: @[]) &
-      @["--listen", address, "--minimized"] &
-      (if temp_workdir: @["--temp-workdir"] else: @[]) &
+      @["--world", absolute_path(world)] & (if ?level: @["--level", level] else: @[]) &
+      @["--listen", address, "--minimized"] & workdir_flags &
       # it quits if we die without cleaning up (a crash, kill -9)
       @["--exit-with", $get_current_process_id()]
     log = get_temp_dir() / "enu_managed.log"
