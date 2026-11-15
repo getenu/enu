@@ -40,9 +40,41 @@ proc client*(_: type Enu, address = "", mode = PARTIAL, id = ""): EdClient =
     enu_client = EdClient(id: id, address: resolved, mode: mode)
   enu_client
 
+var root_things {.threadvar.}: EdSeq[Thing]
+  ## Held for the session. Without a live reference the evictor reclaims it
+  ## between calls, and fetching it again brings every unit with it — tens of
+  ## MB, and seconds even on an idle machine.
+
+const ROOT_THINGS_TIMEOUT = 60.seconds
+
 proc things*(_: type Enu): EdSeq[Thing] =
-  ## The level's top-level things, via this thread's client.
-  EdSeq[Thing](enu_client.ctx["root_things"])
+  ## The level's top-level things, via this thread's client. The first call
+  ## in a session waits for them to arrive.
+  let ctx = enu_client.ctx
+  if ?root_things and not root_things.destroyed and root_things.ctx == ctx:
+    return root_things
+  # Not a blocking read: that gives up after a few seconds, which a busy
+  # machine can need just to send the units.
+  let deadline = get_mono_time() + ROOT_THINGS_TIMEOUT
+  var pending = ctx.fetch("root_things")
+  while true:
+    discard enu_client.tick_until(
+      deadline - get_mono_time(), pending.state != Pending
+    )
+    if pending.state == Found:
+      break
+    if get_mono_time() >= deadline:
+      raise KeyError.init(
+        "Enu didn't send its things within " & $ROOT_THINGS_TIMEOUT &
+          " (fetch " & $pending.state & ")"
+      )
+    # NotFound: Enu always has them, so the link dropped (a long level load
+    # can hold Enu's worker past the connection timeout). Ask again once
+    # it's back.
+    discard enu_client.tick_until(250.milliseconds, false)
+    pending = enu_client.ctx.fetch("root_things")
+  root_things = EdSeq[Thing](pending.obj)
+  root_things
 
 proc find_thing*(_: type Enu, id: string): Thing =
   ## The root thing with this `id`, or nil if there's no match.
@@ -162,6 +194,7 @@ proc disconnect*(_: type Enu) =
       if Ed.thread_ctx == ctx:
         Ed.thread_ctx = EdContext.init()
     enu_client = nil
+  root_things = nil
 
 proc connect*(_: type Enu, address = "", id = ""): bool {.discardable.} =
   ## Attach to a running Enu at `address` (else $ENU_CONNECT_ADDRESS, else
@@ -197,7 +230,7 @@ proc launch_and_connect*(
     world: string,
     level = "",
     id = "",
-    timeout = 30.seconds,
+    timeout = 90.seconds,
     temp_workdir = false,
 ): string =
   ## Launch a private Enu opening `world` (a path) at level `level` (a name;
@@ -249,10 +282,12 @@ proc launch_and_connect*(
         if managed_pid > 0:
           discard posix.kill(Pid(managed_pid), SIGTERM)
   # Retry until the launched Enu boots and answers; each attempt is bounded by
-  # the client's connect_timeout.
+  # the client's connect_timeout. A busy machine can take most of a minute to
+  # boot it, so give up early only if it exits.
   Enu.client(address = address, id = id).connect
   discard Enu.client.tick_until(
-    timeout, Enu.client.connected or Enu.client.refusal != ""
+    timeout,
+    Enu.client.connected or Enu.client.refusal != "" or not enu_process.running,
   )
   if not Enu.client.connected:
     let refusal = Enu.client.refusal
