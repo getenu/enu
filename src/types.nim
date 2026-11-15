@@ -140,6 +140,9 @@ type
 
   FrameOrder* = object
     ids*: seq[int]
+    unvisited*: seq[int]
+      ## Ids of frames the script hasn't moved to yet. Moving to one first
+      ## gives it the manual blocks of the nearest visited frame before it.
 
 type
   EnuError* = object of CatchableError
@@ -547,6 +550,9 @@ type
       ## Host-local: the id the next new frame gets. Ids are never reused
       ## while the build lives; they aren't saved.
     saved_frames_hash*: Hash
+    run_from_frame*: Option[int]
+      ## Host-local: the frame on screen when this run started, which the
+      ## run's first move to a new frame takes its blocks from.
     bakes*: Table[string, BakeEntry]
       ## Host-local: what each `bake` key drew, so a run can replay it.
     baking*: seq[BakeCapture]

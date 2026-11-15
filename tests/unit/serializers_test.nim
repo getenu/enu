@@ -245,7 +245,7 @@ suite "Frame Serialization":
     check build.id notin json["edits"]
     check json["frames"]["count"].get_int == 3
     check json["frames"]["edits"].len == 3
-    check json["frames"]["edits"][2].len == 1
+    check json["frames"]["edits"][2].len == 3 # carried from frames 0 and 1
 
     let restored = Build.init(id = "build_frames_inline")
     restored.load_frames(json)
@@ -258,6 +258,22 @@ suite "Frame Serialization":
     for index in 0 ..< 3:
       check restored.voxels.frame_edits(restored.frame_order.ids[index]).chunks ==
         build.voxels.frame_edits(build.frame_order.ids[index]).chunks
+
+  test "frames not yet moved to stay that way":
+    let build = Build.init(id = "build_frames_unvisited")
+    build.draw(vec3(0, 0, 0), (PERSISTED, ACTION_COLORS[RED]))
+    build.go_to_frame(3)
+    build.voxels.flush_edits_for_save()
+    let json = parse_json(build.to_json_string(frame_files = false))
+    check json["frames"]["unvisited"] == %*[1, 2]
+
+    let restored = Build.init(id = "build_frames_unvisited")
+    restored.load_frames(json)
+    restored.restore_edits
+    restored.go_to_frame(2)
+    check restored.voxels.get_edit(vec3(0, 0, 0)) ==
+      (PERSISTED, ACTION_COLORS[RED])
+    check restored.frame_order.unvisited == @[1]
 
 suite "Bake Serialization":
   test "bakes round-trip through bakes.bin, never the JSON":

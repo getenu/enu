@@ -22,11 +22,11 @@ suite "Frame Animation":
     check me.frames.len == 1
     check me.frame == 0
 
-  test "frame = n past the end adds empty frames":
+  test "frame = n past the end adds frames":
     me.draw_voxel(spot, red)
     me.frame = 2
     check me.frames.len == 3
-    check not has_block_at(here + spot)
+    check not has_block_at(here + spot) # computed blocks aren't carried
     me.frame = 0
     check color_at(spot) == red
 
@@ -83,6 +83,41 @@ suite "Frame Animation":
   test "frames past 63 raise":
     check raises(proc() = me.frame = 64)
     check raises(proc() = discard me.frames[me.frames.len])
+
+  test "moving to a new frame carries its blocks forward":
+    me.frames.clear()
+    me.place_block(hand, red)
+    me.draw_voxel(spot, green)
+    me.frame = 1
+    check color_at(hand) == red
+    check not has_block_at(here + spot) # the script draws its own blocks
+
+  test "a new frame takes the blocks of the frame we're coming from":
+    me.place_block(vec3(4, 0, 0), blue)
+    me.frame = 4
+    check color_at(vec3(4, 0, 0)) == blue
+    check color_at(hand) == red
+    me.frame = 0
+    me.frame = 2
+    check color_at(hand) == red
+    check not has_block_at(here + vec3(4, 0, 0))
+
+  test "a frame cleared after moving to it stays empty":
+    me.frame = 3
+    me.frames[3].clear()
+    me.frame = 0
+    me.frame = 3
+    check not has_block_at(here + hand)
+
+  test "frames skipped over stay empty, and copies count as visited":
+    me.frame = 1
+    me.frames[7] = me.frames[1]
+    me.frame = 7
+    check color_at(hand) == red
+    me.frames[6] = me.frames[5]
+    me.frame = 6
+    check not has_block_at(here + hand)
+    me.frames.clear()
 
   test "play only changes the display, and the script can draw meanwhile":
     me.frames.clear()

@@ -142,6 +142,10 @@ proc load_frames*(self: Build, json: JsonNode) =
         continue
     # the current frame's blocks come with the build's restore_edits
     self.voxels.load_frame_edits(i, frame, adopt = i != current)
+  for index in meta{"unvisited"}.get_elems:
+    let i = index.get_int
+    if i in 0 ..< count and i != current:
+      order.unvisited.add i
   self.frame_order = order
   self.next_frame_id = count
   self.frame = current
@@ -440,13 +444,19 @@ proc extras_json(self: Thing, frame_files: bool): string =
   if self.in_frames(frame_files):
     let build = Build(self)
     let inline = if frame_files: "" else: build.inline_frames_json
+    var unvisited: seq[int]
+    for i, id in build.frame_order.ids:
+      if id in build.frame_order.unvisited:
+        unvisited.add i
+    let unvisited_json =
+      if unvisited.len > 0: ",\n    \"unvisited\": " & $(%unvisited) else: ""
     # Playback state (fps, loop, the displayed frame) is driven by the
     # script's `play()` and isn't saved: the live playhead churned the JSON
     # on every save, and re-running the script re-establishes it.
     result.add \""",
   "frames": {{
     "count": {build.frames_len},
-    "frame": {build.frame}{inline}
+    "frame": {build.frame}{unvisited_json}{inline}
   }}"""
   if ?self.shared and self.shared.palette.len > 0:
     # One color per line: a gradient build's palette runs to hundreds of
