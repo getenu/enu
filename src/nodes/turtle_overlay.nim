@@ -4,7 +4,7 @@ import
     viewport_container, viewport, camera, mesh_instance, surface_tool,
     array_mesh, mesh, spatial_material, spatial, environment,
   ]
-import core, models/[things, builds, colors]
+import core, models/[things, builds, colors, states]
 
 # The turtle indicator: a three-line arrow — shaft plus two barbs — from the
 # centre of the draw cell along the draw heading, rigidly attached to the
@@ -136,11 +136,15 @@ gdobj TurtleOverlay of ViewportContainer:
 
     var show = false
     let thing = state.player.coding
+    let turning =
+      ?held and state.player.tool == TURN_TOOL and ?held.node
     # Follow a draw slow enough to watch, but not an ASAP one: the turtle
     # leaps between batches. It reappears where the script left it.
-    if ?thing and thing of Build and ?thing.node and
-        {SCRIPT_RUNNING, ASAP_MODE} * thing.global_flags.value !=
-        {SCRIPT_RUNNING, ASAP_MODE}:
+    if turning or (
+      ?thing and thing of Build and ?thing.node and
+      {SCRIPT_RUNNING, ASAP_MODE} * thing.global_flags.value !=
+        {SCRIPT_RUNNING, ASAP_MODE}
+    ):
       let world_camera = self.world_viewport.get_camera()
       if ?world_camera:
         show = true
@@ -149,7 +153,15 @@ gdobj TurtleOverlay of ViewportContainer:
         self.camera.far = world_camera.far
         self.camera.global_transform = world_camera.global_transform
         self.arrow.global_transform =
-          thing.node.global_transform *
-          arrow_transform(Build(thing).turtle_transform)
+          if turning:
+            # the turn tool's held thing: which way is forward
+            var marker = held.anchor
+            marker.origin =
+              if held of Build: marker.origin + vec3(0.5, 0.5, 0.5)
+              else: marker.origin + UP
+            (held.node as Spatial).global_transform * marker
+          else:
+            thing.node.global_transform *
+              arrow_transform(Build(thing).turtle_transform)
     self.arrow.visible = show
     self.visible = show
