@@ -260,6 +260,9 @@ type
     PLACE_BOT
     NONE
     DISABLED
+    MOVE_TOOL ## Pick a unit or bot up and drop it somewhere else.
+    LIFT_TOOL ## Pick a unit or bot up and raise or lower it.
+    TURN_TOOL ## Pick a unit or bot up and turn it to face another way.
 
   TaskStates* = enum
     RUNNING

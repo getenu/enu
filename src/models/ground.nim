@@ -7,7 +7,7 @@ proc placement_cell*(self: Ground): Vector3 =
 
 proc fire(self: Ground) {.gcsafe.} =
   let point = self.placement_cell
-  if state.player.tool notin {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool notin CODE_TOOLS + {DISABLED, Tools.NONE, PLACE_BOT}:
     anchor_stroke(STROKE_PLACE, GROUND_ID, point, UP, self.target_point)
     stroke.target = next_block(join_target(self, point))
     stroke.creating = stroke.target.is_nil
@@ -20,7 +20,7 @@ proc stroke_frame*(self: Ground) =
   ## Per-frame stroke continuation while a button is held and the ray is on
   ## the ground: paint the aimed cell if the stroke is anchored here,
   ## otherwise charge the dwell timer toward re-anchoring.
-  if state.player.tool in {DISABLED, Tools.NONE, CODE_MODE, PLACE_BOT}:
+  if state.player.tool in CODE_TOOLS + {DISABLED, Tools.NONE, PLACE_BOT}:
     return
   let cell = self.placement_cell
   if stroke.unit_id == GROUND_ID and self.target_point.y == stroke.face and

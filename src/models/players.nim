@@ -34,7 +34,7 @@ proc init*(_: type Player, id = "player-" & Ed.thread_ctx.id): Player =
       self.tools.changes:
         # Lose the active tool when it's removed; stay in NONE until something
         # is explicitly selected (no auto-recovery when tools come back).
-        if removed and change.item == self.tool:
+        if removed and change.item == self.tool.slot:
           self.tool = NONE
 
       self.flags.changes:

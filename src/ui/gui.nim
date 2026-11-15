@@ -197,7 +197,7 @@ gdobj GUI of Control:
       self.get_tree().set_input_as_handled()
       self.alt_speed = false
 
-    if event of InputEventPanGesture and state.player.tool notin {CODE_MODE, PLACE_BOT}:
+    if event of InputEventPanGesture and state.player.tool notin CODE_TOOLS + {PLACE_BOT}:
       let pan = event as InputEventPanGesture
       self.pan_delta += pan.delta.y
       if self.pan_delta > 2:

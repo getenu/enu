@@ -355,23 +355,6 @@ proc init*(_: type Code, nim: string, runner = state.server_ctx_name): Code =
   let owner = if state.is_nil: runner else: state.worker_ctx_name
   Code(owner: owner, runner: runner, nim: nim)
 
-proc update_action_index*(state: GameState, change: int) =
-  # Cycle through the available tools only, skipping NONE/DISABLED and any tool
-  # the scripts have hidden.
-  let available = to_seq(CODE_MODE .. PLACE_BOT).filter_it(it in state.player.tools)
-  if available.len == 0:
-    return
-
-  var index = available.find(state.player.tool)
-  if index == -1:
-    # Not currently on an available tool (e.g. NONE) — step in from the edge.
-    index = if change >= 0: -1 else: 0
-  index = (index + change) mod available.len
-  if index < 0:
-    index += available.len
-
-  state.player.tool = available[index]
-
 proc require_lifetime*(thing: Thing): Lifetime =
   ## The Thing's owner Lifetime, created on demand. Locally built things get one in
   ## `init_thing`, but things arriving via sync are reconstructed through flatty's

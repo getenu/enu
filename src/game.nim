@@ -1068,13 +1068,14 @@ gdobj Game of Node:
     if state.player.tool != DISABLED:
       if event.is_action_pressed("toggle_code_mode"):
         if state.player.tool != CODE_MODE:
-          if state.player.tool in state.player.tools:
+          if state.player.tool notin CODE_TOOLS and
+              state.player.tool in state.player.tools:
             self.last_tool = state.player.tool
           state.player.select_tool CODE_MODE
         else:
           state.player.select_tool self.last_tool
       elif event.is_action_pressed("mode_1"):
-        state.player.select_tool CODE_MODE
+        state.select_or_modify CODE_MODE
       elif event.is_action_pressed("mode_2"):
         state.select_or_modify BLUE_BLOCK
       elif event.is_action_pressed("mode_3"):
@@ -1090,9 +1091,9 @@ gdobj Game of Node:
       elif event.is_action_pressed("mode_8"):
         state.player.select_tool PLACE_BOT
       elif event.is_action_pressed("stack_up"):
-        state.set_create_mode true
+        state.stack_up
       elif event.is_action_pressed("stack_down"):
-        state.set_create_mode false
+        state.stack_down
 
   method on_meta_clicked(url: string) =
     if url.starts_with("nim://"):
