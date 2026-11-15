@@ -23,12 +23,14 @@ proc handle_collisions(
     let collider = collision.collider
     let normal = collision.normal
     let model = collider.model
-    if not model.is_nil:
+    if not model.is_nil and not model.destroyed:
       if not (model in self.colliders or model in colliders) and model.id != "":
         model.on_collision(self, normal)
       colliders.incl model
   for model in self.colliders - colliders:
-    model.off_collision(self)
+    # A thing unloaded with its level can still be listed from the last frame.
+    if not model.destroyed:
+      model.off_collision(self)
   self.colliders = colliders
 
 let

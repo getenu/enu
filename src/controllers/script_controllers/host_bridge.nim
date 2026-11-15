@@ -212,7 +212,19 @@ proc claim_name(self: Worker, requested: string) =
     new_data_file = new_data_dir / (target_id & ".json")
 
   self.exit(thing.script_ctx, 0)
+  let old_module = thing.script_ctx.module_name
+  self.renaming.incl old_module
+  self.pending_renames.incl target_id
+  for other in state.things.value:
+    if other != thing and ?other.script_ctx and
+        old_id & ".nim" in other.script_ctx.dependencies and
+        other notin self.rename_dependents:
+      self.rename_dependents.add other
   after_boop:
+    self.interpreter.reset_module(old_module)
+    self.module_names.excl old_module
+    self.renaming.excl old_module
+
     # Capture the file content with id rewrites before any moves.
     var data_content = ""
     if file_exists(old_data_file):
@@ -231,6 +243,7 @@ proc claim_name(self: Worker, requested: string) =
 
     if file_exists(old_script):
       move_file(old_script, new_script)
+    discard try_remove_file(state.config.level_dir / "generated" / old_id & ".nim")
 
     # Drop the in-memory thing; the file watcher picks up the new
     # `data/<target_id>/<target_id>.json` on its next pass.
@@ -376,6 +389,8 @@ proc sleep_impl(self: Worker, ctx: ScriptCtx, seconds: float) =
     else:
       DONE
   ctx.last_ran = MonoTime.default
+  if self.active_thing of Build:
+    Build(self.active_thing).settle_holes()
   self.pause_script()
 
 proc hit(self: Thing, thing_b: Thing): bool =
@@ -829,6 +844,14 @@ proc tools_excl(self: Player, tool: int) =
 
 proc tools_clear(self: Player) =
   self.tools.clear()
+
+proc tools_assign(self: Player, tools: int) =
+  ## One write, so the toolbar sees only what changed.
+  var value: set[Tools]
+  for tool in CODE_MODE .. PLACE_BOT:
+    if (tools and (1 shl ord(tool))) != 0:
+      value.incl tool
+  self.tools.value = value
 
 proc check_tool_color_index(index: int) =
   if index notin 0 .. DEFAULT_TOOL_COLORS.high:
@@ -1809,7 +1832,7 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,
     `can_fly=`, boost, tool, `tool=`,
-    tools_has, tools_incl, tools_excl, tools_clear, tool_color, set_tool_color,
+    tools_has, tools_incl, tools_excl, tools_clear, tools_assign, tool_color, set_tool_color,
     coding,
     `coding=`, running, `running=`, open_sign, `open_sign=`, executing_player,
     block_log, clear_block_log

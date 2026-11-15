@@ -53,6 +53,13 @@ proc init*(
 proc vm(self: ScriptCtx): PCtx =
   PCtx(self.interpreter.get_graph.vm)
 
+proc vm_size*(i: Interpreter): tuple[code: int, heap_bytes: int, modules: int] =
+  ## How much a long-lived VM has grown: its bytecode, its heap, and the
+  ## modules its graph has compiled.
+  let g = i.get_graph
+  let c = PCtx(g.vm)
+  (c.code.len, c.mem.bytes_in_use, g.ifaces.len)
+
 proc pause*(ctx: ScriptCtx) =
   ## Park the script once the current host call returns. See `after_host_call`.
   ctx.pause_requested = true
@@ -279,7 +286,7 @@ proc run*(self: ScriptCtx, me: int): bool =
   proc run_body() {.gcsafe.} =
     {.gcsafe.}:
       let run_script = self.interpreter.select_routine(
-        "run_script", module_name = self.module_name
+        "run_script", module_name = self.module_name, file_name = self.file_name
       )
       if me > 0 and ?run_script:
         discard self.start(
@@ -352,7 +359,9 @@ proc call_proc*(
     self: ScriptCtx, proc_name: string, args: varargs[PNode, `to_node`]
 ): tuple[paused: bool, result: PNode] =
   let foreign_proc =
-    self.interpreter.select_routine(proc_name, module_name = self.module_name)
+    self.interpreter.select_routine(
+      proc_name, module_name = self.module_name, file_name = self.file_name
+    )
   if foreign_proc == nil:
     raise new_exception(
       VMError, \"script does not export a proc of the name: '{proc_name}'"

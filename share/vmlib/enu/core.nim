@@ -7,7 +7,7 @@ import
     strformat, math, importutils, strutils, options, sets, sequtils, algorithm
   ]
 import random as rnd except rand
-import types, vectors, base_bridge, base_bridge_private
+import types, vectors, base_bridge, base_bridge_private, handles
 
 export types, vectors, base_bridge
 export strutils
@@ -53,6 +53,18 @@ var state_init_callbacks: seq[proc()] = @[]
 proc register_state_init*(callback: proc()) =
   ## Used by Enu while a level loads. You won't need this in a script.
   state_init_callbacks.add(callback)
+
+var level_reset_callbacks: seq[proc()] = @[]
+
+proc register_level_reset*(callback: proc()) =
+  ## Used by Enu's own modules: forget what a level left behind.
+  level_reset_callbacks.add(callback)
+
+proc reset_level_state*(first_level_handle: int) =
+  ## Used by Enu when switching levels without rebuilding the VM.
+  forget_handles(first_level_handle)
+  for callback in level_reset_callbacks:
+    callback()
 
 proc initialize_state*() =
   ## Used by Enu while a level loads. You won't need this in a script.

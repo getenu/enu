@@ -81,7 +81,11 @@ proc compose_chunk(self: VoxelStore, fc: FrameChunk): CachedChunk =
   ## cache is authoritative (see apply_snapshot) and pending is the only
   ## other input.
   result = CachedChunk()
-  if ?self.build:
+  let staged = self.pending_snapshots.get_or_default(fc)
+  if staged.data.len > 0:
+    # a staged blob replaces the synced state when it flushes
+    result.cells = decode_chunk(staged)
+  elif ?self.build:
     if fc in self.packed_chunks:
       result.cells = decode_chunk(self.packed_chunks[fc])
     if fc in self.chunk_deltas:
@@ -159,6 +163,9 @@ iterator frame_chunk_ids*(self: VoxelStore, frame_id: int): Vector3 =
       if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
         yield fc.loc
   for fc in self.pending_chunks.keys:
+    if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
+      yield fc.loc
+  for fc in self.pending_snapshots.keys:
     if fc.frame == frame_id and not seen.contains_or_incl(fc.loc):
       yield fc.loc
   for fc in self.chunk_cache.keys:
@@ -856,11 +863,16 @@ proc stamp_chunk*(self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData): boo
     return false
   self.note_chunk(fc.loc)
   self.restored_frames.excl fc.frame
-  let cells = decode_chunk(snapshot)
   let empty =
     fc notin self.chunk_cache and fc notin self.pending_chunks and
     fc notin self.pending_snapshots and
     (not ?self.build or (fc notin self.packed_chunks and fc notin self.chunk_deltas))
+  if empty and ?self.build:
+    # Staged as is and decoded only if something reads it: a baked
+    # animation stamps every frame, and most are never read here.
+    self.pending_snapshots[fc] = snapshot
+    return true
+  let cells = decode_chunk(snapshot)
   let chunk = if empty: CachedChunk() else: self.cached_chunk(fc)
   for linear in 0 ..< CHUNK_VOLUME:
     if cells[linear] != EMPTY_VOXEL:

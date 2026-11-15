@@ -171,13 +171,16 @@ proc selectUniqueSymbol*(
     name: string,
     symKinds: set[TSymKind] = {skLet, skVar},
     moduleName: string,
+    fileName = "",
 ): PSym =
   ## Can be used to access a unique symbol of ``name`` and
-  ## the given ``symKinds`` filter.
+  ## the given ``symKinds`` filter. Pass ``fileName`` for a script's module:
+  ## two levels can each have a unit with the same id, and the VM keeps both.
   assert i != nil
   var module = i.mainModule
   for iface in i.graph.ifaces:
-    if iface.module != nil and iface.module.name.s == moduleName:
+    if iface.module != nil and iface.module.name.s == moduleName and
+        (fileName == "" or fileName == toFullPath(i.graph.config, iface.module.info)):
       module = iface.module
       break
   assert module != nil, "no module selected"
@@ -194,7 +197,9 @@ proc selectUniqueSymbol*(
     s = nextModuleIter(it, i.graph)
 
 # from nimeval. Added moduleName
-proc selectRoutine*(i: Interpreter, name: string, module_name: string): PSym =
+proc selectRoutine*(
+    i: Interpreter, name: string, module_name: string, file_name = ""
+): PSym =
   ## Selects a declared routine (proc/func/etc) from the main module.
   ## The routine needs to have the export marker ``*``. The only matching
   ## routine is returned and ``nil`` if it is overloaded.
@@ -204,15 +209,17 @@ proc selectRoutine*(i: Interpreter, name: string, module_name: string): PSym =
       name,
       {skTemplate, skMacro, skFunc, skMethod, skProc, skConverter},
       moduleName,
+      file_name,
     )
 
 proc resetModule*(i: Interpreter, moduleName: string) {.gcsafe.} =
   {.gcsafe.}: # see loadModule
     for iface in i.graph.ifaces:
+      # Every module of that name: a level switch can leave another level's
+      # same-named one behind.
       if iface.module != nil and iface.module.name.s == moduleName:
         initStrTables(i.graph, iface.module)
         iface.module.ast = nil
-        break
 
 template with_import_stack_recovery(graph: ModuleGraph, body: untyped) =
   ## An aborted compile (a VMQuit timeout raised from the exec hook mid-import)

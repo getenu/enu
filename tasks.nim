@@ -188,6 +188,7 @@ task test_unit, "run unit tests":
   exec "nim c -r tests/unit/join_target_test"
   exec "nim c -r tests/unit/code_tools_test"
   exec "nim c -r tests/unit/thing_tools_test"
+  exec "nim c -r tests/unit/vmlib_globals_test"
 
 task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"
@@ -232,19 +233,32 @@ task test_world,
     else:
       godot_bin()
 
-  for test_level in test_levels:
-    p &"Running world test: {test_level.split_path.tail}"
+  proc run_level(test_level, workdir: string) =
     let
       world = test_level.parent_dir
       level = test_level.split_path.tail
-      loc = " --world " & world & " --level " & level
-    let cmd =
-      if use_dist:
-        bin & loc & " --enu-test --minimized --temp-workdir"
-      else:
-        "cd app && " & bin & loc &
-          " --enu-test --minimized scenes/game.tscn --temp-workdir"
-    exec cmd
+      flags = &" --world {world} --level {level} --enu-test --minimized"
+    if use_dist:
+      exec bin & flags & " " & workdir
+    else:
+      exec "cd app && " & bin & flags & " scenes/game.tscn " & workdir
+
+  for test_level in test_levels:
+    p &"Running world test: {test_level.split_path.tail}"
+    run_level(test_level, "--temp-workdir")
+
+  # A level saved by Enu 0.2.2 runs twice on one copy: the first run converts
+  # it, the second loads what the first saved.
+  let
+    fixture = this_dir() / "tests/worlds/saved-by-0-2-2"
+    workdir = this_dir() / "scratch/round-trip"
+    copy = workdir / "worlds" / fixture.split_path.tail
+  rm_dir workdir
+  mk_dir copy.parent_dir
+  cp_dir fixture, copy
+  for pass in ["converting", "reloading"]:
+    p &"Running world test: {fixture.split_path.tail} ({pass})"
+    run_level(copy, "--workdir " & workdir)
 
 task check_bakes,
   "check that every shipped level's saved bakes still match its scripts":

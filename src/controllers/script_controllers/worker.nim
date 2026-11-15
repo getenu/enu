@@ -150,8 +150,6 @@ proc change_code(self: Worker, thing: Thing, code: Code) =
   debug "code changing", thing = thing.id
   thing.errors.clear
   thing.global_flags -= HIGHLIGHT_ERROR
-  if ?thing.script_ctx and thing.script_ctx.running and not ?thing.clone_of:
-    thing.collect_garbage
 
   thing.reset()
   if LOADING_SCRIPT notin state.local_flags and code.nim.strip == "":
@@ -183,6 +181,12 @@ proc change_code(self: Worker, thing: Thing, code: Code) =
       self.load_script(thing)
 
 const file_watch_interval = 2.seconds
+
+# A level switch keeps the VM until it has grown past these, then rebuilds it.
+# A heavy level (tutorial-3) adds ~25k instructions and ~4MB of heap a visit.
+const
+  VM_REBUILD_CODE = 1_000_000
+  VM_REBUILD_HEAP = 64 * 1024 * 1024
 
 proc update_files*(self: Worker) =
   if SERVER notin state.local_flags:
@@ -305,6 +309,15 @@ proc update_files*(self: Worker) =
         load_thing_from_json(thing_id, json_file)
       except Exception as e:
         error "Failed to load new thing from JSON", thing_id, error = e
+    for (thing_id, _) in new_things:
+      self.pending_renames.excl thing_id
+    if self.pending_renames.card == 0:
+      for other in self.rename_dependents:
+        if ?other.script_ctx and other.code.nim != "":
+          self.interpreter.reset_module(other.script_ctx.module_name)
+          self.module_names.excl other.script_ctx.module_name
+          other.code_value.touch Code.init(other.code.nim)
+      self.rename_dependents = @[]
     self.retry_failed_scripts()
     self.retry_failures = false
     state.pop_flag LOADING_SCRIPT
@@ -634,33 +647,49 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
   worker.update_files_proc = proc() {.gcsafe.} =
     worker.update_files()
 
-  let load_level = proc() =
-    var level_dir = state.config.level_dir
+  proc load_base_api() =
     player.script_ctx.interpreter = worker.interpreter
     worker.load_script_and_dependents(player)
+    worker.base_module_names = worker.module_names
+    worker.first_level_handle = max(worker.handle_things.len, 1)
+
+  let load_level = proc() =
+    var level_dir = state.config.level_dir
+    load_base_api()
 
     worker.load_level(level_dir)
     state.level_name = state.config.world & "/" & state.config.level
     state.config_value.changes:
       if added:
         if change.item.level_dir != level_dir:
+          let switch_started = get_mono_time()
           let full_reset = RESETTING_VM in state.local_flags
           if level_dir != "":
             save_level(level_dir, save_all = full_reset)
           worker.unload_level()
-          if full_reset:
+          let size = worker.interpreter.vm_size
+          if full_reset or size.code > VM_REBUILD_CODE or
+              size.heap_bytes > VM_REBUILD_HEAP:
             worker.init_interpreter("")
             worker.bridge_to_vm
-            player.script_ctx.interpreter = worker.interpreter
-            worker.load_script_and_dependents(player)
-            # The fresh VM has no `player` global until initialize_state runs,
-            # and load_level (which normally runs it) may not happen until a
-            # later change event. Anything that loads a thing script in that
-            # window hits a nil player at script top level.
+            load_base_api()
+            # The fresh VM has no `player` global until initialize_state
+            # runs, and load_level (which normally runs it) may not happen
+            # until a later change event. Anything that loads a thing script
+            # in that window hits a nil player at script top level.
             worker.run_state_initializers()
+          else:
+            worker.reset_level_vm_state()
           level_dir = change.item.level_dir
           if level_dir != "":
             worker.load_level(level_dir)
+          let grown = worker.interpreter.vm_size
+          info "level switch",
+            ms = (get_mono_time() - switch_started).in_milliseconds,
+            rebuilt = full_reset or size.code > VM_REBUILD_CODE or
+              size.heap_bytes > VM_REBUILD_HEAP,
+            code = grown.code, heap_mb = grown.heap_bytes div 1_000_000,
+            modules = grown.modules
 
   if SERVER in state.local_flags:
     # Snapshot the level BEFORE Enu's first write — the load saves at its

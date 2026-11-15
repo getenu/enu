@@ -10,6 +10,7 @@ import models/voxels
 import controllers/script_controllers/scripting
 import controllers/script_controllers/vars
 import libs/eval
+from pkg/compiler/ast import new_int_node, TNodeKind
 
 proc to_json_hook(self: Vector3): JsonNode =
   %[self.x, self.y, self.z]
@@ -541,6 +542,9 @@ proc topo_sort(
     visited = initHashSet[string]()
     temp_visited = initHashSet[string]()
     order = newSeq[string]()
+  # A dependency on something not being ordered (a renamed prototype's old id,
+  # or a unit on the other side of PLAYERS) mustn't be added to the order.
+  let known = nodes.to_hash_set
 
   proc visit(node: string) =
     if node in temp_visited:
@@ -554,7 +558,9 @@ proc topo_sort(
 
     if node in graph:
       for dep_path in graph[node]:
-        visit(dep_path.extract_filename)
+        let dep = dep_path.extract_filename
+        if dep in known:
+          visit(dep)
 
     temp_visited.excl(node)
     visited.incl(node)
@@ -698,6 +704,14 @@ proc load_things*(parent: Thing, load_order: seq[string] = newSeq[string]()) =
 
       if has_script:
         thing.code = Code.init(read_file(thing.script_ctx.script))
+
+      # A script that replayed a bake during its load staged the frames
+      # rather than publishing them. Publish them now, so ed ordering
+      # delivers them ahead of LOAD_SCREEN's removal and the spawn gate
+      # waits on them, and so playback never shows a frame missing chunks.
+      thing.walk_tree proc(thing: Thing) =
+        if thing of Build and ?Build(thing).voxels:
+          Build(thing).voxels.flush_dirty_chunks()
 
       let took = (get_mono_time() - unit_started).in_milliseconds
       if took > 100:
@@ -917,7 +931,7 @@ proc level_json(self: LevelInfo): string =
 """
 
 proc save_level*(level_dir: string, save_all = false, force = false) =
-  if (SERVER in state.local_flags and TEST_MODE notin state.local_flags) or force:
+  if SERVER in state.local_flags or force:
     # The whole level is in load_order now — script-less units (terrain and
     # other pure-JSON builds) included, keyed by id. Build the dependency graph,
     # the error set, and the script-less set (all scripted-vs-not decisions key
@@ -1209,6 +1223,38 @@ proc run_state_initializers*(worker: Worker) =
   except VMQuit as e:
     state.err(e.msg)
 
+  worker.active_thing = nil
+
+proc reset_level_vm_state*(worker: Worker) =
+  ## Forget what the last level left in a VM that's kept for the next one: its
+  ## modules, its things' handles, and the base API's per-level state.
+  for name in worker.module_names:
+    if name notin worker.base_module_names:
+      worker.interpreter.reset_module(name)
+  worker.module_names = worker.base_module_names
+  worker.renaming.clear()
+  worker.pending_renames.clear()
+  worker.rename_dependents = @[]
+
+  for handle in worker.first_level_handle ..< worker.handle_things.len:
+    let thing = worker.handle_things[handle]
+    if not thing.is_nil:
+      worker.thing_handles.del thing
+      worker.handle_things[handle] = nil
+
+  let reset_proc =
+    worker.interpreter.select_routine("reset_level_state", "core")
+  assert not reset_proc.is_nil, "reset_level_state not found in core"
+  assert worker.active_thing.is_nil, "active_thing should be nil at this point"
+  worker.active_thing = state.player
+  state.player.script_ctx.fuel = script_fuel
+  try:
+    {.gcsafe.}:
+      discard worker.interpreter.call_routine(
+        reset_proc, [new_int_node(nkIntLit, worker.first_level_handle)]
+      )
+  except VMQuit as e:
+    state.err(e.msg)
   worker.active_thing = nil
 
 proc unload_level*(worker: Worker) =

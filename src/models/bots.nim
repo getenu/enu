@@ -138,10 +138,10 @@ method clone*(self: Bot, clone_to: Thing, id: string): Thing =
     color = self.start_color,
   )
 
-method on_collision*(self: Thing, partner: Model, normal: Vector3) =
+method on_collision*(self: Bot, partner: Model, normal: Vector3) =
   self.collisions.add (partner.id, normal)
 
-method off_collision*(self: Thing, partner: Model) =
+method off_collision*(self: Bot, partner: Model) =
   for collision in self.collisions.dup:
     if collision.id == partner.id:
       self.collisions -= collision

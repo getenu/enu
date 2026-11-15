@@ -439,6 +439,7 @@ type
     dirty*: bool
     asap_active*: bool
     last_paste_time*: MonoTime
+    last_write_time*: MonoTime
 
   ScriptErrors* =
     EdSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
@@ -559,6 +560,8 @@ type
     auto_ramp_started*: bool
     auto_ramp_done*: bool
     auto_ramp_start*: MonoTime
+    holes_settled*: bool
+      ## This run's initial batch of drawing is over (see settle_holes).
     drawing*: bool
     bounds_value*: EdValue[AABB]
     bot_collisions*: bool
@@ -785,6 +788,20 @@ type
     last_exception*: ref Exception
     player_cache*: Table[string, Player]
     module_names*: HashSet[string]
+    renaming*: HashSet[string]
+      ## Modules of prototypes that renamed themselves, until the rename's
+      ## files move. Nothing new imports them.
+    pending_renames*: HashSet[string]
+      ## New ids of renamed prototypes the file watcher hasn't loaded yet.
+    rename_dependents*: seq[Thing]
+    base_module_names*: HashSet[string]
+      ## What `module_names` held once the base API loaded; a level switch
+      ## that keeps the VM goes back to it.
+    first_level_handle*: int
+      ## The first handle a level's things got. Earlier ones (the player)
+      ## outlive a level switch.
+      ## Scripts that use a renamed prototype, or failed while one was
+      ## pending. They run again once it's loaded under its new name.
     watch_files_at*: MonoTime
     orphan_scripts_reported*: HashSet[string]
     eval_proc*: proc(
