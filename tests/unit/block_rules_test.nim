@@ -130,7 +130,9 @@ suite "Frames":
     build.draw(hand, (PERSISTED, blue))
     build.go_to_frame(1)
     check build.frames_len == 2
-    check spot notin build
+    check build.has_hole # carried from frame 0
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+    build.clear_frame(1)
     check not build.voxels.has_edit(spot)
     check not build.voxels.has_edit(hand)
     build.computed(red)
@@ -141,6 +143,22 @@ suite "Frames":
     build.go_to_frame(1)
     check not build.voxels.has_edit(hand)
     check build.voxel_info(spot) == (TRANSIENT, red)
+
+  test "a run's first new frame takes the blocks of the frame on screen":
+    let build = Build.init(id = "build_frames_run_from")
+    build.go_to_frame(1)
+    build.clear_frame(1)
+    build.draw(hand, (PERSISTED, blue))
+    # as a run starts: on frame 0, with frame 1 on screen until then
+    build.run_from_frame = some(1)
+    build.frame = 0
+    build.current_frame = 0
+    build.go_to_frame(2)
+    check build.voxels.get_edit(hand) == (PERSISTED, blue)
+    build.run_from_frame = some(1)
+    build.go_to_frame(0)
+    build.go_to_frame(3)
+    check not build.voxels.has_edit(hand) # only the run's first move
 
   test "a script run drops every frame's computed blocks and starts on 0":
     let build = Build.init(id = "build_frames_rerun")

@@ -412,7 +412,10 @@ method collect_garbage*(self: Build) =
 # ids by index, so switching frames copies nothing and inserting or deleting
 # one only rewrites the order. A script run redraws every frame: it starts by
 # dropping their computed blocks and going to frame 0. Only manual blocks are
-# saved.
+# saved. A frame starts out unvisited; the first time the script moves to it,
+# it gets the manual blocks of the frame on screen, so stop motion carries the
+# scene forward. Playback doesn't count as moving, and frames skipped over
+# stay empty.
 
 proc frames_len*(self: Build): int =
   self.frame_order.ids.len
@@ -459,8 +462,18 @@ proc grow_frames(self: Build, index: int) =
     return
   var order = self.frame_order
   while order.ids.len <= index:
-    order.ids.add self.new_frame_id
+    let id = self.new_frame_id
+    order.ids.add id
+    order.unvisited.add id
   self.frame_order = order
+
+proc visited(self: Build, index: int) =
+  ## Frame `index` has content of its own now: moving to it carries nothing.
+  let id = self.frame_id(index)
+  if id in self.frame_order.unvisited:
+    var order = self.frame_order
+    order.unvisited.delete order.unvisited.find(id)
+    self.frame_order = order
 
 proc refresh_edits(self: Build) =
   # hand edits made on main reach this side through the synced edit tables
@@ -486,13 +499,37 @@ proc frames_hash*(self: Build): Hash =
         sum += cast[uint](hash((index[key.frame], key.loc, delta.data)))
   cast[Hash](sum)
 
+proc carry_into(self: Build, index: int) =
+  ## Give unvisited frame `index` the manual blocks and holes of the frame
+  ## we're coming from: the one on screen (when the run started, for its
+  ## first move), or the script's while playing. Computed blocks stay
+  ## behind: the script draws each frame's own.
+  let id = self.frame_id(index)
+  if id notin self.frame_order.unvisited:
+    return
+  self.visited(index)
+  let src =
+    if self.run_from_frame.is_some: self.run_from_frame.get
+    elif self.frames_fps <= 0: self.current_frame
+    else: self.frame
+  if src == index or src notin 0 ..< self.frames_len:
+    return
+  self.refresh_edits()
+  let edits = self.voxels.saved_frame_edits(self.frame_id(src))
+  if edits.chunks.len > 0:
+    self.voxels.load_frame_edits(id, edits)
+  self.frames_changed()
+
 proc go_to_frame*(self: Build, index: int) =
-  ## Make `index` the frame the script draws into, growing the frames with
-  ## empty ones if it's past the end.
+  ## Make `index` the frame the script draws into, growing the frames if
+  ## it's past the end. The first move to a frame carries the manual blocks
+  ## forward (see `carry_into`); frames skipped over stay empty until then.
   self.check_frame_index(index, grow = true)
   if index >= self.frames_len:
     self.grow_frames(index)
     self.frames_changed()
+  self.carry_into(index)
+  self.run_from_frame = none(int)
   self.frame = index
   self.target_frame()
   self.follow_frame()
@@ -506,6 +543,7 @@ proc copy_frame*(self: Build, src: int, dst: int) =
   self.refresh_edits()
   self.grow_frames(dst)
   self.voxels.copy_frame(self.frame_id(src), self.frame_id(dst))
+  self.visited(dst)
   self.frames_changed()
 
 proc insert_frame*(self: Build, src: int, index: int) =
@@ -549,7 +587,11 @@ proc delete_frames*(self: Build, first: int, last: int) =
     return
   var order = self.frame_order
   for index in first .. last:
-    self.voxels.drop_frame(order.ids[index])
+    let id = order.ids[index]
+    self.voxels.drop_frame(id)
+    let at = order.unvisited.find(id)
+    if at >= 0:
+      order.unvisited.delete at
   order.ids.delete(first .. last)
   if order.ids.len == 0:
     order.ids.add self.new_frame_id
@@ -588,6 +630,7 @@ proc paste_frame*(self: Build, src: int, dst: int) =
   self.check_frame_index(dst)
   self.refresh_edits()
   self.voxels.paste_frame(self.frame_id(src), self.frame_id(dst))
+  self.visited(dst)
   self.frames_changed()
 
 proc play*(
@@ -986,6 +1029,7 @@ method reset*(self: Build) =
     file_exists(self.script_ctx.script)
   if scripted:
     self.frames_fps = 0.0
+    self.run_from_frame = some(self.current_frame)
   self.start_frames_run(scripted)
   self.target_frame()
   self.follow_frame()

@@ -200,6 +200,7 @@ proc script_finished*(thing: Thing) =
   thing.global_flags -= SCRIPT_INITIALIZING
   if thing of Build:
     Build(thing).end_asap()
+    Build(thing).run_from_frame = none(int)
   if not ?thing.clone_of:
     thing.collect_garbage
     thing.ensure_visible
