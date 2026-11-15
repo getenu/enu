@@ -386,9 +386,9 @@ type
     edits_loaded*: HashSet[FrameChunk]
     edits_frame*: int
       ## Main only: the `state.frame_count` its decoded edits were read in.
-    writing_edits*: bool
-      ## Set while this side writes the edit tables, so its own writes don't
-      ## count as changes made elsewhere.
+    writing_rows*: bool
+      ## Set while this side writes the synced voxel or edit tables, so its
+      ## own writes don't count as changes made elsewhere.
     hole_chunks*: Table[FrameChunk, bool]
       ## Whether each chunk's edits hold a hole, where known.
     hole_free_frames*: HashSet[int]

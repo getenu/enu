@@ -1097,6 +1097,26 @@ proc watch_edit_rows(self: Build) =
       if added and ?change.item.value:
         watch_deltas(key, change.item.value)
 
+proc watch_voxel_rows(self: Build) =
+  ## The server worker draws into the voxel tables but doesn't follow them
+  ## like a client does, so a row main writes (a hand edit) would leave its
+  ## cached decode stale.
+  proc watch_deltas(fc: FrameChunk, deltas: EdSeq[DeltaUpdate]) =
+    deltas.watch:
+      self.voxels.voxel_row_changed(fc)
+
+  for fc, deltas in self.voxels.chunk_deltas:
+    if ?deltas:
+      watch_deltas(fc, deltas)
+
+  self.voxels.packed_chunks.watch:
+    self.voxels.voxel_row_changed(change.item.key)
+  self.voxels.chunk_deltas.watch:
+    let fc = change.item.key
+    self.voxels.voxel_row_changed(fc)
+    if added and ?change.item.value:
+      watch_deltas(fc, change.item.value)
+
 proc init_voxels_if_needed*(self: Build, watch_edits = true) =
   ## Rebuild the local render wrapper if nil (the plain `voxels` field doesn't
   ## ride the closure, so it's nil after a cross-thread sync). The synced tables
@@ -1131,6 +1151,8 @@ proc init_voxels_if_needed*(self: Build, watch_edits = true) =
     )
     if watch_edits:
       self.watch_edit_rows()
+      if SERVER in state.local_flags:
+        self.watch_voxel_rows()
     self.track_chunk_bounds()
 
 proc setup_packed_chunk_watches(self: Build) =
