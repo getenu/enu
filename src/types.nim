@@ -452,6 +452,9 @@ type
     parent* {.cursor.}: Thing # back-ref; the parent owns this child via `things`
     things*: EdSeq[Thing]
     start_transform*: Transform
+    start_anchor*: Transform
+      ## The anchor a run starts with, set by hand and saved. A script's
+      ## `anchor:` block moves on from here.
     scale_value*: EdValue[float]
     glow_value*: EdValue[float]
     speed_value*: EdValue[float]
@@ -481,6 +484,10 @@ type
     placed_value*: EdValue[Placement]
       ## Set when a player puts the thing down with a move, lift or turn tool.
       ## The worker moves it and its start transform by the same amount.
+    anchor_placed_value*: EdValue[Placement]
+      ## Set when a player moves the thing's anchor by hand. The worker keeps
+      ## it as the start anchor, less whatever the script's `anchor:` block
+      ## adds on top.
     rendered_voxel_count_value*: EdValue[int]
     pending_block_updates_value*: EdValue[int]
     query_value*: EdValue[ThingQuery]

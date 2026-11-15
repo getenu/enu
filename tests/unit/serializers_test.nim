@@ -123,6 +123,17 @@ suite "Build Serialization":
     check restored.start_transform.origin.y == original.start_transform.origin.y
     check restored.start_transform.origin.z == original.start_transform.origin.z
 
+  test "a build's start anchor is saved only when it's been set":
+    let build = Build.init(id = "build_anchor", color = ACTION_COLORS[BLUE])
+    check "start_anchor" notin parse_json($build)
+    build.start_anchor = Transform(
+      basis: init_basis(0, 0, 1, 0, 1, 0, -1, 0, 0), origin: vec3(1, 0, 2)
+    )
+    var restored: Build
+    restored.from_json(parse_json($build))
+    check restored.start_anchor == build.start_anchor
+    check restored.anchor == build.start_anchor
+
 suite "Bot Serialization":
   test "bot serializes to json string":
     let bot = Bot.init(

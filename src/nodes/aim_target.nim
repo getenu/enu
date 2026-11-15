@@ -21,6 +21,8 @@ gdobj AimTarget of Sprite3D:
     held_from: Transform ## Where the held thing was, in the world.
     aim_point: Vector3 ## Where the aim last hit something.
     grab: Vector3 ## Where the aim hit the held thing when it was picked up.
+    eye: Vector3 ## Where the aim starts.
+    look: Vector3 ## Which way the aim goes.
 
   proc glow(target: Build) =
     if target != self.glowing:
@@ -71,10 +73,14 @@ gdobj AimTarget of Sprite3D:
     state.local_flags.watch(state.player):
       if PRIMARY_DOWN.added and VIEWPORT_FOCUSED in state.local_flags:
         if ?held:
-          put_down(self.held_to)
+          put_down(if holding_anchor: anchor_to else: self.held_to)
         elif state.player.tool in THING_TOOLS and self.target_model of Thing and
             Thing(self.target_model).can_hold:
-          hold(Thing(self.target_model))
+          let thing = Thing(self.target_model)
+          if ?aimed and (create_held or self.near_marker(aimed)):
+            hold_anchor(aimed)
+          else:
+            hold(thing)
           self.held_to = held.transform
           self.held_from = (held.node as Spatial).global_transform
           self.grab = self.aim_point
@@ -87,6 +93,45 @@ gdobj AimTarget of Sprite3D:
         self.target_model.target_point = vec3()
         self.target_model.target_normal = vec3()
         self.target_model = nil
+
+  proc near_marker(thing: Thing): bool =
+    ## Whether the aim passes near `thing`'s anchor marker.
+    let marker = (thing.node as Spatial).global_transform * thing.anchor.marker
+    near_anchor(marker.origin, self.eye, self.look)
+
+  proc place_anchor(thing: Model) =
+    ## Move, lift or turn the held anchor, leaving its thing where it is.
+    let
+      body = (held.node as Spatial).global_transform
+      start = body * held.anchor
+    var to = none(Transform)
+    case state.player.tool
+    of MOVE_TOOL:
+      # onto the block aimed at if it's the thing's own, or next to it
+      let cell =
+        if thing of Build and Thing(thing).find_root(true) == held:
+          let build = Build(thing)
+          (build.target_point - build.target_normal * 0.5).floor.world_from(build)
+        elif thing of Build:
+          Build(thing).placement_cell
+        elif thing of Ground:
+          Ground(thing).placement_cell
+        else:
+          return
+      var at = start
+      at.origin = cell
+      to = some(at)
+    of LIFT_TOOL:
+      to = lifted(start, self.grab, self.eye, self.look)
+    of TURN_TOOL:
+      to = turned(start, Transform.init, self.eye, self.look)
+    else:
+      discard
+    if to.is_some:
+      var anchor = body.affine_inverse * to.get
+      anchor.basis = anchor.basis.tidy
+      anchor.origin = anchor.origin.round
+      anchor_to = anchor
 
   proc place_held(to: Transform) =
     let node = held.node as Spatial
@@ -110,27 +155,23 @@ gdobj AimTarget of Sprite3D:
         cell - to.basis.xform(held.anchor.origin)
     self.place_held(to)
 
-  proc lift_held(ray: RayCast) =
+  proc lift_held() =
     ## Raise or lower the lift tool's held thing to the aim's height.
-    let
-      eye = ray.global_transform.origin
-      look = ray.global_transform.basis.xform(ray.cast_to).normalized
-      to = lifted(self.held_from, self.grab, eye, look)
+    let to = lifted(self.held_from, self.grab, self.eye, self.look)
     if to.is_some:
       self.place_held(to.get)
 
-  proc turn_held(ray: RayCast) =
+  proc turn_held() =
     ## Point the turn tool's held thing toward the aim.
-    let
-      eye = ray.global_transform.origin
-      look = ray.global_transform.basis.xform(ray.cast_to).normalized
-      to = turned(self.held_from, held.anchor, eye, look)
+    let to = turned(self.held_from, held.anchor, self.eye, self.look)
     if to.is_some:
       self.place_held(to.get)
 
   proc update*(ray: RayCast) =
     create_held =
       is_key_pressed(if host_os == "macosx": KEY_META else: KEY_CONTROL)
+    self.eye = ray.global_transform.origin
+    self.look = ray.global_transform.basis.xform(ray.cast_to).normalized
     ray.force_raycast_update()
     let collider =
       if ray.is_colliding():
@@ -229,12 +270,20 @@ gdobj AimTarget of Sprite3D:
 
     if collider != nil:
       self.aim_point = ray.get_collision_point()
-    if ?held and state.player.tool == MOVE_TOOL and collider != nil:
+    aimed =
+      if held.is_nil and state.player.tool in THING_TOOLS and thing of Build and
+          Thing(thing).can_hold:
+        Thing(thing).find_root(true)
+      else:
+        nil
+    if ?held and holding_anchor:
+      self.place_anchor(thing)
+    elif ?held and state.player.tool == MOVE_TOOL and collider != nil:
       self.carry_held(thing)
     elif ?held and state.player.tool == LIFT_TOOL:
-      self.lift_held(ray)
+      self.lift_held()
     elif ?held and state.player.tool == TURN_TOOL:
-      self.turn_held(ray)
+      self.turn_held()
     self.update_glow(thing)
 
     if PRIMARY_DOWN notin state.local_flags and

@@ -503,7 +503,9 @@ template anchor*(body: untyped) =
   ## Declare the thing's pivot. Inside the block, turtle commands
   ## (`forward`, `right`, `up`, `turn`, `lean`, …) accumulate into the
   ## thing's anchor pose instead of drawing voxels or moving the thing.
-  ## The turtle starts at the proto's local `(0, 0, 0)` facing -Z.
+  ## The turtle starts at the anchor set by hand with the move, lift or
+  ## turn tools, or at the proto's local `(0, 0, 0)` facing -Z if there
+  ## isn't one.
   ##
   ## After the block, `position` places the anchor pivot at the given
   ## world coord, `rotation` pivots around it, and `move me; forward`

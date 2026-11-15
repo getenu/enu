@@ -349,6 +349,15 @@ proc watch_code(self: Worker, thing: Thing) =
       thing.transform = placed.after
       thing.global_flags += DIRTY
 
+  thing.anchor_placed_value.changes:
+    if added:
+      # Whatever the script's `anchor:` block added stays on top of it.
+      let placed = change.item
+      let scripted = thing.start_anchor.affine_inverse * placed.before
+      thing.start_anchor = placed.after * scripted.affine_inverse
+      thing.anchor = placed.after
+      thing.global_flags += DIRTY
+
   thing.eval_value.changes:
     if added or touched and change.item != "":
       thing.eval = ""

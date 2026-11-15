@@ -211,6 +211,9 @@ proc from_json_hook(self: var Build, json: JsonNode) =
     transform = json["start_transform"].json_to(Transform),
     color = color,
   )
+  if "start_anchor" in json:
+    self.start_anchor = json["start_anchor"].json_to(Transform)
+    self.anchor = self.start_anchor
 
   if "palette" in json:
     # Restore the static palette in saved order BEFORE anything packs a
@@ -478,21 +481,27 @@ proc frame_files(self: Thing): bool =
           if count > EDITS_JSON_LIMIT:
             return true
 
-proc to_json_string(self: Thing, frame_files: bool): string =
+proc transform_json(transform: Transform): string =
   let elements =
-    self.start_transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
-  let origin = self.start_transform.origin
-  let edits =
-    edits_to_string(self.shared, if self.in_frames(frame_files): self.id else: "")
-  result = \"""
-{{
-  "id": "{self.id}",
-  "start_transform": {{
+    transform.basis.elements.map_it($[it.x, it.y, it.z]).join(",\n")
+  let origin = transform.origin
+  \"""{{
     "basis": [
 {elements.indent(6)}
     ],
     "origin": {$[origin.x, origin.y, origin.z]}
-  }},
+  }}"""
+
+proc to_json_string(self: Thing, frame_files: bool): string =
+  let edits =
+    edits_to_string(self.shared, if self.in_frames(frame_files): self.id else: "")
+  let anchor =
+    if self.start_anchor == Transform.init: ""
+    else: \",\n  \"start_anchor\": {self.start_anchor.transform_json}"
+  result = \"""
+{{
+  "id": "{self.id}",
+  "start_transform": {self.start_transform.transform_json}{anchor},
   "start_color": {self.start_color},
   "edits": {{
 {edits.indent(4)}
