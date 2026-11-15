@@ -18,6 +18,9 @@ gdobj AimTarget of Sprite3D:
     glowing: Build
     join_key: JoinKey
     held_to: Transform ## Where the held thing goes if it's put down now.
+    held_from: Transform ## Where the held thing was, in the world.
+    aim_point: Vector3 ## Where the aim last hit something.
+    grab: Vector3 ## Where the aim hit the held thing when it was picked up.
 
   proc glow(target: Build) =
     if target != self.glowing:
@@ -73,6 +76,8 @@ gdobj AimTarget of Sprite3D:
             Thing(self.target_model).can_hold:
           hold(Thing(self.target_model))
           self.held_to = held.transform
+          self.held_from = (held.node as Spatial).global_transform
+          self.grab = self.aim_point
 
     state.player.tool_value.watch(state.player):
       put_back()
@@ -83,6 +88,11 @@ gdobj AimTarget of Sprite3D:
         self.target_model.target_normal = vec3()
         self.target_model = nil
 
+  proc place_held(to: Transform) =
+    let node = held.node as Spatial
+    node.global_transform = to
+    self.held_to = node.transform
+
   proc carry_held(thing: Model) =
     ## Keep the move tool's held thing on the block the aim is on.
     let cell =
@@ -92,15 +102,22 @@ gdobj AimTarget of Sprite3D:
         Ground(thing).placement_cell
       else:
         return
-    let node = held.node as Spatial
-    var to = node.global_transform
+    var to = (held.node as Spatial).global_transform
     to.origin =
       if held of Bot:
         cell + vec3(0.5, 0, 0.5)
       else:
         cell - to.basis.xform(held.anchor.origin)
-    node.global_transform = to
-    self.held_to = node.transform
+    self.place_held(to)
+
+  proc lift_held(ray: RayCast) =
+    ## Raise or lower the lift tool's held thing to the aim's height.
+    let
+      eye = ray.global_transform.origin
+      look = ray.global_transform.basis.xform(ray.cast_to).normalized
+      to = lifted(self.held_from, self.grab, eye, look)
+    if to.is_some:
+      self.place_held(to.get)
 
   proc update*(ray: RayCast) =
     create_held =
@@ -201,8 +218,12 @@ gdobj AimTarget of Sprite3D:
         else:
           thing.local_flags -= TARGET_MOVED
 
+    if collider != nil:
+      self.aim_point = ray.get_collision_point()
     if ?held and state.player.tool == MOVE_TOOL and collider != nil:
       self.carry_held(thing)
+    elif ?held and state.player.tool == LIFT_TOOL:
+      self.lift_held(ray)
     self.update_glow(thing)
 
     if PRIMARY_DOWN notin state.local_flags and
