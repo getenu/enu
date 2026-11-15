@@ -28,6 +28,10 @@ window/dpi/allow_hidpi=true
 window/handheld/orientation="sensor"
 window/stretch/aspect="expand"
 
+[editor]
+
+convert_text_resources_to_binary_on_export=true
+
 [editor_plugins]
 
 enabled=PoolStringArray(  )
