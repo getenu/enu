@@ -13,6 +13,7 @@ bridged_to_host:
   proc tools_incl*(self: Player, tool: Tools)
   proc tools_excl*(self: Player, tool: Tools)
   proc tools_clear*(self: Player)
+  proc tools_assign(self: Player, tools: int)
   proc tool_color*(self: Player, index: int): Color
   proc set_tool_color*(self: Player, index: int, color: Color)
   proc playing*(self: Player): bool
@@ -173,7 +174,8 @@ proc `colors=`*(self: Player, value: openArray[string]) =
 proc `tools=`*(self: Player, value: set[Tools]) =
   ## Replace the whole toolbar at once:
   ## `player.tools = {CodeMode, BlueBlock, PlaceBot}`.
-  self.tools_clear()
+  var tools = 0
   for tool in value:
     if tool != None:
-      self.tools_incl(tool)
+      tools = tools or (1 shl ord(tool))
+  self.tools_assign(tools)
