@@ -247,16 +247,24 @@ proc forget_edits(self: VoxelStore, fc: FrameChunk) =
 proc edit_row_changed*(self: VoxelStore, fc: FrameChunk) =
   ## A chunk's edit row changed. Unless this side wrote it, the decoded copy
   ## is stale.
-  if not self.writing_edits:
+  if not self.writing_rows:
     self.forget_edits(fc)
 
+proc voxel_row_changed*(self: VoxelStore, fc: FrameChunk) =
+  ## A chunk's voxel row changed. Unless this side wrote it, the cached
+  ## decode is stale; the next read composes it again, pending writes and all.
+  ## A chunk staged in `pending_snapshots` lives only in the cache until it
+  ## flushes, so it stays.
+  if not self.writing_rows and fc notin self.pending_snapshots:
+    self.chunk_cache.del(fc)
+
 template writing(self: VoxelStore, body: untyped) =
-  let previous = self.writing_edits
-  self.writing_edits = true
+  let previous = self.writing_rows
+  self.writing_rows = true
   try:
     body
   finally:
-    self.writing_edits = previous
+    self.writing_rows = previous
 
 proc edit_chunk_ids*(self: VoxelStore, frame_id: int): seq[Vector3] =
   ## Every chunk of a frame that may hold edits.
@@ -307,15 +315,16 @@ proc build_edit_state(
 proc flush_chunk_snapshot(self: VoxelStore, fc: FrameChunk) =
   let packed = encode_chunk(self.cached_chunk(fc).cells)
 
-  if packed.is_empty:
-    if fc in self.packed_chunks:
-      self.packed_chunks.del(fc)
-    if fc in self.chunk_deltas:
-      self.chunk_deltas.del(fc)
-  else:
-    self.packed_chunks[fc] = packed
-    if fc in self.chunk_deltas:
-      self.chunk_deltas[fc].clear
+  self.writing:
+    if packed.is_empty:
+      if fc in self.packed_chunks:
+        self.packed_chunks.del(fc)
+      if fc in self.chunk_deltas:
+        self.chunk_deltas.del(fc)
+    else:
+      self.packed_chunks[fc] = packed
+      if fc in self.chunk_deltas:
+        self.chunk_deltas[fc].clear
 
   inc self.snapshots_flushed
 
@@ -326,16 +335,17 @@ proc flush_chunk_delta(
 ) =
   let delta = encode_delta(changes)
 
-  if fc notin self.chunk_deltas:
-    # Own the nested seq under its table's owner (the build): it's created here
-    # during drawing — outside any own scope — and an unowned container escapes
-    # the destroy cascade, leaking on every reload.
-    let table_owner = self.chunk_deltas.owner_id
-    table_owner.own:
-      self.chunk_deltas[fc] =
-        EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
+  self.writing:
+    if fc notin self.chunk_deltas:
+      # Own the nested seq under its table's owner (the build): it's created
+      # here during drawing — outside any own scope — and an unowned container
+      # escapes the destroy cascade, leaking on every reload.
+      let table_owner = self.chunk_deltas.owner_id
+      table_owner.own:
+        self.chunk_deltas[fc] =
+          EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
 
-  self.chunk_deltas[fc].add delta
+    self.chunk_deltas[fc].add delta
   inc self.deltas_flushed
 
 iterator flush_dirty_chunks*(self: VoxelStore): FrameChunk =
@@ -363,9 +373,10 @@ iterator flush_dirty_chunks*(self: VoxelStore): FrameChunk =
       self.flush_chunk_snapshot(fc)
       self.pending_chunks.del fc
     else:
-      self.packed_chunks[fc] = blob # bulk-adopted, publish verbatim
-      if fc in self.chunk_deltas:
-        self.chunk_deltas[fc].clear
+      self.writing:
+        self.packed_chunks[fc] = blob # bulk-adopted, publish verbatim
+        if fc in self.chunk_deltas:
+          self.chunk_deltas[fc].clear
       inc self.snapshots_flushed
     self.pending_snapshots.del fc
     yield fc
