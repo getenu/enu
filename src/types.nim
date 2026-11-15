@@ -425,6 +425,7 @@ type
     dirty*: bool
     asap_active*: bool
     last_paste_time*: MonoTime
+    last_write_time*: MonoTime
 
   ScriptErrors* =
     EdSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
