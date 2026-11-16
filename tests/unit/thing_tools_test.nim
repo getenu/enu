@@ -70,3 +70,31 @@ suite "Holding things":
     check BLOCK_TARGET_VISIBLE in state.local_flags
     put_back()
     check BLOCK_TARGET_VISIBLE notin state.local_flags
+
+suite "Lifting":
+  let
+    start = Transform.init(origin = vec3(0, 0, -5))
+    grab = vec3(0, 1, -5)
+    eye = vec3(0, 1, 0)
+
+  test "aiming level keeps it where it is":
+    check lifted(start, grab, eye, vec3(0, 0, -1)).get.origin == vec3(0, 0, -5)
+
+  test "aiming higher raises it by whole blocks":
+    # 5 away, looking up 2.4 in 5: crosses 2.4 above the grab, so up 2
+    let look = vec3(0, 2.4, -5).normalized
+    check lifted(start, grab, eye, look).get.origin == vec3(0, 2, -5)
+
+  test "aiming lower lowers it":
+    let look = vec3(0, -3.1, -5).normalized
+    check lifted(start, grab, eye, look).get.origin == vec3(0, -3, -5)
+
+  test "only its height changes":
+    let look = vec3(3, 2, -5).normalized
+    let to = lifted(start, grab, eye, look).get
+    check to.origin.x == 0
+    check to.origin.z == -5
+
+  test "straight up or away from it does nothing":
+    check lifted(start, grab, eye, UP).is_none
+    check lifted(start, grab, eye, vec3(0, 0, 1)).is_none
