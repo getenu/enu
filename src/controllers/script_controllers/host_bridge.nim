@@ -492,10 +492,9 @@ proc start_position_set(self: Thing, position: Vector3) =
   self.global_flags += DIRTY
 
 proc reset_anchor(self: Thing) =
-  ## Reset the thing's anchor to identity. Used at the start of an
-  ## `anchor:` block so the body's turtle commands accumulate from a
-  ## clean pivot.
-  self.anchor = Transform.init
+  ## Reset the thing's anchor to the one it starts with. Used at the start of
+  ## an `anchor:` block so the body's turtle commands accumulate from there.
+  self.anchor = self.start_anchor
 
 proc capture_start_transform(self: Thing) =
   ## Stamp the thing's current pose as its spawn pose. Called at the end of

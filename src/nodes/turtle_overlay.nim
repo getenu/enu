@@ -4,7 +4,7 @@ import
     viewport_container, viewport, camera, mesh_instance, surface_tool,
     array_mesh, mesh, spatial_material, spatial, environment,
   ]
-import core, models/[things, builds, colors, states]
+import core, models/[things, builds, colors, states, thing_tools]
 
 # The turtle indicator: a three-line arrow — shaft plus two barbs — from the
 # centre of the draw cell along the draw heading, rigidly attached to the
@@ -136,11 +136,15 @@ gdobj TurtleOverlay of ViewportContainer:
 
     var show = false
     let thing = state.player.coding
-    let turning =
-      ?held and state.player.tool == TURN_TOOL and ?held.node
+    let
+      turning =
+        ?held and not holding_anchor and state.player.tool == TURN_TOOL and
+        ?held.node
+      anchoring = ?held and holding_anchor and ?held.node
+      pointing = held.is_nil and ?aimed and ?aimed.node
     # Follow a draw slow enough to watch, but not an ASAP one: the turtle
     # leaps between batches. It reappears where the script left it.
-    if turning or (
+    if turning or anchoring or pointing or (
       ?thing and thing of Build and ?thing.node and
       {SCRIPT_RUNNING, ASAP_MODE} * thing.global_flags.value !=
         {SCRIPT_RUNNING, ASAP_MODE}
@@ -153,12 +157,19 @@ gdobj TurtleOverlay of ViewportContainer:
         self.camera.far = world_camera.far
         self.camera.global_transform = world_camera.global_transform
         self.arrow.global_transform =
-          if turning:
+          if anchoring:
+            # the anchor being moved
+            (held.node as Spatial).global_transform * anchor_to.marker
+          elif pointing:
+            # the anchor of what a move, lift or turn tool would pick up
+            (aimed.node as Spatial).global_transform * aimed.anchor.marker
+          elif turning:
             # the turn tool's held thing: which way is forward
             var marker = held.anchor
-            marker.origin =
-              if held of Build: marker.origin + vec3(0.5, 0.5, 0.5)
-              else: marker.origin + UP
+            if held of Build:
+              marker = marker.marker
+            else:
+              marker.origin = marker.origin + UP
             (held.node as Spatial).global_transform * marker
           else:
             thing.node.global_transform *

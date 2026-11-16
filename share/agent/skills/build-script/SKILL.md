@@ -179,8 +179,11 @@ Without an anchor, `position`/`rotation` pivot around the proto's local
 `(0, 0, 0)` — rotating swings the body around that corner. The
 `anchor:` block declares where the pivot lives in the proto's local
 voxel frame. Inside it, turtle commands accumulate into the anchor pose
-— no voxels are placed, the unit doesn't move. Run it at the top of the
-proto, before drawing:
+— no voxels are placed, the unit doesn't move. They start from the anchor
+a player set by hand (aiming at its arrow with the move, lift or turn
+tool; saved as `start_anchor` in the unit's JSON), or from local
+`(0, 0, 0)` facing -Z if there isn't one. Run it at the top of the proto,
+before drawing:
 
 ```nim
 name DiningChair

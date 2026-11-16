@@ -3,6 +3,29 @@
 import std/[math]
 import core, models/[states, things]
 
+const ANCHOR_REACH = 0.75
+  ## How near the aim has to pass an anchor's marker to pick the anchor up.
+
+var
+  holding_anchor* {.threadvar.}: bool
+    ## The held thing's anchor is being moved, not the thing.
+  anchor_to* {.threadvar.}: Transform
+    ## Where the held anchor goes if it's put down now, in its thing's space.
+  aimed* {.threadvar.}: Thing
+    ## The unit a move, lift or turn tool would pick up, if any.
+
+proc marker*(anchor: Transform): Transform =
+  ## Where an anchor's arrow shows, in its thing's space: in the middle of
+  ## the block at its origin.
+  result = anchor
+  result.origin = anchor.origin + vec3(0.5, 0.5, 0.5)
+
+proc near_anchor*(marker, eye, look: Vector3): bool =
+  ## Whether the aim from `eye` along `look` passes near enough to `marker`
+  ## to pick its anchor up.
+  let along = (marker - eye).dot(look)
+  along > 0 and (marker - eye - look * along).length < ANCHOR_REACH
+
 proc can_hold*(thing: Thing): bool =
   ## Whether the move, lift and turn tools can pick `thing` up: a unit or bot,
   ## not locked, outside Play.
@@ -20,16 +43,31 @@ proc hold*(thing: Thing) =
     thing.global_flags += HELD
   state.resolve_flags
 
+proc hold_anchor*(thing: Thing) =
+  ## Pick up `thing`'s anchor, leaving it where it is.
+  assert held.is_nil
+  held = thing.find_root(true)
+  holding_anchor = true
+  anchor_to = held.anchor
+  state.resolve_flags
+
 proc let_go() =
-  held.walk_tree proc(thing: Thing) =
-    thing.global_flags -= HELD
+  if not holding_anchor:
+    held.walk_tree proc(thing: Thing) =
+      thing.global_flags -= HELD
   held = nil
+  holding_anchor = false
   state.resolve_flags
 
 proc put_down*(transform: Transform) =
-  ## Put the held thing down at `transform`, in its parent's space.
-  held.placed = Placement(before: held.transform, after: transform)
-  held.transform = transform
+  ## Put the held thing down at `transform`, in its parent's space; or its
+  ## anchor, in its own space.
+  if holding_anchor:
+    held.anchor_placed = Placement(before: held.anchor, after: transform)
+    held.anchor = transform
+  else:
+    held.placed = Placement(before: held.transform, after: transform)
+    held.transform = transform
   let_go()
 
 proc put_back*() =
@@ -57,7 +95,7 @@ proc yaw(direction: Vector3): float =
   ## How far `direction` is turned from FORWARD around UP.
   arctan2(-direction.x, -direction.z)
 
-proc tidy(basis: Basis): Basis =
+proc tidy*(basis: Basis): Basis =
   ## `basis` with rounding error taken off its whole numbers, so quarter turns
   ## stay exact.
   result = basis

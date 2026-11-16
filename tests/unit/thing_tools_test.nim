@@ -71,6 +71,50 @@ suite "Holding things":
     put_back()
     check BLOCK_TARGET_VISIBLE notin state.local_flags
 
+suite "Moving anchors":
+  setup:
+    state = GameState.init
+    state.player = Player.init(id = "player-me")
+    state.player.tool = MOVE_TOOL
+    held = nil
+    holding_anchor = false
+
+  test "picking up the anchor leaves the thing alone":
+    let unit = unit_at(0, 0, 0)
+    hold_anchor(unit)
+    check held == unit
+    check holding_anchor
+    check HELD notin unit.global_flags
+
+  test "putting the anchor down moves only the anchor":
+    let unit = unit_at(3, 0, 0)
+    hold_anchor(unit)
+    let to = Transform.init(origin = vec3(1, 0, 1))
+    put_down(to)
+    check held.is_nil
+    check not holding_anchor
+    check unit.anchor == to
+    check unit.anchor_placed.before == Transform.init
+    check unit.anchor_placed.after == to
+    check unit.transform.origin == vec3(3, 0, 0)
+
+  test "putting the anchor back leaves it":
+    let unit = unit_at(0, 0, 0)
+    hold_anchor(unit)
+    anchor_to = Transform.init(origin = vec3(2, 0, 0))
+    put_back()
+    check unit.anchor == Transform.init
+    check not holding_anchor
+
+  test "the marker is in the middle of the anchor's block":
+    check Transform.init.marker.origin == vec3(0.5, 0.5, 0.5)
+
+  test "aiming near the marker reaches it":
+    let eye = vec3(0, 1, 0)
+    check near_anchor(vec3(0.3, 1, -5), eye, FORWARD)
+    check not near_anchor(vec3(2, 1, -5), eye, FORWARD)
+    check not near_anchor(vec3(0, 1, 5), eye, FORWARD)
+
 suite "Lifting":
   let
     start = Transform.init(origin = vec3(0, 0, -5))

@@ -46,6 +46,7 @@ proc init_thing*[T: Thing](
 ) =
   ## `body_flags` go on the transform and velocity.
   self.lifetime = new_lifetime()
+  self.start_anchor = Transform.init
   with self:
     # OWNS_MEMBERS: children belong to us — membership drives ed's owned index,
     # so our destroy cascades into them (and removal un-registers them).
@@ -68,6 +69,7 @@ proc init_thing*[T: Thing](
     eval_value = EdValue[string].init("", flags = {SYNC_LOCAL})
     anchor_value = ed(Transform.init)
     placed_value = EdValue[Placement].init()
+    anchor_placed_value = EdValue[Placement].init()
     rendered_voxel_count_value = ed(0)
     pending_block_updates_value = ed(0)
     query_value = EdValue[ThingQuery].init(ThingQuery())
