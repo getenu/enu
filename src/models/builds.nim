@@ -400,15 +400,20 @@ proc new_frame_id(self: Build): int =
   result = self.next_frame_id
   inc self.next_frame_id
 
+proc draw_origin(self: Build, index: int)
+
 proc grow_frames(self: Build, index: int) =
   if index < self.frames_len:
     return
+  let first = self.frames_len
   var order = self.frame_order
   while order.ids.len <= index:
     let id = self.new_frame_id
     order.ids.add id
     order.unvisited.add id
   self.frame_order = order
+  for added in first .. index:
+    self.draw_origin(added)
 
 proc visited(self: Build, index: int) =
   ## Frame `index` has content of its own now: moving to it carries nothing.
@@ -460,7 +465,9 @@ proc carry_into(self: Build, index: int) =
   self.refresh_edits()
   let edits = self.voxels.saved_frame_edits(self.frame_id(src))
   if edits.chunks.len > 0:
+    self.voxels.drop_frame(id) # holds only its origin block so far
     self.voxels.load_frame_edits(id, edits)
+    self.draw_origin(index)
   self.frames_changed()
 
 proc go_to_frame*(self: Build, index: int) =
@@ -536,9 +543,12 @@ proc delete_frames*(self: Build, first: int, last: int) =
     if at >= 0:
       order.unvisited.delete at
   order.ids.delete(first .. last)
-  if order.ids.len == 0:
+  let emptied = order.ids.len == 0
+  if emptied:
     order.ids.add self.new_frame_id
   self.frame_order = order
+  if emptied:
+    self.draw_origin(0)
   let len = order.ids.len
   self.frame = self.frame.after_delete(first, last, len)
   self.current_frame = self.current_frame.after_delete(first, last, len)
@@ -551,6 +561,7 @@ proc clear_frame*(self: Build, index: int) =
   self.check_not_baking("clear a frame")
   self.check_frame_index(index)
   self.voxels.drop_frame(self.frame_id(index))
+  self.draw_origin(index)
   self.frames_changed()
 
 proc clear_frames*(self: Build) =
@@ -689,6 +700,17 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
 
   if position == vec3(0, 0, 0) and voxel.kind != TRANSIENT:
     self.start_color = voxel.color
+
+proc draw_origin(self: Build, index: int) =
+  ## Every frame has the origin block, unless a hole there hides it or a
+  ## manual block takes its place. It's computed, so a `bake` mustn't
+  ## record it.
+  let baking = move self.baking
+  self.voxels.with_frame(self.frame_id(index)):
+    if not self.voxels.has_edit(vec3()) or
+        self.voxels.get_edit(vec3()).kind == HOLE:
+      self.draw(vec3(), (TRANSIENT, self.start_color))
+  self.baking = baking
 
 proc sync_turtle*(self: Build) =
   # Mirror draw_transform for the render side. Called once per batch of
@@ -990,16 +1012,22 @@ method reset*(self: Build) =
   if rebuild:
     self.restore_edits
   self.unmark_holes()
-  self.draw(vec3(), (TRANSIENT, self.start_color))
+  for index in 0 ..< self.frames_len:
+    self.draw_origin(index)
 
 method ensure_visible*(self: Build) =
-  if self.things.len == 0 and not self.has_visible_voxels:
-    let color =
-      if self.start_color == ACTION_COLORS[ERASER]:
-        ACTION_COLORS[BLUE]
-      else:
-        self.start_color
-    self.draw(vec3(), (TRANSIENT, color))
+  ## A frame showing nothing shows the origin block, even through a hole.
+  if self.things.len > 0:
+    return
+  let color =
+    if self.start_color == ACTION_COLORS[ERASER]:
+      ACTION_COLORS[BLUE]
+    else:
+      self.start_color
+  for id in self.frame_order.ids:
+    self.voxels.with_frame(id):
+      if not self.has_visible_voxels:
+        self.add_voxel(vec3(), (TRANSIENT, color))
 
 method destroy*(self: Build) =
   self.destroy_impl
