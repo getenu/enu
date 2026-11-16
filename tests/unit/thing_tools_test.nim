@@ -98,3 +98,36 @@ suite "Lifting":
   test "straight up or away from it does nothing":
     check lifted(start, grab, eye, UP).is_none
     check lifted(start, grab, eye, vec3(0, 0, 1)).is_none
+
+suite "Turning":
+  let eye = vec3(0, 1, 0)
+
+  proc turn(start: Transform, look: Vector3, anchor = Transform.init): Transform =
+    turned(start, anchor, eye, look.normalized).get
+
+  test "it faces the nearest axis toward the aim":
+    # a unit 5 ahead, aimed past its right side: turn it to face right
+    let start = Transform.init(origin = vec3(0, 0, -5))
+    let to = turn(start, vec3(4, -1, -5))
+    check to.basis.xform(FORWARD) == RIGHT
+    check to.origin == vec3(0, 0, -5)
+
+  test "aiming past its far side keeps it facing away":
+    let start = Transform.init(origin = vec3(0, 0, -5))
+    check turn(start, vec3(0.3, -1, -8)).basis == start.basis
+
+  test "it turns around its anchor":
+    let start = Transform.init(origin = vec3(0, 0, -5))
+    let anchor = Transform.init(origin = vec3(1, 0, 1))
+    let to = turn(start, vec3(4, -1, -4), anchor)
+    check to.basis.xform(vec3(1, 0, 1)) + to.origin == vec3(1, 0, -4)
+
+  test "the anchor's forward is what turns toward the aim":
+    let start = Transform.init(origin = vec3(0, 0, -5))
+    let anchor = Transform(basis: init_basis(0, 0, 1, 0, 1, 0, -1, 0, 0))
+    let to = turn(start, vec3(0.3, -1, -8), anchor)
+    check to.basis.xform(anchor.basis.xform(FORWARD)) == FORWARD
+
+  test "aiming at its anchor does nothing":
+    let start = Transform.init(origin = vec3(0, 0, 0))
+    check turned(start, Transform.init, eye, DOWN).is_none

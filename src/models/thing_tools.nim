@@ -52,3 +52,41 @@ proc lifted*(start: Transform, grab, eye, look: Vector3): Option[Transform] =
   var to = start
   to.origin.y += round(hit.y - grab.y)
   some(to)
+
+proc yaw(direction: Vector3): float =
+  ## How far `direction` is turned from FORWARD around UP.
+  arctan2(-direction.x, -direction.z)
+
+proc tidy(basis: Basis): Basis =
+  ## `basis` with rounding error taken off its whole numbers, so quarter turns
+  ## stay exact.
+  result = basis
+  for row in 0 .. 2:
+    for col in 0 .. 2:
+      let value = result[row][col]
+      if abs(value - round(value)) < 0.0001:
+        result[row][col] = round(value)
+
+proc turned*(start, anchor: Transform, eye, look: Vector3): Option[Transform] =
+  ## `start` turned around its anchor, so its forward points along whichever
+  ## world axis is nearest the way from the anchor to where the aim from
+  ## `eye` along `look` crosses the anchor's height. None while that's too
+  ## close to the anchor to tell.
+  let pivot = start.basis.xform(anchor.origin) + start.origin
+  let ahead = vec3(look.x, 0, look.z)
+  let aim =
+    if abs(look.y) > 0.001 and (pivot.y - eye.y) / look.y > 0:
+      eye + look * ((pivot.y - eye.y) / look.y)
+    else:
+      eye + ahead * 1000
+  let want = vec3(aim.x - pivot.x, 0, aim.z - pivot.z)
+  if want.length < 0.5:
+    return
+  let quarter = PI / 2
+  let forward = start.basis.xform(anchor.basis.xform(FORWARD))
+  let turn =
+    round(want.yaw / quarter) * quarter - vec3(forward.x, 0, forward.z).yaw
+  var to = start
+  to.basis = start.basis.rotated(UP, turn).tidy
+  to.origin = pivot - to.basis.xform(anchor.origin)
+  some(to)

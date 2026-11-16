@@ -119,6 +119,15 @@ gdobj AimTarget of Sprite3D:
     if to.is_some:
       self.place_held(to.get)
 
+  proc turn_held(ray: RayCast) =
+    ## Point the turn tool's held thing toward the aim.
+    let
+      eye = ray.global_transform.origin
+      look = ray.global_transform.basis.xform(ray.cast_to).normalized
+      to = turned(self.held_from, held.anchor, eye, look)
+    if to.is_some:
+      self.place_held(to.get)
+
   proc update*(ray: RayCast) =
     create_held =
       is_key_pressed(if host_os == "macosx": KEY_META else: KEY_CONTROL)
@@ -224,6 +233,8 @@ gdobj AimTarget of Sprite3D:
       self.carry_held(thing)
     elif ?held and state.player.tool == LIFT_TOOL:
       self.lift_held(ray)
+    elif ?held and state.player.tool == TURN_TOOL:
+      self.turn_held(ray)
     self.update_glow(thing)
 
     if PRIMARY_DOWN notin state.local_flags and
