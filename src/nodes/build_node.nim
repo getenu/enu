@@ -11,6 +11,9 @@ import ./queries, ./voxel_library_registry, ./build_node_frames
 
 const
   highlight_glow = 1.0
+  held_alpha = 0.5 ## How much of a unit shows while a tool holds it.
+  hidden_alpha = 0.117647
+    ## How much of an invisible unit shows in god mode (BuildNode.tscn's).
   default_glow = 0.0
   error_flash_time = 0.5.seconds
 
@@ -52,6 +55,7 @@ gdobj BuildNode of VoxelTerrain:
     # process, with the watch paused).
     pending_transform: Option[Transform]
     positioned: bool # initial placement applied? (see the transform watch)
+    held_layer: int ## The collision layer to go back to once it's put down.
     default_view_distance: int
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
@@ -187,16 +191,21 @@ gdobj BuildNode of VoxelTerrain:
         m.set_shader_param("emission_energy", self.model.glow.to_variant)
 
   proc set_visibility() =
-    if VISIBLE in self.model.global_flags:
+    if VISIBLE in self.model.global_flags and HELD notin self.model.global_flags:
       self.visible = true
 
       self.each_material(i, material):
         material.shader = shader
-    elif VISIBLE notin self.model.global_flags and GOD in state.player.flags:
+    elif HELD in self.model.global_flags or GOD in state.player.flags:
       self.visible = true
+      let alpha =
+        if HELD in self.model.global_flags: held_alpha else: hidden_alpha
 
       self.each_material(i, material):
         material.shader = hidden_shader
+        var albedo = material.get_shader_param("albedo").as_color
+        albedo.a = alpha
+        material.set_shader_param("albedo", albedo.to_variant)
     else:
       self.visible = false
 
@@ -523,8 +532,16 @@ gdobj BuildNode of VoxelTerrain:
       if (
         change.item == VISIBLE and
         SCRIPT_INITIALIZING notin self.model.global_flags
-      ) or SCRIPT_INITIALIZING.removed:
+      ) or SCRIPT_INITIALIZING.removed or change.item == HELD:
         self.set_visibility
+        if HELD.added:
+          # the aim goes through it to wherever it's being put
+          self.held_layer = self.collision_layer
+          self.collision_layer = 0
+        elif HELD.removed:
+          # put down or put back: wherever the model says
+          self.transform = self.model.transform
+          self.collision_layer = self.held_layer
       elif RESETTING.added:
         # the terrain reloads with the frame the run starts on
         self.show_deferred = false
@@ -641,7 +658,7 @@ gdobj BuildNode of VoxelTerrain:
       # a frame stale, so writing it back would fight the script and bounce. With
       # no pending, this still carries node-side edits to the model.
       if self.model.code.owner == state.worker_ctx_name and
-          self.pending_transform.is_none:
+          self.pending_transform.is_none and HELD notin self.model.global_flags:
         self.model.transform_value.pause self.transform_zid:
           self.model.transform = self.transform
 

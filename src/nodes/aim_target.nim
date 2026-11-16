@@ -17,6 +17,7 @@ gdobj AimTarget of Sprite3D:
     target_model: Model
     glowing: Build
     join_key: JoinKey
+    held_to: Transform ## Where the held thing goes if it's put down now.
 
   proc glow(target: Build) =
     if target != self.glowing:
@@ -64,13 +65,42 @@ gdobj AimTarget of Sprite3D:
       elif BLOCK_TARGET_VISIBLE.removed:
         self.visible = false
 
+    state.local_flags.watch(state.player):
+      if PRIMARY_DOWN.added and VIEWPORT_FOCUSED in state.local_flags:
+        if ?held:
+          put_down(self.held_to)
+        elif state.player.tool in THING_TOOLS and self.target_model of Thing and
+            Thing(self.target_model).can_hold:
+          hold(Thing(self.target_model))
+          self.held_to = held.transform
+
     state.player.tool_value.watch(state.player):
+      put_back()
       # tool changed. Retarget.
       if self.target_model != nil:
         self.target_model.local_flags -= HOVER
         self.target_model.target_point = vec3()
         self.target_model.target_normal = vec3()
         self.target_model = nil
+
+  proc carry_held(thing: Model) =
+    ## Keep the move tool's held thing on the block the aim is on.
+    let cell =
+      if thing of Build:
+        Build(thing).placement_cell
+      elif thing of Ground:
+        Ground(thing).placement_cell
+      else:
+        return
+    let node = held.node as Spatial
+    var to = node.global_transform
+    to.origin =
+      if held of Bot:
+        cell + vec3(0.5, 0, 0.5)
+      else:
+        cell - to.basis.xform(held.anchor.origin)
+    node.global_transform = to
+    self.held_to = node.transform
 
   proc update*(ray: RayCast) =
     create_held =
@@ -171,6 +201,8 @@ gdobj AimTarget of Sprite3D:
         else:
           thing.local_flags -= TARGET_MOVED
 
+    if ?held and state.player.tool == MOVE_TOOL and collider != nil:
+      self.carry_held(thing)
     self.update_glow(thing)
 
     if PRIMARY_DOWN notin state.local_flags and

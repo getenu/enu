@@ -63,6 +63,9 @@ gdobj BotNode of KinematicBody:
     floor_prev_transform: Transform
     fall_velocity: float # node-side fake gravity for walking off ledges
     floor_seen: bool # gravity only starts once the bot has stood on something
+    held_layers: (int, int)
+      ## The body's and selection area's collision layers to go back to once
+      ## it's put down.
 
   proc update_material*(value: Material) =
     self.mesh.set_surface_material(0, value)
@@ -101,7 +104,11 @@ gdobj BotNode of KinematicBody:
 
   proc set_visibility() =
     var color = self.model.color
-    if VISIBLE in self.model.global_flags:
+    if HELD in self.model.global_flags:
+      self.visible = true
+      color.a = 0.0
+      SpatialMaterial(self.material).albedo_color = color
+    elif VISIBLE in self.model.global_flags:
       self.visible = true
       self.set_color(color)
     elif VISIBLE notin self.model.global_flags and GOD in state.player.flags:
@@ -140,8 +147,18 @@ gdobj BotNode of KinematicBody:
       if (
         change.item == VISIBLE and
         SCRIPT_INITIALIZING notin self.model.global_flags
-      ) or SCRIPT_INITIALIZING.removed:
+      ) or SCRIPT_INITIALIZING.removed or change.item == HELD:
         self.set_visibility
+        let selection = self.get_node("SelectionArea") as Area
+        if HELD.added:
+          # the aim goes through it to wherever it's being put
+          self.held_layers = (self.collision_layer, selection.collision_layer)
+          self.collision_layer = 0
+          selection.collision_layer = 0
+        elif HELD.removed:
+          # put down or put back: wherever the model says
+          self.transform = self.model.transform
+          (self.collision_layer, selection.collision_layer) = self.held_layers
 
     self.model.local_flags.watch:
       if HIGHLIGHT.added:
@@ -611,7 +628,7 @@ gdobj BotNode of KinematicBody:
     self.process_screenshot()
 
   method physics_process(delta: float) =
-    if ?self.model:
+    if ?self.model and HELD notin self.model.global_flags:
       if self.model of Bot:
         let bot = Bot(self.model)
         # Move only while a script is driving the bot, so it stops when the

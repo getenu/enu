@@ -187,6 +187,7 @@ task test_unit, "run unit tests":
   exec "nim c -r tests/unit/block_rules_test"
   exec "nim c -r tests/unit/join_target_test"
   exec "nim c -r tests/unit/code_tools_test"
+  exec "nim c -r tests/unit/thing_tools_test"
 
 task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"

@@ -248,6 +248,14 @@ type
       ## GlobalModelFlags) because every context applies the membership move and
       ## runs the same ungated destroy. Interim until destructor-driven teardown
       ## (getenu/enu#65) makes remove==detach; then this flag goes away.
+    HELD
+      ## Picked up by a move, lift or turn tool: its script waits, it shows
+      ## see-through, and its node goes where the tool puts it without
+      ## telling the model until it's placed.
+
+  Placement* = object
+    ## A hand move: where a thing was, and where it was put.
+    before*, after*: Transform
 
   Tools* = enum
     CODE_MODE
@@ -470,6 +478,9 @@ type
     sight_query_value*: EdValue[SightQuery]
     eval_value*: EdValue[string]
     anchor_value*: EdValue[Transform]
+    placed_value*: EdValue[Placement]
+      ## Set when a player puts the thing down with a move, lift or turn tool.
+      ## The worker moves it and its start transform by the same amount.
     rendered_voxel_count_value*: EdValue[int]
     pending_block_updates_value*: EdValue[int]
     query_value*: EdValue[ThingQuery]
