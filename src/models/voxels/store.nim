@@ -589,8 +589,7 @@ proc restore_needed*(self: VoxelStore): bool =
   ## Kind is the ground truth — persisted edits restore as PERSISTED cells,
   ## scripts draw TRANSIENT ones — so:
   ## - any TRANSIENT cell → a script drew since the last restore: rebuild
-  ##   (early exit on the first one found; a unit that completed a reset
-  ##   before carries at least the TRANSIENT default origin block).
+  ##   (early exit on the first one found).
   ## - no cells at all → nothing restored yet (or a genuinely empty unit,
   ##   where the rebuild is a cheap no-op): rebuild.
   ## - non-empty and all PERSISTED → the live state is already exactly the
@@ -602,10 +601,13 @@ proc restore_needed*(self: VoxelStore): bool =
   ## reads as pristine, so removing that script's erase code and reloading
   ## won't resurrect the erased voxels — rerunning the script reproduces
   ## the same state anyway.
+  ## The origin block doesn't count: every frame gets one each run.
   ## The answer is remembered per frame until a computed block lands in it
   ## or its blocks are replaced.
   if self.frame_id in self.restored_frames:
     return false
+  let origin_chunk = vec3().buffer
+  let origin_linear = linear_position(vec3())
   var has_content = false
   for chunk_id in self.chunk_ids.to_seq:
     let chunk = self.cached_chunk(self.key(chunk_id))
@@ -617,7 +619,8 @@ proc restore_needed*(self: VoxelStore): bool =
       if v == EMPTY_VOXEL:
         continue
       let (_, kind_ord) = unpack_voxel(v)
-      if VoxelKind(kind_ord) == TRANSIENT:
+      if VoxelKind(kind_ord) == TRANSIENT and
+          (chunk_id != origin_chunk or linear != origin_linear):
         return true
   if has_content:
     self.restored_frames.incl self.frame_id

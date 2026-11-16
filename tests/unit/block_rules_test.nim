@@ -160,6 +160,28 @@ suite "Frames":
     build.go_to_frame(3)
     check not build.voxels.has_edit(hand) # only the run's first move
 
+  test "a hole on the origin block carries to new frames":
+    let build = Build.init(id = "build_frames_origin_hole")
+    check vec3() in build
+    build.erase_cell(vec3())
+    check vec3() notin build
+    build.go_to_frame(2)
+    check vec3() notin build
+    check build.voxels.has_edit(vec3())
+    build.voxels.with_frame(build.frame_id(1)):
+      check vec3() in build # skipped over: nothing carried
+
+  test "a frame showing nothing shows the origin block, even through a hole":
+    let build = Build.init(id = "build_frames_origin_visible")
+    build.erase_cell(vec3())
+    build.go_to_frame(1)
+    build.draw(hand, (PERSISTED, blue))
+    build.go_to_frame(0)
+    build.ensure_visible()
+    check vec3() in build
+    build.go_to_frame(1)
+    check vec3() notin build # frame 1 shows its manual block
+
   test "a script run drops every frame's computed blocks and starts on 0":
     let build = Build.init(id = "build_frames_rerun")
     build.go_to_frame(1)

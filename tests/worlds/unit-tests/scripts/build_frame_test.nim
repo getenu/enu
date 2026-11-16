@@ -119,6 +119,16 @@ suite "Frame Animation":
     check not has_block_at(here + hand)
     me.frames.clear()
 
+  test "every frame has the origin block":
+    me.frames.clear()
+    me.frame = 3
+    check has_block_at(here)
+    me.frame = 1 # skipped over, then carried from frame 3
+    check has_block_at(here)
+    me.frames[1].clear()
+    check has_block_at(here)
+    me.frames.clear()
+
   test "play only changes the display, and the script can draw meanwhile":
     me.frames.clear()
     me.draw_voxel(spot, red)
