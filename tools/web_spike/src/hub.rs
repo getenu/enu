@@ -68,6 +68,9 @@ fn render_loop(rx: Receiver<Job>) {
             let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 renderer.render_to_vec(|p| p.append_scene(scene, Affine::IDENTITY), &mut pixels)
             }));
+            if drawn.is_ok() {
+                crate::unpremultiply(&mut pixels);
+            }
             if drawn.is_err() {
                 // Skip the frame. The page shows its last good one.
                 renderer = VelloCpuImageRenderer::new(1, 1);
@@ -149,7 +152,7 @@ pub unsafe extern "C" fn ew_frame_render_ms(f: *const Frame) -> f32 {
     })
 }
 
-/// Premultiplied RGBA8, `width * height * 4` bytes.
+/// Straight-alpha RGBA8, `width * height * 4` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_frame_pixels(f: *const Frame) -> *const u8 {
     crate::guard::guard(move || {
