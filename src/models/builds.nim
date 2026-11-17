@@ -1220,6 +1220,8 @@ proc watch_edit_rows(self: Build) =
   ## that row's seq, so each seq is watched too.
   proc changed(key: EditKey) =
     self.voxels.edit_row_changed((key.frame, key.loc))
+    # an edit made elsewhere (a hand-placed block) may be in a new chunk
+    self.expand_bounds_to_chunk(key.loc)
 
   proc watch_deltas(key: EditKey, deltas: EdSeq[DeltaUpdate]) =
     deltas.watch:
@@ -1295,7 +1297,10 @@ proc init_voxels_if_needed*(self: Build, watch_edits = true) =
       self.watch_edit_rows()
       if SERVER in state.local_flags:
         self.watch_voxel_rows()
-    self.track_chunk_bounds()
+      # Bounds are the worker's to keep. Main's copy starts empty and fills
+      # from sync, so bounds it worked out itself could be stale, and a stale
+      # write would land over the worker's.
+      self.track_chunk_bounds()
 
 proc setup_packed_chunk_watches(self: Build) =
   ## Set up watches for packed_chunks and chunk_deltas to reconstruct local voxels on clients.
