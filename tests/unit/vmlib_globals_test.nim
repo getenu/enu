@@ -21,6 +21,9 @@ const KNOWN = [
   "worlds.world", "types.global_default",
   # cleared by a level reset callback
   "builds_private.save_points", "builds_private.warned_about_save",
+  "pages.handlers",
+  # set once, by pages; does nothing until a page has a click handler
+  "core.yield_hook",
   # not part of the base API: reset with the level that imported it
   "testing.current_suite", "testing.failed_tests", "testing.failure_msg",
   "testing.passed_tests", "testing.test_failed", "testing.total_tests",

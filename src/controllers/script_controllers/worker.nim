@@ -835,6 +835,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         last_asap_flush = frame_start
       was_in_asap = any_asap
 
+      when defined(enu_web):
+        pump_pages()
+
       while Ed.thread_ctx.pressure < 0.9 and to_process.len > 0 and
           (any_asap or state.voxel_tasks <= 10) and get_mono_time() < timeout:
         let things = to_process
@@ -843,6 +846,9 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           if READY in thing.global_flags:
             if worker.advance_thing(thing, timeout):
               to_process.add(thing)
+
+      when defined(enu_web):
+        present_pages()
 
       # Flush pending changes for all Builds
       let asap_interval_elapsed =
