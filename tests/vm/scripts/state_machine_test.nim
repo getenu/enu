@@ -8,7 +8,7 @@ import types
 
 # Create a test thing and register it as active
 var test_thing = Thing()
-test_thing.query_results = initTable[string, seq[Thing]]()
+test_thing.query_results = initTable[string, seq[RootRef]]()
 register_active(test_thing)
 
 suite "State Machine":

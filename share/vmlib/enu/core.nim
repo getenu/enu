@@ -133,10 +133,6 @@ proc bounce*(me: Player, power = 1.0) =
   ## Launch the player into the air. More power, more air.
   me.velocity = me.velocity + UP * power * 30
 
-var yield_hook*: proc() {.nimcall.}
-  ## Runs whenever a script finishes waiting (`sleep`, a move, a turn).
-  ## Pages use it to run click handlers. Unset unless something needs it.
-
 template wait(body: untyped) =
   mixin action_running, `action_running=`, yield_script
   let self = active_thing()
@@ -144,8 +140,6 @@ template wait(body: untyped) =
   body
   while self.action_running and self.advance_state_machine():
     self.yield_script()
-  if yield_hook != nil:
-    yield_hook()
 
 proc sleep*(seconds = -1.0) =
   ## Do nothing for this many seconds. With no argument, naps for up to
@@ -877,7 +871,7 @@ proc loop_finished*() =
   else:
     sleep()
 
-template query(T: type Thing, key: string, body: untyped): untyped =
+template query(T: typedesc, key: string, body: untyped): untyped =
   var result: T
   let thing = active_thing()
   if key in thing.query_results:
@@ -886,7 +880,7 @@ template query(T: type Thing, key: string, body: untyped): untyped =
     let results = body
     if ?results:
       result = results[^1]
-      thing.query_results[key] = results.map_it(Thing(it))
+      thing.query_results[key] = results.map_it(RootRef(it))
   result
 
 iterator items*[T](self: Query[seq[T]]): T =

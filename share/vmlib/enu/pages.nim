@@ -1,19 +1,19 @@
 ## Pages: signs that are real web pages. Give a sign some HTML, change any
-## part of it from your script, and do things when players click.
+## part of it from your script, and react when players click.
 ##
 ## ```nim
 ## let board = say("...", width = 6, height = 0)
 ## board.html = "<h2 id=count>0</h2><button id=add>Add one</button>"
 ## var count = 0
-## board["#add"].on_click:
-##   inc count
-##   board["#count"].text = $count
-## forever: sleep()
+## loop:
+##   if board["#add"].clicked as click:
+##     inc count
+##     board["#count"].text = $count
 ## ```
 ##
-## Click handlers run when the script finishes waiting for something
-## (`sleep`, a move, a turn), so keep it alive with a loop. A click cuts a
-## plain `sleep()` short, so `forever: sleep()` answers right away. (Spike:
+## `clicked` is a query, like `Player.hit`: inside a command loop, `as` hands
+## out each click once and the loop runs again until they've all been
+## handled. A click wakes the thing, so it's handled right away. (Spike:
 ## needs Enu built with `-d:enu_web`.)
 
 import core, vm_bridge_utils
@@ -25,12 +25,9 @@ type
     sign*: Sign
     id*: int
 
-  Handler = object
-    owner: string
-    sign: Sign
-    sign_id: string
-    node: int
-    action: proc()
+  Click* = ref object of RootObj
+    ## A player's click on a page element.
+    element*: Element
 
 bridged_to_host:
   proc page_set_html(self: Sign, html: string)
@@ -45,14 +42,12 @@ bridged_to_host:
   proc page_set_inner_html(self: Sign, node: int, html: string)
   proc page_parent(self: Sign, node: int): int
   proc page_rect(self: Sign, node: int): PageRect
-  proc page_next_click(self: Sign): int
+  proc page_click_count(self: Sign, node: int): int
   proc page_stats*(): string
     ## How long pages took on the worker since you last asked.
   proc page_post_pointer*(self: Sign, kind: int, u: float, v: float)
     ## For tests: pretend a player's pointer did something. `kind` is 0 move,
     ## 1 press, 2 release, 3 leave; `u`, `v` run 0..1 across and down.
-
-var handlers: seq[Handler]
 
 proc `html=`*(self: Sign, html: string) =
   ## Turn the sign into a page with this HTML. Replaces anything there.
@@ -110,49 +105,11 @@ proc rect*(self: Element): PageRect =
   ## date, even right after a change.
   self.sign.page_rect(self.id)
 
-proc dispatch_clicks() =
-  ## Runs the handlers this script registered for clicks that have happened.
-  ## A click goes to the clicked element's handlers, then its parents'.
-  var running {.global.} = false
-  if running or handlers.len == 0:
-    return
-  running = true
-  defer:
-    running = false
-  let me = active_thing().id
-  var signs: seq[Sign]
-  var seen: seq[string]
-  for h in handlers:
-    if h.owner == me and h.sign_id notin seen:
-      seen.add h.sign_id
-      signs.add h.sign
-  for sign in signs:
-    let sign_id = sign.id
-    while true:
-      var node = sign.page_next_click()
-      if node == 0:
-        break
-      while node != 0:
-        for h in handlers:
-          if h.owner == me and h.sign_id == sign_id and h.node == node:
-            h.action()
-        node = sign.page_parent(node)
-
-proc add_click_handler*(self: Element, action: proc()) =
-  handlers.add Handler(
-    owner: active_thing().id,
-    sign: self.sign,
-    sign_id: self.sign.id,
-    node: self.id,
-    action: action,
-  )
-  yield_hook = dispatch_clicks
-
-template on_click*(self: Element, body: untyped) =
-  ## Do something when a player clicks the element (or anything inside it).
-  self.add_click_handler(proc() = body)
-
-register_level_reset(
-  proc() =
-    handlers.set_len(0)
-)
+proc clicked*(self: Element): Query[seq[Click]] =
+  ## Clicks on the element (or anything inside it) since the last tick. Use
+  ## it in a command loop: `if button.clicked as click:`.
+  let n = self.sign.page_click_count(self.id)
+  var clicks: seq[Click]
+  for i in 0 ..< n:
+    clicks.add Click(element: self)
+  Query.init(clicks)
