@@ -67,6 +67,9 @@ proc ew_post_pointer*(key: cstring, kind: uint32, u, v: float32): bool
 proc ew_take_pointer*(key: cstring, out_events: ptr float32, max: csize_t): csize_t
 proc ew_forget*(key: cstring)
 
+# Every call catches its own panics (see ../src/guard.rs).
+proc ew_take_error*(): cstring
+
 proc ew_canvas_attach*(v: ViewPtr, node: NodeId)
 proc ew_canvas_clear*(v: ViewPtr, node: NodeId)
 proc ew_canvas_begin_path*(v: ViewPtr, node: NodeId)
@@ -94,3 +97,10 @@ proc get_attribute*(v: ViewPtr, node: NodeId, name: string): string =
     return $cast[cstring](buf[0].addr)
   result = new_string(n)
   discard ew_get_attribute(v, node, name.cstring, result[0].addr, csize_t(n + 1))
+
+proc take_error*(): string =
+  ## The error from the last call that failed on this thread, or "". Clears
+  ## it.
+  let e = ew_take_error()
+  if not e.is_nil:
+    result = $e

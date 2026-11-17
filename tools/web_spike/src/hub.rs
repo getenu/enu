@@ -65,7 +65,14 @@ fn render_loop(rx: Receiver<Job>) {
             renderer.resize(job.width, job.height);
             let mut pixels = Vec::new();
             let scene = job.scene;
-            renderer.render_to_vec(|p| p.append_scene(scene, Affine::IDENTITY), &mut pixels);
+            let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                renderer.render_to_vec(|p| p.append_scene(scene, Affine::IDENTITY), &mut pixels)
+            }));
+            if drawn.is_err() {
+                // Skip the frame. The page shows its last good one.
+                renderer = VelloCpuImageRenderer::new(1, 1);
+                continue;
+            }
             let frame = Frame {
                 width: job.width,
                 height: job.height,
@@ -84,16 +91,18 @@ fn render_loop(rx: Receiver<Job>) {
 /// Returns the time spent on this thread, in ms.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_present(v: *mut View, key: *const c_char) -> f32 {
-    let start = Instant::now();
-    let v = unsafe { view(v) };
-    let key = unsafe { str_arg(key) }.to_owned();
-    v.doc.resolve(0.0);
-    let mut scene = Scene::new();
-    let (w, h) = (v.width, v.height);
-    blitz_paint::paint_scene(&mut scene, &mut v.doc, v.scale as f64, w, h, 0, 0);
-    let job = Job { key, scene, width: w, height: h };
-    JOBS.lock().unwrap().send(job).expect("render thread alive");
-    start.elapsed().as_secs_f32() * 1000.0
+    crate::guard::guard(move || {
+        let start = Instant::now();
+        let v = unsafe { view(v) };
+        let key = unsafe { str_arg(key) }.to_owned();
+        v.doc.resolve(0.0);
+        let mut scene = Scene::new();
+        let (w, h) = (v.width, v.height);
+        blitz_paint::paint_scene(&mut scene, &mut v.doc, v.scale as f64, w, h, 0, 0);
+        let job = Job { key, scene, width: w, height: h };
+        JOBS.lock().unwrap().send(job).expect("render thread alive");
+        start.elapsed().as_secs_f32() * 1000.0
+    })
 }
 
 /// The newest finished frame for `key` if it's newer than `since`, else
@@ -106,43 +115,55 @@ pub unsafe extern "C" fn ew_take_frame(
     since: u64,
     version: *mut u64,
 ) -> *const Frame {
-    let key = unsafe { str_arg(key) };
-    let slots = SLOTS.lock().unwrap();
-    match slots.get(key) {
-        Some(Slot { frame: Some(f), version: v, .. }) if *v > since => {
-            unsafe { *version = *v };
-            Arc::into_raw(f.clone())
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        let slots = SLOTS.lock().unwrap();
+        match slots.get(key) {
+            Some(Slot { frame: Some(f), version: v, .. }) if *v > since => {
+                unsafe { *version = *v };
+                Arc::into_raw(f.clone())
+            }
+            _ => std::ptr::null(),
         }
-        _ => std::ptr::null(),
-    }
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_frame_width(f: *const Frame) -> u32 {
-    unsafe { &*f }.width
+    crate::guard::guard(move || {
+        unsafe { &*f }.width
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_frame_height(f: *const Frame) -> u32 {
-    unsafe { &*f }.height
+    crate::guard::guard(move || {
+        unsafe { &*f }.height
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_frame_render_ms(f: *const Frame) -> f32 {
-    unsafe { &*f }.render_ms
+    crate::guard::guard(move || {
+        unsafe { &*f }.render_ms
+    })
 }
 
 /// Premultiplied RGBA8, `width * height * 4` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_frame_pixels(f: *const Frame) -> *const u8 {
-    unsafe { &*f }.pixels.as_ptr()
+    crate::guard::guard(move || {
+        unsafe { &*f }.pixels.as_ptr()
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_frame_free(f: *const Frame) {
-    if !f.is_null() {
-        drop(unsafe { Arc::from_raw(f) });
-    }
+    crate::guard::guard(move || {
+        if !f.is_null() {
+            drop(unsafe { Arc::from_raw(f) });
+        }
+    })
 }
 
 /// Queues a pointer event for the page named `key`. `u` and `v` run 0..1
@@ -150,34 +171,40 @@ pub unsafe extern "C" fn ew_frame_free(f: *const Frame) {
 /// has presented a page. Returns whether it was queued.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_post_pointer(key: *const c_char, kind: u32, u: f32, v: f32) -> bool {
-    let key = unsafe { str_arg(key) };
-    let mut slots = SLOTS.lock().unwrap();
-    let Some(slot) = slots.get_mut(key) else { return false };
-    // A run of moves only needs the last one.
-    if kind == 0 && slot.pointer.last().is_some_and(|p| p[0] == 0.0) {
-        slot.pointer.pop();
-    }
-    slot.pointer.push([kind as f32, u, v]);
-    true
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        let mut slots = SLOTS.lock().unwrap();
+        let Some(slot) = slots.get_mut(key) else { return false };
+        // A run of moves only needs the last one.
+        if kind == 0 && slot.pointer.last().is_some_and(|p| p[0] == 0.0) {
+            slot.pointer.pop();
+        }
+        slot.pointer.push([kind as f32, u, v]);
+        true
+    })
 }
 
 /// Moves up to `max` queued pointer events into `out` as (kind, u, v)
 /// triples. Returns how many.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_take_pointer(key: *const c_char, out: *mut f32, max: usize) -> usize {
-    let key = unsafe { str_arg(key) };
-    let mut slots = SLOTS.lock().unwrap();
-    let Some(slot) = slots.get_mut(key) else { return 0 };
-    let n = slot.pointer.len().min(max);
-    for (i, p) in slot.pointer.drain(..n).enumerate() {
-        unsafe { std::ptr::copy_nonoverlapping(p.as_ptr(), out.add(i * 3), 3) };
-    }
-    n
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        let mut slots = SLOTS.lock().unwrap();
+        let Some(slot) = slots.get_mut(key) else { return 0 };
+        let n = slot.pointer.len().min(max);
+        for (i, p) in slot.pointer.drain(..n).enumerate() {
+            unsafe { std::ptr::copy_nonoverlapping(p.as_ptr(), out.add(i * 3), 3) };
+        }
+        n
+    })
 }
 
 /// Drops anything waiting for `key`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_forget(key: *const c_char) {
-    let key = unsafe { str_arg(key) };
-    SLOTS.lock().unwrap().remove(key);
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        SLOTS.lock().unwrap().remove(key);
+    })
 }
