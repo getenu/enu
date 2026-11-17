@@ -271,29 +271,33 @@ let board = say("page", width = 12, height = 0, size = 0.7)
 board.html = "<h2>Bolt's Counting Machine</h2><p>Count: <b id=count>0</b></p>" &
   "<button id=add>Add one</button><ul id=log></ul>"
 var count = 0
-board["#add"].on_click:
-  inc count
-  board["#count"].text = $count
-  board["#log"].add board.element("li", \"pressed it, now {count}")
-forever:
-  sleep()
+loop:
+  if board["#add"].clicked as click:
+    inc count
+    board["#count"].text = $count
+    board["#log"].add board.element("li", \"pressed it, now {count}")
 ```
 
 - API (`share/vmlib/enu/pages.nim`): `sign.html=`, `sign[selector]`,
   `sign.element(tag, text)`, `add`, `remove`, `text`/`text=`, `html=`,
   attributes with `[]`/`[]=`, `parent`, `rect` (layout, always current), and
-  `on_click`. Element handles are Blitz node ids.
+  `clicked`. Element handles are Blitz node ids.
 - Host side: `src/controllers/script_controllers/web_pages.nim`, bridged in
   `host_bridge.nim` and pumped from the worker loop (pointer events before
   scripts run, changed pages recorded after).
-- Handlers live in the VM. They run when the script finishes waiting
-  (`sleep`, a move, a turn) through a `yield_hook` in `core.nim`'s `wait`, and
-  a click cuts the owner's plain `sleep()` short, as a bump does. Handlers
-  bubble from the clicked element up through its parents. They're cleared on
-  level reset.
-- A handler can't run during a long action (`forward 20`); it runs after.
-  Scratch runs "when clicked" scripts concurrently. Matching that needs
-  per-handler tasks in the VM.
+- Clicks are a query, like `Player.hit`. `clicked(el)` counts the clicks
+  this tick on the element or anything inside it; `as` hands them out one
+  per pass, and the loop runs until they've all been handled. The host keeps
+  a page's clicks for the tick they arrive in, so evaluating the query
+  doesn't consume anything. A click wakes the owner, as a bump does, so its
+  loop sees the click the same tick. Query results are stored as `RootRef`
+  now (they were `Thing`), so a query can hand out things that aren't Things.
+- The first version used callbacks (`on_click`) run from a hook in `wait`.
+  That's the model Enu avoids, and it only ran handlers after a command
+  finished. Replaced by the query.
+- Until #152 is fixed, a click handled in a pass during a long command can
+  be seen again on the next wake pass of that command (the stored result
+  isn't popped there). Things that are only a UI don't hit this.
 - Measured in game (welcome level, page 1200 px wide):
   - Worker, per changed frame, style + layout + recording: 0.12–0.5 ms,
     including a 14,600 px tall page.
@@ -326,8 +330,8 @@ forever:
 - Blitz text input, focus and IME. `:hover`/`:active` and clicks work
   (prototype 7); keyboard input isn't forwarded yet.
 - Try the aim-ray click path with a real mouse, including billboard signs.
-- Handlers during long actions (see prototype 7), and `clicked` as a polled
-  condition for state machines.
+- Query semantics (#152): results last one tick, combinations follow
+  nesting, the first transition in a tick wins.
 - Main-thread upload cost on Godot 3 (~6 ms per changed frame).
 - How DOM edits sync to other players (to discuss).
 - Is the Nim VM fast enough for interactive UI driven by player scripts, or

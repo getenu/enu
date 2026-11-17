@@ -94,11 +94,16 @@ proc page_rect*(self: Sign, node: int): PageRect =
   ew_rect(self.page.view, NodeId(node), r.addr)
   (r[0].float, r[1].float, r[2].float, r[3].float)
 
-proc page_next_click*(self: Sign): int =
+proc page_click_count*(self: Sign, node: int): int =
+  ## Clicks this tick on `node` or anything inside it.
   let page = self.page
-  if page.clicks.len > 0:
-    result = page.clicks[0]
-    page.clicks.delete(0)
+  for target in page.clicks:
+    var n = NodeId(target)
+    while n != NO_NODE:
+      if n == NodeId(node):
+        inc result
+        break
+      n = ew_parent(page.view, n)
 
 proc summary(times: seq[float]): string =
   if times.len == 0:
@@ -137,8 +142,8 @@ proc pump_pages*() =
         page.dirty = true
       if clicked != NO_NODE:
         page.clicks.add int(clicked.uint64)
-        # Cut the owner's plain `sleep()` short, like a bump does, so its
-        # handlers run now.
+        # Wake the owner, like a bump does, so its loop sees the click this
+        # tick.
         let owner = page.sign.owner
         if ?owner and ?owner.script_ctx:
           owner.script_ctx.timer = get_mono_time()
@@ -149,8 +154,11 @@ proc pump_pages*() =
     pages.del key
 
 proc present_pages*() =
-  ## After scripts run: lay out and record pages that changed.
+  ## After scripts run: forget this tick's clicks, then lay out and record
+  ## pages that changed. Clicks last one tick, like other query results; the
+  ## click woke the owner, so its script has seen them.
   for key, page in pages:
+    page.clicks.set_len(0)
     if not page.dirty or page.sign.destroyed:
       continue
     let start = get_mono_time()
