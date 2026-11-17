@@ -1,6 +1,6 @@
 # Web UI
 
-Status: prototypes 1–7 done as a spike (see Results). Nothing ships yet;
+Status: prototypes 1–9 done as a spike (see Results). Nothing ships yet;
 web signs and script pages are behind `-d:enu_web`.
 
 ## Goal
@@ -159,6 +159,41 @@ over the page.
 - **Drawing:** the block editor draws on canvas 2D (precedent: Snap! draws
   its whole UI on one canvas). It's Enu UI, so it runs native, not in the VM.
 
+## Command loops, events and pages
+
+Settled in discussion (2026-11-17). Long-term direction, not built yet,
+except where noted.
+
+- **One command loop per thing.** A thing has one state machine, which may
+  be written in pieces and may nest, but there are no peer state machines.
+  Two independent behaviors are two things. `loop` is expected to become
+  bare `on:`, with `on <event>:` forms alongside it.
+- **The loop body is rules.** It runs an undetermined number of times: every
+  0.5s, when something interesting happens (a collision, a click), and once
+  per combination of query results. It should mostly decide which state the
+  thing is in. Commands run as states' actions.
+- **Queries hand out everything that happened in a tick, one result per
+  pass** (`if Player.added as p:`). Results last one tick. Nested queries
+  run once per combination (each player with each build); sibling queries
+  are independent, since a rule can only see the results it's nested in.
+  The current code doesn't do this yet: see #152.
+- **Clicks are a query.** `if button.clicked as click:` (built), and `on
+  click(el):` as sugar for it. A click wakes the thing so it's handled in the
+  same tick, even mid-command. A `->` inside one only fires if the thing is
+  idle in that state, the same as any other query.
+- **Data changes on click are fine** (`inc count`), as long as each result is
+  handled once: that's why siblings must not be multiplied together.
+- **Pages are declarative and live in the loop body.** `page board:`
+  describes the whole page on each pass; the host compares it with the last
+  description and applies only the differences. `on click:` inside an
+  element is the click query for that element. A page described inside a
+  state only exists in that state. The differences are also the edit log
+  other players would replay (syncing not designed yet).
+- **Open:** what a transition does to the rest of a tick's results (proposed:
+  the first transition wins, and the remaining results are still processed);
+  whether `on X:` loops can run commands (proposed: no, which also makes them
+  possible in native Enu, where nothing can pause mid-pass).
+
 ## Prototypes
 
 Each one answers one question. Stop and reassess if one fails.
@@ -182,6 +217,9 @@ Each one answers one question. Stop and reassess if one fails.
 7. **Pages on the worker thread.** The page lives next to the script for
    direct DOM access; a render thread rasterizes; the main thread uploads and
    forwards the pointer. Completes 2 (clicks).
+8. **Panics as errors.** A renderer bug becomes a script error, not a crash.
+9. **Declarative pages.** `page board:` in the command loop, with
+   differences applied on the host and logged as edits.
 
 After Godot 4: port the adapter, GPU canvas and WebGPU through wgpu, then the
 iOS build.
@@ -320,10 +358,74 @@ loop:
   damaged, and the next layout panics on a stale node ("invalid SlotMap key
   used"). Worked around by removing children one at a time. Worth reporting
   upstream.
-- Panics abort Enu (`panic = "abort"`). Before shipping, the C interface
-  should catch them (unwind + `catch_unwind`) and report an error to the
-  script instead.
+- Panics used to abort Enu. See 8.
 - Pages are capped at 4096 px tall until they scroll.
+
+**8. Panics stop at the C interface.** Every exported function runs inside
+`guard` (`tools/web_spike/src/guard.rs`), which catches panics and stores the
+message for `ew_take_error`.
+
+- In a script call, the error becomes a script error ("The page had a
+  problem: ..."). In the worker loop and on the main thread it's logged.
+- A panic may leave a page half-changed, so that page refuses further calls
+  until its HTML is set again. Caller mistakes found before anything changes
+  (a node id that doesn't exist) are reported without breaking the page.
+- An element that wasn't found gives a script error naming its selector.
+- The render thread skips a frame that panics instead of dying.
+- Unwinding costs about 1.7MB: the stripped library is 10.9MB (9.0–9.2MB
+  with `panic = "abort"`).
+- Tested natively (`nim/guard_test.nim`) and in game: setting the text of a
+  missing element used to be a Blitz panic; now it's a script error.
+
+**9. Declarative pages.** `page board:` in a command loop describes the
+whole page on each pass:
+
+```nim
+var count = 0
+loop:
+  page board:
+    h2 "Bolt's Counting Machine"
+    p:
+      text "Count: "
+      b $count
+    button(id = "add"):
+      text "Add one"
+      on click:
+        inc count
+    if count > 0:
+      button(id = "reset"):
+        text "Start over"
+        on click:
+          count = 0
+    ul:
+      for i in 1 .. count:
+        li \"pressed it, now {i}"
+```
+
+- Script side (`share/vmlib/enu/pages.nim`): a macro turns HTML tags into
+  builder calls. `h2 "text"`, `p:` for children, `div(class = "row"):` for
+  attributes, `text` for plain text, `on click:` inside an element, and
+  ordinary `if`/`for`/`case` around them. The description goes to the host
+  as one string per pass.
+- Host side (`tools/web_spike/nim/page_tree.nim`, no Enu dependencies):
+  compares it with the last description and applies only the differences:
+  text and attribute changes, adds, removes, replacements. Each one is logged
+  as an edit (`text 2.1.0 3`, `add 5.1 li`, `remove 5`), readable from a
+  script with `board.page_edits()`. That's the stream other players would
+  replay.
+- Nodes are identified by path (index among siblings, "2.1.0"). `on click:`
+  is the click query for the element at that path, so it works inside
+  loops. Clicks are matched against the paths the player actually saw.
+- If an `on click` body ran, the page is described again without running
+  handlers, so the change shows on the same pass.
+- No keys yet: when an element appears in the middle, everything after it
+  in that parent is rebuilt (`replace 4 button`, `add 5 ul`) instead of
+  moved. Keyed elements (`li(key = item.id)`) fix that when it matters.
+- Tested natively (`nim/page_tree_test.nim`) and in game with the counter
+  above: clicks, the conditional button, the list, CSS from a `style`
+  element, `:hover`. Worker cost per changed pass 0.25–1 ms.
+- Inherits the query bugs in #152 (a click handled in a pass during a long
+  command can repeat on the next wake pass).
 
 ## Open questions
 
