@@ -1837,7 +1837,8 @@ proc bridge_to_vm*(worker: Worker) =
     result.bridged_from_vm "pages",
       page_set_html, page_query, page_create, page_append, page_remove,
       page_text, page_set_text, page_attr, page_set_attr, page_set_inner_html,
-      page_parent, page_rect, page_click_count, page_stats, page_post_pointer
+      page_parent, page_rect, page_click_count, page_stats, page_post_pointer,
+      page_render, page_path_clicks, page_edits
 
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,

@@ -5,9 +5,9 @@
 ## render thread (tools/web_spike/src/hub.rs). The main thread only uploads
 ## finished frames.
 
-import std/[tables, monotimes, times, strformat, algorithm, math]
+import std/[tables, monotimes, times, strformat, algorithm, math, strutils]
 import core, models/signs
-import ../../../tools/web_spike/nim/[enu_web, sign_page]
+import ../../../tools/web_spike/nim/[enu_web, sign_page, page_tree]
 
 const MAX_PAGE_HEIGHT = 4096
   ## Pages don't scroll yet. Taller ones are cut off rather than turned into
@@ -22,6 +22,8 @@ type
     height: int
     dirty: bool
     clicks: seq[int]
+    tree: PageTree ## what `page sign:` last described
+    edit_log: seq[string]
 
 var
   pages {.threadvar.}: Table[string, Page]
@@ -60,6 +62,7 @@ proc page_set_html*(self: Sign, html: string) =
     pages[self.id] = page
   else:
     ew_set_html(page.view, full.cstring)
+  page.tree = PageTree()
   page.dirty = true
 
 proc page_query*(self: Sign, selector: string): int =
@@ -141,6 +144,41 @@ proc page_click_count*(self: Sign, node: int): int =
         inc result
         break
       n = ew_parent(page.view, n)
+
+const PAGE_ROOT = "enu-page"
+
+proc page_render*(self: Sign, tree: string) =
+  ## Makes the page match a description from `page sign:`.
+  defer:
+    check()
+  if self.id notin pages:
+    self.page_set_html("<div id=" & PAGE_ROOT & "></div>")
+  let page = self.page
+  var root = ew_query(page.view, cstring("#" & PAGE_ROOT))
+  if root == NO_NODE:
+    root = ew_create_element(page.view, "div")
+    ew_set_attribute(page.view, root, "id", PAGE_ROOT)
+    ew_append(page.view, ew_query(page.view, "body"), root)
+  if page.tree.render(page.view, root, parse_tree(tree)):
+    page.dirty = true
+    page.edit_log.add page.tree.take_edits
+    if page.edit_log.len > 200:
+      page.edit_log = page.edit_log[^200 .. ^1]
+
+proc page_path_clicks*(self: Sign, path: string): int =
+  ## Clicks this tick on the described element at `path`, or inside it.
+  defer:
+    check()
+  let page = pages.get_or_default(self.id)
+  if not page.is_nil:
+    result = page.tree.clicks_at(page.view, page.clicks, path)
+
+proc page_edits*(self: Sign): string =
+  defer:
+    check()
+  let page = self.page
+  result = page.edit_log.join("\n")
+  page.edit_log.set_len(0)
 
 proc summary(times: seq[float]): string =
   if times.len == 0:

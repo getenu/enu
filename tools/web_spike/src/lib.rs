@@ -541,3 +541,25 @@ pub unsafe extern "C" fn ew_rect(v: *mut View, node: u64, out: *mut f32) {
         unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out, 4) };
     })
 }
+
+/// Inserts `node` just before `anchor`, under the same parent.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_insert_before(v: *mut View, anchor: u64, node: u64) {
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[anchor, node]);
+        v.doc.mutate().insert_nodes_before(id(anchor), &[id(node)]);
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_remove_attribute(v: *mut View, node: u64, name: *const c_char) {
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        let name = unsafe { str_arg(name) };
+        v.doc
+            .mutate()
+            .clear_attribute(id(node), QualName::new(None, ns!(), LocalName::from(name)));
+    })
+}
