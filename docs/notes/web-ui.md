@@ -403,27 +403,39 @@ loop:
 ```
 
 - Script side (`share/vmlib/enu/pages.nim`): a macro turns HTML tags into
-  builder calls. `h2 "text"`, `p:` for children, `div(class = "row"):` for
+  builder calls. `h2 "text"`, `p:` for children, `pane(class = "row"):` for
   attributes, `text` for plain text, `on click:` inside an element, and
   ordinary `if`/`for`/`case` around them. The description goes to the host
   as one string per pass.
+- `pane` is HTML's `div`, which can't be a name in Nim (it's a keyword). The
+  meaningful block tags are all there too (`header`, `footer`, `nav`,
+  `section`, `article`, `aside`, `main`, ...). Teach "use the tag that says
+  what it is; if it's just for layout, use a `pane`".
+- `{.piece.}` on a proc lets it describe part of a page, for reuse. It has to
+  be called inside a `page` block.
 - Host side (`tools/web_spike/nim/page_tree.nim`, no Enu dependencies):
   compares it with the last description and applies only the differences:
-  text and attribute changes, adds, removes, replacements. Each one is logged
-  as an edit (`text 2.1.0 3`, `add 5.1 li`, `remove 5`), readable from a
+  text and attribute changes, adds, removes, moves. Each one is logged as an
+  edit (`text 2/1/0 3`, `add 4/#bot_rat li`, `move 0/#crab`), readable from a
   script with `board.page_edits()`. That's the stream other players would
   replay.
-- Nodes are identified by path (index among siblings, "2.1.0"). `on click:`
-  is the click query for the element at that path, so it works inside
-  loops. Clicks are matched against the paths the player actually saw.
+- Identity: an element's `id` is its key, and elements made in a loop over
+  things (`for bot in Bot.all:`) take the thing's id automatically. Keyed
+  elements are matched by key wherever they move; others by position. As in
+  Karax, the unchanged start and end of each child list are skipped first,
+  so one insert or removal is one edit even without keys. Out-of-order keyed
+  elements are moved, as few as possible (longest increasing run).
+- Paths name elements for clicks and edits: a key as `#key`, else the index
+  among siblings (`4/#bot_rat/1`). The script computes the same paths while
+  it describes the page, so `on click:` finds the element the player clicked
+  even if the list moved since.
 - If an `on click` body ran, the page is described again without running
   handlers, so the change shows on the same pass.
-- No keys yet: when an element appears in the middle, everything after it
-  in that parent is rebuilt (`replace 4 button`, `add 5 ul`) instead of
-  moved. Keyed elements (`li(key = item.id)`) fix that when it matters.
-- Tested natively (`nim/page_tree_test.nim`) and in game with the counter
-  above: clicks, the conditional button, the list, CSS from a `style`
-  element, `:hover`. Worker cost per changed pass 0.25–1 ms.
+- Tested natively (`nim/page_tree_test.nim`: keyed insert, move, a click
+  following its item after a shift, unkeyed insert at the top) and in game:
+  the counter, a `{.piece.}`, a `pane` row, and a list of every bot with a
+  "wave" button each, keyed by bot id. Worker cost per changed pass
+  0.25–1 ms.
 - Inherits the query bugs in #152 (a click handled in a pass during a long
   command can repeat on the next wake pass).
 

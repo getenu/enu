@@ -141,104 +141,163 @@ proc clicked*(self: Element): Query[seq[Click]] =
 #     p:
 #       text "Count: "
 #       b $count
-#     button "Add one":
+#     button(id = "add"):
+#       text "Add one"
 #       on click:
 #         inc count
 #     ul:
-#       for i in 1 .. count:
-#         li \"pressed it, now {i}"
+#       for bot in Bot.all:
+#         li bot.id
 # ```
 #
-# Elements are HTML tags: `h2 "text"`, `p: ...` for children, attributes as
-# `div(class = "row"): ...`. `text` adds plain text. `on click:` inside an
-# element runs once per click on it (or anything inside it), the same way
-# `if button.clicked as click:` does.
+# Elements are HTML tags: `h2 "text"`, `p:` for children, attributes as
+# `pane(class = "row"):`. `pane` is HTML's `div` (`div` is a Nim keyword).
+# `text` adds plain text. `on click:` inside an element runs once per click on
+# it (or anything inside it), the same way `if button.clicked as click:` does.
+#
+# An element with an `id` keeps it as its identity: if it moves, Enu moves it
+# instead of rebuilding everything around it, and clicks follow it. Elements
+# made in a loop over things (`for bot in Bot.all:`) get the thing's id as
+# their identity automatically.
+#
+# A proc marked `{.piece.}` can describe part of a page, for reuse:
+#
+# ```nim
+# proc stat(label: string, value: int) {.piece.} =
+#   pane(class = "stat"):
+#     b label
+#     text $value
+# ```
 
 const
   TOKEN_SEP = '\x1e'
   FIELD_SEP = '\x1f'
   PAGE_TAGS = [
-    "a", "b", "br", "button", "code", "div", "em", "footer", "h1", "h2", "h3",
-    "h4", "h5", "h6", "header", "hr", "i", "img", "label", "li", "ol", "p",
-    "pre", "section", "small", "span", "strong", "style", "table", "td", "th",
-    "tr", "u", "ul",
+    # text
+    "a", "b", "br", "code", "em", "i", "img", "label", "mark", "small", "span",
+    "strong", "u",
+    # blocks
+    "address", "article", "aside", "blockquote", "dd", "details", "dialog", "dl",
+    "dt", "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
+    "h4", "h5", "h6", "header", "hgroup", "hr", "legend", "li", "main", "menu",
+    "nav", "ol", "p", "pane", "pre", "search", "section", "summary", "ul",
+    # other
+    "button", "caption", "style", "table", "tbody", "td", "th", "thead", "tr",
   ]
 
-type PageBuilder* = object
+proc html_tag(name: string): string =
+  if name == "pane": "div" else: name
+
+type PageBuilder* = ref object
+  ## Collects a page's description while a `page` block runs.
   sign*: Sign
   tokens*: string
   counters: seq[int]
   paths: seq[string]
-  handling*: bool ## run `on click` bodies on this build
+  keys: seq[seq[string]]
+  next_key: string
+  next_key_depth: int
+  next_key_count: int
+  handling*: bool ## run `on click` bodies on this pass
   handled*: bool ## an `on click` body ran
 
+var building*: PageBuilder
+  ## The page being described, while a `page` block runs.
+
 proc init*(_: type PageBuilder, sign: Sign, handling: bool): PageBuilder =
-  PageBuilder(sign: sign, counters: @[0], paths: @[""], handling: handling)
+  PageBuilder(
+    sign: sign, counters: @[0], paths: @[""], keys: @[new_seq[string]()],
+    handling: handling,
+  )
 
 proc clean(s: string): string =
   s.multi_replace(($TOKEN_SEP, " "), ($FIELD_SEP, " "))
 
-proc next_path(b: var PageBuilder): string =
+proc join_path(parent, step: string): string =
+  if parent == "": step else: parent & "/" & step
+
+proc claim(b: PageBuilder, level: int, key: string) =
+  if key in b.keys[level]:
+    raise ValueError.init(
+      "Two elements next to each other have the id \"" & key &
+        "\". Ids have to be different."
+    )
+  b.keys[level].add key
+
+proc open*(b: PageBuilder, tag: string) =
   let i = b.counters[^1]
   inc b.counters[^1]
-  let parent = b.paths[^1]
-  if parent == "": $i else: parent & "." & $i
-
-proc open*(b: var PageBuilder, tag: string) =
-  let path = b.next_path
+  var step = $i
   b.tokens.add "E" & FIELD_SEP & tag & TOKEN_SEP
+  if b.next_key != "" and b.paths.len == b.next_key_depth:
+    let key =
+      if b.next_key_count == 0: b.next_key
+      else: b.next_key & "~" & $b.next_key_count
+    inc b.next_key_count
+    b.claim(b.keys.high, key)
+    b.tokens.add "K" & FIELD_SEP & key.clean & TOKEN_SEP
+    step = "#" & key
   b.counters.add 0
-  b.paths.add path
+  b.paths.add join_path(b.paths[^1], step)
+  b.keys.add new_seq[string]()
 
-proc attr*(b: var PageBuilder, name, value: string) =
+proc attr*(b: PageBuilder, name, value: string) =
   b.tokens.add "A" & FIELD_SEP & name.clean & FIELD_SEP & value.clean & TOKEN_SEP
+  if name == "id":
+    b.claim(b.keys.high - 1, value)
+    b.paths[^1] = join_path(b.paths[^2], "#" & value)
 
-proc text*(b: var PageBuilder, value: string) =
-  discard b.next_path
+proc text*(b: PageBuilder, value: string) =
+  inc b.counters[^1]
   b.tokens.add "T" & FIELD_SEP & value.clean & TOKEN_SEP
 
-proc close*(b: var PageBuilder) =
+proc close*(b: PageBuilder) =
   b.tokens.add "C" & TOKEN_SEP
   discard b.counters.pop
   discard b.paths.pop
+  discard b.keys.pop
+
+proc item_key*(b: PageBuilder, key: string) =
+  ## Elements opened next at this level take `key` as their identity.
+  b.next_key = key
+  b.next_key_depth = b.paths.len
+  b.next_key_count = 0
 
 proc here*(b: PageBuilder): string =
   b.paths[^1]
 
-proc render*(b: PageBuilder) =
-  b.sign.page_render(b.tokens)
-
-template page_on_click*(b: var PageBuilder, body: untyped) =
-  if b.handling:
+template page_on_click*(body: untyped) =
+  if building.handling:
     if loop_context.is_nil:
       raise ObjectConversionDefect.init(
         "`on click` only works in a page inside a command loop"
       )
-    let key = "page-click-" & b.sign.id & "-" & b.here
+    let key = "page-click-" & building.sign.id & "-" & building.here
     let thing = active_thing()
     var clicked = key in thing.query_results
     if not clicked:
-      let n = b.sign.page_path_clicks(b.here)
+      let n = building.sign.page_path_clicks(building.here)
       if n > 0:
         var clicks: seq[RootRef]
         for i in 0 ..< n:
-          clicks.add Click(element: Element(sign: b.sign))
+          clicks.add Click(element: Element(sign: building.sign))
         thing.query_results[key] = clicks
         clicked = true
     if clicked:
-      b.handled = true
+      building.handled = true
       body
 
-proc page_body(n, b: NimNode): NimNode =
+proc page_body(n: NimNode): NimNode =
   ## Turns the statements of a `page` block into builder calls.
+  let b = ident"building"
   case n.kind
   of nnk_stmt_list:
     result = new_stmt_list()
     for child in n:
-      result.add page_body(child, b)
+      result.add page_body(child)
   of nnk_ident:
     if n.str_val in PAGE_TAGS:
-      let tag = n.str_val
+      let tag = html_tag(n.str_val)
       result = quote:
         `b`.open(`tag`)
         `b`.close()
@@ -257,21 +316,22 @@ proc page_body(n, b: NimNode): NimNode =
         n[2].kind == nnk_stmt_list:
       let body = n[2]
       result = quote:
-        page_on_click(`b`, `body`)
+        page_on_click(`body`)
     elif name in PAGE_TAGS:
+      let tag = html_tag(name)
       result = new_stmt_list()
       result.add quote do:
-        `b`.open(`name`)
+        `b`.open(`tag`)
       var rest = new_stmt_list()
       for arg in n[1 ..^ 1]:
         case arg.kind
         of nnk_expr_eq_expr:
-          let key = if arg[0].kind == nnk_ident: arg[0].str_val else: arg[0].str_val
+          let key = arg[0].str_val
           let value = arg[1]
           result.add quote do:
             `b`.attr(`key`, $(`value`))
         of nnk_stmt_list:
-          rest.add page_body(arg, b)
+          rest.add page_body(arg)
         else:
           rest.add quote do:
             `b`.text($(`arg`))
@@ -280,31 +340,62 @@ proc page_body(n, b: NimNode): NimNode =
         `b`.close()
     else:
       result = n
+  of nnk_for_stmt:
+    # Elements made for each thing in a loop take the thing's id as their
+    # identity.
+    result = n.copy_nim_tree
+    var body = page_body(n[^1])
+    let item = n[^3]
+    if item.kind == nnk_ident:
+      body.insert 0,
+        quote do:
+          when `item` is Thing:
+            `b`.item_key(`item`.id)
+    result[^1] = body
+    result = new_stmt_list(result)
+    result.add quote do:
+      `b`.item_key("")
   of nnk_if_stmt, nnk_when_stmt, nnk_case_stmt, nnk_elif_branch, nnk_else,
-      nnk_of_branch, nnk_for_stmt, nnk_while_stmt, nnk_block_stmt:
+      nnk_of_branch, nnk_while_stmt, nnk_block_stmt:
     result = n.copy_nim_tree
     for i, child in result:
       if child.kind in {
         nnk_stmt_list, nnk_elif_branch, nnk_else, nnk_of_branch
       }:
-        result[i] = page_body(child, b)
+        result[i] = page_body(child)
   else:
     result = n
 
 macro page*(sign: Sign, body: untyped): untyped =
   ## Describe the whole page for `sign`. See the notes above.
-  let b = gensym(nsk_var, "page")
-  let first = page_body(body, b)
-  let again = page_body(body.copy_nim_tree, b)
+  let first = page_body(body)
+  let again = page_body(body.copy_nim_tree)
   result = quote:
     block:
-      var `b` = PageBuilder.init(`sign`, handling = true)
-      block:
-        `first`
-      if `b`.handled:
-        # A click changed something: describe the page again so it shows
-        # the change now, not on the next pass.
-        `b` = PageBuilder.init(`sign`, handling = false)
+      let outer = building
+      try:
+        building = PageBuilder.init(`sign`, handling = true)
         block:
-          `again`
-      `b`.render
+          `first`
+        if building.handled:
+          # A click changed something: describe the page again so it shows
+          # the change now, not on the next pass.
+          building = PageBuilder.init(`sign`, handling = false)
+          block:
+            `again`
+        building.sign.page_render(building.tokens)
+      finally:
+        building = outer
+
+macro piece*(def: untyped): untyped =
+  ## For a proc that describes part of a page: `proc stat(...) {.piece.} =`.
+  ## Its body uses the same tags as a `page` block, and it has to be called
+  ## from inside one.
+  result = def
+  let message =
+    "`" & $def.name & "` adds to a page, so call it inside a `page` block."
+  let body = page_body(def.body)
+  result.body = quote:
+    if building.is_nil:
+      raise ValueError.init(`message`)
+    `body`
