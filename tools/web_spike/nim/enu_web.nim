@@ -42,6 +42,8 @@ proc ew_set_attribute*(v: ViewPtr, node: NodeId, name, value: cstring)
 proc ew_set_text*(v: ViewPtr, node: NodeId, text: cstring)
 proc ew_set_inner_html*(v: ViewPtr, node: NodeId, html: cstring)
 proc ew_append*(v: ViewPtr, parent, child: NodeId)
+proc ew_insert_before*(v: ViewPtr, anchor, node: NodeId)
+proc ew_remove_attribute*(v: ViewPtr, node: NodeId, name: cstring)
 proc ew_remove*(v: ViewPtr, node: NodeId)
 proc ew_parent*(v: ViewPtr, node: NodeId): NodeId
 proc ew_element_at*(v: ViewPtr, x, y: float32): NodeId

@@ -6,11 +6,16 @@ Prototypes for rendering Enu's UI with web technologies. See
 - `src/` — a C interface over [Blitz](https://github.com/DioxusLabs/blitz):
   render HTML to an RGBA buffer, change the DOM, hit test, and a `<canvas>`
   custom widget that replays 2D drawing commands. Knows nothing about Godot.
+- `src/guard.rs` — panics stop at the C interface and become errors.
 - `src/hub.rs` — moving pages between threads: the render thread, finished
   frames by key, and pointer events going back.
 - `nim/enu_web.nim` — Nim bindings for it.
 - `nim/sign_page.nim` — how sign text becomes a page (shared by the main
   thread and the worker).
+- `nim/page_tree.nim` — declarative pages: compare a description with the
+  last one, apply the differences, log them as edits.
+- `nim/guard_test.nim`, `nim/page_tree_test.nim` — native tests (run from
+  the repo root: `nim c -r -d:release tools/web_spike/nim/<test>.nim`).
 - `nim/web_ui.nim` — one small UI API with two backends: native (Blitz) and
   JS (`nim js`, the browser DOM and canvas).
 - `nim/spike1.nim` — render a sign page to PNG and measure speed and memory.
