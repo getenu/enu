@@ -77,6 +77,19 @@ fn check_nodes(doc: &BaseDocument, ids: &[u64]) {
     }
 }
 
+/// Blitz draws premultiplied alpha; Godot's usual blend (and PNG) want
+/// straight alpha, or translucent parts come out too dark.
+pub(crate) fn unpremultiply(pixels: &mut [u8]) {
+    for px in pixels.chunks_exact_mut(4) {
+        let a = px[3] as u32;
+        if a != 0 && a != 255 {
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
+}
+
 fn id(n: u64) -> NodeId {
     NodeId::from_u64(n)
 }
@@ -147,7 +160,7 @@ pub unsafe extern "C" fn ew_resize(v: *mut View, width: u32, height: u32) {
 }
 
 /// Lays out the document and draws it. Returns a pointer to `width * height`
-/// RGBA8 pixels (premultiplied alpha), valid until the next call on this view.
+/// RGBA8 pixels (straight alpha), valid until the next call on this view.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_render(v: *mut View) -> *const u8 {
     crate::guard::guard(move || {
@@ -160,6 +173,7 @@ pub unsafe extern "C" fn ew_render(v: *mut View) -> *const u8 {
             |scene| blitz_paint::paint_scene(scene, doc, scale, w, h, 0, 0),
             &mut v.pixels,
         );
+        unpremultiply(&mut v.pixels);
         v.pixels.as_ptr()
     })
 }
@@ -347,15 +361,7 @@ pub unsafe extern "C" fn ew_write_png(v: *mut View, path: *const c_char) -> bool
     crate::guard::guard(move || {
         let v = unsafe { view(v) };
         let path = unsafe { str_arg(path) };
-        let mut rgba = v.pixels.clone();
-        for px in rgba.chunks_exact_mut(4) {
-            let a = px[3] as u32;
-            if a != 0 && a != 255 {
-                for c in &mut px[..3] {
-                    *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
-                }
-            }
-        }
+        let rgba = &v.pixels;
         let Ok(file) = std::fs::File::create(path) else {
             return false;
         };
@@ -363,7 +369,7 @@ pub unsafe extern "C" fn ew_write_png(v: *mut View, path: *const c_char) -> bool
         enc.set_color(png::ColorType::Rgba);
         enc.set_depth(png::BitDepth::Eight);
         enc.write_header()
-            .and_then(|mut w| w.write_image_data(&rgba))
+            .and_then(|mut w| w.write_image_data(rgba))
             .is_ok()
     })
 }

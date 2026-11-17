@@ -76,6 +76,14 @@ gdobj SignNode of Spatial:
     t.origin.y = sign_height / 2
     mesh.transform = t
 
+  proc light_web() =
+    ## Brightness of an unlit page: 1 normally, more when highlighted or
+    ## glowing.
+    let k =
+      if HIGHLIGHT in self.model.local_flags: 1.3
+      else: 1.0 + self.model.glow * 0.3
+    self.material.albedo_color = init_color(k, k, k)
+
   proc show_pixels(pixels: pointer, px_width, px_height: int) =
     ## Uploads a rendered page as the albedo and sizes the quad to fit it
     ## across the model's width.
@@ -224,6 +232,11 @@ gdobj SignNode of Spatial:
     if use_web:
       self.web_tex = gdnew[ImageTexture]()
       self.material.albedo_texture = self.web_tex
+      # Pages show their own colors, like a screen, whatever the lighting.
+      # Unlit materials ignore emission, so glow and highlight brighten the
+      # page instead.
+      self.material.flags_unshaded = true
+      self.light_web()
       self.viewport.render_target_update_mode = UPDATE_DISABLED
       self.label.visible = false
       self.render_web()
@@ -248,7 +261,10 @@ gdobj SignNode of Spatial:
 
     self.model.glow_value.watch:
       if added:
-        self.material.emission_energy = change.item
+        if use_web:
+          self.light_web()
+        else:
+          self.material.emission_energy = change.item
 
     self.transform = self.model.transform
     self.model.transform_value.watch:
@@ -267,7 +283,9 @@ gdobj SignNode of Spatial:
         self.set_visibility
 
     self.model.local_flags.watch:
-      if HIGHLIGHT.added:
+      if use_web and (HIGHLIGHT.added or HIGHLIGHT.removed):
+        self.light_web()
+      elif HIGHLIGHT.added:
         self.material.emission_energy = 1.0
       elif HIGHLIGHT.removed:
         self.material.emission_energy = self.model.glow
