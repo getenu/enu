@@ -433,7 +433,6 @@ proc on_order_changed*(self: FramePlayer) =
   self.decoded.clear()
   self.frame_data.clear()
   self.display.clear()
-  self.show(self.model.current_frame)
 
 proc chunk_changed*(self: FramePlayer, fc: FrameChunk) =
   ## A chunk of some frame changed. Patch the cached copy of that frame, and
