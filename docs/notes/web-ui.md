@@ -1,0 +1,340 @@
+# Web UI
+
+Status: prototypes 1–7 done as a spike (see Results). Nothing ships yet;
+web signs and script pages are behind `-d:enu_web`.
+
+## Goal
+
+Enu's UI, from toolbars to in-world signs, is built with web technologies
+instead of Godot's UI system. Players can use the same technologies to make
+in-game apps, up to and including 2D games and fast 3D with shaders. Apps
+written for Enu also run as normal web apps in a normal browser. Arbitrary
+websites loading inside Enu is a non-goal.
+
+## Decisions so far
+
+- **One engine on every platform, and not WebKit.** iOS must work (after the
+  Godot 4 move). macOS uses the same path iOS will, so iOS problems show up
+  early, on the desktop.
+- **No network access** for in-game pages to start. Adding it later is a
+  separate, deliberate design.
+- **Nim only to start, no JS engine.** UI and apps are written in Nim. Inside
+  Enu they run natively (Enu's own UI) or in the Nim VM (player scripts). In a
+  normal browser they are compiled with Nim's JS backend. A JS engine
+  (QuickJS, interpreter only) stays an option for later.
+  With no network and no JS engine this is an HTML renderer driven by Enu's
+  scripting, not a web browser, which keeps us clear of App Store rule 2.5.6.
+- **Binary size matters** more than build complexity. Rust/cargo in the build
+  is fine, through `nim prereqs` like everything else.
+- **Pages render to flat planes.** Deeper 3D integration goes through a
+  message bridge to Enu's script world (an `enu` module that is stubbed in a
+  normal browser), not by putting page content into the Godot scene.
+- **Canvas 2D and WebGPU are required and must be fast.** These can be our
+  own limited versions, but they follow the real APIs. WebGPU rather than
+  WebGL: it's the newer API, and wgpu implements it directly.
+- **Scratch-style blocks are our own, written in Nim.** Feeling familiar to
+  Scratch users is an explicit goal. We reproduce the shared visual
+  conventions (hat/stack/C/reporter/boolean shapes, category colors, palette,
+  snap-on-drag), not Scratch's art or name.
+- **Signs come first,** before toolbars and other screen UI.
+
+## Engine
+
+**Blitz** (DioxusLabs) is the lead candidate: Rust, MIT/Apache, Firefox's CSS
+engine (Stylo), Taffy layout (flex, grid, block, inline, tables), Vello
+drawing. It has no JS, which suits the Nim-only plan. In 2024 a stripped
+macOS build was ~12MB, against ~98MB for Servo. It reportedly builds for
+`aarch64-apple-ios`. It is experimental and its API is still changing.
+
+The fallback is **Servo** (full engine with SpiderMonkey JS, ~98MB). It has
+no official iOS support, and its SVG DOM was still stubs as of mid-2026.
+
+Ruled out:
+
+| Option | Why not |
+|---|---|
+| System web views | No usable path to draw into a texture (WKWebView only draws while on screen) |
+| CEF | No iOS/Android; 150MB+ |
+| Cobalt | Since Cobalt 27 it's a full Chromium fork; the old lightweight engine is legacy |
+| Ladybird | Pre-alpha, no embedding API, runs as several processes |
+| Ultralight | License |
+| Chawan | Lays out for terminal cells, not pixels (its Chame parser and Monoucha QuickJS glue could be reused) |
+| Ferus | Toy engine |
+| litehtml | Only basic flexbox, no grid; emergency fallback |
+| RmlUi, Sciter | Not standard HTML, or proprietary |
+
+## Architecture
+
+```
+Nim UI framework (one API)
+├── native backend ── Enu's own UI (toolbars, block editor), compiled in
+├── VM backend ────── player scripts, through the host bridge
+└── JS backend ────── a normal browser, through Nim's JS backend
+
+Web engine (Rust library, C interface, knows nothing about Godot)
+  create view / resize / input / pump / frame
+  DOM: CPU drawing (vello_cpu) → RGBA buffer
+  <canvas>: reserves a rectangle; content drawn on the GPU (below)
+
+Godot adapter (thin; rewritten for Godot 4)
+  frame → texture, input forwarding, views on signs / screen
+```
+
+The C interface and the framework carry over unchanged from Godot 3 to 4.
+Only the adapter is rewritten, and it should be a few hundred lines.
+
+### Threads
+
+A page lives on the thread of the code that owns it. Blitz documents can be
+created on any thread but can't move between threads afterwards (they aren't
+`Send`); the recorded drawing commands (`anyrender::Scene`) can.
+
+```
+worker thread                       render thread            main thread
+VM ⇄ Blitz page (real DOM)  ──recording──▶ rasterize ──frame──▶ upload texture
+     style, layout, hit testing                                  aim ray → u, v
+     ◀──────────────────────── pointer events (u, v) ───────────────────
+```
+
+- Scripts get direct, synchronous DOM access, layout reads included.
+- Pointer events go to the worker as positions on the page. The worker hit
+  tests, updates `:hover`/`:active`, and queues clicks for the script.
+- The main thread only uploads finished frames and forwards the aim ray.
+- Enu's own UI keeps its pages on the main thread.
+- The hand-off lives in Rust (`tools/web_spike/src/hub.rs`): pages are named
+  by key (Enu uses the sign id). It holds the newest frame per key with a
+  version, so a recreated sign node can ask again, and queues pointer events.
+- Multiplayer: a remote copy of a page would be kept in sync by replaying an
+  ordered log of DOM edits from the owner. Not designed yet.
+
+### Canvas 2D and WebGPU
+
+Page layout changes rarely, so it is drawn on the CPU. Canvas content changes
+every frame and is drawn on the GPU into its own texture, which Enu composites
+over the page.
+
+- **Godot 4:** wgpu, sharing its textures into Godot through
+  `RenderingDevice.texture_create_from_extension` (Vulkan or Metal handles).
+  - WebGPU maps almost directly onto wgpu, and shaders are WGSL.
+  - Canvas 2D uses GPU Vello.
+  - Open question: wgpu and Godot sharing one device, versus two devices
+    sharing textures.
+- **Godot 3:** CPU canvas only, for prototyping. Don't build GPU canvas
+  twice.
+- **No JIT, so the cost of each script call is the real limit.** Favour
+  retained objects (Path2D, buffers, bind groups), batched calls, and a few
+  Enu fast paths (e.g. sprite batches). WebGPU is already shaped this way.
+  For heavy canvas work, write against the native backend rather than the VM
+  where possible.
+
+## Blocks
+
+- **Text is the source of truth.** The `.nim` script stays canonical; blocks
+  are a view of it. Block positions and other layout go in side metadata,
+  never in the script.
+- **Round-trip through the AST.** Parse with the Nim compiler's parser (it's
+  already in-process for the VM). Constructs in the happy-path subset become
+  real blocks. Anything else becomes a "code" block that holds raw text, so
+  any script can be opened as blocks. Blocks print back to text using the
+  project's formatting.
+- **The happy-path subset** is defined by the code in shipped levels:
+  - commands with optional arguments (`forward 10`, `turn right`,
+    `lean back, 90`)
+  - assignments to properties (`color = brown`, `scale = 0.25`)
+  - `let`/`var`
+  - `if`/`elif`/`else`, `while`, `n.times(i):`
+  - ranges as values (`0 .. 360`), `cycle(...)`
+  - simple `proc`s with parameters, and calls to them
+  - Enu's state-machine syntax
+
+  Shipped levels should round-trip without falling back to code blocks. A
+  test that loads every script under `share/` and checks that
+  text → blocks → text comes back identical keeps that true.
+- **Comments and blank lines** are the usual round-trip trap. They must
+  survive, either attached to blocks or as comment blocks.
+- **Where blocks appear:** mainly a 2D panel (the editor). The code
+  billboards above players' heads show blocks too. They're always-on-top
+  billboards, so they're effectively 2D panels drawn to a texture. In-world
+  interactive block panels are a stress test, not a user-facing feature.
+- **Drawing:** the block editor draws on canvas 2D (precedent: Snap! draws
+  its whole UI on one canvas). It's Enu UI, so it runs native, not in the VM.
+
+## Prototypes
+
+Each one answers one question. Stop and reassess if one fails.
+
+1. **Blitz offscreen behind a C interface.** A Nim test program loads HTML
+   and writes a PNG. Measure: added size (macOS and an iOS build), time to
+   draw a sign-sized page, memory per page.
+2. **Nim VM driving the page.** A script builds and updates a page through
+   the host bridge, including clicks.
+3. **The same UI code compiled to JS** in a regular browser. The start of the
+   framework.
+4. **Canvas plus blocks.** A `<canvas>` with a Nim 2D API, drawing a few
+   draggable, snapping blocks. Tests text quality, antialiasing and hit
+   testing.
+5. **Block round-trip.** Parse a shipped level script, convert it to a block
+   tree, print it back, and diff. Doesn't depend on the renderer, so it can
+   run in parallel with 1–4.
+6. **A web sign in Godot 3.** Texture on the sign's quad; markdown signs
+   become markdown converted to HTML, so the sign API doesn't change. Static
+   signs draw once and free their view.
+7. **Pages on the worker thread.** The page lives next to the script for
+   direct DOM access; a render thread rasterizes; the main thread uploads and
+   forwards the pointer. Completes 2 (clicks).
+
+After Godot 4: port the adapter, GPU canvas and WebGPU through wgpu, then the
+iOS build.
+
+## Results (spike, 2026-11-16)
+
+Code: `tools/web_spike/` (Rust C interface, Nim bindings, `web_ui` module),
+`tools/blocks_spike/` (blocks), `src/nodes/sign_web.nim` (signs, behind
+`-d:enu_web`). Blitz 0.3.0-beta.4, CPU drawing with `vello_cpu`. Measured on
+an Apple Silicon Mac.
+
+**1. Offscreen rendering works and is fast.**
+
+| | |
+|---|---|
+| First page created (includes system font discovery) | 37–265 ms |
+| Each later page created | ~15 ms |
+| Draw a 1200×1200 sign page (first / again / after a text change) | 2–3 / 0.7 / 1.0 ms |
+| Memory | ~30 MB for the first page (fonts), ~3 MB per extra 600×600 page |
+| Added to Enu's release dylib, stripped and dead-stripped | **+8.6 MB** (10.8 → 19.4 MB) |
+| The library alone, built for size (`opt-level = "z"`) | 5.3 MB, but drawing is ~6× slower |
+
+- The best trade-off is probably `opt-level = "z"` for most crates, with
+  `vello_cpu` kept at full optimization. Not tried yet.
+- iOS: the renderer builds and links for `aarch64-apple-ios` (as a
+  stripped dylib: 9.06MB, about the same as macOS). It hasn't run on a
+  device or the simulator yet.
+
+**2/6. Real Enu signs render through Blitz.** With `-d:enu_web` every
+markdown sign is converted with the markdown dependency Enu already uses, laid
+out by Blitz, and uploaded as an `ImageTexture` in place of the viewport and
+MarkdownLabel. Tutorial signs, the animated welcome ticker, and HTML set from
+a script (flexbox, gradients, rounded corners) all render in-world. Found:
+
+- Signs use a lit material with forced sRGB, so scene lighting shifts page
+  colors. Current signs have the same problem. UI-quality color needs an
+  unshaded sign material.
+- nim-markdown doesn't do task lists (`- [ ]`). MarkdownLabel did, so a few
+  tutorial signs read worse. Either add it or handle it in our converter.
+- Scripts can only replace a sign's whole message so far. Not built yet:
+  live DOM handles in the VM, and click forwarding from the 3D sign into the
+  page and back to the script.
+
+**3. One app, two backends.** `counter_app.nim` runs natively through Blitz
+(clicks by position, bubbling to handlers) and compiles to JS (79 KB) with
+identical results. The JS version was smoke-tested in JavaScriptCore with a
+stub DOM, not yet in a real browser.
+
+**4. Canvas works through a Blitz custom widget.** This answers the earlier
+open question: Blitz's custom widget API (`set_custom_widget` + `paint` into
+an anyrender `Scene`) is exactly the hook needed. The spike records
+CanvasRenderingContext2D-style commands (paths, fill, stroke, fillText via
+parley, measureText). On Godot 4 the same widget can register a GPU texture as
+a resource instead of drawing on the CPU. A whole script drawn as blocks
+(1100×1474) lays out, draws and renders in ~8 ms; redrawing after a drag
+takes ~3 ms.
+
+**5. Blocks round-trip.** Text is parsed with Enu's nph fork (it keeps
+comments), turned into blocks, printed back as plain text and formatted by
+nph.
+
+- All 129 hand-written scripts under `share/worlds` come back **identical**.
+- **92.9%** of statements become real blocks; the rest are code blocks.
+- The remaining code blocks are mostly:
+  - imports (100)
+  - grouped `let`/`var`/`const` sections
+  - templates
+  - transitions with a body (`a ==> b do:`)
+  - bare boolean expressions
+  - `case`
+- Things learned:
+  - Blank lines must be kept. They also map nicely to separate block stacks.
+  - Trailing and header comments attach to blocks.
+  - nph's renderer reads atom text from file 0 of its config, so every parse
+    needs a fresh config, and a tree can't be stitched together from several
+    parses. Printing blocks as text and letting nph format it avoids both
+    problems, and it's what an editor would do anyway.
+- `blocks_demo.nim` draws shipped scripts as blocks and performs a drag: a
+  pointer hit test, a snap to the nearest bottom edge, and a move in the
+  tree. The text diff shows the statement moving with its comment.
+
+**7. Pages on the worker thread, with clicks.** A script turns a sign into
+a page and changes it directly:
+
+```nim
+let board = say("page", width = 12, height = 0, size = 0.7)
+board.html = "<h2>Bolt's Counting Machine</h2><p>Count: <b id=count>0</b></p>" &
+  "<button id=add>Add one</button><ul id=log></ul>"
+var count = 0
+board["#add"].on_click:
+  inc count
+  board["#count"].text = $count
+  board["#log"].add board.element("li", \"pressed it, now {count}")
+forever:
+  sleep()
+```
+
+- API (`share/vmlib/enu/pages.nim`): `sign.html=`, `sign[selector]`,
+  `sign.element(tag, text)`, `add`, `remove`, `text`/`text=`, `html=`,
+  attributes with `[]`/`[]=`, `parent`, `rect` (layout, always current), and
+  `on_click`. Element handles are Blitz node ids.
+- Host side: `src/controllers/script_controllers/web_pages.nim`, bridged in
+  `host_bridge.nim` and pumped from the worker loop (pointer events before
+  scripts run, changed pages recorded after).
+- Handlers live in the VM. They run when the script finishes waiting
+  (`sleep`, a move, a turn) through a `yield_hook` in `core.nim`'s `wait`, and
+  a click cuts the owner's plain `sleep()` short, as a bump does. Handlers
+  bubble from the clicked element up through its parents. They're cleared on
+  level reset.
+- A handler can't run during a long action (`forward 20`); it runs after.
+  Scratch runs "when clicked" scripts concurrently. Matching that needs
+  per-handler tasks in the VM.
+- Measured in game (welcome level, page 1200 px wide):
+  - Worker, per changed frame, style + layout + recording: 0.12–0.5 ms,
+    including a 14,600 px tall page.
+  - Worker, pointer events: 0.01–0.2 ms per batch.
+  - Script DOM calls: edit + layout read 0.08 ms, text read 0.02 ms, 200
+    `li` appended 8.8 ms (~0.04 ms each through the bridge).
+  - Render thread: 0.5–1.8 ms per frame.
+  - Main thread upload: ~6 ms per changed frame (1200×573) on the tools
+    build of Godot 3. It was 54 ms until the copy into `PoolByteArray` used
+    one write lock instead of `mitems`. Reusing the texture or dropping
+    mipmaps didn't change it. On Godot 4 the frame can go straight to a
+    `RenderingDevice` texture, or a shared wgpu texture.
+- Tested by posting pointer events from a script (`page_post_pointer`) into
+  the same queue the main thread uses: three clicks → count 3, three list
+  items, hover style on the button under the pointer. The real aim path
+  (ray → u, v in `aim_target.nim` and `SignNode.page_pointer`) is written
+  but hasn't been tried with a mouse.
+- Found a Blitz bug: `remove_and_drop_all_children` (and so
+  `set_inner_html` with empty HTML) doesn't mark the parent's layout
+  damaged, and the next layout panics on a stale node ("invalid SlotMap key
+  used"). Worked around by removing children one at a time. Worth reporting
+  upstream.
+- Panics abort Enu (`panic = "abort"`). Before shipping, the C interface
+  should catch them (unwind + `catch_unwind`) and report an error to the
+  script instead.
+- Pages are capped at 4096 px tall until they scroll.
+
+## Open questions
+
+- Blitz text input, focus and IME. `:hover`/`:active` and clicks work
+  (prototype 7); keyboard input isn't forwarded yet.
+- Try the aim-ray click path with a real mouse, including billboard signs.
+- Handlers during long actions (see prototype 7), and `clicked` as a polled
+  condition for state machines.
+- Main-thread upload cost on Godot 3 (~6 ms per changed frame).
+- How DOM edits sync to other players (to discuss).
+- Is the Nim VM fast enough for interactive UI driven by player scripts, or
+  do player apps need a faster path (QuickJS, or Nim compiled to Wasm under
+  an interpreter)?
+- The cargo build is a separate `nim build_web` task. Before anything ships
+  it belongs in `nim prereqs` and `nim dist`.
+- Multiplayer for in-game apps: the owner's page is the source of truth and
+  other players replay its DOM edit log (see Threads). Not designed yet; it
+  only needs to be possible.
