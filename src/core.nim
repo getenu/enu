@@ -16,6 +16,9 @@ export utils, sequtils, strutils, sugar, importutils
 const enu_version* = static_exec("git describe --tags HEAD")
 var state* {.threadvar.}: GameState
 var saved_state* {.threadvar.}: SavedState
+var display_mismatches* {.threadvar.}: int
+  ## Chunks the main thread has seen the screen show differently from the
+  ## model (build_node's `check_display`). A test run with any fails.
 const animation_duration* = 0.3
 
 ### Sugar ###

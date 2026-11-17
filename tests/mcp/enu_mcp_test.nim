@@ -11,7 +11,7 @@
 ##   - Tool results have the expected structure
 
 import std/[osproc, streams, json, strutils, os, times, md5]
-import enu_mcp_reconnect_test
+import enu_mcp_reconnect_test, frame_display_test
 import client
 
 type McpSession = object
@@ -594,6 +594,27 @@ proc run_reload_tests() =
       echo "FAIL: spawner after the door reloaded: " & text
       quit 1
 
+proc checked_frame(id: string): int =
+  ## The build's `display_checked_frame`, read by this suite's own client.
+  try:
+    discard Enu.client.tick_until(init_duration(milliseconds = 10), false)
+  except SessionLost:
+    Enu.client.online # it sat idle through the earlier tests and was dropped
+  let thing = Enu.find_thing(id)
+  if thing.is_nil: -1 else: Build(thing).display_checked_frame
+
+proc run_frame_display_tests() =
+  var s = open_session()
+  defer:
+    s.close()
+  s.connect_session()
+  Enu.client.online # reads the build itself (see checked_frame)
+  run_frame_display_tests(
+    proc(name: string, args: JsonNode): string =
+      s.do_call_tool(name, args, timeout_ms = 40000).tool_text,
+    checked_frame,
+  )
+
 # ---- Main -----------------------------------------------------------------
 
 echo "=== enu_mcp test suite ==="
@@ -625,6 +646,7 @@ if external or managed:
   run_reconnect_tests()
   run_hang_repro()
   run_reload_tests()
+  run_frame_display_tests()
 else:
   echo ""
   echo "(skipping integration tests — set ENU_CONNECT_ADDRESS or launch one)"

@@ -494,6 +494,13 @@ proc display_pending*(self: FramePlayer): bool =
   self.queue.len > 0 or self.missing.len > 0 or
     (self.staged.len > 0 and self.commit_index == self.model.current_frame)
 
+proc stale_mesh*(self: FramePlayer, chunk_id: Vector3): bool =
+  ## Debug: the mesh this chunk shows is from content other than the frame on
+  ## screen, with nothing queued or baking for it that would replace it.
+  chunk_id in self.display and chunk_id notin self.queue and
+    chunk_id notin self.missing and chunk_id notin self.staged and
+    self.display[chunk_id] != self.shown_key(chunk_id)
+
 proc forget_display*(self: FramePlayer, chunk_id: Vector3) =
   ## The chunk's mesh block was (re)created by pairing: whatever we recorded
   ## as displayed belonged to the previous block instance. Clearing the entry
