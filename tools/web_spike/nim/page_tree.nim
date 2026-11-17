@@ -82,6 +82,15 @@ proc identical(a, b: VNode): bool =
       return false
   true
 
+proc same_kids*(a, b: seq[VNode]): bool =
+  ## Whether two descriptions are the same, without needing a document.
+  if a.len != b.len:
+    return false
+  for i in 0 ..< a.len:
+    if not identical(a[i], b[i]):
+      return false
+  true
+
 proc same_end(a, b: VNode): bool =
   ## Whether `a` and `b` can be paired while skipping the unchanged start and
   ## end of a child list: the same key, or no keys and nothing changed.
@@ -112,7 +121,7 @@ proc place(view: ViewPtr, parent, node, before: NodeId) =
   else:
     ew_insert_before(view, before, node)
 
-proc patch_children(t: var PageTree, view: ViewPtr, old, new: VNode)
+proc patch_children(t: var PageTree, view: ViewPtr, old, new: VNode) {.gcsafe.}
 
 proc patch(t: var PageTree, view: ViewPtr, old, new: VNode) =
   ## `old` and `new` are the same element (or text) in two descriptions.
@@ -164,7 +173,7 @@ proc longest_increasing(values: seq[int]): seq[bool] =
       result[i] = true
       i = before[i]
 
-proc patch_children(t: var PageTree, view: ViewPtr, old, new: VNode) =
+proc patch_children(t: var PageTree, view: ViewPtr, old, new: VNode) {.gcsafe.} =
   let (ol, nl) = (old.kids.len, new.kids.len)
   var start = 0
   while start < ol and start < nl and same_end(old.kids[start], new.kids[start]):

@@ -52,6 +52,9 @@ bridged_to_host:
     ## looking at what a page sends when it changes.
   proc page_stats*(): string
     ## How long pages took on the worker since you last asked.
+  proc page_parked*(self: Sign): bool
+    ## For tests: whether the page has put its document away for now (it
+    ## hasn't changed or been pointed at in a while).
   proc page_post_pointer*(self: Sign, kind: int, u: float, v: float)
     ## For tests: pretend a player's pointer did something. `kind` is 0 move,
     ## 1 press, 2 release, 3 leave; `u`, `v` run 0..1 across and down.

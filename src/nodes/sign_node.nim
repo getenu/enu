@@ -21,6 +21,9 @@ const
   # `size * viewport_x / width`. This constant is the whole bridge between the
   # block-space API and the pixel-space label.
   text_px_per_block = viewport_x.float
+  sign_page_seconds {.intdefine.} = 30
+    ## A plain sign frees its page (a few MB) after this long without a new
+    ## message. Its picture stays; a new message builds a page again.
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
@@ -35,6 +38,7 @@ gdobj SignNode of Spatial:
   var web: pointer # `ViewPtr` with -d:enu_web
   var web_tex: ImageTexture
   var page_version: uint64
+  var web_idle: float ## seconds since a plain sign's page last drew
     ## Version of the last frame shown from a script's page (0: not a page).
 
   proc set_visibility() =
@@ -116,6 +120,7 @@ gdobj SignNode of Spatial:
       if self.web.is_nil:
         self.web = ew_view_new(html.cstring, viewport_x, viewport_y, 1.0).pointer
       let web = ViewPtr(self.web)
+      self.web_idle = 0
       ew_resize(web, viewport_x, viewport_y)
       ew_set_html(web, html.cstring)
 
@@ -240,6 +245,10 @@ gdobj SignNode of Spatial:
       self.viewport.render_target_update_mode = UPDATE_DISABLED
       self.label.visible = false
       self.render_web()
+      # If a script made this sign a page, ask its owner for the picture
+      # (this node may be new). Ignored for plain signs.
+      when defined(enu_web):
+        discard ew_post_pointer(self.model.id.cstring, POINTER_WAKE, 0, 0)
 
     if self.model.text_only:
       text_edit.text = self.model.message
@@ -299,6 +308,11 @@ gdobj SignNode of Spatial:
     when defined(enu_web):
       if ?self.model and ?self.web_tex:
         self.show_page_frame()
+      if not self.web.is_nil:
+        self.web_idle += delta
+        if self.web_idle > sign_page_seconds.float:
+          ew_view_free(ViewPtr(self.web))
+          self.web = nil
     # If we only billboard the material, the collision surface doesn't move
     # so highlighting the sign is weird from some angles. Align the mesh to the
     # camera, along with billboarding the material. The mesh doesn't line-up
