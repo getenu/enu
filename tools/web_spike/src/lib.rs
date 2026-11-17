@@ -3,6 +3,7 @@
 //! 0 means "none".
 
 mod canvas;
+mod guard;
 mod hub;
 
 use std::cell::RefCell;
@@ -29,6 +30,7 @@ pub struct View {
     text: Rc<RefCell<canvas::Text>>,
     pressed: Option<NodeId>,
     out: CString,
+    poisoned: bool,
 }
 
 fn viewport(width: u32, height: u32, scale: f32) -> Viewport {
@@ -48,9 +50,31 @@ pub(crate) unsafe fn str_arg<'a>(s: *const c_char) -> &'a str {
     unsafe { CStr::from_ptr(s) }.to_str().expect("utf-8")
 }
 
+/// The page behind `v`, refusing pages broken by an earlier panic.
 pub(crate) unsafe fn view<'a>(v: *mut View) -> &'a mut View {
+    let v = unsafe { view_any(v) };
+    if v.poisoned {
+        panic!("this page stopped working after an earlier error; set its html again");
+    }
+    v
+}
+
+/// The page behind `v`, even if an earlier panic broke it.
+unsafe fn view_any<'a>(v: *mut View) -> &'a mut View {
     assert!(!v.is_null());
+    guard::note_view(v);
     unsafe { &mut *v }
+}
+
+/// Fails the call (without breaking the page) unless every id is a node.
+fn check_nodes(doc: &BaseDocument, ids: &[u64]) {
+    for &n in ids {
+        if doc.get_node(id(n)).is_none() {
+            guard::caller_error(format!(
+                "no element {n} on this page (it wasn't found, or was removed)"
+            ));
+        }
+    }
 }
 
 fn id(n: u64) -> NodeId {
@@ -70,96 +94,117 @@ pub unsafe extern "C" fn ew_view_new(
     height: u32,
     scale: f32,
 ) -> *mut View {
-    let html = unsafe { str_arg(html) };
-    let mut doc = parse(html, width, height, scale);
-    doc.resolve(0.0);
-    Box::into_raw(Box::new(View {
-        doc,
-        renderer: VelloCpuImageRenderer::new(width, height),
-        width,
-        height,
-        scale,
-        pixels: Vec::new(),
-        canvases: HashMap::new(),
-        text: Rc::new(RefCell::new(canvas::Text::new())),
-        pressed: None,
-        out: CString::default(),
-    }))
+    crate::guard::guard(move || {
+        let html = unsafe { str_arg(html) };
+        let mut doc = parse(html, width, height, scale);
+        doc.resolve(0.0);
+        Box::into_raw(Box::new(View {
+            doc,
+            renderer: VelloCpuImageRenderer::new(width, height),
+            width,
+            height,
+            scale,
+            pixels: Vec::new(),
+            canvases: HashMap::new(),
+            text: Rc::new(RefCell::new(canvas::Text::new())),
+            pressed: None,
+            out: CString::default(),
+            poisoned: false,
+        }))
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_view_free(v: *mut View) {
-    if !v.is_null() {
-        drop(unsafe { Box::from_raw(v) });
-    }
+    crate::guard::guard(move || {
+        if !v.is_null() {
+            drop(unsafe { Box::from_raw(v) });
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_set_html(v: *mut View, html: *const c_char) {
-    let v = unsafe { view(v) };
-    let html = unsafe { str_arg(html) };
-    v.doc = parse(html, v.width, v.height, v.scale);
-    v.canvases.clear();
+    crate::guard::guard(move || {
+        let v = unsafe { view_any(v) };
+        let html = unsafe { str_arg(html) };
+        v.doc = parse(html, v.width, v.height, v.scale);
+        v.canvases.clear();
+        v.pressed = None;
+        v.poisoned = false;
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_resize(v: *mut View, width: u32, height: u32) {
-    let v = unsafe { view(v) };
-    v.width = width;
-    v.height = height;
-    v.doc.set_viewport(viewport(width, height, v.scale));
-    v.renderer.resize(width, height);
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        v.width = width;
+        v.height = height;
+        v.doc.set_viewport(viewport(width, height, v.scale));
+        v.renderer.resize(width, height);
+    })
 }
 
 /// Lays out the document and draws it. Returns a pointer to `width * height`
 /// RGBA8 pixels (premultiplied alpha), valid until the next call on this view.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_render(v: *mut View) -> *const u8 {
-    let v = unsafe { view(v) };
-    v.doc.resolve(0.0);
-    let (w, h, scale) = (v.width, v.height, v.scale as f64);
-    let doc = &mut v.doc;
-    v.pixels.clear();
-    v.renderer.render_to_vec(
-        |scene| blitz_paint::paint_scene(scene, doc, scale, w, h, 0, 0),
-        &mut v.pixels,
-    );
-    v.pixels.as_ptr()
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        v.doc.resolve(0.0);
+        let (w, h, scale) = (v.width, v.height, v.scale as f64);
+        let doc = &mut v.doc;
+        v.pixels.clear();
+        v.renderer.render_to_vec(
+            |scene| blitz_paint::paint_scene(scene, doc, scale, w, h, 0, 0),
+            &mut v.pixels,
+        );
+        v.pixels.as_ptr()
+    })
 }
 
 /// Height of the laid-out content in physical pixels, for sizing a sign to
 /// fit its text.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_content_height(v: *mut View) -> f32 {
-    let v = unsafe { view(v) };
-    v.doc.resolve(0.0);
-    let root = v.doc.root_element();
-    let layout = root.final_layout();
-    layout.size.height.max(layout.scrollable_overflow_rect.bottom) * v.scale
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        v.doc.resolve(0.0);
+        let root = v.doc.root_element();
+        let layout = root.final_layout();
+        layout.size.height.max(layout.scrollable_overflow_rect.bottom) * v.scale
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_query(v: *mut View, selector: *const c_char) -> u64 {
-    let v = unsafe { view(v) };
-    let selector = unsafe { str_arg(selector) };
-    match v.doc.query_selector(selector) {
-        Ok(Some(n)) => n.as_u64(),
-        _ => 0,
-    }
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let selector = unsafe { str_arg(selector) };
+        match v.doc.query_selector(selector) {
+            Ok(Some(n)) => n.as_u64(),
+            _ => 0,
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_create_element(v: *mut View, tag: *const c_char) -> u64 {
-    let v = unsafe { view(v) };
-    let tag = unsafe { str_arg(tag) };
-    v.doc.mutate().create_element(html_name(tag), vec![]).as_u64()
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let tag = unsafe { str_arg(tag) };
+        v.doc.mutate().create_element(html_name(tag), vec![]).as_u64()
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_create_text(v: *mut View, text: *const c_char) -> u64 {
-    let v = unsafe { view(v) };
-    let text = unsafe { str_arg(text) };
-    v.doc.mutate().create_text_node(text).as_u64()
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let text = unsafe { str_arg(text) };
+        v.doc.mutate().create_text_node(text).as_u64()
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -169,11 +214,14 @@ pub unsafe extern "C" fn ew_set_attribute(
     name: *const c_char,
     value: *const c_char,
 ) {
-    let v = unsafe { view(v) };
-    let (name, value) = unsafe { (str_arg(name), str_arg(value)) };
-    v.doc
-        .mutate()
-        .set_attribute(id(node), QualName::new(None, ns!(), LocalName::from(name)), value);
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        let (name, value) = unsafe { (str_arg(name), str_arg(value)) };
+        v.doc
+            .mutate()
+            .set_attribute(id(node), QualName::new(None, ns!(), LocalName::from(name)), value);
+    })
 }
 
 /// Removes `node`'s children one at a time. Blitz's
@@ -190,58 +238,75 @@ fn clear_children(doc: &mut BaseDocument, node: NodeId) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_set_text(v: *mut View, node: u64, text: *const c_char) {
-    let v = unsafe { view(v) };
-    let text = unsafe { str_arg(text) };
-    let is_element = v.doc.get_node(id(node)).is_some_and(|n| n.is_element());
-    if is_element {
-        clear_children(&mut v.doc, id(node));
-    }
-    let mut m = v.doc.mutate();
-    if is_element {
-        // Like `textContent =`: replace the children with one text node.
-        let t = m.create_text_node(text);
-        m.append_children(id(node), &[t]);
-    } else {
-        m.set_node_text(id(node), text);
-    }
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        let text = unsafe { str_arg(text) };
+        let is_element = v.doc.get_node(id(node)).is_some_and(|n| n.is_element());
+        if is_element {
+            clear_children(&mut v.doc, id(node));
+        }
+        let mut m = v.doc.mutate();
+        if is_element {
+            // Like `textContent =`: replace the children with one text node.
+            let t = m.create_text_node(text);
+            m.append_children(id(node), &[t]);
+        } else {
+            m.set_node_text(id(node), text);
+        }
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_set_inner_html(v: *mut View, node: u64, html: *const c_char) {
-    let v = unsafe { view(v) };
-    let html = unsafe { str_arg(html) };
-    clear_children(&mut v.doc, id(node));
-    v.doc.mutate().set_inner_html(id(node), html);
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        let html = unsafe { str_arg(html) };
+        clear_children(&mut v.doc, id(node));
+        v.doc.mutate().set_inner_html(id(node), html);
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_append(v: *mut View, parent: u64, child: u64) {
-    let v = unsafe { view(v) };
-    v.doc.mutate().append_children(id(parent), &[id(child)]);
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[parent, child]);
+        v.doc.mutate().append_children(id(parent), &[id(child)]);
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_remove(v: *mut View, node: u64) {
-    let v = unsafe { view(v) };
-    v.doc.mutate().remove_and_drop_node(id(node));
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        v.doc.mutate().remove_and_drop_node(id(node));
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_parent(v: *mut View, node: u64) -> u64 {
-    let v = unsafe { view(v) };
-    v.doc
-        .get_node(id(node))
-        .and_then(|n| n.parent)
-        .map_or(0, |p| p.as_u64())
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        v.doc
+            .get_node(id(node))
+            .and_then(|n| n.parent)
+            .map_or(0, |p| p.as_u64())
+    })
 }
 
 /// The element under a point in physical pixels, or 0.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_element_at(v: *mut View, x: f32, y: f32) -> u64 {
-    let v = unsafe { view(v) };
-    v.doc.resolve(0.0);
-    let s = v.scale;
-    v.doc.element_from_point(x / s, y / s).map_or(0, |n| n.as_u64())
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        v.doc.resolve(0.0);
+        let s = v.scale;
+        v.doc.element_from_point(x / s, y / s).map_or(0, |n| n.as_u64())
+    })
 }
 
 /// Writes `value` of attribute `name` on `node` into `buf` (NUL-terminated,
@@ -254,48 +319,53 @@ pub unsafe extern "C" fn ew_get_attribute(
     buf: *mut u8,
     len: usize,
 ) -> i64 {
-    let v = unsafe { view(v) };
-    let name = unsafe { str_arg(name) };
-    let Some(el) = v.doc.get_node(id(node)).and_then(|n| n.element_data()) else {
-        return -1;
-    };
-    let Some(value) = el.attr(LocalName::from(name)) else {
-        return -1;
-    };
-    if len > 0 {
-        let bytes = value.as_bytes();
-        let n = bytes.len().min(len - 1);
-        unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, n);
-            *buf.add(n) = 0;
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        let name = unsafe { str_arg(name) };
+        let Some(el) = v.doc.get_node(id(node)).and_then(|n| n.element_data()) else {
+            return -1;
+        };
+        let Some(value) = el.attr(LocalName::from(name)) else {
+            return -1;
+        };
+        if len > 0 {
+            let bytes = value.as_bytes();
+            let n = bytes.len().min(len - 1);
+            unsafe {
+                std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, n);
+                *buf.add(n) = 0;
+            }
         }
-    }
-    value.len() as i64
+        value.len() as i64
+    })
 }
 
 /// Writes the last rendered frame to a PNG. For tests and the spike harness.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_write_png(v: *mut View, path: *const c_char) -> bool {
-    let v = unsafe { view(v) };
-    let path = unsafe { str_arg(path) };
-    let mut rgba = v.pixels.clone();
-    for px in rgba.chunks_exact_mut(4) {
-        let a = px[3] as u32;
-        if a != 0 && a != 255 {
-            for c in &mut px[..3] {
-                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let path = unsafe { str_arg(path) };
+        let mut rgba = v.pixels.clone();
+        for px in rgba.chunks_exact_mut(4) {
+            let a = px[3] as u32;
+            if a != 0 && a != 255 {
+                for c in &mut px[..3] {
+                    *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+                }
             }
         }
-    }
-    let Ok(file) = std::fs::File::create(path) else {
-        return false;
-    };
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), v.width, v.height);
-    enc.set_color(png::ColorType::Rgba);
-    enc.set_depth(png::BitDepth::Eight);
-    enc.write_header()
-        .and_then(|mut w| w.write_image_data(&rgba))
-        .is_ok()
+        let Ok(file) = std::fs::File::create(path) else {
+            return false;
+        };
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), v.width, v.height);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header()
+            .and_then(|mut w| w.write_image_data(&rgba))
+            .is_ok()
+    })
 }
 
 // --- canvas ----------------------------------------------------------------
@@ -305,11 +375,13 @@ pub unsafe extern "C" fn ew_write_png(v: *mut View, path: *const c_char) -> bool
 /// Makes `node` (normally a `<canvas>`) draw the commands recorded below.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_canvas_attach(v: *mut View, node: u64) {
-    let v = unsafe { view(v) };
-    let state = canvas::Handle::default();
-    let widget = canvas::CanvasWidget { state: state.clone(), text: v.text.clone() };
-    v.doc.mutate().set_custom_widget(id(node), Box::new(widget));
-    v.canvases.insert(node, state);
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let state = canvas::Handle::default();
+        let widget = canvas::CanvasWidget { state: state.clone(), text: v.text.clone() };
+        v.doc.mutate().set_custom_widget(id(node), Box::new(widget));
+        v.canvases.insert(node, state);
+    })
 }
 
 fn canvas<'a>(v: &'a mut View, node: u64) -> std::cell::RefMut<'a, canvas::CanvasState> {
@@ -320,8 +392,10 @@ macro_rules! canvas_fn {
     ($name:ident, $method:ident $(, $arg:ident : $ty:ty)*) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(v: *mut View, node: u64 $(, $arg: $ty)*) {
-            let v = unsafe { view(v) };
-            canvas(v, node).$method($($arg),*);
+            crate::guard::guard(move || {
+                let v = unsafe { view(v) };
+                canvas(v, node).$method($($arg),*);
+            })
         }
     };
 }
@@ -347,9 +421,11 @@ pub unsafe extern "C" fn ew_canvas_fill_text(
     color: u32,
     bold: bool,
 ) {
-    let v = unsafe { view(v) };
-    let text = unsafe { str_arg(text) };
-    canvas(v, node).fill_text(text, x, y, size, color, bold);
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let text = unsafe { str_arg(text) };
+        canvas(v, node).fill_text(text, x, y, size, color, bold);
+    })
 }
 
 /// Advance width of `text` in CSS px, like measureText().width.
@@ -360,9 +436,11 @@ pub unsafe extern "C" fn ew_measure_text(
     size: f32,
     bold: bool,
 ) -> f32 {
-    let v = unsafe { view(v) };
-    let text = unsafe { str_arg(text) };
-    v.text.borrow_mut().measure(text, size, bold)
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        let text = unsafe { str_arg(text) };
+        v.text.borrow_mut().measure(text, size, bold)
+    })
 }
 
 pub const EW_POINTER_MOVE: u32 = 0;
@@ -394,64 +472,72 @@ pub unsafe extern "C" fn ew_pointer(
     y: f32,
     changed: *mut bool,
 ) -> u64 {
-    let v = unsafe { view(v) };
-    v.doc.resolve(0.0);
-    let (x, y) = (x / v.scale, y / v.scale);
-    let mut dirty = false;
-    let mut clicked = 0;
-    match kind {
-        EW_POINTER_MOVE => dirty = v.doc.set_hover_to(x, y),
-        EW_POINTER_DOWN => {
-            dirty = v.doc.set_hover_to(x, y);
-            dirty |= v.doc.active_node();
-            v.pressed = v.doc.get_hover_node_id();
-        }
-        EW_POINTER_UP => {
-            dirty = v.doc.set_hover_to(x, y);
-            dirty |= v.doc.unactive_node();
-            if let (Some(p), Some(h)) = (v.pressed.take(), v.doc.get_hover_node_id()) {
-                if is_ancestor(&v.doc, p, h) {
-                    clicked = p.as_u64();
-                } else if is_ancestor(&v.doc, h, p) {
-                    clicked = h.as_u64();
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        v.doc.resolve(0.0);
+        let (x, y) = (x / v.scale, y / v.scale);
+        let mut dirty;
+        let mut clicked = 0;
+        match kind {
+            EW_POINTER_MOVE => dirty = v.doc.set_hover_to(x, y),
+            EW_POINTER_DOWN => {
+                dirty = v.doc.set_hover_to(x, y);
+                dirty |= v.doc.active_node();
+                v.pressed = v.doc.get_hover_node_id();
+            }
+            EW_POINTER_UP => {
+                dirty = v.doc.set_hover_to(x, y);
+                dirty |= v.doc.unactive_node();
+                if let (Some(p), Some(h)) = (v.pressed.take(), v.doc.get_hover_node_id()) {
+                    if is_ancestor(&v.doc, p, h) {
+                        clicked = p.as_u64();
+                    } else if is_ancestor(&v.doc, h, p) {
+                        clicked = h.as_u64();
+                    }
                 }
             }
+            _ => {
+                dirty = v.doc.clear_hover();
+                dirty |= v.doc.unactive_node();
+                v.pressed = None;
+            }
         }
-        _ => {
-            dirty = v.doc.clear_hover();
-            dirty |= v.doc.unactive_node();
-            v.pressed = None;
+        if !changed.is_null() {
+            unsafe { *changed = dirty };
         }
-    }
-    if !changed.is_null() {
-        unsafe { *changed = dirty };
-    }
-    clicked
+        clicked
+    })
 }
 
 /// The text inside `node`, like `textContent`. Valid until the next call
 /// that returns a string on this view.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_get_text(v: *mut View, node: u64) -> *const c_char {
-    let v = unsafe { view(v) };
-    let text = v.doc.get_node(id(node)).map(|n| n.text_content()).unwrap_or_default();
-    v.out = CString::new(text.replace('\0', "")).unwrap();
-    v.out.as_ptr()
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        let text = v.doc.get_node(id(node)).map(|n| n.text_content()).unwrap_or_default();
+        v.out = CString::new(text.replace('\0', "")).unwrap();
+        v.out.as_ptr()
+    })
 }
 
 /// Writes x, y, width, height of `node`'s box in CSS pixels, relative to the
 /// page, into `out`. Lays the page out first, so the answer is current.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_rect(v: *mut View, node: u64, out: *mut f32) {
-    let v = unsafe { view(v) };
-    v.doc.resolve(0.0);
-    let r = match v.doc.get_node(id(node)) {
-        Some(n) => {
-            let p = n.absolute_position(0.0, 0.0);
-            let size = n.final_layout().size;
-            [p.x, p.y, size.width, size.height]
-        }
-        None => [0.0; 4],
-    };
-    unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out, 4) };
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        check_nodes(&v.doc, &[node]);
+        v.doc.resolve(0.0);
+        let r = match v.doc.get_node(id(node)) {
+            Some(n) => {
+                let p = n.absolute_position(0.0, 0.0);
+                let size = n.final_layout().size;
+                [p.x, p.y, size.width, size.height]
+            }
+            None => [0.0; 4],
+        };
+        unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out, 4) };
+    })
 }

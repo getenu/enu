@@ -24,6 +24,7 @@ type
     ## A piece of a sign's page: a heading, a button, a paragraph...
     sign*: Sign
     id*: int
+    selector*: string
 
   Click* = ref object of RootObj
     ## A player's click on a page element.
@@ -56,7 +57,14 @@ proc `html=`*(self: Sign, html: string) =
 proc `[]`*(self: Sign, selector: string): Element =
   ## Find the first element on the page that matches a CSS selector:
   ## `board["#score"]`, `board["button"]`, `board[".warning"]`.
-  Element(sign: self, id: self.page_query(selector))
+  Element(sign: self, id: self.page_query(selector), selector: selector)
+
+proc found(self: Element): Element =
+  if self.id == 0:
+    raise ValueError.init(
+      "There's nothing on the page matching \"" & self.selector & "\"."
+    )
+  self
 
 proc `?`*(self: Element): bool =
   ## Whether the element was found.
@@ -70,45 +78,45 @@ proc element*(self: Sign, tag: string, text = ""): Element =
 
 proc add*(self: Element, child: Element) =
   ## Put `child` inside this element, at the end.
-  self.sign.page_append(self.id, child.id)
+  self.sign.page_append(self.found.id, child.found.id)
 
 proc remove*(self: Element) =
   ## Take the element off the page.
-  self.sign.page_remove(self.id)
+  self.sign.page_remove(self.found.id)
 
 proc text*(self: Element): string =
   ## All the text inside the element.
-  self.sign.page_text(self.id)
+  self.sign.page_text(self.found.id)
 
 proc `text=`*(self: Element, value: string) =
   ## Replace what's inside the element with this text.
-  self.sign.page_set_text(self.id, value)
+  self.sign.page_set_text(self.found.id, value)
 
 proc `html=`*(self: Element, value: string) =
   ## Replace what's inside the element with this HTML.
-  self.sign.page_set_inner_html(self.id, value)
+  self.sign.page_set_inner_html(self.found.id, value)
 
 proc `[]`*(self: Element, attribute: string): string =
   ## An attribute, like `link["href"]`. Empty if it isn't set.
-  self.sign.page_attr(self.id, attribute)
+  self.sign.page_attr(self.found.id, attribute)
 
 proc `[]=`*(self: Element, attribute: string, value: string) =
   ## Set an attribute: `box["class"] = "big red"`,
   ## `box["style"] = "width: 40%"`.
-  self.sign.page_set_attr(self.id, attribute, value)
+  self.sign.page_set_attr(self.found.id, attribute, value)
 
 proc parent*(self: Element): Element =
-  Element(sign: self.sign, id: self.sign.page_parent(self.id))
+  Element(sign: self.sign, id: self.sign.page_parent(self.found.id))
 
 proc rect*(self: Element): PageRect =
   ## Where the element is on the page and how big, in pixels. Always up to
   ## date, even right after a change.
-  self.sign.page_rect(self.id)
+  self.sign.page_rect(self.found.id)
 
 proc clicked*(self: Element): Query[seq[Click]] =
   ## Clicks on the element (or anything inside it) since the last tick. Use
   ## it in a command loop: `if button.clicked as click:`.
-  let n = self.sign.page_click_count(self.id)
+  let n = self.sign.page_click_count(self.found.id)
   var clicks: seq[Click]
   for i in 0 ..< n:
     clicks.add Click(element: self)

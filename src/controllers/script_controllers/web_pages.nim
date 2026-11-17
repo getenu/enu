@@ -28,6 +28,17 @@ var
   present_times {.threadvar.}: seq[float]
   pump_times {.threadvar.}: seq[float]
 
+proc check() =
+  ## Turns a failed call into a script error.
+  let error = take_error()
+  if error != "":
+    raise ValueError.init("The page had a problem: " & error)
+
+proc log_errors(key: string) =
+  let error = take_error()
+  if error != "":
+    error "page error", sign = key, error
+
 proc page(self: Sign): Page =
   result = pages.get_or_default(self.id)
   if result.is_nil:
@@ -36,6 +47,8 @@ proc page(self: Sign): Page =
     )
 
 proc page_set_html*(self: Sign, html: string) =
+  defer:
+    check()
   let full = sign_html(html, font_px(self.size, self.width))
   var page = pages.get_or_default(self.id)
   if page.is_nil:
@@ -50,51 +63,75 @@ proc page_set_html*(self: Sign, html: string) =
   page.dirty = true
 
 proc page_query*(self: Sign, selector: string): int =
+  defer:
+    check()
   int ew_query(self.page.view, selector.cstring).uint64
 
 proc page_create*(self: Sign, tag: string): int =
+  defer:
+    check()
   int ew_create_element(self.page.view, tag.cstring).uint64
 
 proc page_append*(self: Sign, parent: int, child: int) =
+  defer:
+    check()
   let page = self.page
   ew_append(page.view, NodeId(parent), NodeId(child))
   page.dirty = true
 
 proc page_remove*(self: Sign, node: int) =
+  defer:
+    check()
   let page = self.page
   ew_remove(page.view, NodeId(node))
   page.dirty = true
 
 proc page_text*(self: Sign, node: int): string =
+  defer:
+    check()
   $ew_get_text(self.page.view, NodeId(node))
 
 proc page_set_text*(self: Sign, node: int, text: string) =
+  defer:
+    check()
   let page = self.page
   ew_set_text(page.view, NodeId(node), text.cstring)
   page.dirty = true
 
 proc page_attr*(self: Sign, node: int, name: string): string =
+  defer:
+    check()
   self.page.view.get_attribute(NodeId(node), name)
 
 proc page_set_attr*(self: Sign, node: int, name: string, value: string) =
+  defer:
+    check()
   let page = self.page
   ew_set_attribute(page.view, NodeId(node), name.cstring, value.cstring)
   page.dirty = true
 
 proc page_set_inner_html*(self: Sign, node: int, html: string) =
+  defer:
+    check()
   let page = self.page
   ew_set_inner_html(page.view, NodeId(node), html.cstring)
   page.dirty = true
 
 proc page_parent*(self: Sign, node: int): int =
+  defer:
+    check()
   int ew_parent(self.page.view, NodeId(node)).uint64
 
 proc page_rect*(self: Sign, node: int): PageRect =
+  defer:
+    check()
   var r: array[4, float32]
   ew_rect(self.page.view, NodeId(node), r.addr)
   (r[0].float, r[1].float, r[2].float, r[3].float)
 
 proc page_click_count*(self: Sign, node: int): int =
+  defer:
+    check()
   ## Clicks this tick on `node` or anything inside it.
   let page = self.page
   for target in page.clicks:
@@ -147,6 +184,7 @@ proc pump_pages*() =
         let owner = page.sign.owner
         if ?owner and ?owner.script_ctx:
           owner.script_ctx.timer = get_mono_time()
+    log_errors(key)
     pump_times.add (get_mono_time() - start).in_microseconds.float / 1000
   for key in gone:
     ew_view_free(pages[key].view)
@@ -171,6 +209,7 @@ proc present_pages*() =
     ew_resize(page.view, PAGE_WIDTH, height.uint32)
     page.height = height
     discard ew_present(page.view, key.cstring)
+    log_errors(key)
     page.dirty = false
     present_times.add (get_mono_time() - start).in_microseconds.float / 1000
 

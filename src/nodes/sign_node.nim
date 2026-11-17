@@ -117,7 +117,12 @@ gdobj SignNode of Spatial:
         else:
           int(viewport_x.float * self.model.height / self.model.width)
       ew_resize(web, viewport_x, px_height.uint32)
-      self.show_pixels(ew_render(web), viewport_x, px_height)
+      let pixels = ew_render(web)
+      let error = take_error()
+      if error != "":
+        error "sign render failed", sign = self.model.id, error
+        return
+      self.show_pixels(pixels, viewport_x, px_height)
 
   proc show_page_frame() =
     ## Shows the newest frame of this sign's page, if a script built one and
