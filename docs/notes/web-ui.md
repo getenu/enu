@@ -1,6 +1,6 @@
 # Web UI
 
-Status: prototypes 1–9 done as a spike (see Results). Nothing ships yet;
+Status: prototypes 1–10 done as a spike (see Results). Nothing ships yet;
 web signs and script pages are behind `-d:enu_web`.
 
 ## Goal
@@ -438,6 +438,35 @@ loop:
   0.25–1 ms.
 - Inherits the query bugs in #152 (a click handled in a pass during a long
   command can repeat on the next wake pass).
+
+**10. Unlit signs and parking.**
+
+- Web signs are unlit, so pages show their own colors whatever the lighting
+  (a screen, not a billboard). The sign material's gray albedo used to halve
+  their brightness. Glow and highlight brighten the page, since unlit
+  materials ignore emission. Frames are converted to straight alpha, so
+  translucent parts aren't too dark.
+- A declarative page with no changes or pointer activity for 2 minutes
+  (`-d:page_park_seconds`) parks: it drops its Blitz document and the hub's
+  copy of its last frame, keeping only its description. The sign keeps its
+  picture. A description that hasn't changed is recognized without a
+  document, so the loop describing it every pass doesn't wake it. A pointer
+  event, a changed description, or a DOM call rebuilds it first.
+- Imperative pages (`html=` plus edits) don't park: Blitz can write a
+  document back out as HTML, but reading it in again gives every element a
+  new id, and scripts hold on to ids.
+- Plain signs free their page 30 seconds after their last message
+  (`-d:sign_page_seconds`) and build one again for the next.
+- A recreated sign node asks the worker for its page's picture again.
+- Found while testing parking: a click was dropped if the owner's script
+  didn't run in the tick the click arrived (rebuilding a parked page takes
+  time, and scripts only get what's left of the tick). Clicks now last until
+  the script has looked at them, or two seconds.
+- Tested in game with 5-second timeouts: a parked page wakes for a click and
+  counts it (three of three), and parked pages and freed plain signs keep
+  their pictures. Savings per page are the earlier measurements (about 3 MB
+  of document plus 2–3 MB of frame); not re-measured in game, where the whole
+  process is around 1.2 GB.
 
 ## Open questions
 

@@ -9,9 +9,15 @@ import std/[tables, monotimes, times, strformat, algorithm, math, strutils]
 import core, models/signs
 import ../../../tools/web_spike/nim/[enu_web, sign_page, page_tree]
 
-const MAX_PAGE_HEIGHT = 4096
-  ## Pages don't scroll yet. Taller ones are cut off rather than turned into
-  ## huge textures.
+const
+  MAX_PAGE_HEIGHT = 4096
+    ## Pages don't scroll yet. Taller ones are cut off rather than turned
+    ## into huge textures.
+  page_park_seconds {.intdefine.} = 120
+    ## A declarative page with no changes or pointer activity for this long
+    ## drops its document (a few MB) and keeps only its description. Any
+    ## pointer event, change, or DOM call rebuilds it.
+  PAGE_ROOT = "enu-page"
 
 type
   PageRect* = tuple[x, y, width, height: float]
@@ -22,8 +28,13 @@ type
     height: int
     dirty: bool
     clicks: seq[int]
+    clicks_since: MonoTime ## when the oldest unseen click arrived
+    clicks_seen: bool ## the script asked about clicks since they arrived
     tree: PageTree ## what `page sign:` last described
     edit_log: seq[string]
+    imperative: bool ## changed by DOM calls, so it can't be rebuilt
+    parked: bool ## document dropped; `tree` holds the last description
+    last_active: MonoTime
 
 var
   pages {.threadvar.}: Table[string, Page]
@@ -41,29 +52,64 @@ proc log_errors(key: string) =
   if error != "":
     error "page error", sign = key, error
 
+proc root_html(self: Sign): string =
+  sign_html("<div id=" & PAGE_ROOT & "></div>", font_px(self.size, self.width))
+
+proc unpark(page: Page) =
+  ## Rebuilds a parked page's document from its last description.
+  page.view = ew_view_new(page.sign.root_html.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0)
+  let root = ew_query(page.view, cstring("#" & PAGE_ROOT))
+  let kids = if page.tree.root.is_nil: @[] else: page.tree.root.kids
+  page.tree = PageTree()
+  discard page.tree.render(page.view, root, kids)
+  discard page.tree.take_edits
+  page.parked = false
+  page.dirty = true
+  page.last_active = get_mono_time()
+
+proc park(page: Page, key: string) =
+  ew_view_free(page.view)
+  page.view = ViewPtr(nil)
+  page.parked = true
+  ew_drop_frame(key.cstring)
+
 proc page(self: Sign): Page =
   result = pages.get_or_default(self.id)
   if result.is_nil:
     raise ValueError.init(
       "This sign isn't a page yet. Set its `html` first."
     )
+  if result.parked:
+    result.unpark
 
-proc page_set_html*(self: Sign, html: string) =
-  defer:
-    check()
+proc changed_by_script(self: Sign): Page =
+  ## The page, about to be changed by a DOM call.
+  result = self.page
+  result.imperative = true
+  result.dirty = true
+
+proc create_page(self: Sign, html: string): Page =
   let full = sign_html(html, font_px(self.size, self.width))
-  var page = pages.get_or_default(self.id)
-  if page.is_nil:
-    page = Page(
+  result = pages.get_or_default(self.id)
+  if result.is_nil:
+    result = Page(
       view: ew_view_new(full.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0),
       sign: self,
       height: PAGE_WIDTH,
     )
-    pages[self.id] = page
+    pages[self.id] = result
   else:
-    ew_set_html(page.view, full.cstring)
-  page.tree = PageTree()
-  page.dirty = true
+    if result.parked:
+      result.unpark
+    ew_set_html(result.view, full.cstring)
+  result.tree = PageTree()
+  result.dirty = true
+  result.last_active = get_mono_time()
+
+proc page_set_html*(self: Sign, html: string) =
+  defer:
+    check()
+  self.create_page(html).imperative = true
 
 proc page_query*(self: Sign, selector: string): int =
   defer:
@@ -73,21 +119,19 @@ proc page_query*(self: Sign, selector: string): int =
 proc page_create*(self: Sign, tag: string): int =
   defer:
     check()
-  int ew_create_element(self.page.view, tag.cstring).uint64
+  int ew_create_element(self.changed_by_script.view, tag.cstring).uint64
 
 proc page_append*(self: Sign, parent: int, child: int) =
   defer:
     check()
-  let page = self.page
+  let page = self.changed_by_script
   ew_append(page.view, NodeId(parent), NodeId(child))
-  page.dirty = true
 
 proc page_remove*(self: Sign, node: int) =
   defer:
     check()
-  let page = self.page
+  let page = self.changed_by_script
   ew_remove(page.view, NodeId(node))
-  page.dirty = true
 
 proc page_text*(self: Sign, node: int): string =
   defer:
@@ -97,9 +141,8 @@ proc page_text*(self: Sign, node: int): string =
 proc page_set_text*(self: Sign, node: int, text: string) =
   defer:
     check()
-  let page = self.page
+  let page = self.changed_by_script
   ew_set_text(page.view, NodeId(node), text.cstring)
-  page.dirty = true
 
 proc page_attr*(self: Sign, node: int, name: string): string =
   defer:
@@ -109,16 +152,14 @@ proc page_attr*(self: Sign, node: int, name: string): string =
 proc page_set_attr*(self: Sign, node: int, name: string, value: string) =
   defer:
     check()
-  let page = self.page
+  let page = self.changed_by_script
   ew_set_attribute(page.view, NodeId(node), name.cstring, value.cstring)
-  page.dirty = true
 
 proc page_set_inner_html*(self: Sign, node: int, html: string) =
   defer:
     check()
-  let page = self.page
+  let page = self.changed_by_script
   ew_set_inner_html(page.view, NodeId(node), html.cstring)
-  page.dirty = true
 
 proc page_parent*(self: Sign, node: int): int =
   defer:
@@ -137,6 +178,7 @@ proc page_click_count*(self: Sign, node: int): int =
     check()
   ## Clicks this tick on `node` or anything inside it.
   let page = self.page
+  page.clicks_seen = true
   for target in page.clicks:
     var n = NodeId(target)
     while n != NO_NODE:
@@ -145,22 +187,26 @@ proc page_click_count*(self: Sign, node: int): int =
         break
       n = ew_parent(page.view, n)
 
-const PAGE_ROOT = "enu-page"
-
 proc page_render*(self: Sign, tree: string) =
   ## Makes the page match a description from `page sign:`.
   defer:
     check()
-  if self.id notin pages:
-    self.page_set_html("<div id=" & PAGE_ROOT & "></div>")
-  let page = self.page
+  let kids = parse_tree(tree)
+  var page = pages.get_or_default(self.id)
+  if not page.is_nil and not page.imperative and not page.tree.root.is_nil and
+      same_kids(page.tree.root.kids, kids):
+    return # unchanged: nothing to do, and a parked page stays parked
+  if page.is_nil:
+    page = self.create_page("<div id=" & PAGE_ROOT & "></div>")
+  page = self.page
   var root = ew_query(page.view, cstring("#" & PAGE_ROOT))
   if root == NO_NODE:
     root = ew_create_element(page.view, "div")
     ew_set_attribute(page.view, root, "id", PAGE_ROOT)
     ew_append(page.view, ew_query(page.view, "body"), root)
-  if page.tree.render(page.view, root, parse_tree(tree)):
+  if page.tree.render(page.view, root, kids):
     page.dirty = true
+    page.last_active = get_mono_time()
     page.edit_log.add page.tree.take_edits
     if page.edit_log.len > 200:
       page.edit_log = page.edit_log[^200 .. ^1]
@@ -170,7 +216,8 @@ proc page_path_clicks*(self: Sign, path: string): int =
   defer:
     check()
   let page = pages.get_or_default(self.id)
-  if not page.is_nil:
+  if not page.is_nil and not page.parked:
+    page.clicks_seen = true
     result = page.tree.clicks_at(page.view, page.clicks, path)
 
 proc page_edits*(self: Sign): string =
@@ -207,8 +254,15 @@ proc pump_pages*() =
     if n == 0:
       continue
     let start = get_mono_time()
+    if page.parked:
+      page.unpark
+    page.last_active = start
     for i in 0 ..< n:
       let kind = events[i * 3].uint32
+      if kind == POINTER_WAKE:
+        # A sign node that needs the picture again (it was recreated).
+        page.dirty = true
+        continue
       let x = events[i * 3 + 1] * PAGE_WIDTH.float32
       let y = events[i * 3 + 2] * page.height.float32
       var changed = false
@@ -216,6 +270,8 @@ proc pump_pages*() =
       if changed:
         page.dirty = true
       if clicked != NO_NODE:
+        if page.clicks.len == 0:
+          page.clicks_since = start
         page.clicks.add int(clicked.uint64)
         # Wake the owner, like a bump does, so its loop sees the click this
         # tick.
@@ -225,17 +281,30 @@ proc pump_pages*() =
     log_errors(key)
     pump_times.add (get_mono_time() - start).in_microseconds.float / 1000
   for key in gone:
-    ew_view_free(pages[key].view)
+    if not pages[key].parked:
+      ew_view_free(pages[key].view)
     ew_forget(key.cstring)
     pages.del key
 
 proc present_pages*() =
-  ## After scripts run: forget this tick's clicks, then lay out and record
-  ## pages that changed. Clicks last one tick, like other query results; the
-  ## click woke the owner, so its script has seen them.
+  ## After scripts run: forget clicks the script has seen, lay out and record
+  ## pages that changed, and park declarative pages that have been quiet a
+  ## while.
+  let now = get_mono_time()
   for key, page in pages:
-    page.clicks.set_len(0)
-    if not page.dirty or page.sign.destroyed:
+    # Clicks last until the script has looked at them (its loop may not run
+    # every tick, e.g. when the worker is busy), or two seconds if it never
+    # does.
+    if page.clicks_seen or now - page.clicks_since > init_duration(seconds = 2):
+      page.clicks.set_len(0)
+    page.clicks_seen = false
+    if page.sign.destroyed or page.parked:
+      continue
+    if not page.dirty:
+      if not page.imperative and not page.tree.root.is_nil and
+          page.clicks.len == 0 and
+          now - page.last_active > init_duration(seconds = page_park_seconds):
+        page.park(key)
       continue
     let start = get_mono_time()
     let sign = page.sign
@@ -250,6 +319,11 @@ proc present_pages*() =
     log_errors(key)
     page.dirty = false
     present_times.add (get_mono_time() - start).in_microseconds.float / 1000
+
+proc page_parked*(self: Sign): bool =
+  ## For tests: whether the page has dropped its document for now.
+  let page = pages.get_or_default(self.id)
+  not page.is_nil and page.parked
 
 proc page_post_pointer*(self: Sign, kind: int, u: float, v: float) =
   ## For tests: queue a pointer event the way the main thread does.

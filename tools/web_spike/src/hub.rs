@@ -211,3 +211,16 @@ pub unsafe extern "C" fn ew_forget(key: *const c_char) {
         SLOTS.lock().unwrap().remove(key);
     })
 }
+
+/// Drops the finished frame kept for `key` (a few MB) but keeps the page
+/// known, so pointer events still reach it. A sign that needs the picture
+/// again asks with `EW_POINTER_WAKE`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_drop_frame(key: *const c_char) {
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        if let Some(slot) = SLOTS.lock().unwrap().get_mut(key) {
+            slot.frame = None;
+        }
+    })
+}

@@ -24,6 +24,9 @@ const
   POINTER_DOWN* = 1'u32
   POINTER_UP* = 2'u32
   POINTER_LEAVE* = 3'u32
+  POINTER_WAKE* = 4'u32
+    ## Not a pointer: asks the page's owner to present it again (a sign node
+    ## that was recreated needs the picture).
 
 proc `==`*(a, b: NodeId): bool {.borrow.}
 proc is_nil*(f: FramePtr): bool = f.pointer.is_nil
@@ -68,6 +71,7 @@ proc ew_frame_free*(f: FramePtr)
 proc ew_post_pointer*(key: cstring, kind: uint32, u, v: float32): bool
 proc ew_take_pointer*(key: cstring, out_events: ptr float32, max: csize_t): csize_t
 proc ew_forget*(key: cstring)
+proc ew_drop_frame*(key: cstring)
 
 # Every call catches its own panics (see ../src/guard.rs).
 proc ew_take_error*(): cstring

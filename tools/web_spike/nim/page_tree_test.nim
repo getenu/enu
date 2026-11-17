@@ -98,6 +98,10 @@ discard tree.render(v, root, parse_tree(items(@["a", "b", "c"])))
 tree.check @["add 0/0 li"]
 doAssert $ew_get_text(v, root) == "abc"
 
+# Comparing descriptions needs no document (how a parked page stays parked).
+doAssert same_kids(parse_tree(counter(2)), parse_tree(counter(2)))
+doAssert not same_kids(parse_tree(counter(2)), parse_tree(counter(3)))
+
 doAssert take_error() == ""
 ew_view_free(v)
 echo "page_tree ok"
