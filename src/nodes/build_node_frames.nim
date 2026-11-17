@@ -83,6 +83,10 @@ type FramePlayer* = ref object
   new_keys: int
   next_stats: MonoTime
   next_at: MonoTime ## next server-side flip deadline
+  flip_viewers: Table[int, seq[Vector3]]
+    ## the viewer positions each pending or shown flip picked its chunks'
+    ## frames with (temporal LOD), so later checks of what a chunk should show
+    ## agree with what was queued for it
   playback_logged: bool
 
 proc init*(
@@ -209,10 +213,13 @@ proc drain(self: FramePlayer) =
   flush_registry()
   var done: seq[Vector3]
   for chunk_id, chunk_index in self.queue:
-    if not self.has_frame(chunk_index) or chunk_id in self.missing:
-      # a bake is already in flight for this chunk — let it land or time out
-      # before writing newer content over it
+    if not self.has_frame(chunk_index):
       done.add chunk_id
+      continue
+    if chunk_id in self.missing:
+      # a bake is already in flight for this chunk — let it land or time out
+      # before writing newer content over it. It stays queued: dropping it
+      # here left the chunk on the bake's frame, not the one asked for.
       continue
     let target = self.key_for(chunk_index, chunk_id)
     if chunk_id notin self.display or self.display[chunk_id] != target:
@@ -300,6 +307,13 @@ proc effective_frame(
   else:
     first
 
+proc shown_key(self: FramePlayer, chunk_id: Vector3): Hash =
+  ## The content key the chunk should show for the frame on screen: the frame
+  ## its flip picked for it by distance.
+  let index = self.model.current_frame
+  let viewers = self.flip_viewers.get_or_default(index)
+  self.key_for(self.effective_frame(chunk_id, index, viewers), chunk_id)
+
 proc show_chunk*(self: FramePlayer, chunk_id: Vector3, index: int) =
   ## Queue frame content for ONE freshly loaded chunk — on_block_loaded's
   ## entry point. It used to run a full show() per paged-in chunk, and show()
@@ -308,8 +322,9 @@ proc show_chunk*(self: FramePlayer, chunk_id: Vector3, index: int) =
   ## the next tick.
   if not self.has_frame(index) or not ?self.renderer.voxel_tool:
     return
-  let viewers = self.viewer_positions()
-  let chunk_index = self.effective_frame(chunk_id, index, viewers)
+  if index notin self.flip_viewers:
+    self.flip_viewers[index] = self.viewer_positions()
+  let chunk_index = self.effective_frame(chunk_id, index, self.flip_viewers[index])
   let known = self.cached_key(chunk_index, chunk_id)
   if known.is_some and chunk_id in self.display and
       self.display[chunk_id] == known.get:
@@ -334,6 +349,10 @@ proc show*(self: FramePlayer, index: int) =
       unit = self.model.id, cached = self.mesh_cache.len, missing = self.missing.len
   self.commit_index = index
   let viewers = self.viewer_positions()
+  for shown in self.flip_viewers.keys.to_seq:
+    if shown != self.model.current_frame:
+      self.flip_viewers.del shown
+  self.flip_viewers[index] = viewers
   var active: HashSet[int]
   active.incl index
   for chunk_id in self.loaded_chunks[]:
@@ -359,8 +378,9 @@ proc show*(self: FramePlayer, index: int) =
 proc on_mesh_baked*(self: FramePlayer, chunk_id: Vector3, tag: int, mesh: Mesh) =
   ## A bake landed. It's a pure function of the padded bytes we submitted under
   ## this tag, so the mesh IS the tagged key's content — cache it
-  ## unconditionally; the chunk joins the animation on its next flip. (nil is a
-  ## valid mesh: an all-hole chunk bakes to nothing.)
+  ## unconditionally. It goes on screen now if it's the frame on screen;
+  ## otherwise the chunk picks it up on a later flip. (nil is a valid mesh: an
+  ## all-hole chunk bakes to nothing.)
   if chunk_id notin self.missing:
     return
   let entry = self.missing[chunk_id]
@@ -369,7 +389,11 @@ proc on_mesh_baked*(self: FramePlayer, chunk_id: Vector3, tag: int, mesh: Mesh) 
   if entry.key notin self.mesh_cache:
     inc self.new_keys
   self.store_cached(entry.key, mesh)
-  if chunk_id notin self.display:
+  if chunk_id notin self.display or entry.key == self.shown_key(chunk_id):
+    # On screen now, while the chunk still shows an older mesh: until every
+    # frame is cached, waiting for the next flip would leave each frame
+    # showing the one before (a whole first loop of playback on old meshes).
+    #
     # First appearance (fresh reload or a newly streamed chunk): show it the
     # moment its bake lands rather than waiting for a flip to re-queue it.
     # Deferral exists for flip atomicity BETWEEN frames — a chunk that has never
@@ -418,6 +442,7 @@ proc reset*(self: FramePlayer) =
   self.decoded.clear()
   self.frame_data.clear()
   self.keys.clear()
+  self.flip_viewers.clear()
 
 proc render*(self: FramePlayer, index: int) =
   ## Show frame `index`. The terrain itself is the display: frame content is
@@ -433,7 +458,6 @@ proc on_order_changed*(self: FramePlayer) =
   self.decoded.clear()
   self.frame_data.clear()
   self.display.clear()
-  self.show(self.model.current_frame)
 
 proc chunk_changed*(self: FramePlayer, fc: FrameChunk) =
   ## A chunk of some frame changed. Patch the cached copy of that frame, and

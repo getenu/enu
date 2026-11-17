@@ -91,12 +91,12 @@ gdobj BuildNode of VoxelTerrain:
       ## must NOT repaint them on the main thread — that redundant paint was the
       ## load-time bog-down. Cleared on the first (non-modified) packed arrival
       ## and on page-out.
-    prefilled_chunks: Table[Vector3, int]
+    prefilled_chunks: Table[Vector3, tuple[count, frame_id: int]]
       ## Chunks the request-time hook (enu_chunk_bytes) answered with real bytes,
       ## so the streaming thread prefilled the engine block with them, mapped to
-      ## the served content's voxel count. Consumed by on_block_loaded to skip
-      ## the now-redundant snapshot + delta paints while still crediting
-      ## rendered_voxel_count. See docs/notes/voxel-stream-loading.md.
+      ## the served content's voxel count and the frame it came from. Consumed
+      ## by on_block_loaded to skip the now-redundant snapshot + delta paints
+      ## while still crediting rendered_voxel_count. See docs/notes/voxel-stream-loading.md.
     tracked_delta_seqs: Table[FrameChunk, EID]
     renderer: VoxelRenderer
     paging_logged: bool
@@ -261,20 +261,35 @@ gdobj BuildNode of VoxelTerrain:
       ):
         inc self.prefill_miss_with_data
     if bytes.len > 0:
-      self.prefilled_chunks[block_position] = PackedChunk(data: bytes).voxel_count
+      self.prefilled_chunks[block_position] =
+        (PackedChunk(data: bytes).voxel_count, fc.frame)
       # Served from edit_snapshots (packed_chunks hadn't synced yet): remember
       # it so the later packed_chunks sync doesn't repaint it on the main thread.
       if fc notin self.model.voxels.packed_chunks:
         self.edit_prefilled.incl block_position
       result = to_pool_byte_array(bytes)
 
+  proc repaint_chunk(chunk_id: Vector3) =
+    ## Make the terrain hold exactly the model's content for this chunk of the
+    ## frame on screen, whatever it showed before.
+    let fc: FrameChunk = (self.model.voxels.frame_id, chunk_id)
+    let snapshot = self.model.voxels.chunk_bytes(fc)
+    if ?self.renderer.voxel_tool:
+      if snapshot.is_empty:
+        erase_chunk_direct(self.renderer.voxel_tool, chunk_id)
+      else:
+        render_snapshot_replace(
+          self.renderer.voxel_tool, chunk_id, snapshot, self.resolver
+        )
+
   method on_block_loaded(chunk_id: Vector3) =
     let start = get_mono_time()
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
       # Consume the request-time hint: was this block prefilled with its data?
-      var prefill_credit = 0
-      let prefilled = self.prefilled_chunks.pop(chunk_id, prefill_credit)
+      var prefill: tuple[count, frame_id: int]
+      let prefilled = self.prefilled_chunks.pop(chunk_id, prefill)
+      let prefill_credit = prefill.count
       if prefilled:
         inc self.prefill_hits
         # The engine expanded the served bytes into this block; the paints
@@ -303,8 +318,12 @@ gdobj BuildNode of VoxelTerrain:
       # While playing, the frame player gives the fresh chunk its content:
       # painting the shown frame would schedule a remesh that lands after
       # (and overwrites) a directly-set cached frame mesh.
-      let displaying_frame =
+      let playing =
         self.model.frames_fps > 0 and ASAP_MODE notin self.model.global_flags
+      # A block prefilled with a frame that has since left the screen (a run's
+      # first frame change can land while its blocks page in) is repainted.
+      let stale = prefilled and prefill.frame_id != self.model.voxels.frame_id
+      let displaying_frame = playing or stale
       let fc: FrameChunk = (self.model.voxels.frame_id, chunk_id)
 
       if fc in self.model.voxels.packed_chunks and not displaying_frame:
@@ -358,9 +377,11 @@ gdobj BuildNode of VoxelTerrain:
 
           self.watch_delta_seq(fc, delta_seq)
       flush_registry()
-      if displaying_frame:
+      if playing:
         # give the fresh chunk its frame content on the next drain
         self.frames.show_chunk(chunk_id, self.model.current_frame)
+      elif stale:
+        self.repaint_chunk(chunk_id)
       let took = (get_mono_time() - start).in_milliseconds
       if took > 10:
         warn "on_block_loaded slow", ms = took, unit = self.model.id
@@ -381,11 +402,21 @@ gdobj BuildNode of VoxelTerrain:
   proc show_current_frame() =
     ## Put `current_frame` on screen. During a reset the terrain is reloading
     ## and picks the frame up as it does; during ASAP drawing the flip waits
-    ## for the drawing to end, so the screen never mixes two frames.
+    ## for the drawing to end, so the screen never mixes two frames. While
+    ## nothing plays, the terrain is painted straight from the model, and the
+    ## watches keep it that way: the engine meshes what the data holds. The
+    ## frame player only drives playback.
     if RESETTING in self.model.global_flags:
       self.model.target_shown_frame()
     elif ASAP_MODE in self.model.global_flags and self.model.frames_fps <= 0:
       self.show_deferred = true
+    elif self.model.frames_fps <= 0:
+      self.show_deferred = false
+      self.model.target_shown_frame()
+      self.frames.reset()
+      for chunk_id in self.loaded_chunks:
+        self.repaint_chunk(chunk_id)
+      flush_registry()
     else:
       self.show_deferred = false
       self.model.target_shown_frame()
@@ -589,10 +620,15 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         self.show_current_frame()
 
+    self.model.frames_fps_value.watch:
+      if added:
+        self.show_current_frame()
+
     self.model.frame_order_value.watch:
       if added:
         self.model.target_shown_frame()
         self.frames.on_order_changed()
+        self.show_current_frame()
 
     self.model.cull_down_faces_value.watch:
       if added:
