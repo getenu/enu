@@ -884,11 +884,14 @@ gdobj Game of Node:
         else:
           self.force_quit_at = get_mono_time() + 2.seconds
       elif QUITTING.removed:
-        let exit_code =
+        var exit_code =
           if TEST_MODE in state.local_flags and state.test_exit_code >= 0:
             state.test_exit_code
           else:
             0
+        if TEST_MODE in state.local_flags and display_mismatches > 0:
+          error "the screen didn't show the model", chunks = display_mismatches
+          exit_code = max(exit_code, 1)
         if TEST_MODE in state.local_flags:
           # Headless Godot's dummy rasterizer segfaults during teardown,
           # freeing render resources it never allocated (NULL RID frees in

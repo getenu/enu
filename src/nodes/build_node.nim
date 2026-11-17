@@ -40,6 +40,27 @@ let prefill_disabled = get_env("ENU_NO_PREFILL") == "1"
   ## A/B switch: disable the enu_chunk_bytes prefill so paged-in blocks take
   ## the old paint-after-load path (perf comparison).
 let perf_log = get_env("ENU_PERF_LOG") != ""
+# Compare what the terrain shows with the model (`check_display`). On unless
+# built with -d:skip_checks (dist builds and benchmarks); ENU_CHECK_DISPLAY=0
+# turns it off at run time.
+when defined(skip_checks):
+  const display_checks = false
+else:
+  let display_checks = get_env("ENU_CHECK_DISPLAY") != "0"
+const
+  DISPLAY_CHECKS_PER_FRAME = 4
+    ## chunks compared per frame across every build; the rest wait their turn
+  DISPLAY_VISITS_PER_FRAME = 32
+    ## chunks looked at per frame across every build, compared or not
+  DISPLAY_RECHECK_INTERVAL = init_duration(milliseconds = 100)
+    ## how often, across every build, a chunk whose model hasn't changed since
+    ## it last matched is compared again, to catch a stray paint over a chunk
+    ## the model left alone
+var display_checks_left {.threadvar.}: int
+var display_checks_refill_at {.threadvar.}: MonoTime
+var display_nodes {.threadvar.}: seq[VoxelTerrain]
+  ## every BuildNode being checked (as its base: the type isn't declared yet)
+var display_cursor {.threadvar.}: int
 
 var build_scene {.threadvar.}: PackedScene
 var shader {.threadvar.}: Shader
@@ -67,6 +88,17 @@ gdobj BuildNode of VoxelTerrain:
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
     next_stats_log: MonoTime
+    display_check_queue, display_recheck_queue: seq[Vector3]
+    display_reported: HashSet[(Vector3, int)]
+    display_recheck_at: MonoTime
+    display_registered: bool
+    display_visits_this_frame: int
+    display_pass_ok: bool
+      ## Every chunk of the current pass through the check queue has matched
+      ## the frame `display_pass_frame` without needing a fresh compare.
+    display_pass_frame: int
+    display_clean: Table[Vector3, Hash]
+      ## the model content (`display_content`) each chunk last matched
     stream_floor_until: MonoTime
     stream_floor_expired: bool
     prefill_hits, prefill_misses: int
@@ -269,6 +301,203 @@ gdobj BuildNode of VoxelTerrain:
         self.edit_prefilled.incl block_position
       result = to_pool_byte_array(bytes)
 
+  proc display_mismatch(chunk_id: Vector3): tuple[model, shown, differ: int] =
+    ## Cells where the terrain's voxels disagree with the model's content
+    ## for this chunk of the frame on screen (filled vs empty).
+    let fc: FrameChunk = (self.model.voxels.frame_id, chunk_id)
+    let snapshot = self.model.voxels.chunk_bytes(fc)
+    let buffer = gdnew[VoxelBuffer]()
+    buffer.create(ChunkDim, ChunkDim, ChunkDim)
+    self.renderer.voxel_tool.copy(chunk_id * ChunkDim, buffer, 1)
+    var cells: array[CHUNK_VOLUME, PackedVoxel]
+    if not snapshot.is_empty:
+      cells = decode_chunk(snapshot)
+    for linear in 0 ..< CHUNK_VOLUME:
+      let p = from_linear(linear)
+      let shown = buffer.get_voxel(p.x.int64, p.y.int64, p.z.int64) != 0
+      # holes, and script blocks drawn in the eraser color, paint as air
+      let model = not cells[linear].renders_as_air and
+        unpack_voxel(cells[linear])[0] != ERASER.ord
+      if model: inc result.model
+      if shown: inc result.shown
+      if model != shown: inc result.differ
+
+  proc display_content(chunk_id: Vector3): Option[Hash] =
+    ## Identifies the model's content for this chunk of the frame on screen,
+    ## cheaply. None while writes are still buffered.
+    let voxels = self.model.voxels
+    let fc: FrameChunk = (voxels.frame_id, chunk_id)
+    if fc in voxels.pending_chunks:
+      return
+    var h = hash(fc)
+    if fc in voxels.packed_chunks:
+      h = h !& hash(voxels.packed_chunks[fc].data)
+    if fc in voxels.chunk_deltas:
+      h = h !& hash(voxels.chunk_deltas[fc].len)
+    some(!$h)
+
+  proc display_checked(frame: int) =
+    ## Publish the checked frame from the side that runs the build's script
+    ## (or, for a script-less build, the server), as pending_block_updates is.
+    let owner = self.model.code.owner
+    let publishes =
+      owner == state.worker_ctx_name or
+      (owner == "" and state.server_ctx_name == state.worker_ctx_name)
+    if publishes and self.model.display_checked_frame != frame:
+      self.model.display_checked_frame = frame
+
+  proc check_display_chunk(chunk_id: Vector3, content: Option[Hash]) =
+    let playing = self.model.frames_fps > 0
+    let frame = self.model.current_frame
+    self.display_clean.del chunk_id
+    var (model, shown, differ) =
+      if playing: (0, 0, 0) else: self.display_mismatch(chunk_id)
+    if self.frames.stale_mesh(chunk_id):
+      # the frame player's mesh is another frame's content
+      shown = -1
+      inc differ
+    if differ == 0:
+      self.display_reported.excl (chunk_id, frame)
+      if content.is_some:
+        self.display_clean[chunk_id] = content.get
+    else:
+      self.display_pass_ok = false
+      self.display_checked(-1)
+    if differ != 0 and (chunk_id, frame) notin self.display_reported:
+      self.display_reported.incl (chunk_id, frame)
+      inc display_mismatches
+      warn "DISPLAY MISMATCH", unit = self.model.id, chunk_id, frame,
+        playing, model, shown, differ
+      state.err \"DISPLAY MISMATCH {self.model.id} chunk {chunk_id} " &
+        \"frame {frame}: model {model} shown {shown}"
+
+  proc finish_display_pass() =
+    ## A full pass where nothing changed and nothing differed means the
+    ## screen shows the frame: publish it. Then start the next pass.
+    let frame = self.model.current_frame
+    let playing = self.model.frames_fps > 0
+    if self.display_pass_ok and self.display_pass_frame == frame and
+        not (playing and self.frames.display_pending):
+      self.display_checked(frame)
+    else:
+      self.display_checked(-1)
+    self.display_pass_ok = true
+    self.display_pass_frame = frame
+
+  proc next_display_chunk(queue: var seq[Vector3]): Option[Vector3] =
+    ## The next loaded chunk in `queue`, refilled from the loaded chunks
+    ## when it runs out. None when nothing is loaded.
+    while true:
+      if queue.len == 0:
+        for chunk_id in self.loaded_chunks:
+          queue.add chunk_id
+        if queue.len == 0:
+          return
+      let chunk_id = queue.pop
+      if chunk_id in self.loaded_chunks:
+        return some(chunk_id)
+      self.display_clean.del chunk_id
+
+  proc display_paused(): bool =
+    ## Work we know is in flight: nothing to hold the screen to yet.
+    not ?self.renderer.voxel_tool or RESETTING in self.model.global_flags or
+      ASAP_MODE in self.model.global_flags
+
+  proc display_visit(): bool =
+    ## Look at this build's next chunk, comparing it if its model changed
+    ## since it last matched. False when the build has nothing more to look
+    ## at this frame.
+    if not ?self.model or not ?self.renderer:
+      return false # being set up or torn down
+    if self.display_paused:
+      self.display_reported.clear()
+      self.display_clean.clear()
+      self.display_pass_ok = false
+      self.display_checked(-1)
+      return false
+    if self.display_visits_this_frame >= self.loaded_chunks.len:
+      return false
+    if self.display_check_queue.len == 0:
+      self.finish_display_pass()
+    let next = self.next_display_chunk(self.display_check_queue)
+    if next.is_none:
+      return false
+    let chunk_id = next.get
+    inc self.display_visits_this_frame
+    if self.model.frames_fps > 0:
+      # playing: only the frame player's bookkeeping is checked, which is cheap
+      self.check_display_chunk(chunk_id, none(Hash))
+      return true
+    let content = self.display_content(chunk_id)
+    if content.is_some and chunk_id in self.display_clean and
+        self.display_clean[chunk_id] == content.get:
+      return true
+    if display_checks_left == 0:
+      self.display_check_queue.add chunk_id # first in line next frame
+      return false
+    # changed since it last matched: this pass can't vouch for the frame
+    self.display_pass_ok = false
+    dec display_checks_left
+    self.check_display_chunk(chunk_id, content)
+    true
+
+  proc display_recheck(now: MonoTime) =
+    ## Compare one chunk whatever its model did, every so often.
+    if not ?self.model or not ?self.renderer or self.display_paused or display_checks_left == 0 or
+        now < self.display_recheck_at:
+      return
+    let next = self.next_display_chunk(self.display_recheck_queue)
+    if next.is_some:
+      self.display_recheck_at =
+        now + DISPLAY_RECHECK_INTERVAL * max(display_nodes.len, 1)
+      dec display_checks_left
+      let content =
+        if self.model.frames_fps > 0: none(Hash)
+        else: self.display_content(next.get)
+      self.check_display_chunk(next.get, content)
+
+  proc check_display() =
+    ## Once a frame, for every build: report a chunk the screen shows
+    ## differently from the model's frame on screen, the moment it's seen.
+    ## Painting is synchronous with the model's changes, so outside of work we
+    ## know is in flight (chunks still loading, ASAP drawing, a reset, the frame
+    ## player's queue) the two must match. While nothing plays, the terrain's
+    ## voxels must be the model's. While playing, each chunk's mesh must be the
+    ## current frame's.
+    ##
+    ## The cost stays flat however much is loaded: builds take turns looking at
+    ## one chunk at a time under a shared per-frame budget, starting from a
+    ## different build each frame. A chunk whose model hasn't changed since it
+    ## last matched is skipped; a separate, slower sweep rechecks those.
+    if not self.display_registered:
+      self.display_registered = true
+      display_nodes.add VoxelTerrain(self)
+    let now = get_mono_time()
+    if now < display_checks_refill_at:
+      return
+    display_checks_refill_at = now + init_duration(milliseconds = 16)
+    display_checks_left = DISPLAY_CHECKS_PER_FRAME
+    let first = display_cursor mod display_nodes.len
+    display_cursor = first + 1
+    var turn: seq[BuildNode]
+    for node in display_nodes[first ..^ 1] & display_nodes[0 ..< first]:
+      turn.add BuildNode(node)
+    for node in turn:
+      node.display_visits_this_frame = 0
+    var visits_left = DISPLAY_VISITS_PER_FRAME
+    var looking = turn
+    while visits_left > 0 and looking.len > 0:
+      var more: seq[BuildNode]
+      for node in looking:
+        if visits_left == 0:
+          break
+        if node.display_visit():
+          dec visits_left
+          more.add node
+      looking = more
+    for node in turn:
+      node.display_recheck(now)
+
   proc repaint_chunk(chunk_id: Vector3) =
     ## Make the terrain hold exactly the model's content for this chunk of the
     ## frame on screen, whatever it showed before.
@@ -286,6 +515,9 @@ gdobj BuildNode of VoxelTerrain:
     let start = get_mono_time()
     if ?self.model:
       self.loaded_chunks.incl(chunk_id)
+      self.display_clean.del chunk_id
+      self.display_pass_ok = false
+      self.display_checked(-1)
       # Consume the request-time hint: was this block prefilled with its data?
       var prefill: tuple[count, frame_id: int]
       let prefilled = self.prefilled_chunks.pop(chunk_id, prefill)
@@ -669,6 +901,11 @@ gdobj BuildNode of VoxelTerrain:
         self.model.sight_query = query
 
   method exit_tree() =
+    if self.display_registered:
+      self.display_registered = false
+      let i = display_nodes.find(VoxelTerrain(self))
+      if i >= 0:
+        display_nodes.delete i
     if self.holding_bakes:
       self.holding_bakes = false
       release_bakes()
@@ -716,6 +953,9 @@ gdobj BuildNode of VoxelTerrain:
           prefill_misses = self.prefill_misses,
           prefill_gated = self.prefill_gated,
           prefill_miss_with_data = self.prefill_miss_with_data
+
+      if display_checks:
+        self.check_display()
 
       # Frame playback: the server is the single advancing authority; the
       # synced current_frame drives rendering on every side. Each side runs its

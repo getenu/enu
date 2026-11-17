@@ -586,6 +586,10 @@ type
     frames_first_value*: EdValue[int]
     frames_last_value*: EdValue[int]
       ## The frames playback runs through; `play` checks none are missing.
+    display_checked_frame_value*: EdValue[int]
+      ## The frame on screen, once the main thread's display check (build_node's
+      ## `check_display`) has seen every loaded chunk show it; -1 until then.
+      ## Tests wait on it.
     sealed_frames_value*: EdValue[bool]
       ## Bake frame meshes self-contained: chunk borders treated as open,
       ## so every chunk mesh carries its own boundary skin and any mix of
