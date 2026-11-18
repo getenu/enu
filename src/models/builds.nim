@@ -461,9 +461,11 @@ proc check_frame_index(self: Build, index: int, grow = false) =
       "no frame " & $index & ": frames go from 0 to " & $(limit - 1)
     )
 
-proc new_frame_id(self: Build): int =
-  result = self.next_frame_id
-  inc self.next_frame_id
+proc new_frame_id(order: var FrameOrder): int =
+  result = order.next_id
+  for id in order.ids:
+    result = max(result, id + 1)
+  order.next_id = result + 1
 
 proc draw_origin(self: Build, index: int)
 
@@ -473,7 +475,7 @@ proc grow_frames(self: Build, index: int) =
   let first = self.frames_len
   var order = self.frame_order
   while order.ids.len <= index:
-    let id = self.new_frame_id
+    let id = order.new_frame_id
     order.ids.add id
     order.unvisited.add id
   self.frame_order = order
@@ -575,9 +577,9 @@ proc insert_frame*(self: Build, src: int, index: int) =
       "frame limit reached (" & $MAX_FRAMES & ")"
     )
   self.refresh_edits()
-  let id = self.new_frame_id
-  self.voxels.copy_frame(self.frame_id(src), id)
   var order = self.frame_order
+  let id = order.new_frame_id
+  self.voxels.copy_frame(self.frame_id(src), id)
   order.ids.insert(id, index)
   self.frame_order = order
   if self.frame >= index:
@@ -610,7 +612,7 @@ proc delete_frames*(self: Build, first: int, last: int) =
   order.ids.delete(first .. last)
   let emptied = order.ids.len == 0
   if emptied:
-    order.ids.add self.new_frame_id
+    order.ids.add order.new_frame_id
   self.frame_order = order
   if emptied:
     self.draw_origin(0)
@@ -636,7 +638,7 @@ proc clear_frames*(self: Build) =
   for id in self.frame_order.ids:
     if id != keep:
       self.voxels.drop_frame(id)
-  self.frame_order = FrameOrder(ids: @[keep])
+  self.frame_order = FrameOrder(ids: @[keep], next_id: self.frame_order.next_id)
   self.frame = 0
   self.current_frame = 0
   self.frames_changed()
@@ -1136,9 +1138,8 @@ proc init*(
       current_frame_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frame_order_value:
         EdValue[FrameOrder].init(
-          FrameOrder(ids: @[0]), flags = {SYNC_LOCAL, SYNC_REMOTE}
+          FrameOrder(ids: @[0], next_id: 1), flags = {SYNC_LOCAL, SYNC_REMOTE}
         ),
-      next_frame_id: 1,
       frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       frames_first_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),

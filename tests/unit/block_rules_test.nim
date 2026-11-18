@@ -212,6 +212,17 @@ suite "Frames":
     build.go_to_frame(1)
     check vec3() notin build # frame 1 shows its manual block
 
+  test "a new frame never takes an id another frame has":
+    # an order synced from the other side carries more frames than this
+    # side has added itself
+    let build = Build.init(id = "build_frames_fresh_ids")
+    build.frame_order = FrameOrder(ids: @[0, 1])
+    build.draw(hand, (PERSISTED, blue)) # frame 0
+    build.go_to_frame(2)
+    check build.frame_id(2) notin [0, 1]
+    build.go_to_frame(1)
+    check not build.voxels.has_edit(hand)
+
   test "a script run drops every frame's computed blocks and starts on 0":
     let build = Build.init(id = "build_frames_rerun")
     build.go_to_frame(1)

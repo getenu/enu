@@ -140,6 +140,9 @@ type
 
   FrameOrder* = object
     ids*: seq[int]
+    next_id*: int
+      ## The id the next new frame gets. It travels with `ids` so every side
+      ## agrees on it: an id handed out twice puts two frames' blocks in one.
     unvisited*: seq[int]
       ## Ids of frames the script hasn't moved to yet. Moving to one first
       ## gives it the manual blocks of the nearest visited frame before it.
@@ -552,9 +555,6 @@ type
       ## inserting, deleting or moving a frame only rewrites this list.
       ## Replaced whole on change: ed's positional seq ops don't sync
       ## order-safely.
-    next_frame_id*: int
-      ## Host-local: the id the next new frame gets. Ids are never reused
-      ## while the build lives; they aren't saved.
     saved_frames_hash*: Hash
     run_from_frame*: Option[int]
       ## Host-local: the frame on screen when this run started, which the
