@@ -147,8 +147,8 @@ proc load_frames*(self: Build, json: JsonNode) =
     let i = index.get_int
     if i in 0 ..< count and i != current:
       order.unvisited.add i
+  order.next_id = count
   self.frame_order = order
-  self.next_frame_id = count
   self.frame = current
   self.current_frame = self.frame
   self.target_frame()
