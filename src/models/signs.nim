@@ -24,10 +24,10 @@ proc init*(
       size_value: ed(size),
       billboard_value: ed(billboard),
       frame_created: state.frame_count,
-      start_color: ACTION_COLORS[BLACK],
-      start_transform: transform,
+      start_color_value: ed(ACTION_COLORS[BLACK]),
+      start_transform_value: ed(transform),
       owner_value: ed(owner),
-      text_only: text_only,
+      text_only_value: ed(text_only),
       parent: owner,
     )
     self.init_thing

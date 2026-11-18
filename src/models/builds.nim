@@ -1042,6 +1042,7 @@ method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
+  self.drawing = true
   self.speed = AUTO # ramp up then finish ASAP, unless the script sets a speed
   self.auto_ramp_active = false
   self.auto_ramp_started = false
@@ -1151,15 +1152,15 @@ proc init*(
       cull_down_faces_value:
         EdValue[bool].init(false, flags = {SYNC_LOCAL, SYNC_REMOTE}),
       voxels: voxels,
-      start_transform: transform,
+      start_transform_value: ed(transform),
       draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
       turtle_transform_value:
         EdValue[Transform].init(Transform.init, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      start_color: color,
+      start_color_value: ed(color),
       drawing: true,
       bounds_value: ed(empty_bounds()),
       clone_of: clone_of,
-      bot_collisions: bot_collisions,
+      bot_collisions_value: ed(bot_collisions),
       parent: parent,
     )
 

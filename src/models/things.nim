@@ -46,6 +46,11 @@ proc init_thing*[T: Thing](
 ) =
   ## `body_flags` go on the transform and velocity.
   self.lifetime = new_lifetime()
+  # A constructor that knows its starting pose or color creates these itself.
+  if self.start_transform_value.is_nil:
+    self.start_transform_value = ed(Transform.init)
+  if self.start_color_value.is_nil:
+    self.start_color_value = ed(Color())
   with self:
     # OWNS_MEMBERS: children belong to us — membership drives ed's owned index,
     # so our destroy cascades into them (and removal un-registers them).

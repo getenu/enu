@@ -99,10 +99,10 @@ proc init*(
   id.own:
     var self = Bot(
       id: id,
-      start_transform: transform,
+      start_transform_value: ed(transform),
       animation_value: ed("auto"),
       clone_of: clone_of,
-      start_color: color,
+      start_color_value: ed(color),
       parent: parent,
     )
 

@@ -501,9 +501,9 @@ proc position_set(self: Thing, position: Vector3) =
 
 proc start_position_set(self: Thing, position: Vector3) =
   if GLOBAL in self.global_flags:
-    self.start_transform.origin = position
+    self.start_transform.origin := position
   else:
-    self.start_transform.origin = position.local_to(self.parent)
+    self.start_transform.origin := position.local_to(self.parent)
   self.global_flags += DIRTY
 
 proc reset_anchor(self: Thing) =
