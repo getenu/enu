@@ -447,7 +447,7 @@ type
   Thing* = ref object of Model
     parent* {.cursor.}: Thing # back-ref; the parent owns this child via `things`
     things*: EdSeq[Thing]
-    start_transform*: Transform
+    start_transform_value*: EdValue[Transform]
     scale_value*: EdValue[float]
     glow_value*: EdValue[float]
     speed_value*: EdValue[float]
@@ -465,7 +465,7 @@ type
       ## things, the player, instances spawned elsewhere) is re-rooted.
     collisions*: EdSeq[tuple[id: string, normal: Vector3]]
     shared_value*: EdValue[Shared]
-    start_color*: Color
+    start_color_value*: EdValue[Color]
     color_value*: EdValue[Color]
     sight_ray*: RayCast
     frame_created*: int
@@ -518,7 +518,7 @@ type
     size_value*: EdValue[float] ## text height in blocks (see sign_node)
     billboard_value*: EdValue[bool]
     owner_value*: EdValue[Thing]
-    text_only*: bool
+    text_only_value*: EdValue[bool]
 
   Build* = ref object of Thing
     # The synced voxel tables ride the build's closure as real Ed fields (like
@@ -549,7 +549,7 @@ type
       ## This run's initial batch of drawing is over (see settle_holes).
     drawing*: bool
     bounds_value*: EdValue[AABB]
-    bot_collisions*: bool
+    bot_collisions_value*: EdValue[bool]
     frame_order_value*: EdValue[FrameOrder]
       ## The frames, in order, by id. Every voxel row is keyed by frame id, so
       ## inserting, deleting or moving a frame only rewrites this list.

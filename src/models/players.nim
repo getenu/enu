@@ -8,7 +8,7 @@ proc init*(_: type Player, id = "player-" & Ed.thread_ctx.id): Player =
       id: id,
       rotation_value: ed(0.0),
       boost_value: EdValue[Vector3].init(),
-      start_transform: Transform.init(origin = vec3(0, 1, 0)),
+      start_transform_value: ed(Transform.init(origin = vec3(0, 1, 0))),
       input_direction_value: EdValue[Vector3].init(),
       cursor_position_value: ed((0, 0)),
       block_log_entries: EdSeq[BlockLogEntry].init(flags = {SYNC_LOCAL}),
