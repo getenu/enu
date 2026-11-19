@@ -1139,10 +1139,6 @@ proc init*(
       drawing = true,
       bounds = empty_bounds(),
       bot_collisions = bot_collisions,
-      frame_order = FrameOrder(ids: @[0], next_id: 1),
-      frames_loop = true,
-      display_checked_frame = -1,
-      sealed_frames = true,
     )
 
     voxels.build = self # back-ref for live table reads (set once self exists)

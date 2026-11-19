@@ -320,31 +320,28 @@ type
     net_connections_value*: EdValue[int]
     ed_mem_value*: EdValue[int] # worker ctx resident body bytes (evictor)
 
-  Model* = ref object of EdRef
-    target_point*: Vector3
-    target_normal*: Vector3
-    local_flags* {.ed_flags: {SYNC_LOCAL}.}: EdSet[LocalModelFlags]
-    global_flags*: EdSet[GlobalModelFlags]
-    node*: Spatial
+  Model* {.ed.} = ref object of EdRef
+    target_point* {.ignore.}: Vector3
+    target_normal* {.ignore.}: Vector3
+    local_flags* {.local.}: set[LocalModelFlags]
+    global_flags*: set[GlobalModelFlags]
+    node* {.ignore.}: Spatial
 
   Ground* = ref object of Model
 
-  Shared* = ref object of EdRef
-    materials* {.ed_ignore.}: seq[ShaderMaterial]
-      ## Node-side Godot refs, shared across the unit tree's nodes.
-      ## `ed_ignore`: godot refs can't ride a body sync — a revive would
-      ## wipe them (and glow/highlight with them).
-    emission_colors* {.ed_ignore.}: seq[godot.Color]
-    edit_snapshots*: EdTable[EditKey, SnapshotData]
-    edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
-    palette*: EdSeq[Color]
+  Shared* {.ed.} = ref object of EdRef
+    materials* {.ignore.}: seq[ShaderMaterial]
+      ## Node-side Godot refs, shared across the unit tree's nodes. Godot refs
+      ## can't sync.
+    emission_colors* {.ignore.}: seq[godot.Color]
+    edit_snapshots*: Table[EditKey, SnapshotData]
+    edit_deltas*: Table[EditKey, EdSeq[DeltaUpdate]]
+    palette*: seq[Color]
       ## Static (non-named) voxel colors for this unit tree, in allocation
       ## order. A packed color_index >= STATIC_COLOR_BASE indexes this seq.
       ## Append-only; not persisted (edit JSON stores hex, load re-allocates).
-    palette_cache* {.ed_ignore.}: Table[Color, int]
+    palette_cache* {.ignore.}: Table[Color, int]
       ## Local color -> palette index cache; rebuilt when out of sync.
-      ## `ed_ignore`: per-side state — syncing it would race concurrent
-      ## lookups during body serialization.
 
   CachedChunk* = ref object
     ## One decoded chunk in a VoxelStore's read-through cache: the dense cell
@@ -436,51 +433,52 @@ type
     last_paste_time*: MonoTime
     last_write_time*: MonoTime
 
-  ScriptErrors* =
-    EdSeq[tuple[msg: string, info: TLineInfo, location: string, log: bool]]
+  ScriptError* = tuple[msg: string, info: TLineInfo, location: string, log: bool]
+  ScriptErrors* = EdSeq[ScriptError]
 
   SightQuery* = object
     target*: Thing
     distance*: float
     answer*: Option[bool]
 
-  Thing* = ref object of Model
-    parent* {.cursor.}: Thing # back-ref; the parent owns this child via `things`
-    things* {.ed_flags: DEFAULT_FLAGS + {OWNS_MEMBERS}.}: EdSeq[Thing]
-    start_transform_value* {.ed_default: Transform.init.}: EdValue[Transform]
-    scale_value* {.ed_default: 1.0.}: EdValue[float]
-    glow_value*: EdValue[float]
-    speed_value*: EdValue[float]
-    code_value*: EdValue[Code]
-    script_ctx*: ScriptCtx
-    disabled*: bool
-    velocity_value*: EdValue[Vector3]
-    transform_value* {.ed_default: Transform.init.}: EdValue[Transform]
-    clone_of*: Thing
-    spawned_by*: string
+  Thing* {.ed.} = ref object of Model
+    parent* {.cursor, ignore.}: Thing
+      # back-ref; the parent owns this child via `things`
+    things* {.owns_members.}: seq[Thing]
+    start_transform*: Transform = Transform.init
+    scale*: float = 1.0
+    glow*: float
+    speed*: float
+    code*: Code
+    script_ctx* {.ignore.}: ScriptCtx
+    disabled* {.ignore.}: bool
+    velocity*: Vector3
+    transform*: Transform = Transform.init
+    clone_of* {.ignore.}: Thing
+    spawned_by* {.ignore.}: string
       ## Id of the thing whose script `.new()`'d this instance, set once at
       ## creation and never changed. Distinguishes *my* instances from foreign
       ## ones (both have `clone_of`): when a thing is destroyed, only children
       ## with `spawned_by == self.id` go down with it; everything else (real
       ## things, the player, instances spawned elsewhere) is re-rooted.
-    collisions* {.ed_flags: {SYNC_LOCAL}.}: EdSeq[tuple[id: string, normal: Vector3]]
-    shared_value*: EdValue[Shared]
-    start_color_value*: EdValue[Color]
-    color_value*: EdValue[Color]
-    sight_ray*: RayCast
-    frame_created*: int
-    errors*: ScriptErrors
-    current_line_value*: EdValue[int]
-    sight_query_value* {.ed_flags: {SYNC_LOCAL}.}: EdValue[SightQuery]
-    eval_value* {.ed_flags: {SYNC_LOCAL}.}: EdValue[string]
-    anchor_value* {.ed_default: Transform.init.}: EdValue[Transform]
-    rendered_voxel_count_value*: EdValue[int]
-    pending_block_updates_value*: EdValue[int]
-    query_value*: EdValue[ThingQuery]
-    owner_ctx_value* {.ed_default: Ed.thread_ctx.id.}: EdValue[string]
-      # the creating context; synced replicas are built by parse, not init
-      # ctx id that created the thing, synced so the authority can reap EPHEMERAL
-      # things when that context drops -- without encoding the ctx in the id.
+    collisions* {.local.}: seq[tuple[id: string, normal: Vector3]]
+    shared*: Shared
+    start_color*: Color
+    color*: Color
+    sight_ray* {.ignore.}: RayCast
+    frame_created* {.ignore.}: int
+    errors*: seq[ScriptError]
+    current_line*: int
+    sight_query* {.local.}: SightQuery
+    eval* {.local.}: string
+    anchor*: Transform = Transform.init
+    rendered_voxel_count*: int
+    pending_block_updates*: int
+    query*: ThingQuery
+    owner_ctx*: string = Ed.thread_ctx.id
+      ## The context that created the thing, so the authority can reap
+      ## EPHEMERAL things when that context drops, without encoding the
+      ## context in the id. Replicas are built by sync, not `init`.
 
   BlockLogEntry* =
     tuple[
@@ -491,107 +489,107 @@ type
       timestamp: MonoTime,
     ]
 
-  Player* = ref object of Thing
-    colliders*: HashSet[Model]
-    rotation_value*: EdValue[float]
-    boost_value*: EdValue[Vector3]
+  Player* {.ed.} = ref object of Thing
+    colliders* {.ignore.}: HashSet[Model]
+    rotation*: float
+    boost*: Vector3
       ## Script-driven launch impulse (player.boost). Touched, not set, so
       ## identical repeat boosts still fire; the player node consumes it in
       ## its physics step (the walk controller rebuilds horizontal velocity
       ## from input every frame, so a plain velocity write can't launch).
-    input_direction_value*: EdValue[Vector3]
-    cursor_position_value*: EdValue[tuple[line: int, col: int]]
-    block_log_entries* {.ed_flags: {SYNC_LOCAL}.}: EdSeq[BlockLogEntry]
-    tool_value*: EdValue[Tools]
-    tools*: EdSet[Tools]
-    tool_colors*: EdSeq[Color]
+    input_direction*: Vector3
+    cursor_position*: tuple[line: int, col: int]
+    block_log_entries* {.local.}: seq[BlockLogEntry]
+    tool*: Tools
+    tools*: set[Tools]
+    tool_colors*: seq[Color]
       ## The block tools' colors, BLUE_BLOCK .. BROWN_BLOCK in order.
-    flags*: EdSet[PlayerFlags]
-    coding_value*: EdValue[Thing]
-    open_sign_value*: EdValue[Sign]
+    flags*: set[PlayerFlags]
+    coding*: Thing
+    open_sign*: Sign
 
-  Bot* = ref object of Thing
-    animation_value*: EdValue[string]
+  Bot* {.ed.} = ref object of Thing
+    animation*: string
 
-  Sign* = ref object of Thing
-    message_value*, more_value*: EdValue[string]
-    width_value*, height_value*: EdValue[float]
-    size_value*: EdValue[float] ## text height in blocks (see sign_node)
-    billboard_value*: EdValue[bool]
-    owner_value*: EdValue[Thing]
-    text_only_value*: EdValue[bool]
+  Sign* {.ed.} = ref object of Thing
+    message*, more*: string
+    width*, height*: float
+    size*: float ## text height in blocks (see sign_node)
+    billboard*: bool
+    owner*: Thing
+    text_only*: bool
 
-  Build* = ref object of Thing
+  Build* {.ed.} = ref object of Thing
     # The synced voxel tables ride the build's closure as real Ed fields (like
     # `things`) — reconnected by reference after sync, with generated ids. So they
     # need no id lookup, and a reload gets fresh ids (no destroy+recreate-same-id
     # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
     # at these.
-    packed_chunks*: EdTable[FrameChunk, SnapshotData]
-    chunk_deltas*: EdTable[FrameChunk, EdSeq[DeltaUpdate]]
-    voxels*: VoxelStore
-    draw_transform_value* {.ed_flags: {}, ed_default: Transform.init.}: EdValue[Transform]
+    packed_chunks*: Table[FrameChunk, SnapshotData]
+    chunk_deltas*: Table[FrameChunk, EdSeq[DeltaUpdate]]
+    voxels* {.ignore.}: VoxelStore
+    draw_transform* {.unsynced.}: Transform = Transform.init
     # draw_transform mirrored for the render side (turtle indicator). A separate
     # field because draw_transform is written per voxel — syncing it directly
     # would flood the context queue during ASAP draws. This one is written once
     # per batch (see sync_turtle).
-    turtle_transform_value* {.ed_default: Transform.init.}: EdValue[Transform]
-    voxels_per_frame*: float
-    voxels_remaining_this_frame*: float
+    turtle_transform*: Transform = Transform.init
+    voxels_per_frame* {.ignore.}: float
+    voxels_remaining_this_frame* {.ignore.}: float
     # `speed = auto` ramp state (see builds.nim). `active` while the draw rate
     # is ramping up, `started` once the first block anchors the clock, `done`
     # after it has handed off to ASAP — so a later `speed = auto` (e.g. an
     # `asap:` block restoring the speed) doesn't restart a finished ramp.
-    auto_ramp_active*: bool
-    auto_ramp_started*: bool
-    auto_ramp_done*: bool
-    auto_ramp_start*: MonoTime
-    holes_settled*: bool
+    auto_ramp_active* {.ignore.}: bool
+    auto_ramp_started* {.ignore.}: bool
+    auto_ramp_done* {.ignore.}: bool
+    auto_ramp_start* {.ignore.}: MonoTime
+    holes_settled* {.ignore.}: bool
       ## This run's initial batch of drawing is over (see settle_holes).
-    drawing*: bool
-    bounds_value*: EdValue[AABB]
-    bot_collisions_value*: EdValue[bool]
-    frame_order_value*: EdValue[FrameOrder]
+    drawing* {.ignore.}: bool
+    bounds*: AABB
+    bot_collisions*: bool
+    frame_order*: FrameOrder = FrameOrder(ids: @[0], next_id: 1)
       ## The frames, in order, by id. Every voxel row is keyed by frame id, so
       ## inserting, deleting or moving a frame only rewrites this list.
       ## Replaced whole on change: ed's positional seq ops don't sync
       ## order-safely.
-    saved_frames_hash*: Hash
-    run_from_frame*: Option[int]
+    saved_frames_hash* {.ignore.}: Hash
+    run_from_frame* {.ignore.}: Option[int]
       ## Host-local: the frame on screen when this run started, which the
       ## run's first move to a new frame takes its blocks from.
-    bakes*: Table[string, BakeEntry]
+    bakes* {.ignore.}: Table[string, BakeEntry]
       ## Host-local: what each `bake` key drew, so a run can replay it.
-    baking*: seq[BakeCapture]
+    baking* {.ignore.}: seq[BakeCapture]
       ## Host-local: the `bake` blocks whose bodies are running, innermost
       ## last.
-    bake_key_sites*: Table[string, string]
+    bake_key_sites* {.ignore.}: Table[string, string]
       ## Host-local: where each keyed `bake` this run was called from, so two
       ## blocks can't share a key.
-    bakes_serial*: int
-    saved_bakes_serial*: int
+    bakes_serial* {.ignore.}: int
+    saved_bakes_serial* {.ignore.}: int
       ## Host-local: `bakes_serial` changes with the bakes; the save writes
       ## them when it differs from this.
       ## Host-local: `frames_hash` as of the last frame save or load. Loaded
       ## frames start clean: re-encoding 24 untouched frames on every level
       ## save dominated debug-build load times.
-    current_frame_value*: EdValue[int]
+    current_frame*: int
       ## The frame on screen, by index. Playback moves it; otherwise it
       ## follows `frame`. Hand edits go to it.
-    frame*: int
+    frame* {.ignore.}: int
       ## The frame the script draws into, by index. A script run starts on
       ## frame 0.
-    frames_fps_value*: EdValue[float]
+    frames_fps*: float
       ## > 0 while playing; the server advances `current_frame` at this rate.
-    frames_loop_value*: EdValue[bool]
-    frames_first_value*: EdValue[int]
-    frames_last_value*: EdValue[int]
+    frames_loop*: bool = true
+    frames_first*: int
+    frames_last*: int
       ## The frames playback runs through; `play` checks none are missing.
-    display_checked_frame_value*: EdValue[int]
+    display_checked_frame*: int = -1
       ## The frame on screen, once the main thread's display check (build_node's
       ## `check_display`) has seen every loaded chunk show it; -1 until then.
       ## Tests wait on it.
-    sealed_frames_value*: EdValue[bool]
+    sealed_frames*: bool = true
       ## Bake frame meshes self-contained: chunk borders treated as open,
       ## so every chunk mesh carries its own boundary skin and any mix of
       ## displayed frames is visually closed — no seams, ever, at the cost
@@ -600,7 +598,7 @@ type
       ## against the frame's real neighbor content — fewer quads, exact AO,
       ## but chunks displaying different frames (temporal LOD bands,
       ## catch-up after movement) can show transient seams.
-    cull_down_faces_value*: EdValue[bool]
+    cull_down_faces*: bool
       ## Sheet hint: skip downward faces when meshing. An ocean slab's
       ## underside is never visible but costs ~a third of its geometry.
       ## Set it before drawing/playing — cached frame meshes don't rebake.
