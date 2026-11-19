@@ -177,36 +177,10 @@ proc init_logger*(self: GameState) =
     state.console.log += msg & "\n"
 
 proc init*(_: type GameState): GameState =
-  let flags = {SYNC_LOCAL}
   let self = GameState(
-    player_value: EdValue[Player].init(flags = flags),
-    local_flags: EdSet[LocalStateFlags].init(flags = flags),
-    global_flags: EdSet[GlobalStateFlags].init(id = "state_global_flags"),
-    things: EdSeq[Thing].init(
-      # OWNS_MEMBERS (ownerless): nothing cascades into root things, but ed
-      # indexes the members so partial subscribers get each thing's ownership
-      # closure pushed ahead of the collection (husk-free parse).
-      id = "root_things",
-      flags = DEFAULT_FLAGS + {OWNS_MEMBERS},
-    ),
-    config_value: EdValue[Config].init(flags = flags, id = "config"),
-    gravity: -80.0,
-    show_prototypes: true,
-    show_tools: true,
     start_transform: Transform.init(origin = vec3(0, 1, 0)),
-    console: ConsoleModel(log: EdSeq[string].init(flags = flags)),
-    wants: EdSeq[LocalStateFlags].init(flags = flags),
-    level_name_value: EdValue[string].init("", id = "level_name"),
-    queued_action_value: EdValue[string].init("", flags = flags),
-    server_ctx_name_value: EdValue[string].init("", flags = flags),
-    status_message_value: EdValue[string].init("", flags = flags),
-    voxel_tasks_value: EdValue[int].init(0, flags = flags),
-    test_exit_code_value: EdValue[int].init(-1, flags = flags),
-    net_bytes_sent_value: EdValue[int64].init(0'i64, flags = flags),
-    net_bytes_received_value: EdValue[int64].init(0'i64, flags = flags),
-    net_connections_value: EdValue[int].init(0, flags = flags),
-    ed_mem_value: EdValue[int].init(0, flags = flags),
-  )
+    console: ConsoleModel(log: EdSeq[string].init(flags = {SYNC_LOCAL})),
+  ).init_ed_fields
 
   self.init_logger
 
