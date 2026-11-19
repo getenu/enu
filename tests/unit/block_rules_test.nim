@@ -36,6 +36,25 @@ suite "Computed and manual blocks":
     check not build.voxels.has_edit(spot)
     check build.voxel_info(spot) == (TRANSIENT, red)
 
+  test "the script erasing its own block leaves nothing":
+    let build = Build.init(id = "build_rules_script_erase")
+    build.computed(red)
+    build.computed(ACTION_COLORS[ERASER])
+    check not build.voxels.has_edit(spot)
+    check spot notin build
+
+  test "the script erasing an empty cell stores nothing":
+    let build = Build.init(id = "build_rules_script_erase_empty")
+    build.computed(ACTION_COLORS[ERASER])
+    check not build.voxels.has_edit(spot)
+    check spot notin build
+
+  test "the script erasing doesn't touch a manual block":
+    let build = Build.init(id = "build_rules_script_erase_manual")
+    build.manual(red)
+    build.computed(ACTION_COLORS[ERASER])
+    check build.voxel_info(spot) == (PERSISTED, red)
+
   test "erasing a manual block leaves no hole":
     let build = Build.init(id = "build_rules_erase_manual")
     build.manual(red)

@@ -889,10 +889,17 @@ proc stamp_chunk*(self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData): boo
   let cells = decode_chunk(snapshot)
   let chunk = if empty: CachedChunk() else: self.cached_chunk(fc)
   for linear in 0 ..< CHUNK_VOLUME:
-    if cells[linear] != EMPTY_VOXEL:
-      if chunk.cells[linear] == EMPTY_VOXEL:
-        inc chunk.count
-      chunk.cells[linear] = cells[linear]
+    if cells[linear] == EMPTY_VOXEL:
+      continue
+    if unpack_voxel(cells[linear])[0] == ERASER.ord:
+      # the bake erased here: whatever was drawn goes, and nothing is stored
+      if chunk.cells[linear] != EMPTY_VOXEL:
+        chunk.cells[linear] = EMPTY_VOXEL
+        dec chunk.count
+      continue
+    if chunk.cells[linear] == EMPTY_VOXEL:
+      inc chunk.count
+    chunk.cells[linear] = cells[linear]
   if empty:
     inc self.cache_tick
     chunk.tick = self.cache_tick
