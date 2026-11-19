@@ -323,7 +323,7 @@ type
   Model* = ref object of EdRef
     target_point*: Vector3
     target_normal*: Vector3
-    local_flags*: EdSet[LocalModelFlags]
+    local_flags* {.ed_flags: {SYNC_LOCAL}.}: EdSet[LocalModelFlags]
     global_flags*: EdSet[GlobalModelFlags]
     node*: Spatial
 
@@ -446,16 +446,16 @@ type
 
   Thing* = ref object of Model
     parent* {.cursor.}: Thing # back-ref; the parent owns this child via `things`
-    things*: EdSeq[Thing]
-    start_transform_value*: EdValue[Transform]
-    scale_value*: EdValue[float]
+    things* {.ed_flags: DEFAULT_FLAGS + {OWNS_MEMBERS}.}: EdSeq[Thing]
+    start_transform_value* {.ed_default: Transform.init.}: EdValue[Transform]
+    scale_value* {.ed_default: 1.0.}: EdValue[float]
     glow_value*: EdValue[float]
     speed_value*: EdValue[float]
     code_value*: EdValue[Code]
     script_ctx*: ScriptCtx
     disabled*: bool
     velocity_value*: EdValue[Vector3]
-    transform_value*: EdValue[Transform]
+    transform_value* {.ed_default: Transform.init.}: EdValue[Transform]
     clone_of*: Thing
     spawned_by*: string
       ## Id of the thing whose script `.new()`'d this instance, set once at
@@ -463,7 +463,7 @@ type
       ## ones (both have `clone_of`): when a thing is destroyed, only children
       ## with `spawned_by == self.id` go down with it; everything else (real
       ## things, the player, instances spawned elsewhere) is re-rooted.
-    collisions*: EdSeq[tuple[id: string, normal: Vector3]]
+    collisions* {.ed_flags: {SYNC_LOCAL}.}: EdSeq[tuple[id: string, normal: Vector3]]
     shared_value*: EdValue[Shared]
     start_color_value*: EdValue[Color]
     color_value*: EdValue[Color]
@@ -471,13 +471,14 @@ type
     frame_created*: int
     errors*: ScriptErrors
     current_line_value*: EdValue[int]
-    sight_query_value*: EdValue[SightQuery]
-    eval_value*: EdValue[string]
-    anchor_value*: EdValue[Transform]
+    sight_query_value* {.ed_flags: {SYNC_LOCAL}.}: EdValue[SightQuery]
+    eval_value* {.ed_flags: {SYNC_LOCAL}.}: EdValue[string]
+    anchor_value* {.ed_default: Transform.init.}: EdValue[Transform]
     rendered_voxel_count_value*: EdValue[int]
     pending_block_updates_value*: EdValue[int]
     query_value*: EdValue[ThingQuery]
-    owner_ctx_value*: EdValue[string]
+    owner_ctx_value* {.ed_default: Ed.thread_ctx.id.}: EdValue[string]
+      # the creating context; synced replicas are built by parse, not init
       # ctx id that created the thing, synced so the authority can reap EPHEMERAL
       # things when that context drops -- without encoding the ctx in the id.
 
@@ -500,7 +501,7 @@ type
       ## from input every frame, so a plain velocity write can't launch).
     input_direction_value*: EdValue[Vector3]
     cursor_position_value*: EdValue[tuple[line: int, col: int]]
-    block_log_entries*: EdSeq[BlockLogEntry]
+    block_log_entries* {.ed_flags: {SYNC_LOCAL}.}: EdSeq[BlockLogEntry]
     tool_value*: EdValue[Tools]
     tools*: EdSet[Tools]
     tool_colors*: EdSeq[Color]
@@ -529,12 +530,12 @@ type
     packed_chunks*: EdTable[FrameChunk, SnapshotData]
     chunk_deltas*: EdTable[FrameChunk, EdSeq[DeltaUpdate]]
     voxels*: VoxelStore
-    draw_transform_value*: EdValue[Transform]
+    draw_transform_value* {.ed_flags: {}, ed_default: Transform.init.}: EdValue[Transform]
     # draw_transform mirrored for the render side (turtle indicator). A separate
     # field because draw_transform is written per voxel — syncing it directly
     # would flood the context queue during ASAP draws. This one is written once
     # per batch (see sync_turtle).
-    turtle_transform_value*: EdValue[Transform]
+    turtle_transform_value* {.ed_default: Transform.init.}: EdValue[Transform]
     voxels_per_frame*: float
     voxels_remaining_this_frame*: float
     # `speed = auto` ramp state (see builds.nim). `active` while the draw rate
@@ -850,9 +851,9 @@ proc packed_chunks*(self: VoxelStore): EdTable[FrameChunk, SnapshotData] =
 proc chunk_deltas*(self: VoxelStore): EdTable[FrameChunk, EdSeq[DeltaUpdate]] =
   self.build.chunk_deltas
 
-Ed.register(Player)
-Ed.register(Build)
-Ed.register(Sign)
-Ed.register(Bot)
+Ed.register(Player, constructor = false)
+Ed.register(Build, constructor = false)
+Ed.register(Sign, constructor = false)
+Ed.register(Bot, constructor = false)
 Ed.register(Shared)
 Ed.build_accessors(GameState)

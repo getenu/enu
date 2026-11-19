@@ -97,21 +97,21 @@ proc init*(
   ## agents want a session-scoped bot instead — see the `(x, y, z, save = ...)`
   ## overload below, which sets EPHEMERAL.
   id.own:
-    var self = Bot(
-      id: id,
-      start_transform_value: ed(transform),
-      animation_value: ed("auto"),
-      clone_of: clone_of,
-      start_color_value: ed(color),
-      parent: parent,
+    result = Ed.init(
+      Bot,
+      id = id,
+      parent = parent,
+      start_transform = transform,
+      transform = transform,
+      clone_of = clone_of,
+      start_color = color,
+      color = color,
+      speed = 1.0, # bots walk by default; other things draw ASAP
+      animation = "auto",
     )
-
-    self.init_thing
-    self.speed = 1.0 # bots walk by default (init_thing defaults speed to 0/ASAP)
-
+    result.init_thing
     if global:
-      self.global_flags += GLOBAL
-    result = self
+      result.global_flags += GLOBAL
 
 proc init*(
     _: type Bot,

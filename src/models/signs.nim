@@ -15,23 +15,25 @@ proc init*(
 ): Sign =
   let sign_id = "sign_" & generate_id()
   sign_id.own:
-    var self = Sign(
-      id: sign_id,
-      message_value: ed(message),
-      more_value: ed(more),
-      width_value: ed(width),
-      height_value: ed(height),
-      size_value: ed(size),
-      billboard_value: ed(billboard),
-      frame_created: state.frame_count,
-      start_color_value: ed(ACTION_COLORS[BLACK]),
-      start_transform_value: ed(transform),
-      owner_value: ed(owner),
-      text_only_value: ed(text_only),
-      parent: owner,
+    result = Ed.init(
+      Sign,
+      id = sign_id,
+      parent = owner,
+      start_transform = transform,
+      transform = transform,
+      start_color = ACTION_COLORS[BLACK],
+      color = ACTION_COLORS[BLACK],
+      frame_created = state.frame_count,
+      message = message,
+      more = more,
+      width = width,
+      height = height,
+      size = size,
+      billboard = billboard,
+      owner = owner,
+      text_only = text_only,
     )
-    self.init_thing
-    result = self
+    result.init_thing
 
 method main_thread_joined*(self: Sign) =
   proc_call main_thread_joined(Thing(self))

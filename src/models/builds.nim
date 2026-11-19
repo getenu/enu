@@ -1125,43 +1125,24 @@ proc init*(
     # empty-then-repaint). (Was LAZY: pull-only paging; that left prefill missing
     # on load, so blocks meshed empty and repainted, spiking load and flashing
     # empty at reveal.)
-    let packed_chunks = EdTable[FrameChunk, SnapshotData].init(
-      flags = {SYNC_LOCAL, SYNC_REMOTE}
-    )
-    let chunk_deltas = EdTable[FrameChunk, EdSeq[DeltaUpdate]].init(
-      flags = {SYNC_LOCAL, SYNC_REMOTE}
-    )
     let voxels = VoxelStore.init(thing_id = id)
-    var self = Build(
-      id: id,
-      packed_chunks: packed_chunks,
-      chunk_deltas: chunk_deltas,
-      current_frame_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      frame_order_value:
-        EdValue[FrameOrder].init(
-          FrameOrder(ids: @[0], next_id: 1), flags = {SYNC_LOCAL, SYNC_REMOTE}
-        ),
-      frames_fps_value: EdValue[float].init(0.0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      frames_loop_value: EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      frames_first_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      frames_last_value: EdValue[int].init(0, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      display_checked_frame_value:
-        EdValue[int].init(-1, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      sealed_frames_value:
-        EdValue[bool].init(true, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      cull_down_faces_value:
-        EdValue[bool].init(false, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      voxels: voxels,
-      start_transform_value: ed(transform),
-      draw_transform_value: EdValue[Transform].init(Transform.init, flags = {}),
-      turtle_transform_value:
-        EdValue[Transform].init(Transform.init, flags = {SYNC_LOCAL, SYNC_REMOTE}),
-      start_color_value: ed(color),
-      drawing: true,
-      bounds_value: ed(empty_bounds()),
-      clone_of: clone_of,
-      bot_collisions_value: ed(bot_collisions),
-      parent: parent,
+    var self = Ed.init(
+      Build,
+      id = id,
+      parent = parent,
+      start_transform = transform,
+      transform = transform,
+      clone_of = clone_of,
+      start_color = color,
+      color = color,
+      voxels = voxels,
+      drawing = true,
+      bounds = empty_bounds(),
+      bot_collisions = bot_collisions,
+      frame_order = FrameOrder(ids: @[0], next_id: 1),
+      frames_loop = true,
+      display_checked_frame = -1,
+      sealed_frames = true,
     )
 
     voxels.build = self # back-ref for live table reads (set once self exists)
