@@ -749,6 +749,9 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
     elif ?self.clone_of and Build(self.clone_of).voxels.has_edit(position) and
         Build(self.clone_of).voxels.get_edit(position).kind == HOLE:
       return
+    elif voxel.color == ACTION_COLORS[ERASER]:
+      # the script erasing: its block there goes, and nothing takes its place
+      self.del_voxel(position)
     else:
       self.add_voxel(position, voxel)
   else:
@@ -763,7 +766,8 @@ proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
       else:
         self.del_voxel(position)
 
-  if position == vec3(0, 0, 0) and voxel.kind != TRANSIENT:
+  if position == vec3(0, 0, 0) and voxel.kind == PERSISTED:
+    # a hand-placed origin block is the build's color; a hole there isn't
     self.start_color = voxel.color
 
 proc draw_origin(self: Build, index: int) =
