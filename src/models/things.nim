@@ -41,44 +41,9 @@ proc init_shared*(self: Thing) =
       # it owns — down everywhere, no synced ownership state required.
       Ed.thread_ctx.set_owner(self.shared, self.id)
 
-proc init_thing*[T: Thing](
-    self: T, shared = true, body_flags = DEFAULT_FLAGS
-) =
-  ## `body_flags` go on the transform and velocity.
+proc init_thing*[T: Thing](self: T) =
+  ## What every thing needs once `Ed.init` has created its fields.
   self.lifetime = new_lifetime()
-  # A constructor that knows its starting pose or color creates these itself.
-  if self.start_transform_value.is_nil:
-    self.start_transform_value = ed(Transform.init)
-  if self.start_color_value.is_nil:
-    self.start_color_value = ed(Color())
-  with self:
-    # OWNS_MEMBERS: children belong to us — membership drives ed's owned index,
-    # so our destroy cascades into them (and removal un-registers them).
-    things = EdSeq[Thing].init(flags = DEFAULT_FLAGS + {OWNS_MEMBERS})
-    transform_value =
-      EdValue[Transform].init(self.start_transform, flags = body_flags)
-    global_flags = EdSet[GlobalModelFlags].init()
-    local_flags = EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL})
-    code_value = EdValue[Code].init()
-    velocity_value = EdValue[Vector3].init(flags = body_flags)
-    scale_value = ed(1.0)
-    glow_value = EdValue[float].init()
-    speed_value = ed(0.0) # draw ASAP unless the script sets a speed
-    color_value = ed(self.start_color)
-    errors = ScriptErrors.init
-    current_line_value = ed(0)
-    collisions = EdSeq[(string, Vector3)].init(flags = {SYNC_LOCAL})
-    shared_value = EdValue[Shared].init()
-    sight_query_value = EdValue[SightQuery].init(flags = {SYNC_LOCAL})
-    eval_value = EdValue[string].init("", flags = {SYNC_LOCAL})
-    anchor_value = ed(Transform.init)
-    rendered_voxel_count_value = ed(0)
-    pending_block_updates_value = ed(0)
-    query_value = EdValue[ThingQuery].init(ThingQuery())
-    # Stamp the creating context (init_thing only runs on the creating side;
-    # synced replicas are reconstructed via parse), synced remote+local.
-    owner_ctx_value = ed(Ed.thread_ctx.id)
-
   self.init_shared
   self.global_flags += VISIBLE
   self.global_flags += DIRTY

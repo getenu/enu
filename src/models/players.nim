@@ -4,25 +4,22 @@ import core, models/[things, states, colors]
 
 proc init*(_: type Player, id = "player-" & Ed.thread_ctx.id): Player =
   id.own:
-    let self = Player(
-      id: id,
-      rotation_value: ed(0.0),
-      boost_value: EdValue[Vector3].init(),
-      start_transform_value: ed(Transform.init(origin = vec3(0, 1, 0))),
-      input_direction_value: EdValue[Vector3].init(),
-      cursor_position_value: ed((0, 0)),
-      block_log_entries: EdSeq[BlockLogEntry].init(flags = {SYNC_LOCAL}),
-      tool_value: ed(BLUE_BLOCK),
-      tools: Ed.init({CODE_MODE .. PLACE_BOT}),
-      tool_colors: Ed.init(DEFAULT_TOOL_COLORS),
-      flags: EdSet[PlayerFlags].init(),
-      coding_value: EdValue[Thing].init(),
-      open_sign_value: EdValue[Sign].init(),
-    )
+    let start = Transform.init(origin = vec3(0, 1, 0))
     # The node writes the body's transform and velocity every physics frame;
     # REJECT_STALE keeps a script's move or stop from losing to a frame that
     # was already on its way (getenu/enu#50).
-    self.init_thing(shared = false, body_flags = DEFAULT_FLAGS + {REJECT_STALE})
+    let body_flags = DEFAULT_FLAGS + {REJECT_STALE}
+    let self = Ed.init(
+      Player,
+      id = id,
+      start_transform = start,
+      transform = start,
+      tool = BLUE_BLOCK,
+      tools = {CODE_MODE .. PLACE_BOT},
+      tool_colors = DEFAULT_TOOL_COLORS,
+      ed_flags = (transform: body_flags, velocity: body_flags),
+    )
+    self.init_thing
     self.global_flags += GLOBAL
     self.global_flags += EPHEMERAL
 
