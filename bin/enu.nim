@@ -53,9 +53,17 @@ proc glide(thing: Thing, target: Vector3, rotation = 0.0, instant = false) =
 proc version_mismatch(reason: string): string =
   ## The tool error for an Enu that refused us because it was built from
   ## different types. Starts with a fixed marker so a supervisor can spot it.
-  "Error: version mismatch — " & reason & ". This MCP server and Enu were " &
-    "built from different versions. Restart the MCP server (/mcp, then " &
-    "reconnect) so it matches; if Enu is the older one, restart Enu instead."
+  let built = get_app_filename() & ", built " & CompileDate & " " & CompileTime & " UTC"
+  "Error: version mismatch — " & reason & ". " & (
+    if server_mode:
+      "This MCP server (" & built & ") and Enu were built from different " &
+        "versions. Restart the MCP server (/mcp, then reconnect) so it " &
+        "matches; if Enu is the older one, restart Enu instead."
+    else:
+      "This enu CLI (" & built & ") and Enu were built from different " &
+        "versions. Rebuild the CLI with `nim build_mcp`; if Enu is the older " &
+        "one, rebuild it with `nim build` and restart it."
+  )
 
 proc run(q: ThingQuery, agent_id = "", flag_errors = true): string =
   if not Enu.client.connected and not Enu.client.ctx.is_nil:
