@@ -275,50 +275,54 @@ type
   ConsoleModel* = ref object
     log*: EdSeq[string]
 
-  GameState* = ref object
-    local_flags*: EdSet[LocalStateFlags]
-    wants*: EdSeq[LocalStateFlags]
-    global_flags*: EdSet[GlobalStateFlags]
-    config_value*: EdValue[Config]
-    gravity*: float
-    nodes*: tuple[game: Node, data: Node, player: Node]
-    screenshot_camera*: Node
-    screenshot_viewport*: Node
-    player_camera*: Node
-    screenshot_counter*: int
-    player_value*: EdValue[Player]
-    things*: EdSeq[Thing]
-    ground*: Ground
-    console*: ConsoleModel
-    paused*: bool
-    show_prototypes*: bool
-    show_tools*: bool # level.json: false starts with no tools (script adds them)
-    start_transform*: Transform
+  GameState* {.ed.} = ref object
+    local_flags* {.local.}: set[LocalStateFlags]
+    wants* {.local.}: seq[LocalStateFlags]
+    global_flags* {.id: "state_global_flags".}: set[GlobalStateFlags]
+    config* {.local, id: "config".}: Config
+    gravity* {.ignore.}: float = -80.0
+    nodes* {.ignore.}: tuple[game: Node, data: Node, player: Node]
+    screenshot_camera* {.ignore.}: Node
+    screenshot_viewport* {.ignore.}: Node
+    player_camera* {.ignore.}: Node
+    screenshot_counter* {.ignore.}: int
+    player* {.local.}: Player
+    things* {.id: "root_things", owns_members.}: seq[Thing]
+      ## OWNS_MEMBERS (ownerless): nothing cascades into root things, but ed
+      ## indexes the members so partial subscribers get each thing's ownership
+      ## closure pushed ahead of the collection (husk-free parse).
+    ground* {.ignore.}: Ground
+    console* {.ignore.}: ConsoleModel
+    paused* {.ignore.}: bool
+    show_prototypes* {.ignore.}: bool = true
+    show_tools* {.ignore.}: bool = true
+      ## level.json: false starts with no tools (script adds them)
+    start_transform* {.ignore.}: Transform
       ## level.json: the spawn pose applied to every player at the PLAYERS
       ## load_order step (and, later, to mid-session joins).
-    load_order*: seq[string]
+    load_order* {.ignore.}: seq[string]
       ## The unit ids in level.json's load_order, as read at load. save_level
       ## regenerates the list but preserves this order where dependencies
       ## allow, appending genuinely new units at the end — so the order the
       ## level loads in (and, later, streams in) stays stable and authorable.
-    frame_count*: int
-    disable_packed_chunks*: bool # Runtime toggle for packed chunk format
-    queued_action_value*: EdValue[string]
-    scale_factor*: float
-    worker_ctx_name*: string
-    server_ctx_name_value*: EdValue[string]
-      # Context running scripts (self if Server, remote otherwise)
-    level_name_value*: EdValue[string]
-    status_message_value*: EdValue[string]
-    voxel_tasks_value*: EdValue[int]
-    ignored_touches*: set[byte]
-    logger*: proc(level, msg: string) {.gcsafe.}
-    test_exit_code_value*: EdValue[int]
-      # -1 = not set, 0 = success, 1+ = failure count
-    net_bytes_sent_value*: EdValue[int64]
-    net_bytes_received_value*: EdValue[int64]
-    net_connections_value*: EdValue[int]
-    ed_mem_value*: EdValue[int] # worker ctx resident body bytes (evictor)
+    frame_count* {.ignore.}: int
+    disable_packed_chunks* {.ignore.}: bool # Runtime toggle for packed chunk format
+    queued_action* {.local.}: string
+    scale_factor* {.ignore.}: float
+    worker_ctx_name* {.ignore.}: string
+    server_ctx_name* {.local.}: string
+      ## Context running scripts (self if Server, remote otherwise)
+    level_name* {.id: "level_name".}: string
+    status_message* {.local.}: string
+    voxel_tasks* {.local.}: int
+    ignored_touches* {.ignore.}: set[byte]
+    logger* {.ignore.}: proc(level, msg: string) {.gcsafe.}
+    test_exit_code* {.local.}: int = -1
+      ## -1 = not set, 0 = success, 1+ = failure count
+    net_bytes_sent* {.local.}: int64
+    net_bytes_received* {.local.}: int64
+    net_connections* {.local.}: int
+    ed_mem* {.local.}: int # worker ctx resident body bytes (evictor)
 
   Model* {.ed.} = ref object of EdRef
     target_point* {.ignore.}: Vector3
