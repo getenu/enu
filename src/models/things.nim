@@ -331,36 +331,39 @@ proc reparent_to_root*(self: Thing) =
   after_boop:
     self.global_flags -= TRANSFERRING
 
-method destroy*(self: Thing) {.gcsafe.} =
-  # Override of ed's EdRef base: a Thing must be destroyed through a concrete
-  # subtype's destroy (Bot/Build/Sign/Player), which does enu cleanup and then
-  # calls the generic EdRef teardown.
-  fail "override me"
+proc check_fields_owned[T: Thing](self: T) =
+  # Dev safety net: every direct Ed container should have been attributed to us
+  # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
+  # it'd leak silently, so surface it loudly.
+  for field in self[].fields:
+    when field is Ed:
+      # Skip unloaded placeholders: on a narrow replica the closure may not
+      # have arrived, and ownership stamps ride with it.
+      if ?field and field.loaded:
+        let fid = field.id
+        if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
+          const field_type = $typeof(field)
+          error "unowned Ed field at destroy (missing id.own:/own:?)",
+            thing = self.id, field_id = fid, field_type
 
-proc destroy_impl*(self: Bot | Build | Sign) =
+proc destroy_impl*(self: Thing) =
   if self.destroyed:
     return
 
-  # Dev safety net: every direct Ed container should have been attributed to us
-  # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
-  # it'd leak silently, so surface it loudly. Not in release.
   when not defined(release):
-    for field in self[].fields:
-      when field is Ed:
-        # Skip unloaded placeholders: on a narrow replica the closure may not
-        # have arrived, and ownership stamps ride with it.
-        if ?field and field.loaded:
-          let fid = field.id
-          if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
-            const field_type = $typeof(field)
-            error "unowned Ed field at destroy (missing id.own:/own:?)",
-              thing = self.id, field_id = fid, field_type
+    if self of Build: Build(self).check_fields_owned
+    elif self of Bot: Bot(self).check_fields_owned
+    elif self of Sign: Sign(self).check_fields_owned
+    else: self.check_fields_owned
 
-  if state.player.coding == self:
-    state.player.coding = nil
+  # An external client (the MCP server, a test) has no game state; it destroys
+  # its copies when the destroy arrives from Enu.
+  if not state.is_nil:
+    if state.player.coding == self:
+      state.player.coding = nil
 
-  when self is Sign:
-    if state.player.open_sign_value.valid and state.player.open_sign == self:
+    if self of Sign and state.player.open_sign_value.valid and
+        state.player.open_sign == Sign(self):
       state.player.open_sign = nil
 
   # Unlink from the parent (syncs REMOVED). parent is a {.cursor.} — no cycle to
@@ -374,6 +377,12 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   # OWNS_MEMBERS `things` collection cascades through their destroy), and, on
   # the root, the shared voxel-edit tables (created in our `id.own:` scope).
   proc_call EdRef(self).destroy()
+
+method destroy*(self: Thing) {.gcsafe.} =
+  # Override of ed's EdRef base: enu's cleanup, then ed's teardown. Here rather
+  # than on each kind of thing so a process that doesn't link the kinds' own
+  # code (the MCP server, a test client) still tears down what it receives.
+  self.destroy_impl
 
 proc clear_all*(things: Ed[seq[Thing]]) =
   var roots = things.value
