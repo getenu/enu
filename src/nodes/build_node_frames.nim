@@ -280,10 +280,10 @@ proc effective_frame(
   ## just other content keys, so the cache, miss set and blocking playback need
   ## no special cases — distant chunks simply flip less. Quantizing stays inside
   ## the played range, which `play` checked has no gaps.
-  let first = self.model.frames_first
-  let last = self.model.frames_last
+  let first = self.model.playback.first
+  let last = self.model.playback.last
   let count = last - first + 1
-  if self.model.frames_fps <= 0 or index notin first .. last or count <= 1 or
+  if self.model.playback.fps <= 0 or index notin first .. last or count <= 1 or
       viewers.len == 0 or not frame_lod_enabled:
     return index
   let step = index - first
@@ -341,8 +341,8 @@ proc show*(self: FramePlayer, index: int) =
   if not self.has_frame(index) or not ?self.renderer.voxel_tool:
     return
   let flip_start = get_mono_time()
-  if index == self.model.frames_first and
-      self.commit_index != self.model.frames_first:
+  if index == self.model.playback.first and
+      self.commit_index != self.model.playback.first:
     # one line per animation loop: steady timestamps prove playback is
     # free-running (never gated on meshing)
     info "frame loop",
@@ -423,12 +423,12 @@ proc commit_meshes(self: FramePlayer) =
   self.staged.clear()
   # prepare the NEXT flip now: its keys and data writes spread over the rest of
   # the interval, so the flip itself is just the swap pass above
-  if self.model.frames_fps > 0 and
-      self.model.frames_last > self.model.frames_first:
+  if self.model.playback.fps > 0 and
+      self.model.playback.last > self.model.playback.first:
     let current = self.model.current_frame
     var predicted = current + 1
-    if predicted > self.model.frames_last:
-      predicted = if self.model.frames_loop: self.model.frames_first else: current
+    if predicted > self.model.playback.last:
+      predicted = if self.model.playback.loop: self.model.playback.first else: current
     if predicted != current and self.has_frame(predicted):
       self.show(predicted)
 
@@ -481,7 +481,7 @@ proc chunk_changed*(self: FramePlayer, fc: FrameChunk) =
     else:
       frame[][].chunks[fc.loc] = packed
   self.display.del fc.loc
-  if self.model.frames_fps > 0 and fc.loc in self.loaded_chunks[]:
+  if self.model.playback.fps > 0 and fc.loc in self.loaded_chunks[]:
     self.show_chunk(fc.loc, self.model.current_frame)
 
 proc display_pending*(self: FramePlayer): bool =
@@ -534,7 +534,7 @@ proc tick*(self: FramePlayer) =
   self.drain()
   self.commit_meshes()
 
-  if self.model.frames_fps > 0:
+  if self.model.playback.fps > 0:
     let now = get_mono_time()
     if now > self.next_stats:
       self.next_stats = now + init_duration(seconds = 15)
@@ -547,12 +547,12 @@ proc tick*(self: FramePlayer) =
       self.harvests = 0
       self.new_keys = 0
 
-  if self.model.frames_fps > 0 and not self.playback_logged:
+  if self.model.playback.fps > 0 and not self.playback_logged:
     # One line per build: a playback that never swaps in (still warming, or too
     # big for the mesh cache) is visible in the logs.
     self.playback_logged = true
     info "frame playback",
-      unit = self.model.id, frames = self.model.frame_order.ids.len, fps = self.model.frames_fps
+      unit = self.model.id, frames = self.model.frame_order.ids.len, fps = self.model.playback.fps
 
 proc advance_playback*(self: FramePlayer) =
   ## Server-only: advance current_frame on the flipbook schedule. The synced
@@ -562,8 +562,8 @@ proc advance_playback*(self: FramePlayer) =
   ## can't mesh inside one frame interval, and flipping early orphans the
   ## in-flight meshes. Free-running: chunks that aren't ready stay stale until
   ## their bake lands — playback never waits for meshing.
-  if SERVER notin state.local_flags or self.model.frames_fps <= 0 or
-      self.model.frames_last <= self.model.frames_first:
+  if SERVER notin state.local_flags or self.model.playback.fps <= 0 or
+      self.model.playback.last <= self.model.playback.first:
     return
   # Hold the animation on its first frame until the level has finished
   # loading. Cycling frames mid-load floods the mesher (every flip rebakes
@@ -576,16 +576,16 @@ proc advance_playback*(self: FramePlayer) =
     # absolute schedule: adding the interval to the previous deadline (not to
     # `now`) keeps the loop period exact instead of accruing per-flip processing
     # latency (~4% drift measured at 8fps)
-    let interval = init_duration(milliseconds = int(1000.0 / self.model.frames_fps))
+    let interval = init_duration(milliseconds = int(1000.0 / self.model.playback.fps))
     self.next_at = self.next_at + interval
     if self.next_at < now:
       self.next_at = now + interval
-    let last = self.model.frames_last
+    let last = self.model.playback.last
     var next = self.model.current_frame + 1
-    if next > last or next < self.model.frames_first:
-      if self.model.frames_loop:
-        next = self.model.frames_first
+    if next > last or next < self.model.playback.first:
+      if self.model.playback.loop:
+        next = self.model.playback.first
       else:
         next = last
-        self.model.frames_fps = 0.0
+        self.model.playback.fps := 0.0
     self.model.current_frame = next

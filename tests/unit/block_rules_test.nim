@@ -92,10 +92,10 @@ suite "Computed and manual blocks":
     build.computed(red)
     build.erase_cell(spot)
     build.unmark_holes() # the next run starts
-    build.holes_settled = false
+    build.draw_state.holes_settled = false
     build.computed(blue)
     discard build.on_begin_move(FORWARD, 1, move_mode = 2)
-    check build.holes_settled
+    check build.draw_state.holes_settled
     check build.has_hole
 
   test "moving itself ends the initial drawing, dropping stale holes":
@@ -103,7 +103,7 @@ suite "Computed and manual blocks":
     build.computed(red)
     build.erase_cell(spot)
     build.unmark_holes() # the next run starts
-    build.holes_settled = false
+    build.draw_state.holes_settled = false
     discard build.on_begin_turn(LEFT, 90, lean = false, move_mode = 2)
     check not build.voxels.has_edit(spot)
 
@@ -112,7 +112,7 @@ suite "Computed and manual blocks":
     build.computed(red)
     build.erase_cell(spot)
     build.unmark_holes() # the next run starts
-    build.holes_settled = false
+    build.draw_state.holes_settled = false
     build.settle_holes()
     build.computed(blue)
     check spot in build
