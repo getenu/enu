@@ -296,8 +296,8 @@ suite "Bake Serialization":
       )
       entry.frames[0] = pack_frame(build.shared, cells)
       entry.frames[1] = pack_frame(build.shared, cells[0 ..< 1])
-      build.bakes["key"] = entry
-      inc build.bakes_serial
+      build.bakes.entries["key"] = entry
+      inc build.bakes.serial
       build.save
       check file_exists(dir / id / "bakes.bin")
       let json = parse_json(read_file(build.data_file))
@@ -305,8 +305,8 @@ suite "Bake Serialization":
 
       var restored: Build
       restored.from_json(json)
-      check "key" in restored.bakes
-      let back = restored.bakes["key"]
+      check "key" in restored.bakes.entries
+      let back = restored.bakes.entries["key"]
       check back.frames == entry.frames
       check back.end_pose.origin == vec3(2, 0, 0)
       check back.end_frame == 1
@@ -346,12 +346,12 @@ suite "Bake Cleanup":
       bake_key("0", "#live", ""), # an older Enu bake key
     ]
     for key in keys:
-      build.bakes[key] = BakeEntry()
+      build.bakes.entries[key] = BakeEntry()
     build.script_ctx = ScriptCtx(
       bake_sites: @[(file: "", line: 1, key: "live", enu: "1")],
       bakes_known: true,
     )
     build.drop_stale_bakes()
-    check build.bakes.len == 2
-    check keys[0] in build.bakes
-    check keys[1] in build.bakes
+    check build.bakes.entries.len == 2
+    check keys[0] in build.bakes.entries
+    check keys[1] in build.bakes.entries

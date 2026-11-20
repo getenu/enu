@@ -618,20 +618,20 @@ proc `speed=`(self: Thing, speed: float) =
   if self of Build:
     let build = Build(self)
     if speed == ASAP_VALUE:
-      build.auto_ramp_active = false
+      build.draw_state.ramp.active = false
       build.begin_asap()
       types.`speed=`(self, 0.0)
     elif speed == AUTO:
       types.`speed=`(self, AUTO)
       # Don't restart a ramp that already finished — e.g. an `asap:` block
       # captures `auto`, sets ASAP, then restores `auto` when it exits.
-      if build.auto_ramp_done:
+      if build.draw_state.ramp.done:
         build.begin_asap()
-        build.voxels_per_frame = float.high
+        build.draw_state.voxels_per_frame = float.high
       else:
         build.arm_auto_ramp()
     else:
-      build.auto_ramp_active = false
+      build.draw_state.ramp.active = false
       build.end_asap()
       types.`speed=`(self, speed)
   else:
@@ -753,10 +753,10 @@ proc play(self: Bot, animation_name: string) =
 # Build bindings
 
 proc drawing(self: Build): bool =
-  self.drawing
+  self.draw_state.drawing
 
 proc `drawing=`(self: Build, drawing: bool) =
-  self.drawing = drawing
+  self.draw_state.drawing = drawing
 
 proc initial_position(self: Build): Vector3 =
   self.initial_position
@@ -783,14 +783,14 @@ proc draw_position_set(self: Build, position: Vector3) =
   self.sync_turtle()
 
 proc pen(self: Build): Pen =
-  (self.draw_transform, self.color_value.value, self.drawing)
+  (self.draw_transform, self.color_value.value, self.draw_state.drawing)
 
 proc pen_set(self: Build, value: Pen) =
   # Assign each part explicitly: tuple unpacking onto accessor calls
   # compiles but silently writes into the getters' temporaries.
   self.draw_transform = value.position
   self.color_value.value = value.color
-  self.drawing = value.drawing
+  self.draw_state.drawing = value.drawing
 
 # Player binding
 
