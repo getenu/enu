@@ -125,11 +125,11 @@ proc toggle_flag*(self: GameState, flag: LocalStateFlags) =
     self.pop_flag flag
 
 proc `+=`*(
-  self: EdSet[LocalStateFlags], flag: LocalStateFlags
+  self: Ed[set[LocalStateFlags]], flag: LocalStateFlags
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc `-=`*(
-  self: EdSet[LocalStateFlags], flag: LocalStateFlags
+  self: Ed[set[LocalStateFlags]], flag: LocalStateFlags
 ) {.error: "Use `push_flag`, `pop_flag` and `replace_flag`".}
 
 proc set_flag*(self: Player, flag: PlayerFlags, value: bool) =
@@ -179,7 +179,7 @@ proc init_logger*(self: GameState) =
 proc init*(_: type GameState): GameState =
   let self = GameState(
     start_transform: Transform.init(origin = vec3(0, 1, 0)),
-    console: ConsoleModel(log: EdSeq[string].init(flags = {SYNC_LOCAL})),
+    console: ConsoleModel(log: Ed[seq[string]].init(flags = {SYNC_LOCAL})),
   ).init_ed_fields
 
   self.init_logger

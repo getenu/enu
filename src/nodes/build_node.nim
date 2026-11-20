@@ -174,7 +174,7 @@ gdobj BuildNode of VoxelTerrain:
     ## while nothing plays. Other frames' changes go to the frame player.
     fc.frame == self.model.voxels.frame_id and self.model.frames_fps <= 0
 
-  proc watch_delta_seq(fc: FrameChunk, delta_seq: EdSeq[DeltaUpdate]) =
+  proc watch_delta_seq(fc: FrameChunk, delta_seq: Ed[seq[DeltaUpdate]]) =
     if fc in self.tracked_delta_seqs:
       return
     let chunk_id = fc.loc

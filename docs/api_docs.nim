@@ -61,7 +61,7 @@ proc is_static_method*(entry: JsonNode): bool =
   type_name.starts_with("type") or type_name.starts_with("typedesc")
 
 proc strip_generic_params*(type_name: string): string =
-  ## Strip generic parameters from a type name: "EdSeq[string]" -> "EdSeq"
+  ## Strip generic parameters from a type name: "Ed[seq[string]]" -> "Ed"
   result = type_name.replace(re"\[.*\]", "")
 
 proc extract_operating_type*(entry: JsonNode): string =

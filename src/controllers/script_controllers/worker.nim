@@ -412,7 +412,7 @@ proc finish_test_run(self: Worker, timed_out: bool) =
 
 proc watch_things(
     self: Worker,
-    things: EdSeq[Thing],
+    things: Ed[seq[Thing]],
     parent: Thing,
     body: proc(thing: Thing, change: Change[Thing], added: bool, removed: bool) {.
       gcsafe
@@ -498,7 +498,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
     state.push_flag SERVER
     state.server_ctx_name = worker_ctx.id
 
-  state.config_value = EdValue[Config](Ed.thread_ctx["config"])
+  state.config_value = Ed[Config](Ed.thread_ctx["config"])
   state.console = ConsoleModel.init_from(main_thread_state.console)
   state.worker_ctx_name = worker_ctx.id
   main_thread_state.worker_ctx_name = worker_ctx.id
@@ -572,7 +572,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
       var thing: Thing = state.player
       if thing_id != "":
         thing = nil
-        proc find_in(things: EdSeq[Thing]): Thing =
+        proc find_in(things: Ed[seq[Thing]]): Thing =
           for u in things.value:
             if u.id == thing_id:
               return u

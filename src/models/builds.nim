@@ -1208,7 +1208,7 @@ proc watch_edit_rows(self: Build) =
     # an edit made elsewhere (a hand-placed block) may be in a new chunk
     self.expand_bounds_to_chunk(key.loc)
 
-  proc watch_deltas(key: EditKey, deltas: EdSeq[DeltaUpdate]) =
+  proc watch_deltas(key: EditKey, deltas: Ed[seq[DeltaUpdate]]) =
     deltas.watch:
       changed(key)
 
@@ -1230,7 +1230,7 @@ proc watch_voxel_rows(self: Build) =
   ## The server worker draws into the voxel tables but doesn't follow them
   ## like a client does, so a row main writes (a hand edit) would leave its
   ## cached decode stale.
-  proc watch_deltas(fc: FrameChunk, deltas: EdSeq[DeltaUpdate]) =
+  proc watch_deltas(fc: FrameChunk, deltas: Ed[seq[DeltaUpdate]]) =
     deltas.watch:
       self.voxels.voxel_row_changed(fc)
 
@@ -1289,7 +1289,7 @@ proc init_voxels_if_needed*(self: Build, watch_edits = true) =
 
 proc setup_packed_chunk_watches(self: Build) =
   ## Set up watches for packed_chunks and chunk_deltas to reconstruct local voxels on clients.
-  proc watch_delta_seq(chunk_id: FrameChunk, delta_seq: EdSeq[DeltaUpdate]) =
+  proc watch_delta_seq(chunk_id: FrameChunk, delta_seq: Ed[seq[DeltaUpdate]]) =
     delta_seq.watch:
       if added:
         self.voxels.apply_delta(chunk_id, change.item)
@@ -1425,7 +1425,7 @@ method clone*(self: Build, clone_to: Thing, id: string): Thing =
   result = clone
 
 proc voxel_mem_stats*(
-    things: EdSeq[Thing]
+    things: Ed[seq[Thing]]
 ): tuple[builds, lv_chunks, lv_voxels, packed, edit_chunks, edit_voxels: int] =
   ## Aggregate resident voxel-store sizes across every build in the tree — the
   ## ENU_VOXEL_MEM_LOG counters logged per side (see game.nim / worker.nim).
