@@ -40,14 +40,14 @@ proc client*(_: type Enu, address = "", mode = PARTIAL, id = ""): EdClient =
     enu_client = EdClient(id: id, address: resolved, mode: mode)
   enu_client
 
-var root_things {.threadvar.}: EdSeq[Thing]
+var root_things {.threadvar.}: Ed[seq[Thing]]
   ## Held for the session. Without a live reference the evictor reclaims it
   ## between calls, and fetching it again brings every unit with it — tens of
   ## MB, and seconds even on an idle machine.
 
 const ROOT_THINGS_TIMEOUT = 60.seconds
 
-proc things*(_: type Enu): EdSeq[Thing] =
+proc things*(_: type Enu): Ed[seq[Thing]] =
   ## The level's top-level things, via this thread's client. The first call
   ## in a session waits for them to arrive.
   let ctx = enu_client.ctx
@@ -73,7 +73,7 @@ proc things*(_: type Enu): EdSeq[Thing] =
     # it's back.
     discard enu_client.tick_until(250.milliseconds, false)
     pending = enu_client.ctx.fetch("root_things")
-  root_things = EdSeq[Thing](pending.obj)
+  root_things = Ed[seq[Thing]](pending.obj)
   root_things
 
 proc find_thing*(_: type Enu, id: string): Thing =

@@ -198,7 +198,7 @@ proc step_toward*(
   arrived and abs(turn) <= max_degrees
 
 template get_or_init*[T](
-    things: EdSeq[Thing], _: typedesc[T], thing_id: string, init: untyped
+    things: Ed[seq[Thing]], _: typedesc[T], thing_id: string, init: untyped
 ): T =
   ## The thing with `thing_id` in `things`, or `init` evaluated and added —
   ## Ruby's `||=` for a thing collection.
@@ -213,7 +213,7 @@ template get_or_init*[T](
       things.add found
     found
 
-proc query*(self: Thing, q: ThingQuery): EdValue[ThingQuery] =
+proc query*(self: Thing, q: ThingQuery): Ed[ThingQuery] =
   ## File a cross-context query against this thing and return the slot its
   ## answer arrives in — watch for `state == DONE`. Whichever context owns
   ## the thing's behavior answers (today: the server, for ephemeral bots).
@@ -228,7 +228,7 @@ proc query*(
     code = "",
     top_level = false,
     thing_id = "",
-): EdValue[ThingQuery] =
+): Ed[ThingQuery] =
   self.query ThingQuery(
     kind: kind, code: code, top_level: top_level, thing_id: thing_id
   )
@@ -375,7 +375,7 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   # the root, the shared voxel-edit tables (created in our `id.own:` scope).
   proc_call EdRef(self).destroy()
 
-proc clear_all*(things: EdSeq[Thing]) =
+proc clear_all*(things: Ed[seq[Thing]]) =
   var roots = things.value
   for thing in roots:
     # EPHEMERAL things (the human's Player + client-owned bots like MCP)
