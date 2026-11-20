@@ -343,7 +343,8 @@ type
       ## closure pushed ahead of the collection (husk-free parse).
     ground* {.ignore.}: Ground
     console* {.ignore.}: ConsoleModel
-    paused* {.ignore.}: bool
+    paused* {.local.}: bool
+      ## Set on main (the pause key); script runs on the worker check it.
     show_prototypes* {.ignore.}: bool = true
     show_tools* {.ignore.}: bool = true
       ## level.json: false starts with no tools (script adds them)
