@@ -263,8 +263,8 @@ gdobj BotNode of KinematicBody:
     selection.collision_layer = 0
     self.mesh.layers = SELF_AVATAR_LAYER
     self.mesh.cast_shadow = 1 # SHADOW_CASTING_SETTING_ON
-    if not state.player_camera.is_nil:
-      let cam = Camera(state.player_camera)
+    if not state.nodes.player_camera.is_nil:
+      let cam = Camera(state.nodes.player_camera)
       cam.cull_mask = cam.cull_mask and not SELF_AVATAR_LAYER
 
   proc process_screenshot() =
@@ -281,7 +281,7 @@ gdobj BotNode of KinematicBody:
             if q.screenshot_with_ui:
               self.get_tree().root
             else:
-              Viewport(state.screenshot_viewport)
+              Viewport(state.nodes.screenshot_viewport)
           # A minimized window halts the VisualServer draw cycle, so the
           # viewport's texture would otherwise be frozen on the last frame
           # rendered before minimizing. Force a synchronous draw (no buffer
@@ -299,7 +299,7 @@ gdobj BotNode of KinematicBody:
           discard img.save_png(path)
           info "screenshot captured", path
           if not q.screenshot_with_ui:
-            Viewport(state.screenshot_viewport).size = vec2(640, 360)
+            Viewport(state.nodes.screenshot_viewport).size = vec2(640, 360)
           self.screenshot_warmup_frames = -1
           if self.skin_hidden_during_screenshot:
             self.skin.visible = true
@@ -317,7 +317,7 @@ gdobj BotNode of KinematicBody:
             # time, but the world changes on level switches. Refresh it
             # each shot so the ortho/perspective camera renders against
             # the current level.
-            let vp = Viewport(state.screenshot_viewport)
+            let vp = Viewport(state.nodes.screenshot_viewport)
             let main_vp = self.get_tree().root
             if not main_vp.is_nil:
               vp.world = main_vp.find_world()
@@ -325,7 +325,7 @@ gdobj BotNode of KinematicBody:
             # to its small idle size after the capture, since it redraws
             # every frame.
             vp.size = vec2(1920, 1080)
-            let cam = Camera(state.screenshot_camera)
+            let cam = Camera(state.nodes.screenshot_camera)
             if q.screenshot_top_down:
               # Orthographic camera high above the target looking straight
               # down. Half-extent (screenshot_size) controls coverage.
@@ -362,8 +362,8 @@ gdobj BotNode of KinematicBody:
               # shot left the camera in orthogonal mode.
               cam.set_perspective(70.0, 0.05, 500.0)
               var t =
-                if q.screenshot_from_player and not state.player_camera.is_nil:
-                  Camera(state.player_camera).global_transform
+                if q.screenshot_from_player and not state.nodes.player_camera.is_nil:
+                  Camera(state.nodes.player_camera).global_transform
                 else:
                   var bt = self.global_transform
                   bt.origin += vec3(0, 0.8, 0)

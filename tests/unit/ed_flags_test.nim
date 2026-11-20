@@ -22,7 +22,7 @@ suite "Ed fields are created as declared":
     check build.draw_transform_value.flags == {}
     check build.scale == 1.0
     check build.sealed_frames
-    check build.frames_loop
+    check build.playback.loop
 
     let bot = Bot.init(id = "ed_flags_bot")
     check bot.local_flags.flags == {SYNC_LOCAL}

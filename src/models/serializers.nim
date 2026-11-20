@@ -203,11 +203,11 @@ proc load_bakes(self: Build) =
         let frame = decode_frame_file(read_str(), prev)
         entry.frames[offset] = frame
         prev = some(frame)
-      self.bakes[key] = entry
+      self.bakes.entries[key] = entry
   except ValueError, IndexDefect, JsonParsingError:
     let e = get_current_exception()
     warn "bakes file unreadable; dropping it", unit = self.id, error = e.msg
-    self.bakes.clear
+    self.bakes.entries.clear
 
 proc from_json_hook(self: var Build, json: JsonNode) =
   let color = json["start_color"].json_to(Color)
@@ -394,7 +394,7 @@ proc sorted_offsets(entry: BakeEntry): seq[int] =
   result.sort
 
 proc sorted_keys(self: Build): seq[string] =
-  for key in self.bakes.keys:
+  for key in self.bakes.entries.keys:
     result.add key
   result.sort
 
@@ -403,20 +403,20 @@ proc save_bakes(self: Build) =
   ## FRAME_KEYFRAME_INTERVAL and deltas between, like frame files. Skipped
   ## when nothing changed since the last save or load.
   let path = self.data_dir / BAKES_FILE
-  if self.bakes.len == 0:
+  if self.bakes.entries.len == 0:
     if file_exists(path):
       remove_file path
-    self.saved_bakes_serial = self.bakes_serial
+    self.bakes.saved_serial = self.bakes.serial
     return
-  if self.bakes_serial == self.saved_bakes_serial and file_exists(path):
+  if self.bakes.serial == self.bakes.saved_serial and file_exists(path):
     return
   var data = $char(BAKES_FILE_VERSION)
   proc add_str(value: string) =
     data.add_i32 value.len
     data.add value
-  data.add_i32 self.bakes.len
+  data.add_i32 self.bakes.entries.len
   for key in self.sorted_keys:
-    let entry = self.bakes[key]
+    let entry = self.bakes.entries[key]
     add_str key
     add_str $entry.bake_meta_json
     let offsets = entry.sorted_offsets
@@ -430,7 +430,7 @@ proc save_bakes(self: Build) =
       prev = some(frame)
   create_dir self.data_dir
   write_file_if_changed(path, data)
-  self.saved_bakes_serial = self.bakes_serial
+  self.bakes.saved_serial = self.bakes.serial
 
 proc in_frames(self: Thing, frame_files: bool): bool =
   ## Whether the build's own edits live in its `frames` section rather than

@@ -132,6 +132,50 @@ type
     start_drawing*: bool
     cells*: Table[int, Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]]
 
+  BakeState* = object
+    ## A build's `bake` bookkeeping. Host-local.
+    entries*: Table[string, BakeEntry]
+      ## What each `bake` key drew, so a run can replay it.
+    running*: seq[BakeCapture]
+      ## The `bake` blocks whose bodies are running, innermost last.
+    key_sites*: Table[string, string]
+      ## Where each keyed `bake` this run was called from, so two blocks can't
+      ## share a key.
+    serial*: int
+      ## Changes with `entries`; the save writes them when it differs from
+      ## `saved_serial`.
+    saved_serial*: int
+
+  AutoRamp* = object
+    ## `speed = auto`'s ramp: `active` while the draw rate is ramping up,
+    ## `started` once the first block anchors the clock at `start`, `done` after
+    ## it has handed off to ASAP -- so a later `speed = auto` (e.g. an `asap:`
+    ## block restoring the speed) doesn't restart a finished ramp.
+    active*: bool
+    started*: bool
+    done*: bool
+    start*: MonoTime
+
+  DrawState* = object
+    ## How a build's script is drawing. Host-local.
+    drawing*: bool
+      ## The pen is down: moves draw.
+    voxels_per_frame*: float
+    voxels_remaining_this_frame*: float
+    ramp*: AutoRamp
+    holes_settled*: bool
+      ## This run's initial batch of drawing is over (see settle_holes).
+
+  Playback* = object
+    ## How a build plays its frames. One synced value, so a change -- a `play`
+    ## or a `stop` -- arrives whole.
+    fps*: float
+      ## > 0 while playing; the server advances `current_frame` at this rate.
+    loop*: bool = true
+    first*: int
+    last*: int
+      ## The frames playback runs through; `play` checks none are missing.
+
   FrameChunk* = tuple[frame: int, loc: Vector3]
     ## A chunk of one frame. `frame` is a frame id, not an index: ids are
     ## stable while frames are inserted and deleted (see `frame_order`).
@@ -275,16 +319,22 @@ type
   ConsoleModel* = ref object
     log*: Ed[seq[string]]
 
+  GameNodes* = object
+    ## The Godot nodes the game hands around. Each side has its own.
+    game*: Node
+    data*: Node
+    player*: Node
+    player_camera*: Node
+    screenshot_camera*: Node
+    screenshot_viewport*: Node
+
   GameState* {.ed.} = ref object
     local_flags* {.local.}: set[LocalStateFlags]
     wants* {.local.}: seq[LocalStateFlags]
     global_flags* {.id: "state_global_flags".}: set[GlobalStateFlags]
     config* {.local, id: "config".}: Config
     gravity* {.ignore.}: float = -80.0
-    nodes* {.ignore.}: tuple[game: Node, data: Node, player: Node]
-    screenshot_camera* {.ignore.}: Node
-    screenshot_viewport* {.ignore.}: Node
-    player_camera* {.ignore.}: Node
+    nodes* {.ignore.}: GameNodes
     screenshot_counter* {.ignore.}: int
     player* {.local.}: Player
     things* {.id: "root_things", owns_members.}: seq[Thing]
@@ -538,19 +588,7 @@ type
     # would flood the context queue during ASAP draws. This one is written once
     # per batch (see sync_turtle).
     turtle_transform*: Transform = Transform.init
-    voxels_per_frame* {.ignore.}: float
-    voxels_remaining_this_frame* {.ignore.}: float
-    # `speed = auto` ramp state (see builds.nim). `active` while the draw rate
-    # is ramping up, `started` once the first block anchors the clock, `done`
-    # after it has handed off to ASAP — so a later `speed = auto` (e.g. an
-    # `asap:` block restoring the speed) doesn't restart a finished ramp.
-    auto_ramp_active* {.ignore.}: bool
-    auto_ramp_started* {.ignore.}: bool
-    auto_ramp_done* {.ignore.}: bool
-    auto_ramp_start* {.ignore.}: MonoTime
-    holes_settled* {.ignore.}: bool
-      ## This run's initial batch of drawing is over (see settle_holes).
-    drawing* {.ignore.}: bool
+    draw_state* {.ignore.}: DrawState
     bounds*: AABB
     bot_collisions*: bool
     frame_order*: FrameOrder = FrameOrder(ids: @[0], next_id: 1)
@@ -559,36 +597,20 @@ type
       ## Replaced whole on change: ed's positional seq ops don't sync
       ## order-safely.
     saved_frames_hash* {.ignore.}: Hash
-    run_from_frame* {.ignore.}: Option[int]
-      ## Host-local: the frame on screen when this run started, which the
-      ## run's first move to a new frame takes its blocks from.
-    bakes* {.ignore.}: Table[string, BakeEntry]
-      ## Host-local: what each `bake` key drew, so a run can replay it.
-    baking* {.ignore.}: seq[BakeCapture]
-      ## Host-local: the `bake` blocks whose bodies are running, innermost
-      ## last.
-    bake_key_sites* {.ignore.}: Table[string, string]
-      ## Host-local: where each keyed `bake` this run was called from, so two
-      ## blocks can't share a key.
-    bakes_serial* {.ignore.}: int
-    saved_bakes_serial* {.ignore.}: int
-      ## Host-local: `bakes_serial` changes with the bakes; the save writes
-      ## them when it differs from this.
       ## Host-local: `frames_hash` as of the last frame save or load. Loaded
       ## frames start clean: re-encoding 24 untouched frames on every level
       ## save dominated debug-build load times.
+    run_from_frame* {.ignore.}: Option[int]
+      ## Host-local: the frame on screen when this run started, which the
+      ## run's first move to a new frame takes its blocks from.
+    bakes* {.ignore.}: BakeState
     current_frame*: int
       ## The frame on screen, by index. Playback moves it; otherwise it
       ## follows `frame`. Hand edits go to it.
     frame* {.ignore.}: int
       ## The frame the script draws into, by index. A script run starts on
       ## frame 0.
-    frames_fps*: float
-      ## > 0 while playing; the server advances `current_frame` at this rate.
-    frames_loop*: bool = true
-    frames_first*: int
-    frames_last*: int
-      ## The frames playback runs through; `play` checks none are missing.
+    playback*: Playback
     display_checked_frame*: int = -1
       ## The frame on screen, once the main thread's display check (build_node's
       ## `check_display`) has seen every loaded chunk show it; -1 until then.

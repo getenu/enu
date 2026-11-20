@@ -341,11 +341,11 @@ proc arm_auto_ramp*(self: Build) {.gcsafe.} =
   ## drawn, and begin at the slow end. The clock starts on the first drawn
   ## block (`on_begin_move`), the rate climbs each frame (`update_auto_ramp`),
   ## and after `AUTO_RAMP_SECONDS` it hands the rest to ASAP.
-  self.auto_ramp_active = true
-  self.auto_ramp_started = false
-  self.auto_ramp_done = false
-  self.voxels_per_frame = AUTO_RAMP_START_SPEED
-  self.voxels_remaining_this_frame = 0
+  self.draw_state.ramp.active = true
+  self.draw_state.ramp.started = false
+  self.draw_state.ramp.done = false
+  self.draw_state.voxels_per_frame = AUTO_RAMP_START_SPEED
+  self.draw_state.voxels_remaining_this_frame = 0
   self.end_asap()
 
 proc update_auto_ramp*(self: Build) {.gcsafe.} =
@@ -353,18 +353,18 @@ proc update_auto_ramp*(self: Build) {.gcsafe.} =
   ## ease-in curve (slow at first) between the start and end speeds, then flip
   ## to ASAP once the ramp's time is up. A no-op unless a ramp is running and
   ## the first block has anchored the clock.
-  if not (self.auto_ramp_active and self.auto_ramp_started):
+  if not (self.draw_state.ramp.active and self.draw_state.ramp.started):
     return
   let elapsed =
-    (get_mono_time() - self.auto_ramp_start).in_microseconds.float / 1_000_000.0
+    (get_mono_time() - self.draw_state.ramp.start).in_microseconds.float / 1_000_000.0
   if elapsed >= AUTO_RAMP_SECONDS:
-    self.auto_ramp_active = false
-    self.auto_ramp_done = true
+    self.draw_state.ramp.active = false
+    self.draw_state.ramp.done = true
     self.begin_asap()
-    self.voxels_per_frame = float.high
+    self.draw_state.voxels_per_frame = float.high
   else:
     let t = elapsed / AUTO_RAMP_SECONDS
-    self.voxels_per_frame =
+    self.draw_state.voxels_per_frame =
       AUTO_RAMP_START_SPEED + (AUTO_RAMP_END_SPEED - AUTO_RAMP_START_SPEED) * t * t
 
 template buffer*(self: Build, body: untyped) =
@@ -412,8 +412,8 @@ method collect_garbage*(self: Build) =
         self.global_flags += DIRTY
 
 proc settle_holes*(self: Build) =
-  if not self.holes_settled and not ?self.clone_of:
-    self.holes_settled = true
+  if not self.draw_state.holes_settled and not ?self.clone_of:
+    self.draw_state.holes_settled = true
     self.collect_garbage
 
 # Frames. Every voxel row is keyed by frame id, and `frame_order` lists the
@@ -443,13 +443,13 @@ proc target_shown_frame*(self: Build) =
 
 proc follow_frame(self: Build) =
   ## While nothing plays, the screen shows the frame the script draws into.
-  if self.frames_fps <= 0 and self.current_frame != self.frame:
+  if self.playback.fps <= 0 and self.current_frame != self.frame:
     self.current_frame = self.frame
 
 proc check_not_baking(self: Build, action: string) =
   ## Restructuring frames moves or wipes whole frames, manual blocks
   ## included, which a `bake` can't record or replay.
-  if self.baking.len > 0:
+  if self.bakes.running.len > 0:
     raise ValueError.init(
       "can't " & action & " inside a `bake`: do it before the `bake` block"
     )
@@ -525,7 +525,7 @@ proc carry_into(self: Build, index: int) =
   self.visited(index)
   let src =
     if self.run_from_frame.is_some: self.run_from_frame.get
-    elif self.frames_fps <= 0: self.current_frame
+    elif self.playback.fps <= 0: self.current_frame
     else: self.frame
   if src == index or src notin 0 ..< self.frames_len:
     return
@@ -669,17 +669,14 @@ proc play*(
     )
   self.voxels.flush_dirty_chunks()
   self.global_flags += DIRTY
-  self.frames_first = first
-  self.frames_last = last
-  self.frames_loop = loop
   if self.current_frame notin first .. last:
     self.current_frame = first
-  self.frames_fps = fps
+  self.playback = Playback(fps: fps, loop: loop, first: first, last: last)
 
 proc stop*(self: Build) =
   ## Stop playback; the screen stays on the frame it was showing.
   self.global_flags += DIRTY
-  self.frames_fps = 0.0
+  self.playback.fps := 0.0
 
 proc add_voxel*(self: Build, position: Vector3, voxel: VoxelInfo) =
   self.voxels.add_voxel(position, voxel)
@@ -720,7 +717,7 @@ proc record_bake(self: Build, position: Vector3, color: Color) =
   ## A computed block landed while `bake` bodies run: each of them records it
   ## relative to the pose and frame it started on.
   let packed = pack_voxel(pack_color_index(self.shared, color), TRANSIENT.ord)
-  for capture in self.baking.mitems:
+  for capture in self.bakes.running.mitems:
     let local = capture.start.xform_inv_vector3(position)
     let cell = vec3(local.x.round, local.y.round, local.z.round)
     capture.cells
@@ -733,7 +730,7 @@ proc record_bake(self: Build, position: Vector3, color: Color) =
       ] = packed
 
 proc draw*(self: Build, position: Vector3, voxel: VoxelInfo) {.gcsafe.} =
-  if voxel.kind == TRANSIENT and self.baking.len > 0:
+  if voxel.kind == TRANSIENT and self.bakes.running.len > 0:
     self.record_bake(position, voxel.color)
   if voxel.kind == TRANSIENT:
     if self.voxels.has_edit(position):
@@ -776,12 +773,12 @@ proc draw_origin(self: Build, index: int) =
   ## Every frame has the origin block, unless a hole there hides it or a
   ## manual block takes its place. It's computed, so a `bake` mustn't
   ## record it.
-  let baking = move self.baking
+  let baking = move self.bakes.running
   self.voxels.with_frame(self.frame_id(index)):
     if not self.voxels.has_edit(vec3()) or
         self.voxels.get_edit(vec3()).kind == HOLE:
       self.draw(vec3(), (TRANSIENT, self.start_color))
-  self.baking = baking
+  self.bakes.running = baking
 
 proc sync_turtle*(self: Build) =
   # Mirror draw_transform for the render side. Called once per batch of
@@ -790,7 +787,7 @@ proc sync_turtle*(self: Build) =
     self.turtle_transform = self.draw_transform
 
 proc drop_block(self: Build) =
-  if self.drawing:
+  if self.draw_state.drawing:
     var p = self.draw_transform.origin.snapped(vec3(1, 1, 1))
     self.draw(p, (TRANSIENT, self.color))
 
@@ -951,22 +948,22 @@ method on_begin_move*(
           self.transform.origin + (moving * self.speed * delta)
         return RUNNING
   else:
-    if self.speed == AUTO and self.auto_ramp_active:
+    if self.speed == AUTO and self.draw_state.ramp.active:
       # Anchor the ramp clock to the first drawn block; update_auto_ramp drives
       # voxels_per_frame from here on.
-      if not self.auto_ramp_started:
-        self.auto_ramp_started = true
-        self.auto_ramp_start = get_mono_time()
+      if not self.draw_state.ramp.started:
+        self.draw_state.ramp.started = true
+        self.draw_state.ramp.start = get_mono_time()
     elif self.speed == 0 or self.speed == AUTO:
       # ASAP, or auto with no ramp armed (e.g. a level load): draw it all.
-      self.voxels_per_frame = float.high
+      self.draw_state.voxels_per_frame = float.high
     else:
-      self.voxels_remaining_this_frame = self.speed
-      self.voxels_per_frame = self.speed
+      self.draw_state.voxels_remaining_this_frame = self.speed
+      self.draw_state.voxels_per_frame = self.speed
     var count = 0
 
     result = proc(delta: float, timeout: MonoTime): TaskStates =
-      while count.float < steps and self.voxels_remaining_this_frame >= 1 and
+      while count.float < steps and self.draw_state.voxels_remaining_this_frame >= 1 and
           get_mono_time() < timeout:
         if steps < 1:
           self.draw_transform =
@@ -974,7 +971,7 @@ method on_begin_move*(
         else:
           self.draw_transform = self.draw_transform.translated(direction)
         inc count
-        self.voxels_remaining_this_frame -= 1
+        self.draw_state.voxels_remaining_this_frame -= 1
         self.drop_block()
 
       self.sync_turtle()
@@ -999,7 +996,7 @@ method on_begin_turn*(
   if move:
     self.end_asap()
     self.settle_holes()
-    self.voxels_per_frame = 0
+    self.draw_state.voxels_per_frame = 0
     var duration = 0.0
     let axis = self.transform.basis.orthonormalized.xform(axis)
     let scale = self.scale
@@ -1046,19 +1043,19 @@ method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
-  self.drawing = true
+  self.draw_state.drawing = true
   self.speed = AUTO # ramp up then finish ASAP, unless the script sets a speed
-  self.auto_ramp_active = false
-  self.auto_ramp_started = false
-  self.auto_ramp_done = false
+  self.draw_state.ramp.active = false
+  self.draw_state.ramp.started = false
+  self.draw_state.ramp.done = false
   self.begin_asap()
   self.scale = 1
 
   self.global_flags += RESETTING
   self.global_flags += VISIBLE
   self.reset_state()
-  self.baking.set_len(0)
-  self.bake_key_sites.clear
+  self.bakes.running.set_len(0)
+  self.bakes.key_sites.clear
 
   # A run stops playback and redraws every frame from frame 0. A build with
   # NO script has no rerun to re-establish playback or display — its frames
@@ -1067,7 +1064,7 @@ method reset*(self: Build) =
     ?self.script_ctx and self.script_ctx.script != "" and
     file_exists(self.script_ctx.script)
   if scripted:
-    self.frames_fps = 0.0
+    self.playback.fps := 0.0
     self.run_from_frame = some(self.current_frame)
   self.start_frames_run(scripted)
   self.target_frame()
@@ -1086,7 +1083,7 @@ method reset*(self: Build) =
   if rebuild:
     self.restore_edits
   self.unmark_holes()
-  self.holes_settled = false
+  self.draw_state.holes_settled = false
   for index in 0 ..< self.frames_len:
     self.draw_origin(index)
 
@@ -1137,7 +1134,7 @@ proc init*(
       start_color = color,
       color = color,
       voxels = voxels,
-      drawing = true,
+      draw_state = DrawState(drawing: true),
       bounds = empty_bounds(),
       bot_collisions = bot_collisions,
     )

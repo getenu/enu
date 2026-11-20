@@ -47,7 +47,7 @@ proc advance_thing(self: Worker, thing: Thing, timeout: MonoTime): bool =
     if thing of Build:
       let thing = Build(thing)
       thing.update_auto_ramp()
-      thing.voxels_remaining_this_frame += thing.voxels_per_frame
+      thing.draw_state.voxels_remaining_this_frame += thing.draw_state.voxels_per_frame
     try:
       assert self.active_thing.is_nil
       var task_state = NEXT_TASK

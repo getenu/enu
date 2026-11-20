@@ -793,8 +793,8 @@ gdobj Game of Node:
       self.screenshot_camera_node.name = "ScreenshotCamera"
       self.screenshot_viewport_node.add_child(self.screenshot_camera_node)
       self.screenshot_camera_node.make_current()
-      state.screenshot_camera = self.screenshot_camera_node
-      state.screenshot_viewport = self.screenshot_viewport_node
+      state.nodes.screenshot_camera = self.screenshot_camera_node
+      state.nodes.screenshot_viewport = self.screenshot_viewport_node
 
       self.bind_signals(self.get_viewport(), "size_changed")
       self.bind_signals(self.get_tree(), "global_menu_action")
