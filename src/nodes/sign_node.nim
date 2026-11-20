@@ -6,6 +6,11 @@ import
   ]
 import ui/[markdown_label, editor]
 import core
+import godotapi/image_texture
+
+when defined(enu_web):
+  import std/[monotimes, times]
+  import nodes/sign_web
 
 const
   viewport_x = 1200
@@ -16,6 +21,9 @@ const
   # `size * viewport_x / width`. This constant is the whole bridge between the
   # block-space API and the pixel-space label.
   text_px_per_block = viewport_x.float
+  sign_page_seconds {.intdefine.} = 30
+    ## A plain sign frees its page (a few MB) after this long without a new
+    ## message. Its picture stays; a new message builds a page again.
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
@@ -27,6 +35,11 @@ gdobj SignNode of Spatial:
   var quad: QuadMesh
   var counter: int
   var expanded: bool
+  var web: pointer # `ViewPtr` with -d:enu_web
+  var web_tex: ImageTexture
+  var page_version: uint64
+  var web_idle: float ## seconds since a plain sign's page last drew
+    ## Version of the last frame shown from a script's page (0: not a page).
 
   proc set_visibility() =
     if VISIBLE in self.model.global_flags:
@@ -66,6 +79,104 @@ gdobj SignNode of Spatial:
     var t = mesh.transform
     t.origin.y = sign_height / 2
     mesh.transform = t
+
+  proc light_web() =
+    ## Brightness of an unlit page: 1 normally, more when highlighted or
+    ## glowing.
+    let k =
+      if HIGHLIGHT in self.model.local_flags: 1.3
+      else: 1.0 + self.model.glow * 0.3
+    self.material.albedo_color = init_color(k, k, k)
+
+  proc show_pixels(pixels: pointer, px_width, px_height: int) =
+    ## Uploads a rendered page as the albedo and sizes the quad to fit it
+    ## across the model's width.
+    when defined(enu_web):
+      upload(
+        cast[ptr UncheckedArray[uint8]](pixels), px_width, px_height, self.web_tex
+      )
+      let auto_height = self.model.height == 0.0
+      let sign_height = self.model.width * px_height.float / px_width.float
+      self.quad.size = vec2(self.model.width, sign_height)
+      self.shape.scale = vec3(self.model.width, sign_height, 1)
+      let mesh = self.get_node("MeshInstance") as MeshInstance
+      var t = mesh.transform
+      if auto_height:
+        t.origin.y = sign_height / 2
+      else:
+        t.origin.x = self.model.width / -2 + 0.5
+        t.origin.y = self.model.height / -2 + 0.5
+      mesh.transform = t
+      self.expanded = true
+
+  proc render_web() =
+    ## Lays the message out at `viewport_x` px wide, sized to fit (or to the
+    ## model's height). Signs whose script built a page skip this; the
+    ## worker renders those.
+    when defined(enu_web):
+      if self.page_version > 0:
+        return
+      let html = sign_html(self.model.message, font_px(self.model.size, self.model.width))
+      if self.web.is_nil:
+        self.web = ew_view_new(html.cstring, viewport_x, viewport_y, 1.0).pointer
+      let web = ViewPtr(self.web)
+      self.web_idle = 0
+      ew_resize(web, viewport_x, viewport_y)
+      ew_set_html(web, html.cstring)
+
+      let px_height =
+        if self.model.height == 0.0:
+          max(1, int(ew_content_height(web) + 0.999))
+        else:
+          int(viewport_x.float * self.model.height / self.model.width)
+      ew_resize(web, viewport_x, px_height.uint32)
+      let pixels = ew_render(web)
+      let error = take_error()
+      if error != "":
+        error "sign render failed", sign = self.model.id, error
+        return
+      self.show_pixels(pixels, viewport_x, px_height)
+
+  proc show_page_frame() =
+    ## Shows the newest frame of this sign's page, if a script built one and
+    ## it changed.
+    when defined(enu_web):
+      var version: uint64
+      let frame = ew_take_frame(self.model.id.cstring, self.page_version, version.addr)
+      if frame.is_nil:
+        return
+      self.page_version = version
+      let start = get_mono_time()
+      self.show_pixels(
+        ew_frame_pixels(frame),
+        ew_frame_width(frame).int,
+        ew_frame_height(frame).int,
+      )
+      debug "page frame",
+        sign = self.model.id,
+        width = ew_frame_width(frame),
+        height = ew_frame_height(frame),
+        render_ms = ew_frame_render_ms(frame),
+        upload_ms = (get_mono_time() - start).in_microseconds.float / 1000
+      ew_frame_free(frame)
+
+  proc page_pointer*(kind: uint32, global_point: Vector3): bool =
+    ## Passes a pointer event at `global_point` to this sign's page, if it's
+    ## a page. True if it was.
+    when defined(enu_web):
+      if self.page_version == 0:
+        return false
+      let mesh = self.get_node("MeshInstance") as MeshInstance
+      let local = mesh.to_local(global_point)
+      let u = local.x / self.quad.size.x + 0.5
+      let v = 0.5 - local.y / self.quad.size.y
+      result = ew_post_pointer(self.model.id.cstring, kind, u, v)
+
+  method exit_tree*() =
+    when defined(enu_web):
+      if not self.web.is_nil:
+        ew_view_free(ViewPtr(self.web))
+        self.web = nil
 
   proc setup*() =
     debug "sign setup", sign = self.model.id
@@ -122,24 +233,47 @@ gdobj SignNode of Spatial:
     self.material.params_billboard_mode =
       if self.model.billboard: BILLBOARD_ENABLED else: BILLBOARD_DISABLED
 
+    let use_web = defined(enu_web) and not self.model.text_only
+    if use_web:
+      self.web_tex = gdnew[ImageTexture]()
+      self.material.albedo_texture = self.web_tex
+      # Pages show their own colors, like a screen, whatever the lighting.
+      # Unlit materials ignore emission, so glow and highlight brighten the
+      # page instead.
+      self.material.flags_unshaded = true
+      self.light_web()
+      self.viewport.render_target_update_mode = UPDATE_DISABLED
+      self.label.visible = false
+      self.render_web()
+      # If a script made this sign a page, ask its owner for the picture
+      # (this node may be new). Ignored for plain signs.
+      when defined(enu_web):
+        discard ew_post_pointer(self.model.id.cstring, POINTER_WAKE, 0, 0)
+
     if self.model.text_only:
       text_edit.text = self.model.message
-    else:
+    elif not use_web:
       self.label.markdown = self.model.message
       self.label.update
 
     self.model.message_value.watch:
       if added or touched:
-        if self.model.text_only:
+        if use_web:
+          self.render_web()
+        elif self.model.text_only:
           text_edit.text = change.item
+          resize()
         else:
           self.label.markdown = change.item
-        resize()
-        self.label.update
+          resize()
+          self.label.update
 
     self.model.glow_value.watch:
       if added:
-        self.material.emission_energy = change.item
+        if use_web:
+          self.light_web()
+        else:
+          self.material.emission_energy = change.item
 
     self.transform = self.model.transform
     self.model.transform_value.watch:
@@ -158,7 +292,9 @@ gdobj SignNode of Spatial:
         self.set_visibility
 
     self.model.local_flags.watch:
-      if HIGHLIGHT.added:
+      if use_web and (HIGHLIGHT.added or HIGHLIGHT.removed):
+        self.light_web()
+      elif HIGHLIGHT.added:
         self.material.emission_energy = 1.0
       elif HIGHLIGHT.removed:
         self.material.emission_energy = self.model.glow
@@ -169,6 +305,14 @@ gdobj SignNode of Spatial:
       self.expanded = true
 
   method process*(delta: float) =
+    when defined(enu_web):
+      if ?self.model and ?self.web_tex:
+        self.show_page_frame()
+      if not self.web.is_nil:
+        self.web_idle += delta
+        if self.web_idle > sign_page_seconds.float:
+          ew_view_free(ViewPtr(self.web))
+          self.web = nil
     # If we only billboard the material, the collision surface doesn't move
     # so highlighting the sign is weird from some angles. Align the mesh to the
     # camera, along with billboarding the material. The mesh doesn't line-up

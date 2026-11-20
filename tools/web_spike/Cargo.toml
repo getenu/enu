@@ -1,0 +1,31 @@
+[package]
+name = "enu_web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyrender = "0.14.0"
+anyrender_vello_cpu = "0.18.0"
+blitz-dom = { version = "0.3.0-beta.4", default-features = false, features = ["system-fonts", "svg", "custom-widget"] }
+blitz-html = "0.3.0-beta.4"
+blitz-paint = { version = "0.3.0-beta.4", features = ["custom-widget"] }
+blitz-traits = "0.3.0-beta.4"
+bytemuck = "1.25.2"
+kurbo = "0.13"
+parley = "0.12"
+peniko = "0.6"
+png = "0.18"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+# Smallest build, to see what size costs us in speed.
+[profile.small]
+inherits = "release"
+opt-level = "z"

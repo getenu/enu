@@ -166,6 +166,10 @@ task build, "Build enu":
   # The MCP server (`bin/enu`) builds separately — `nim build_mcp`. dist_package
   # bundles it per-platform; the MCP tests compile it themselves (`nim r`).
 
+task build_web,
+  "Spike: build the Blitz HTML renderer (tools/web_spike). Then `nim build -d:enu_web`":
+  exec "cargo build --release --manifest-path tools/web_spike/Cargo.toml"
+
 task build_godot, "Build godot. Use --force to re-init submodules":
   build_godot(force = "--force" in command_line_params())
 

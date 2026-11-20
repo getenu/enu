@@ -2,7 +2,9 @@
 
 import system except echo
 import std/[strutils, math, wrapnils, options]
-import core, vm_bridge_utils, base_bridge_private
+import core, vm_bridge_utils, base_bridge_private, pages
+
+export pages
 
 bridged_to_host:
   proc message*(self: Sign): string

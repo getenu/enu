@@ -871,7 +871,7 @@ proc loop_finished*() =
   else:
     sleep()
 
-template query(T: type Thing, key: string, body: untyped): untyped =
+template query(T: typedesc, key: string, body: untyped): untyped =
   var result: T
   let thing = active_thing()
   if key in thing.query_results:
@@ -880,7 +880,7 @@ template query(T: type Thing, key: string, body: untyped): untyped =
     let results = body
     if ?results:
       result = results[^1]
-      thing.query_results[key] = results.map_it(Thing(it))
+      thing.query_results[key] = results.map_it(RootRef(it))
   result
 
 iterator items*[T](self: Query[seq[T]]): T =

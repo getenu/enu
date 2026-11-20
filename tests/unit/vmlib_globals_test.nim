@@ -17,6 +17,8 @@ const KNOWN = [
   "players.player",
   # no per-level state
   "worlds.world", "types.global_default",
+  # only set while a `page` block runs
+  "pages.building",
   # cleared by a level reset callback
   "builds_private.save_points", "builds_private.warned_about_save",
   # not part of the base API: reset with the level that imported it

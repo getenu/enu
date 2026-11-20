@@ -56,7 +56,7 @@ type
     rng: Rand
     seed: int
     sign*: Sign
-    query_results*: Table[string, seq[Thing]]
+    query_results*: Table[string, seq[RootRef]]
 
   Query*[T] = object of RootObj
     ## The answer to a question like `Bot.all` or `?player`. Acts like
