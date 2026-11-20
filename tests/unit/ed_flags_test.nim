@@ -38,6 +38,7 @@ suite "Ed fields are created as declared":
     check state.things.id == "root_things"
     check state.things.flags == synced + {OWNS_MEMBERS}
     check state.config_value.id == "config"
+    check state.paused_value.flags == {SYNC_LOCAL} # main sets it, the worker reads it
     check state.config_value.flags == {SYNC_LOCAL}
     check state.level_name_value.id == "level_name"
     check state.level_name_value.flags == synced
