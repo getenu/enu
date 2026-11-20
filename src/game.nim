@@ -879,7 +879,7 @@ gdobj Game of Node:
         # stuck, killed, or hasn't fully started because it's trying to connect
         # to a server, it won't pop the flag, so we force it after a timeout.
         if TEST_MODE in state.local_flags:
-          # In test mode, pop immediately - test_exit_code is a EdValue so it syncs with the flag
+          # In test mode, pop immediately - test_exit_code is an Ed so it syncs with the flag
           state.pop_flag QUITTING
         else:
           self.force_quit_at = get_mono_time() + 2.seconds

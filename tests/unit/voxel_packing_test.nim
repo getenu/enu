@@ -127,7 +127,7 @@ suite "Chunk codecs":
 
 suite "Static color palette":
   setup:
-    let shared = Shared(palette: EdSeq[Color].init())
+    let shared = Shared(palette: Ed[seq[Color]].init())
 
   test "named colors pack to their ordinals":
     for c in Colors:

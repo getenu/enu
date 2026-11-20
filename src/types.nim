@@ -273,7 +273,7 @@ type
     NEXT_TASK
 
   ConsoleModel* = ref object
-    log*: EdSeq[string]
+    log*: Ed[seq[string]]
 
   GameState* {.ed.} = ref object
     local_flags* {.local.}: set[LocalStateFlags]
@@ -339,7 +339,7 @@ type
       ## can't sync.
     emission_colors* {.ignore.}: seq[godot.Color]
     edit_snapshots*: Table[EditKey, SnapshotData]
-    edit_deltas*: Table[EditKey, EdSeq[DeltaUpdate]]
+    edit_deltas*: Table[EditKey, Ed[seq[DeltaUpdate]]]
     palette*: seq[Color]
       ## Static (non-named) voxel colors for this unit tree, in allocation
       ## order. A packed color_index >= STATIC_COLOR_BASE indexes this seq.
@@ -374,8 +374,8 @@ type
     # cached copy would dangle on the destroyed table (ed revives the Build's
     # field in place, so reading through it always sees the current table).
     build* {.cursor.}: Build
-    edit_snapshots*: EdTable[EditKey, SnapshotData]
-    edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
+    edit_snapshots*: Ed[Table[EditKey, SnapshotData]]
+    edit_deltas*: Ed[Table[EditKey, Ed[seq[DeltaUpdate]]]]
     frame_id*: int
       ## The frame point reads and writes go to: the one the script draws
       ## into on the worker, the one on screen on main.
@@ -438,7 +438,7 @@ type
     last_write_time*: MonoTime
 
   ScriptError* = tuple[msg: string, info: TLineInfo, location: string, log: bool]
-  ScriptErrors* = EdSeq[ScriptError]
+  ScriptErrors* = Ed[seq[ScriptError]]
 
   SightQuery* = object
     target*: Thing
@@ -530,7 +530,7 @@ type
     # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
     # at these.
     packed_chunks*: Table[FrameChunk, SnapshotData]
-    chunk_deltas*: Table[FrameChunk, EdSeq[DeltaUpdate]]
+    chunk_deltas*: Table[FrameChunk, Ed[seq[DeltaUpdate]]]
     voxels* {.ignore.}: VoxelStore
     draw_transform* {.unsynced.}: Transform = Transform.init
     # draw_transform mirrored for the render side (turtle indicator). A separate
@@ -844,13 +844,13 @@ proc from_flatty*(s: string, i: var int, n: var EdContext) =
 proc to_flatty*(s: var string, n: EdContext) =
   discard
 
-proc packed_chunks*(self: VoxelStore): EdTable[FrameChunk, SnapshotData] =
+proc packed_chunks*(self: VoxelStore): Ed[Table[FrameChunk, SnapshotData]] =
   ## Read the Build's table live — never cache it: a reload reincarnates the Ed
   ## field (ed revives it in place), so reading through the Build always sees the
   ## current table; a cached copy would dangle on the destroyed one.
   self.build.packed_chunks
 
-proc chunk_deltas*(self: VoxelStore): EdTable[FrameChunk, EdSeq[DeltaUpdate]] =
+proc chunk_deltas*(self: VoxelStore): Ed[Table[FrameChunk, Ed[seq[DeltaUpdate]]]] =
   self.build.chunk_deltas
 
 Ed.register(Player, constructor = false)

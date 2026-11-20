@@ -36,8 +36,8 @@ proc stroke_frame*(self: Ground) =
 
 proc init*(_: type Ground, node: Spatial): Ground =
   let self = Ground(
-    global_flags: EdSet[GlobalModelFlags].init(),
-    local_flags: EdSet[LocalModelFlags].init(flags = {SYNC_LOCAL}),
+    global_flags: Ed[set[GlobalModelFlags]].init(),
+    local_flags: Ed[set[LocalModelFlags]].init(flags = {SYNC_LOCAL}),
   )
 
   state.local_flags.changes:

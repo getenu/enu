@@ -302,21 +302,21 @@ proc local_into*(self: Vector3, thing: Thing): Vector3 =
     return self
   thing.transform.affine_inverse.xform_vector3(self.local_into(thing.parent))
 
-proc `+=`*(self: EdValue[string], str: string) =
+proc `+=`*(self: Ed[string], str: string) =
   self.value = self.value & str
 
-proc origin*(self: EdValue[Transform]): Vector3 =
+proc origin*(self: Ed[Transform]): Vector3 =
   self.value.origin
 
-proc `origin=`*(self: EdValue[Transform], value: Vector3) =
+proc `origin=`*(self: Ed[Transform], value: Vector3) =
   var transform = self.value
   transform.origin = value
   self.value = transform
 
-proc basis*(self: EdValue[Transform]): Basis =
+proc basis*(self: Ed[Transform]): Basis =
   self.value.basis
 
-proc `basis=`*(self: EdValue[Transform], value: Basis) =
+proc `basis=`*(self: Ed[Transform], value: Basis) =
   var transform = self.value
   transform.basis = value
   self.value = transform
@@ -385,7 +385,7 @@ proc require_lifetime*(thing: Thing): Lifetime =
     thing.lifetime = new_lifetime()
   thing.lifetime
 
-template watch*[T, O](zen: Ed[T, O], thing: untyped, body: untyped) =
+template watch*[T](zen: Ed[T], thing: untyped, body: untyped) =
   when thing is Thing:
     mixin thread_ctx
     let zid = zen.changes:
@@ -400,7 +400,7 @@ template watch*[T, O](zen: Ed[T, O], thing: untyped, body: untyped) =
         "`self.model`, then `self`."
     .}
 
-template watch*[T, O](zen: Ed[T, O], body: untyped) =
+template watch*[T](zen: Ed[T], body: untyped) =
   when compiles(self.model):
     watch(zen, self.model, body)
   else:
@@ -418,7 +418,7 @@ macro enum_fields*(n: typed): untyped =
     else:
       discard
 
-template value*(self: EdValue, body: untyped) {.dirty.} =
+template value*[T](self: Ed[T], body: untyped) {.dirty.} =
   block:
     var value = self.value
     with value:
