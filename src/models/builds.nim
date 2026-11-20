@@ -1104,9 +1104,6 @@ method ensure_visible*(self: Build) =
       if not self.has_visible_voxels:
         self.add_voxel(vec3(), (TRANSIENT, color))
 
-method destroy*(self: Build) =
-  self.destroy_impl
-
 proc init*(
     _: type Build,
     id = "build_" & generate_id(),
