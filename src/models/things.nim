@@ -315,8 +315,8 @@ proc reparent_to_root*(self: Thing) =
   ## Move `self` out of its current parent's `things` into the top-level
   ## `state.things`, re-rooting its node and restoring its world transform — the
   ## reverse of `adopt`. Also used to evacuate a non-owned child when its parent
-  ## is destroyed. `TRANSFERRING` keeps the collection move from being read as a
-  ## delete; it's cleared on the next tick.
+  ## is destroyed. `TRANSFERRING` marks the collection move (see its doc); it's
+  ## cleared on the next tick.
   let parent = self.parent
   if parent.is_nil:
     return
@@ -366,11 +366,13 @@ proc destroy_impl*(self: Thing) =
         state.player.open_sign == Sign(self):
       state.player.open_sign = nil
 
-  # Unlink from the parent (syncs REMOVED). parent is a {.cursor.} — no cycle to
-  # break by nil-ing it, and ORC owns the memory now.
+  # Unlink (syncs REMOVED). The context that destroys a thing is the one that
+  # removes it; every other context tears its copy down when the destroy
+  # arrives (`on_destroy`), and a removal on its own is only a move.
   if ?self.parent:
-    self.parent.things.pause:
-      self.parent.things -= self
+    self.parent.things -= self
+  elif not state.is_nil and self in state.things:
+    state.things -= self
 
   # Everything else is ownership: the EdRef teardown finishes our lifetime
   # (callbacks) and destroys all we own — our containers, the child things (the
@@ -384,14 +386,14 @@ method destroy*(self: Thing) {.gcsafe.} =
   # code (the MCP server, a test client) still tears down what it receives.
   self.destroy_impl
 
+proc destroy_all*(things: Ed[seq[Thing]]) =
+  for thing in things.value:
+    thing.destroy
+
 proc clear_all*(things: Ed[seq[Thing]]) =
-  var roots = things.value
-  for thing in roots:
+  for thing in things.value:
     # EPHEMERAL things (the human's Player + client-owned bots like MCP)
     # survive level reloads. Their lifecycle belongs to the owning
     # remote context, not the loaded level.
-    if EPHEMERAL in thing.global_flags:
-      continue
-    thing.walk_tree proc(thing: Thing) =
-      thing.things.clear
-    things -= thing
+    if EPHEMERAL notin thing.global_flags:
+      thing.destroy

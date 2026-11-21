@@ -292,12 +292,10 @@ type
       ## screenshots away from the player.
     TRANSFERRING
       ## Transient: the thing is being moved between things collections (see
-      ## `adopt`/`release`). Set across the collection remove/add so the
-      ## destroy-on-remove watchers (node controller + worker) detach/re-attach
-      ## the node instead of tearing the thing down. Synced (SYNC_REMOTE, via
-      ## GlobalModelFlags) because every context applies the membership move and
-      ## runs the same ungated destroy. Interim until destructor-driven teardown
-      ## (getenu/enu#65) makes remove==detach; then this flag goes away.
+      ## `adopt`/`release`). The add isn't a new thing (no re-join or
+      ## re-watch), and the GLOBAL change it brings reparents the node without
+      ## the start_transform origin shift a script's own `global` toggle gets
+      ## (the mover sets the transform). Synced, so every context sees it.
 
   Tools* = enum
     CODE_MODE

@@ -247,10 +247,7 @@ proc claim_name(self: Worker, requested: string) =
 
     # Drop the in-memory thing; the file watcher picks up the new
     # `data/<target_id>/<target_id>.json` on its next pass.
-    if thing.parent.is_nil:
-      state.things -= thing
-    else:
-      thing.parent.things -= thing
+    thing.destroy
     save_level(state.config.level_dir)
 
 proc load_level(self: Worker, level: string, world: string) =
@@ -557,10 +554,7 @@ proc delete(self: Thing) =
       remove_dir(dir)
     except OSError:
       discard
-  if self.parent.is_nil:
-    state.things -= self
-  else:
-    self.parent.things -= self
+  self.destroy
 
 proc adopt(self: Thing, thing: Thing) =
   ## Make `thing` ride `self` (e.g. a moving platform): move it from its current
@@ -568,8 +562,7 @@ proc adopt(self: Thing, thing: Thing) =
   ## engine composes transforms and `thing` follows `self`. Bots don't auto-ride a
   ## moving platform — this is how you make them. Ownership moves with membership
   ## for now (`self` owns `thing` until destructor-driven teardown lands — see
-  ## getenu/enu#65). `TRANSFERRING` keeps the remove/add from tearing the thing
-  ## down (it's a move, not a delete).
+  ## getenu/enu#65). `TRANSFERRING` marks the move (see its doc).
   if thing == self or thing.parent == self:
     return
   # Adopting an ancestor would make parent links circular — every parent walk
