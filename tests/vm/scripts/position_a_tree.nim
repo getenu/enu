@@ -6,7 +6,6 @@ import std/[tables]
 import types, core, base_bridge
 
 var test_thing = Thing()
-test_thing.query_results = initTable[string, seq[Thing]]()
 register_active(test_thing)
 
 type TreeType* = ref object of Build

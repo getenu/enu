@@ -9,6 +9,8 @@ const KNOWN = [
   # set on every call into a script
   "base_bridge.current_active_thing", "base_bridge.last_test_handle",
   "base_bridge.active_handle", "vm_bridge_utils.host_error_pending",
+  # set by each pass of a command loop, before anything reads it
+  "core.query_run",
   # registered once, by the API's own modules
   "core.state_init_callbacks", "core.level_reset_callbacks",
   # level things' handles are forgotten by reset_level_state
