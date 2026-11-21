@@ -78,7 +78,10 @@ proc replay(self: Build, entry: BakeEntry) =
     self.go_to_frame(base + offset)
     let frame_id = self.frame_id(self.frame)
     for chunk_id, packed in entry.frames[offset].chunks:
-      if fast and self.voxels.stamp_chunk((frame_id, chunk_id + shift), packed):
+      if fast and self.voxels.stamp_chunk(
+        (frame_id, chunk_id + shift), packed,
+        erases = (offset, chunk_id) in entry.erasing,
+      ):
         continue
       let cells = decode_chunk(packed)
       for linear in 0 ..< CHUNK_VOLUME:
@@ -189,6 +192,8 @@ proc bake_end*(self: Build, finished: bool) =
       let packed = encode_chunk(cells)
       if not packed.is_empty:
         frame.chunks[chunk_id] = packed
+        if packed.erases:
+          entry.erasing.incl (offset, chunk_id)
     entry.frames[offset] = frame
   self.bakes.entries[capture.key] = entry
   inc self.bakes.serial

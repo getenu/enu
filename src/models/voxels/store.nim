@@ -868,9 +868,12 @@ proc has_edits(self: VoxelStore, fc: FrameChunk): bool =
   else:
     false
 
-proc stamp_chunk*(self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData): bool =
+proc stamp_chunk*(
+    self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData, erases = false
+): bool =
   ## Lay a chunk of computed blocks over chunk `fc` whole: a replayed `bake`
-  ## at a chunk-aligned spot. An empty chunk takes the blob as is. False,
+  ## at a chunk-aligned spot. An empty chunk takes the blob as is, unless it
+  ## `erases`: an eraser cell there leaves nothing, so it isn't stored. False,
   ## changing nothing, when the chunk holds edits: holes and manual blocks
   ## need the per-block rules.
   if self.has_edits(fc):
@@ -881,7 +884,7 @@ proc stamp_chunk*(self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData): boo
     fc notin self.chunk_cache and fc notin self.pending_chunks and
     fc notin self.pending_snapshots and
     (not ?self.build or (fc notin self.packed_chunks and fc notin self.chunk_deltas))
-  if empty and ?self.build:
+  if empty and ?self.build and not erases:
     # Staged as is and decoded only if something reads it: a baked
     # animation stamps every frame, and most are never read here.
     self.pending_snapshots[fc] = snapshot
@@ -905,7 +908,8 @@ proc stamp_chunk*(self: VoxelStore, fc: FrameChunk, snapshot: SnapshotData): boo
     chunk.tick = self.cache_tick
     self.chunk_cache[fc] = chunk
   # an empty blob re-encodes from the cells when it flushes
-  self.pending_snapshots[fc] = if empty: snapshot else: SnapshotData()
+  self.pending_snapshots[fc] =
+    if empty and not erases: snapshot else: SnapshotData()
   true
 
 # Whole frames. These take frame ids, not indexes.

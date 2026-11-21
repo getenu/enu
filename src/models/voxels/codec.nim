@@ -412,6 +412,14 @@ proc is_empty*(packed: PackedChunk): bool =
   packed.data.len == 0 or
     (packed.data.len == 1 and packed.data[0].byte == FMT_EMPTY.byte)
 
+proc erases*(packed: PackedChunk): bool =
+  ## Whether any cell is drawn in the eraser color.
+  if packed.is_empty:
+    return false
+  for cell in decode_chunk(packed):
+    if cell != EMPTY_VOXEL and unpack_voxel(cell)[0] == ERASER.ord:
+      return true
+
 proc renders_as_air*(packed: PackedVoxel): bool {.inline.} =
   ## A cell that contributes no geometry: true air, or a HOLE. `eraser`
   ## records a HOLE (not true emptiness) so it can subtract from a base
