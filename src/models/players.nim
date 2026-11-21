@@ -80,9 +80,9 @@ proc `open_code=`*(self: Player, code: string) =
       return
 
 method destroy*(self: Player) =
-  if self.things.len > 0:
+  if not self.destroyed and self.things.len > 0:
     Sign(self.things[0]).owner = nil
-    self.things.clear
+  self.destroy_impl
 
 proc reset_toolbar*(self: Player, show_tools: bool) =
   ## The toolbar a level starts with: every tool, or none when the level's

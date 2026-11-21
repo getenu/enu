@@ -845,10 +845,7 @@ proc paint_cell(self: Build, cell: Vector3, endpoint = false) =
 
 proc remove_if_empty(self: Build) =
   if self.things.len == 0 and not self.has_visible_voxels:
-    if self.parent.is_nil:
-      state.things -= self
-    else:
-      self.parent.things -= self
+    self.destroy
 
 proc remove(self: Build) =
   if not self.editable:
@@ -1078,7 +1075,7 @@ method reset*(self: Build) =
   if rebuild:
     self.voxels.clear()
 
-  self.things.clear()
+  self.things.destroy_all
   self.global_flags -= RESETTING
   if rebuild:
     self.restore_edits
