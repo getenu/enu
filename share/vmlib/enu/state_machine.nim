@@ -55,16 +55,30 @@ template loop_body(body: untyped) =
     ctx = Context()
     main_loop = true
 
+  let queries = QueryRun()
+
   proc manager(active: bool): bool =
+    # Runs the body once for every combination of query results, with fresh
+    # results each time the loop runs.
     let active {.inject, used.} = active
+    let outer_run = query_run
+    query_run = queries
+    defer:
+      query_run = outer_run
     var body_running = false
     while true:
       if body_running:
-        # Should only be true on `continue`.
-        sleep()
+        # Should only be true on `continue`, which ends this pass early.
+        body_running = false
+        if not queries.next_combination():
+          queries.clear()
+          sleep()
       body_running = true
       body
       body_running = false
+      if queries.next_combination():
+        continue
+      queries.clear()
       return true
 
   validate_loop()
@@ -109,6 +123,61 @@ template loop_body(body: untyped) =
       done = true
       looping = ctx.advance(frame)
 
+proc is_transition(n: NimNode): bool =
+  n.kind == nnkInfix and (n[0].eq_ident("->") or n[0].eq_ident("==>"))
+
+proc is_loop(n: NimNode): bool =
+  n.kind in {nnkCall, nnkCommand} and n[0].kind == nnkIdent and n[0].eq_ident("loop")
+
+proc query_key(n: NimNode): string =
+  n.line_info
+
+proc rewrite_condition(n: NimNode, parent: var string): NimNode =
+  ## Rewrites the queries (`q as name`) in an `if` condition, left to right.
+  ## Each is nested in the one before it; `parent` ends as the last one,
+  ## which the branch is nested in.
+  if n.kind == nnkInfix and n[0].eq_ident("as"):
+    let key = n.query_key
+    result = new_call(
+      ident"query_as",
+      rewrite_condition(n[1], parent),
+      n[2],
+      new_lit(key),
+      new_lit(parent),
+    )
+    parent = key
+  elif n.is_transition:
+    result = n
+  else:
+    result = n.copy_nim_node
+    for child in n:
+      result.add rewrite_condition(child, parent)
+
+proc rewrite_queries(n: NimNode, parent: string): NimNode =
+  ## Gives each query in a loop body a key and the query whose branch it's
+  ## in, so the loop can go through the combinations the nesting asks for.
+  ## Transitions (`a -> b as c` names a state) and nested loops are left
+  ## alone.
+  if n.is_transition or n.is_loop or
+      n.kind in {nnkProcDef, nnkFuncDef, nnkLambda, nnkTemplateDef, nnkMacroDef}:
+    return n
+  if n.kind in {nnkIfStmt, nnkElifExpr, nnkIfExpr}:
+    result = n.copy_nim_node
+    for branch in n:
+      if branch.kind in {nnkElifBranch, nnkElifExpr}:
+        var nested = parent
+        let condition = rewrite_condition(branch[0], nested)
+        result.add branch.kind.new_tree(condition, rewrite_queries(branch[1], nested))
+      else:
+        result.add rewrite_queries(branch, parent)
+  elif n.kind == nnkInfix and n[0].eq_ident("as"):
+    var nested = parent
+    result = rewrite_condition(n, nested)
+  else:
+    result = n.copy_nim_node
+    for child in n:
+      result.add rewrite_queries(child, parent)
+
 macro loop*(body: untyped) =
   ## A command loop, the heart of a thing's behavior. The body runs
   ## over and over (about twice a second), switching between states
@@ -118,13 +187,15 @@ macro loop*(body: untyped) =
   ##     nil -> wander
   ##     if player.near:
   ##       wander -> hide
+  ##
+  ## A query (`if Player.hit as p:`) runs the body once for each result.
   discard current_loop(Loop())
   result = new_stmt_list()
   let body =
     if body.kind == nnkNilLit:
       new_stmt_list()
     else:
-      body
+      rewrite_queries(body, "")
   result.add(get_ast loop_body(body))
   result = new_block_stmt(result)
 
@@ -250,6 +321,9 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
           frame.action = action
         else:
           frame.action = nil
+        # The first transition wins: the rest of this run's query results
+        # are dropped, and the loop's next run starts fresh.
+        query_run.clear()
         raise (ref Halt)()
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =

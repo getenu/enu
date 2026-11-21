@@ -6,7 +6,6 @@ import std/[tables]
 import types, core, base_bridge, position_a_tree
 
 var test_thing = Thing()
-test_thing.query_results = initTable[string, seq[Thing]]()
 register_active(test_thing)
 
 # Add local variables to increase register pressure before Tree.new calls.

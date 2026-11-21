@@ -860,28 +860,76 @@ template reset*(clear = false) =
 proc loop_finished*() =
   ## Called by Enu at the end of each trip through a command loop.
   ## You won't need this in a script.
-  let thing = active_thing()
-  if ?thing.query_results:
-    let key = thing.query_results.first_key
-    let res = thing.query_results[key].pop
-    if not ?thing.query_results[key]:
-      thing.query_results.del key
-      if not ?thing.query_results:
-        sleep()
-  else:
-    sleep()
+  sleep()
 
-template query(T: type Thing, key: string, body: untyped): untyped =
-  var result: T
-  let thing = active_thing()
-  if key in thing.query_results:
-    result = T(thing.query_results[key][^1])
-  else:
-    let results = body
-    if ?results:
-      result = results[^1]
-      thing.query_results[key] = results.map_it(Thing(it))
-  result
+type
+  QuerySlot = object
+    results: seq[RootRef]
+    index: int ## the result in use; `results.len` once they've all been used
+    parent: string ## the query this one is nested in, or ""
+
+  QueryRun* = ref object
+    ## The query results one run of a command loop works through. The loop
+    ## body runs once for every combination the nesting asks for: a query
+    ## nested in another's branch goes through its results for each of the
+    ## outer one's, while queries side by side go through theirs together,
+    ## each result once. Results last for that run only.
+    slots: Table[string, QuerySlot]
+    order: seq[string]
+
+var query_run*: QueryRun
+  ## The run of the command loop whose body is running, if any.
+
+proc clear*(self: QueryRun) =
+  self.slots.clear
+  self.order.set_len(0)
+
+proc restart(self: QueryRun, parent: string) =
+  ## Start the queries nested in `parent` over with their first result.
+  for key in self.order:
+    if self.slots[key].parent == parent:
+      self.slots[key].index = 0
+      self.restart(key)
+
+proc advance(self: QueryRun, key: string): bool
+
+proc advance_nested(self: QueryRun, parent: string): bool =
+  for key in self.order:
+    if self.slots[key].parent == parent and self.advance(key):
+      result = true
+
+proc advance(self: QueryRun, key: string): bool =
+  if self.slots[key].index >= self.slots[key].results.len:
+    return false
+  if self.advance_nested(key):
+    return true
+  if self.slots[key].index + 1 < self.slots[key].results.len:
+    inc self.slots[key].index
+    self.restart(key)
+    return true
+  self.slots[key].index = self.slots[key].results.len
+
+proc next_combination*(self: QueryRun): bool =
+  ## Moves to the next combination of query results. False when they've all
+  ## been handled.
+  self.advance_nested("")
+
+proc query_results*(self: QueryRun, key, parent: string, results: seq[RootRef]) =
+  ## Stores the results of the query at `key`, the first time a pass of this
+  ## run reaches it.
+  if key notin self.slots:
+    self.slots[key] = QuerySlot(results: results, parent: parent)
+    self.order.add key
+
+proc has_query*(self: QueryRun, key: string): bool =
+  key in self.slots
+
+proc query_result*(self: QueryRun, key: string): RootRef =
+  ## The result in use for the query at `key`, or nil once they've all been
+  ## used (or if there were none).
+  let slot = self.slots[key]
+  if slot.index < slot.results.len:
+    result = slot.results[slot.index]
 
 iterator items*[T](self: Query[seq[T]]): T =
   for item in self.result:
@@ -939,20 +987,27 @@ proc hit*(thing: Thing): bool =
 proc `in`*(thing: Thing): bool =
   thing.hit(active_thing())
 
+template query_as*[T](
+    q: Query[seq[T]], name: untyped, key: string, parent: string
+): bool =
+  ## What `as` becomes inside a command loop. `key` names the query and
+  ## `parent` the query whose branch it's in.
+  if query_run.is_nil:
+    raise
+      ObjectConversionDefect.init("`as` can only be used inside an action loop")
+  if not query_run.has_query(key):
+    var results: seq[RootRef]
+    for item in q.result:
+      results.add RootRef(item)
+    query_run.query_results(key, parent, results)
+  let found = query_run.query_result(key)
+  let name {.inject.}: T =
+    if found.is_nil: T.default else: T(found)
+  not found.is_nil
+
 template `as`*[T](q: Query[seq[T]], name: untyped): bool =
   ## Grab a result from a query and give it a name, right inside an
   ## `if`: `if Player.hit as toucher: toucher.bounce`. Only works
-  ## inside a command loop.
-  if loop_context.is_nil:
-    raise
-      ObjectConversionDefect.init("`as` can only be used inside an action loop")
-  let key = $T & "-" & $instantiation_info()
-  var result = false
-  let name {.inject.}: T =
-    if q.truthy:
-      result = true
-      T.query(key, q.result)
-    else:
-      T.default
-  result
+  ## inside a command loop, which runs once for each result.
+  query_as(q, name, $T & "-" & $instantiation_info(), "")
 

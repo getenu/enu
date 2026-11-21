@@ -15,7 +15,6 @@ import types, state_machine, core, base_bridge, builds
 import position_c_tree
 
 var test_thing2 = Thing()
-test_thing2.query_results = initTable[string, seq[Thing]]()
 register_active(test_thing2)
 
 let me2 = Build()
