@@ -78,7 +78,7 @@ method reset*(self: Bot) =
   self.animation_value.touch "auto"
   self.global_flags += VISIBLE
   self.velocity = vec3()
-  self.things.clear()
+  self.things.destroy_all
 
 proc init*(
     _: type Bot,
@@ -164,10 +164,7 @@ method worker_thread_joined*(self: Bot, worker: Worker) =
             if sign.owner == self:
               sign.owner = nil
 
-        if self.parent.is_nil:
-          state.things -= self
-        else:
-          self.parent.things -= self
+        self.destroy
 
   self.local_flags.watch:
     debug "self flag changed",

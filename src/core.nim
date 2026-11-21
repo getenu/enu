@@ -389,7 +389,10 @@ template watch*[T](zen: Ed[T], thing: untyped, body: untyped) =
   when thing is Thing:
     mixin thread_ctx
     let zid = zen.changes:
-      body
+      # The CLOSED a finished lifetime sends isn't a change, and by then the
+      # thing may be partway through its teardown.
+      if not closed():
+        body
     zen.bind_lifetime(thing.require_lifetime, zid)
     make_discardable(zid)
   else:

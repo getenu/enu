@@ -223,10 +223,7 @@ proc update_files*(self: Worker) =
   for thing in thing_deletions:
     debug "thing data file deleted on disk; removing",
       thing_id = thing.id, data_file = thing.data_file
-    if thing.parent.is_nil:
-      state.things -= thing
-    else:
-      thing.parent.things -= thing
+    thing.destroy
   if thing_deletions.len > 0:
     save_level(state.config.level_dir)
 
@@ -280,12 +277,8 @@ proc update_files*(self: Worker) =
         if json_mtime != thing.script_ctx.last_saved_json_mtime:
           debug "thing json changed on disk; reloading",
             thing_id = thing.id, json_mtime
-          let parent = thing.parent
           state.push_flag LOADING_SCRIPT
-          if parent.is_nil:
-            state.things -= thing
-          else:
-            parent.things -= thing
+          thing.destroy
           state.pop_flag LOADING_SCRIPT
           load_thing_from_json(thing_id, json_file)
       except OSError:
@@ -522,32 +515,30 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         # Relink (adopt/release): the thing is already joined and its script is
         # running. Re-adding it to a new collection must not re-join or re-watch.
         discard
-      elif thing.sync_ready:
-        thing.worker_thread_joined(worker)
-        worker.watch_code thing
       else:
-        # Narrow replica: the thing's data is still arriving (the deep fetch in
-        # watch_things pulls it). Join once it lands — drained per loop tick.
-        worker.pending_things.add thing
-
-    if removed:
-      if TRANSFERRING in thing.global_flags:
-        # Moving between collections, not leaving the level: keep the thing, its
-        # script mapping, and its on-disk script/data intact.
-        discard
-      else:
-        worker.unmap_thing(thing)
-
-        if ?thing.script_ctx:
-          thing.script_ctx.stop()
-          thing.script_ctx.running = false
-          thing.script_ctx.callback = nil
-          if not (thing of Player) and LOADING_SCRIPT notin state.local_flags and
-              not ?thing.clone_of:
-            remove_file thing.script_ctx.script
-            remove_dir thing.data_dir
-
-        thing.destroy
+        # Whichever context destroys the thing, its script stops here, and a
+        # delete (anything but a reload, which runs on this side under
+        # LOADING_SCRIPT) takes its files with it.
+        thing.on_destroy:
+          if TEST_MODE in state.local_flags:
+            worker.test_last_activity = get_mono_time()
+          worker.unmap_thing(it)
+          if ?it.script_ctx:
+            it.script_ctx.stop()
+            it.script_ctx.running = false
+            it.script_ctx.callback = nil
+            if not (it of Player) and LOADING_SCRIPT notin state.local_flags and
+                not ?it.clone_of:
+              remove_file it.script_ctx.script
+              remove_dir it.data_dir
+        if thing.sync_ready:
+          thing.worker_thread_joined(worker)
+          worker.watch_code thing
+        else:
+          # Narrow replica: the thing's data is still arriving (the deep fetch
+          # in watch_things pulls it). Join once it lands — drained per loop
+          # tick.
+          worker.pending_things.add thing
 
   let player = state.player
 
@@ -813,7 +804,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
           if EPHEMERAL in thing.global_flags and thing.owner_ctx == ctx_name:
             debug "reaping agent thing on ctx unsubscribe",
               thing_id = thing.id, ctx_name
-            state.things.del i
+            thing.destroy
           else:
             i += 1
 
