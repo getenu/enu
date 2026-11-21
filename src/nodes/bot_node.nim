@@ -49,6 +49,11 @@ gdobj BotNode of KinematicBody:
     # perspective) needs an extra frame on top of that. -1 = idle, N > 0 =
     # warming up (decrement each frame), 0 = capture this frame.
     screenshot_warmup_frames: int = -1
+    # After the warm-up, the capture also waits for the terrain around the
+    # camera to finish meshing (a shot right after a move or level load caught
+    # it half streamed in), up to a deadline in case a build never settles.
+    screenshot_quiet_frames: int
+    screenshot_deadline: MonoTime
     # Bot hides its own skin during capture so it doesn't fill its own POV
     # when the camera sits near the bot's body (screenshot, screenshot_at).
     skin_hidden_during_screenshot: bool
@@ -267,6 +272,27 @@ gdobj BotNode of KinematicBody:
       let cam = Camera(state.nodes.player_camera)
       cam.cull_mask = cam.cull_mask and not SELF_AVATAR_LAYER
 
+  proc terrain_settled(): bool =
+    ## No build has blocks waiting to be meshed, for a few frames running: a
+    ## viewer that just moved takes a frame or two to ask for its new area, so
+    ## a single quiet frame can come before the work does. Builds playing frames
+    ## re-mesh as they go and never settle, so they don't count.
+    var pending = false
+    state.things.value.walk_tree proc(thing: Thing) {.gcsafe.} =
+      if thing of Build:
+        let build = Build(thing)
+        if build.pending_block_updates > 0 and build.playback.fps <= 0:
+          pending = true
+    if pending:
+      self.screenshot_quiet_frames = 0
+    else:
+      inc self.screenshot_quiet_frames
+    if self.screenshot_quiet_frames >= 3:
+      return true
+    if get_mono_time() > self.screenshot_deadline:
+      warn "screenshot: terrain still meshing at the deadline; capturing anyway"
+      return true
+
   proc process_screenshot() =
     if self.model of Bot:
       let bot = Bot(self.model)
@@ -275,6 +301,9 @@ gdobj BotNode of KinematicBody:
         if q.kind == SCREENSHOT and q.state == READY and
             self.screenshot_warmup_frames > 0:
           dec self.screenshot_warmup_frames
+        elif q.kind == SCREENSHOT and q.state == READY and
+            self.screenshot_warmup_frames == 0 and not self.terrain_settled():
+          discard
         elif q.kind == SCREENSHOT and q.state == READY and
             self.screenshot_warmup_frames == 0:
           let vp =
@@ -387,6 +416,8 @@ gdobj BotNode of KinematicBody:
           # capture immediately after an orthographic one occasionally read
           # back the prior frame's ortho render.
           self.screenshot_warmup_frames = 2
+          self.screenshot_quiet_frames = 0
+          self.screenshot_deadline = get_mono_time() + init_duration(seconds = 5)
 
   proc scan_builds(): seq[Build] =
     ## Every build in the level with a live node, nested included —
