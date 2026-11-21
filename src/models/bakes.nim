@@ -68,7 +68,7 @@ proc chunk_aligned(pose: Transform): bool =
 proc replay(self: Build, entry: BakeEntry) =
   let pose = self.draw_transform
   let base = self.frame
-  let fast = self.baking.len == 0 and pose.chunk_aligned
+  let fast = self.bakes.running.len == 0 and pose.chunk_aligned
   let shift = pose.origin / ChunkDim.float
   var offsets: seq[int]
   for offset in entry.frames.keys:
@@ -97,7 +97,7 @@ proc replay(self: Build, entry: BakeEntry) =
   if entry.color.is_some:
     self.color_value.value = entry.color.get
   if entry.drawing.is_some:
-    self.drawing = entry.drawing.get
+    self.draw_state.drawing = entry.drawing.get
 
 const BAKE_CHECK_QUIET = init_duration(seconds = 5)
 
@@ -135,44 +135,44 @@ proc bake_begin*(
     return false
   if key != "":
     let here = file.extract_filename & ":" & $line
-    self.bake_key_sites.with_value(key, other):
+    self.bakes.key_sites.with_value(key, other):
       if other[] != here:
         raise ValueError.init(
           "two `bake` blocks use the key \"" & key & "\": " & other[] & " and " &
             here
         )
     do:
-      self.bake_key_sites[key] = here
+      self.bakes.key_sites[key] = here
   let full = bake_key(enu_key, self.site_part((file, line, key, enu_key)), inputs)
   if CHECK_BAKES in state.local_flags:
     # skip the body either way: it can take minutes
     if rebake:
       self.fail_check("`rebake` left in a script: change it back to `bake`")
-    elif full notin self.bakes:
+    elif full notin self.bakes.entries:
       self.fail_check("bake is stale: its code changed since it was saved")
     else:
-      self.replay(self.bakes[full])
+      self.replay(self.bakes.entries[full])
     return true
-  if full in self.bakes and not rebake:
+  if full in self.bakes.entries and not rebake:
     debug "bake replaying", unit = self.id, key = full
-    self.replay(self.bakes[full])
+    self.replay(self.bakes.entries[full])
     return true
   info "bake recording", unit = self.id, key = full
-  self.baking.add BakeCapture(
+  self.bakes.running.add BakeCapture(
     key: full,
     start: self.draw_transform,
     start_frame: self.frame,
     start_color: self.color_value.value,
-    start_drawing: self.drawing,
+    start_drawing: self.draw_state.drawing,
   )
   false
 
 proc bake_end*(self: Build, finished: bool) =
   ## The body of the innermost running `bake` is done. If it ran to the end,
   ## keep what it drew; if it raised or returned early, forget it.
-  if self.baking.len == 0:
+  if self.bakes.running.len == 0:
     return
-  let capture = self.baking.pop
+  let capture = self.bakes.running.pop
   if not finished:
     return
   var entry = BakeEntry(
@@ -181,8 +181,8 @@ proc bake_end*(self: Build, finished: bool) =
   )
   if self.color_value.value != capture.start_color:
     entry.color = some(self.color_value.value)
-  if self.drawing != capture.start_drawing:
-    entry.drawing = some(self.drawing)
+  if self.draw_state.drawing != capture.start_drawing:
+    entry.drawing = some(self.draw_state.drawing)
   for offset, chunks in capture.cells:
     var frame: FrameData
     for chunk_id, cells in chunks:
@@ -190,8 +190,8 @@ proc bake_end*(self: Build, finished: bool) =
       if not packed.is_empty:
         frame.chunks[chunk_id] = packed
     entry.frames[offset] = frame
-  self.bakes[capture.key] = entry
-  inc self.bakes_serial
+  self.bakes.entries[capture.key] = entry
+  inc self.bakes.serial
   self.global_flags += DIRTY
 
 proc drop_stale_bakes*(self: Build) =
@@ -199,7 +199,7 @@ proc drop_stale_bakes*(self: Build) =
   ## again, because their block is gone from it (and from the sibling
   ## scripts it imports) or the Enu bake key changed. Skipped while an
   ## imported script hasn't compiled yet, since its blocks aren't known.
-  if ?self.clone_of or self.bakes.len == 0 or not ?self.script_ctx:
+  if ?self.clone_of or self.bakes.entries.len == 0 or not ?self.script_ctx:
     return
   var sites = self.script_ctx.bake_sites
   for dep in self.script_ctx.dependencies:
@@ -216,20 +216,20 @@ proc drop_stale_bakes*(self: Build) =
   for site in sites:
     live.incl site.enu & "|" & self.site_part(site)
   var stale: seq[string]
-  for key in self.bakes.keys:
+  for key in self.bakes.entries.keys:
     if key.rsplit('|', 1)[0] notin live:
       stale.add key
   for key in stale:
-    self.bakes.del key
+    self.bakes.entries.del key
   if stale.len > 0:
     info "dropped stale bakes", unit = self.id, count = stale.len
-    inc self.bakes_serial
+    inc self.bakes.serial
     self.global_flags += DIRTY
 
 proc clear_bakes*(self: Build) =
-  if self.bakes.len > 0:
-    self.bakes.clear
-    inc self.bakes_serial
+  if self.bakes.entries.len > 0:
+    self.bakes.entries.clear
+    inc self.bakes.serial
     self.global_flags += DIRTY
 
 proc clear_all_bakes*() =

@@ -22,7 +22,7 @@ suite "Ed fields are created as declared":
     check build.draw_transform_value.flags == {}
     check build.scale == 1.0
     check build.sealed_frames
-    check build.frames_loop
+    check build.playback.loop
 
     let bot = Bot.init(id = "ed_flags_bot")
     check bot.local_flags.flags == {SYNC_LOCAL}
@@ -38,6 +38,7 @@ suite "Ed fields are created as declared":
     check state.things.id == "root_things"
     check state.things.flags == synced + {OWNS_MEMBERS}
     check state.config_value.id == "config"
+    check state.paused_value.flags == {SYNC_LOCAL} # main sets it, the worker reads it
     check state.config_value.flags == {SYNC_LOCAL}
     check state.level_name_value.id == "level_name"
     check state.level_name_value.flags == synced

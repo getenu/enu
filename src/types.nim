@@ -132,6 +132,50 @@ type
     start_drawing*: bool
     cells*: Table[int, Table[Vector3, array[CHUNK_VOLUME, PackedVoxel]]]
 
+  BakeState* = object
+    ## A build's `bake` bookkeeping. Host-local.
+    entries*: Table[string, BakeEntry]
+      ## What each `bake` key drew, so a run can replay it.
+    running*: seq[BakeCapture]
+      ## The `bake` blocks whose bodies are running, innermost last.
+    key_sites*: Table[string, string]
+      ## Where each keyed `bake` this run was called from, so two blocks can't
+      ## share a key.
+    serial*: int
+      ## Changes with `entries`; the save writes them when it differs from
+      ## `saved_serial`.
+    saved_serial*: int
+
+  AutoRamp* = object
+    ## `speed = auto`'s ramp: `active` while the draw rate is ramping up,
+    ## `started` once the first block anchors the clock at `start`, `done` after
+    ## it has handed off to ASAP -- so a later `speed = auto` (e.g. an `asap:`
+    ## block restoring the speed) doesn't restart a finished ramp.
+    active*: bool
+    started*: bool
+    done*: bool
+    start*: MonoTime
+
+  DrawState* = object
+    ## How a build's script is drawing. Host-local.
+    drawing*: bool
+      ## The pen is down: moves draw.
+    voxels_per_frame*: float
+    voxels_remaining_this_frame*: float
+    ramp*: AutoRamp
+    holes_settled*: bool
+      ## This run's initial batch of drawing is over (see settle_holes).
+
+  Playback* = object
+    ## How a build plays its frames. One synced value, so a change -- a `play`
+    ## or a `stop` -- arrives whole.
+    fps*: float
+      ## > 0 while playing; the server advances `current_frame` at this rate.
+    loop*: bool = true
+    first*: int
+    last*: int
+      ## The frames playback runs through; `play` checks none are missing.
+
   FrameChunk* = tuple[frame: int, loc: Vector3]
     ## A chunk of one frame. `frame` is a frame id, not an index: ids are
     ## stable while frames are inserted and deleted (see `frame_order`).
@@ -248,12 +292,10 @@ type
       ## screenshots away from the player.
     TRANSFERRING
       ## Transient: the thing is being moved between things collections (see
-      ## `adopt`/`release`). Set across the collection remove/add so the
-      ## destroy-on-remove watchers (node controller + worker) detach/re-attach
-      ## the node instead of tearing the thing down. Synced (SYNC_REMOTE, via
-      ## GlobalModelFlags) because every context applies the membership move and
-      ## runs the same ungated destroy. Interim until destructor-driven teardown
-      ## (getenu/enu#65) makes remove==detach; then this flag goes away.
+      ## `adopt`/`release`). The add isn't a new thing (no re-join or
+      ## re-watch), and the GLOBAL change it brings reparents the node without
+      ## the start_transform origin shift a script's own `global` toggle gets
+      ## (the mover sets the transform). Synced, so every context sees it.
 
   Tools* = enum
     CODE_MODE
@@ -273,7 +315,16 @@ type
     NEXT_TASK
 
   ConsoleModel* = ref object
-    log*: EdSeq[string]
+    log*: Ed[seq[string]]
+
+  GameNodes* = object
+    ## The Godot nodes the game hands around. Each side has its own.
+    game*: Node
+    data*: Node
+    player*: Node
+    player_camera*: Node
+    screenshot_camera*: Node
+    screenshot_viewport*: Node
 
   GameState* {.ed.} = ref object
     local_flags* {.local.}: set[LocalStateFlags]
@@ -281,10 +332,7 @@ type
     global_flags* {.id: "state_global_flags".}: set[GlobalStateFlags]
     config* {.local, id: "config".}: Config
     gravity* {.ignore.}: float = -80.0
-    nodes* {.ignore.}: tuple[game: Node, data: Node, player: Node]
-    screenshot_camera* {.ignore.}: Node
-    screenshot_viewport* {.ignore.}: Node
-    player_camera* {.ignore.}: Node
+    nodes* {.ignore.}: GameNodes
     screenshot_counter* {.ignore.}: int
     player* {.local.}: Player
     things* {.id: "root_things", owns_members.}: seq[Thing]
@@ -293,7 +341,8 @@ type
       ## closure pushed ahead of the collection (husk-free parse).
     ground* {.ignore.}: Ground
     console* {.ignore.}: ConsoleModel
-    paused* {.ignore.}: bool
+    paused* {.local.}: bool
+      ## Set on main (the pause key); script runs on the worker check it.
     show_prototypes* {.ignore.}: bool = true
     show_tools* {.ignore.}: bool = true
       ## level.json: false starts with no tools (script adds them)
@@ -339,7 +388,7 @@ type
       ## can't sync.
     emission_colors* {.ignore.}: seq[godot.Color]
     edit_snapshots*: Table[EditKey, SnapshotData]
-    edit_deltas*: Table[EditKey, EdSeq[DeltaUpdate]]
+    edit_deltas*: Table[EditKey, Ed[seq[DeltaUpdate]]]
     palette*: seq[Color]
       ## Static (non-named) voxel colors for this unit tree, in allocation
       ## order. A packed color_index >= STATIC_COLOR_BASE indexes this seq.
@@ -374,8 +423,8 @@ type
     # cached copy would dangle on the destroyed table (ed revives the Build's
     # field in place, so reading through it always sees the current table).
     build* {.cursor.}: Build
-    edit_snapshots*: EdTable[EditKey, SnapshotData]
-    edit_deltas*: EdTable[EditKey, EdSeq[DeltaUpdate]]
+    edit_snapshots*: Ed[Table[EditKey, SnapshotData]]
+    edit_deltas*: Ed[Table[EditKey, Ed[seq[DeltaUpdate]]]]
     frame_id*: int
       ## The frame point reads and writes go to: the one the script draws
       ## into on the worker, the one on screen on main.
@@ -438,7 +487,7 @@ type
     last_write_time*: MonoTime
 
   ScriptError* = tuple[msg: string, info: TLineInfo, location: string, log: bool]
-  ScriptErrors* = EdSeq[ScriptError]
+  ScriptErrors* = Ed[seq[ScriptError]]
 
   SightQuery* = object
     target*: Thing
@@ -530,7 +579,7 @@ type
     # race). `voxels` is the LOCAL render wrapper (rebuilt per-side) that points
     # at these.
     packed_chunks*: Table[FrameChunk, SnapshotData]
-    chunk_deltas*: Table[FrameChunk, EdSeq[DeltaUpdate]]
+    chunk_deltas*: Table[FrameChunk, Ed[seq[DeltaUpdate]]]
     voxels* {.ignore.}: VoxelStore
     draw_transform* {.unsynced.}: Transform = Transform.init
     # draw_transform mirrored for the render side (turtle indicator). A separate
@@ -538,19 +587,7 @@ type
     # would flood the context queue during ASAP draws. This one is written once
     # per batch (see sync_turtle).
     turtle_transform*: Transform = Transform.init
-    voxels_per_frame* {.ignore.}: float
-    voxels_remaining_this_frame* {.ignore.}: float
-    # `speed = auto` ramp state (see builds.nim). `active` while the draw rate
-    # is ramping up, `started` once the first block anchors the clock, `done`
-    # after it has handed off to ASAP — so a later `speed = auto` (e.g. an
-    # `asap:` block restoring the speed) doesn't restart a finished ramp.
-    auto_ramp_active* {.ignore.}: bool
-    auto_ramp_started* {.ignore.}: bool
-    auto_ramp_done* {.ignore.}: bool
-    auto_ramp_start* {.ignore.}: MonoTime
-    holes_settled* {.ignore.}: bool
-      ## This run's initial batch of drawing is over (see settle_holes).
-    drawing* {.ignore.}: bool
+    draw_state* {.ignore.}: DrawState
     bounds*: AABB
     bot_collisions*: bool
     frame_order*: FrameOrder = FrameOrder(ids: @[0], next_id: 1)
@@ -559,36 +596,20 @@ type
       ## Replaced whole on change: ed's positional seq ops don't sync
       ## order-safely.
     saved_frames_hash* {.ignore.}: Hash
-    run_from_frame* {.ignore.}: Option[int]
-      ## Host-local: the frame on screen when this run started, which the
-      ## run's first move to a new frame takes its blocks from.
-    bakes* {.ignore.}: Table[string, BakeEntry]
-      ## Host-local: what each `bake` key drew, so a run can replay it.
-    baking* {.ignore.}: seq[BakeCapture]
-      ## Host-local: the `bake` blocks whose bodies are running, innermost
-      ## last.
-    bake_key_sites* {.ignore.}: Table[string, string]
-      ## Host-local: where each keyed `bake` this run was called from, so two
-      ## blocks can't share a key.
-    bakes_serial* {.ignore.}: int
-    saved_bakes_serial* {.ignore.}: int
-      ## Host-local: `bakes_serial` changes with the bakes; the save writes
-      ## them when it differs from this.
       ## Host-local: `frames_hash` as of the last frame save or load. Loaded
       ## frames start clean: re-encoding 24 untouched frames on every level
       ## save dominated debug-build load times.
+    run_from_frame* {.ignore.}: Option[int]
+      ## Host-local: the frame on screen when this run started, which the
+      ## run's first move to a new frame takes its blocks from.
+    bakes* {.ignore.}: BakeState
     current_frame*: int
       ## The frame on screen, by index. Playback moves it; otherwise it
       ## follows `frame`. Hand edits go to it.
     frame* {.ignore.}: int
       ## The frame the script draws into, by index. A script run starts on
       ## frame 0.
-    frames_fps*: float
-      ## > 0 while playing; the server advances `current_frame` at this rate.
-    frames_loop*: bool = true
-    frames_first*: int
-    frames_last*: int
-      ## The frames playback runs through; `play` checks none are missing.
+    playback*: Playback
     display_checked_frame*: int = -1
       ## The frame on screen, once the main thread's display check (build_node's
       ## `check_display`) has seen every loaded chunk show it; -1 until then.
@@ -844,13 +865,13 @@ proc from_flatty*(s: string, i: var int, n: var EdContext) =
 proc to_flatty*(s: var string, n: EdContext) =
   discard
 
-proc packed_chunks*(self: VoxelStore): EdTable[FrameChunk, SnapshotData] =
+proc packed_chunks*(self: VoxelStore): Ed[Table[FrameChunk, SnapshotData]] =
   ## Read the Build's table live — never cache it: a reload reincarnates the Ed
   ## field (ed revives it in place), so reading through the Build always sees the
   ## current table; a cached copy would dangle on the destroyed one.
   self.build.packed_chunks
 
-proc chunk_deltas*(self: VoxelStore): EdTable[FrameChunk, EdSeq[DeltaUpdate]] =
+proc chunk_deltas*(self: VoxelStore): Ed[Table[FrameChunk, Ed[seq[DeltaUpdate]]]] =
   self.build.chunk_deltas
 
 Ed.register(Player, constructor = false)

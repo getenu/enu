@@ -31,8 +31,8 @@ proc init*(
     ctx: EdContext = nil,
     thing_id: string = "",
     build: Build = nil,
-    edit_snapshots: EdTable[EditKey, SnapshotData] = nil,
-    edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]] = nil,
+    edit_snapshots: Ed[Table[EditKey, SnapshotData]] = nil,
+    edit_deltas: Ed[Table[EditKey, Ed[seq[DeltaUpdate]]]] = nil,
 ): VoxelStore =
   # The synced tables (`packed_chunks`/`chunk_deltas`) are the Build's own Ed
   # fields, read live through `build` (not cached) so a reload that reincarnates
@@ -350,7 +350,7 @@ proc flush_chunk_delta(
       let table_owner = self.chunk_deltas.owner_id
       table_owner.own:
         self.chunk_deltas[fc] =
-          EdSeq[DeltaUpdate].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
+          Ed[seq[DeltaUpdate]].init(flags = {SYNC_LOCAL, SYNC_REMOTE})
 
     self.chunk_deltas[fc].add delta
   inc self.deltas_flushed
@@ -441,7 +441,7 @@ proc flush_edit_delta(
       # flush_chunk_delta above.
       let table_owner = self.edit_deltas.owner_id
       table_owner.own:
-        self.edit_deltas[key] = EdSeq[DeltaUpdate].init(
+        self.edit_deltas[key] = Ed[seq[DeltaUpdate]].init(
           ctx = self.ctx, flags = {SYNC_LOCAL, SYNC_REMOTE}
         )
 

@@ -151,7 +151,7 @@ Per gate build, "rendered" = `ASAP_MODE notin build.global_flags` **and**
 `build.pending_block_updates == 0` for a short streak (wait_for_script uses 3
 consecutive zeros) — plus a **timeout** (an animated `loop:`/`move me` build never
 finishes, and a slow mesh can't hang the load forever). `pending_block_updates`
-is main-computed (`build_node.process`) and is an `EdValue` (synced). While
+is main-computed (`build_node.process`) and is an `Ed` value (synced). While
 waiting for voxels to settle the script must not be advancing — `ASAP_MODE`
 cleared guarantees the initial draw is done.
 

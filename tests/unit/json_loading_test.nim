@@ -7,14 +7,14 @@ import models/serializers {.all.} # import private procs like from_json_hook
 
 # Mock Shared object since we don't have full game state
 type MockShared = ref object
-  edit_snapshots: EdTable[EditKey, SnapshotData]
-  edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]]
+  edit_snapshots: Ed[Table[EditKey, SnapshotData]]
+  edit_deltas: Ed[Table[EditKey, Ed[seq[DeltaUpdate]]]]
 
 suite "JSON Loading of Holes":
   setup:
     let shared = Shared(
-      edit_snapshots: EdTable[EditKey, SnapshotData].init(),
-      edit_deltas: EdTable[EditKey, EdSeq[DeltaUpdate]].init(),
+      edit_snapshots: Ed[Table[EditKey, SnapshotData]].init(),
+      edit_deltas: Ed[Table[EditKey, Ed[seq[DeltaUpdate]]]].init(),
     )
 
   test "loading [0, \"\"] from JSON results in persisted hole":

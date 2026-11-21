@@ -11,7 +11,7 @@ Today a build has two representations of its blocks:
   Build, the `Shared` edit tables, and the `VoxelStore` that decodes them.
   Everything reads and writes these: drawing, hand edits, the computed and
   manual rules, collisions, saving and the normal render path.
-- **Frames.** `frames: EdTable[int, FrameData]` holds whole-build snapshots as
+- **Frames.** `frames: Ed[Table[int, FrameData]]` holds whole-build snapshots as
   packed chunks, and playback renders them with a second renderer
   (`FramePlayer`).
 
@@ -39,7 +39,7 @@ single-frame build is just a build with one frame.
 
 - Each frame has a stable `FrameId` (an int that is never reused within the
   build).
-- `frame_order: EdValue[seq[FrameId]]` maps index to id. It is replaced whole
+- `frame_order: Ed[seq[FrameId]]` maps index to id. It is replaced whole
   on change, because ed's positional seq ops don't sync order-safely.
 - Inserting, deleting and reordering frames only edits `frame_order`. No
   chunk data moves. Copying a frame copies its rows under a new id.

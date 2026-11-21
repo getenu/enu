@@ -3,34 +3,20 @@ import pkg/godot except print
 import godotapi/[node, spatial]
 import core, models, nodes/[bot_node, build_node, sign_node, player_node]
 
-proc remove_from_scene(thing: Thing) =
-  debug "removing thing", thing = thing.id
-  if not ?thing.node:
-    # Worker added the thing to its parent's `things` collection, but the
-    # main-thread watcher hadn't run `add_to_scene` yet. Nothing to remove
-    # from the scene tree; just destroy the thing.
-    thing.destroy
-    thing.parent = nil
-    return
-  if thing == last_edited:
-    last_edited = nil
-  if thing == aim_join:
-    aim_join = nil
-  if thing == stroke.target:
-    stroke.target = nil
+proc reset_nodes()
 
-  # Untrack the thing's watchers up front — before the teardown below mutates
-  # flags / clears children — so no watcher fires against the node we're about
-  # to free. `destroy` finishes the lifetime again at the end (idempotent).
+proc remove_from_scene(thing: Thing) =
+  ## The thing was destroyed (here or in another context): free its node. Its
+  ## children are destroyed with it and free their own.
+  debug "removing thing", thing = thing.id
+  if thing == last_edited or thing == aim_join or thing == stroke.target:
+    reset_nodes()
+  if not ?thing.node:
+    return
+
+  # Untrack the thing's watchers before the node goes, so none fires against it.
   if ?thing.lifetime:
     thing.lifetime.finish()
-
-  thing.global_flags -= READY
-
-  let things = thing.things.value
-  thing.things.clear
-  for child in things:
-    child.remove_from_scene()
 
   if thing.node of BuildNode:
     BuildNode(thing.node).model = nil
@@ -41,9 +27,6 @@ proc remove_from_scene(thing: Thing) =
   thing.node.queue_free()
   debug "removing node", thing_id = thing.id
   thing.node = nil
-
-  thing.destroy
-  thing.parent = nil
 
 proc add_to_scene(thing: Thing) =
   debug "adding thing to scene", thing = thing.id
@@ -68,6 +51,11 @@ proc add_to_scene(thing: Thing) =
       node.setup
     thing.main_thread_joined
     thing.global_flags += READY
+
+  thing.on_destroy:
+    # Main-thread globals (the stroke, last_edited), as in the node watchers.
+    {.cast(gcsafe).}:
+      remove_from_scene(it)
 
   let parent_node =
     if GLOBAL in thing.global_flags: state.nodes.data else: thing.parent.node
@@ -143,10 +131,6 @@ proc find_nested_changes(parent: Change[Thing]) =
         # FIXME: this is being set for the worker thread in script_controller
         change.item.fix_parents(parent.item)
         change.item.add_to_scene()
-      elif Removed in change.changes:
-        if TRANSFERRING notin change.item.global_flags:
-          reset_nodes()
-          change.item.remove_from_scene()
     elif change.type_name == $Change[GlobalModelFlags]:
       let change = Change[GlobalModelFlags](change)
       if change.item == GLOBAL:
@@ -162,10 +146,6 @@ proc watch_things(self: NodeController, thing: Thing) {.gcsafe.} =
     if added:
       change.item.fix_parents(thing)
       self.add_or_defer(change.item)
-    elif removed:
-      if TRANSFERRING notin change.item.global_flags:
-        reset_nodes()
-        change.item.remove_from_scene()
 
   thing.global_flags.watch(thing):
     if GLOBAL.added:
@@ -216,14 +196,6 @@ proc watch*(self: NodeController, state: GameState) =
       # stale back-ref left by `release` (which re-roots an adopted thing).
       change.item.parent = nil
       self.add_or_defer(change.item)
-    elif removed:
-      if TRANSFERRING in change.item.global_flags:
-        discard
-      else:
-        change.item.remove_from_scene()
-      # No explicit queue_free: the Thing is an EdRef, reclaimed by ORC once
-      # unreferenced (ed then prunes its ref_pool entry). remove_from_scene
-      # already handles the Godot node teardown. (step 4.3)
 
 proc init*(_: type NodeController): NodeController =
   result = NodeController()

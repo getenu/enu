@@ -172,9 +172,9 @@ gdobj BuildNode of VoxelTerrain:
   proc showing(fc: FrameChunk): bool =
     ## Whether the terrain holds this frame's chunk as is: the frame on screen
     ## while nothing plays. Other frames' changes go to the frame player.
-    fc.frame == self.model.voxels.frame_id and self.model.frames_fps <= 0
+    fc.frame == self.model.voxels.frame_id and self.model.playback.fps <= 0
 
-  proc watch_delta_seq(fc: FrameChunk, delta_seq: EdSeq[DeltaUpdate]) =
+  proc watch_delta_seq(fc: FrameChunk, delta_seq: Ed[seq[DeltaUpdate]]) =
     if fc in self.tracked_delta_seqs:
       return
     let chunk_id = fc.loc
@@ -347,7 +347,7 @@ gdobj BuildNode of VoxelTerrain:
       self.model.display_checked_frame = frame
 
   proc check_display_chunk(chunk_id: Vector3, content: Option[Hash]) =
-    let playing = self.model.frames_fps > 0
+    let playing = self.model.playback.fps > 0
     let frame = self.model.current_frame
     self.display_clean.del chunk_id
     var (model, shown, differ) =
@@ -375,7 +375,7 @@ gdobj BuildNode of VoxelTerrain:
     ## A full pass where nothing changed and nothing differed means the
     ## screen shows the frame: publish it. Then start the next pass.
     let frame = self.model.current_frame
-    let playing = self.model.frames_fps > 0
+    let playing = self.model.playback.fps > 0
     if self.display_pass_ok and self.display_pass_frame == frame and
         not (playing and self.frames.display_pending):
       self.display_checked(frame)
@@ -424,7 +424,7 @@ gdobj BuildNode of VoxelTerrain:
       return false
     let chunk_id = next.get
     inc self.display_visits_this_frame
-    if self.model.frames_fps > 0:
+    if self.model.playback.fps > 0:
       # playing: only the frame player's bookkeeping is checked, which is cheap
       self.check_display_chunk(chunk_id, none(Hash))
       return true
@@ -452,7 +452,7 @@ gdobj BuildNode of VoxelTerrain:
         now + DISPLAY_RECHECK_INTERVAL * max(display_nodes.len, 1)
       dec display_checks_left
       let content =
-        if self.model.frames_fps > 0: none(Hash)
+        if self.model.playback.fps > 0: none(Hash)
         else: self.display_content(next.get)
       self.check_display_chunk(next.get, content)
 
@@ -551,7 +551,7 @@ gdobj BuildNode of VoxelTerrain:
       # painting the shown frame would schedule a remesh that lands after
       # (and overwrites) a directly-set cached frame mesh.
       let playing =
-        self.model.frames_fps > 0 and ASAP_MODE notin self.model.global_flags
+        self.model.playback.fps > 0 and ASAP_MODE notin self.model.global_flags
       # A block prefilled with a frame that has since left the screen (a run's
       # first frame change can land while its blocks page in) is repainted.
       let stale = prefilled and prefill.frame_id != self.model.voxels.frame_id
@@ -640,9 +640,9 @@ gdobj BuildNode of VoxelTerrain:
     ## frame player only drives playback.
     if RESETTING in self.model.global_flags:
       self.model.target_shown_frame()
-    elif ASAP_MODE in self.model.global_flags and self.model.frames_fps <= 0:
+    elif ASAP_MODE in self.model.global_flags and self.model.playback.fps <= 0:
       self.show_deferred = true
-    elif self.model.frames_fps <= 0:
+    elif self.model.playback.fps <= 0:
       self.show_deferred = false
       self.model.target_shown_frame()
       self.frames.reset()
@@ -852,7 +852,7 @@ gdobj BuildNode of VoxelTerrain:
       if added:
         self.show_current_frame()
 
-    self.model.frames_fps_value.watch:
+    self.model.playback_value.watch:
       if added:
         self.show_current_frame()
 
@@ -1132,7 +1132,7 @@ gdobj BuildNode of VoxelTerrain:
 
     self.model.sight_ray = self.get_node("SightRay") as RayCast
     self.prepare_materials()
-    if self.model.frames_fps > 0:
+    if self.model.playback.fps > 0:
       self.frames.render(self.model.current_frame)
 
 proc init*(_: type BuildNode): BuildNode =

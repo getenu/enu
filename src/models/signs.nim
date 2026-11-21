@@ -50,5 +50,3 @@ method main_thread_joined*(self: Sign) =
       self.local_flags -= HIGHLIGHT
       state.pop_flag RETICLE_VISIBLE
 
-method destroy*(self: Sign) =
-  self.destroy_impl

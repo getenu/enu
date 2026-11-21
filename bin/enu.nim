@@ -27,7 +27,7 @@ proc bot_id(agent_id: string): string =
 proc last_transform(id: string): Transform =
   result = Transform.init(vec3(0, 0, 0))
   if not Enu.client.prev.is_nil and "root_things" in Enu.client.prev:
-    for thing in EdSeq[Thing](Enu.client.prev["root_things"]):
+    for thing in Ed[seq[Thing]](Enu.client.prev["root_things"]):
       if thing.id == id and ?thing.transform_value:
         return thing.transform
 

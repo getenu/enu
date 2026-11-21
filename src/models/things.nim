@@ -198,7 +198,7 @@ proc step_toward*(
   arrived and abs(turn) <= max_degrees
 
 template get_or_init*[T](
-    things: EdSeq[Thing], _: typedesc[T], thing_id: string, init: untyped
+    things: Ed[seq[Thing]], _: typedesc[T], thing_id: string, init: untyped
 ): T =
   ## The thing with `thing_id` in `things`, or `init` evaluated and added —
   ## Ruby's `||=` for a thing collection.
@@ -213,7 +213,7 @@ template get_or_init*[T](
       things.add found
     found
 
-proc query*(self: Thing, q: ThingQuery): EdValue[ThingQuery] =
+proc query*(self: Thing, q: ThingQuery): Ed[ThingQuery] =
   ## File a cross-context query against this thing and return the slot its
   ## answer arrives in — watch for `state == DONE`. Whichever context owns
   ## the thing's behavior answers (today: the server, for ephemeral bots).
@@ -228,7 +228,7 @@ proc query*(
     code = "",
     top_level = false,
     thing_id = "",
-): EdValue[ThingQuery] =
+): Ed[ThingQuery] =
   self.query ThingQuery(
     kind: kind, code: code, top_level: top_level, thing_id: thing_id
   )
@@ -315,8 +315,8 @@ proc reparent_to_root*(self: Thing) =
   ## Move `self` out of its current parent's `things` into the top-level
   ## `state.things`, re-rooting its node and restoring its world transform — the
   ## reverse of `adopt`. Also used to evacuate a non-owned child when its parent
-  ## is destroyed. `TRANSFERRING` keeps the collection move from being read as a
-  ## delete; it's cleared on the next tick.
+  ## is destroyed. `TRANSFERRING` marks the collection move (see its doc); it's
+  ## cleared on the next tick.
   let parent = self.parent
   if parent.is_nil:
     return
@@ -331,43 +331,48 @@ proc reparent_to_root*(self: Thing) =
   after_boop:
     self.global_flags -= TRANSFERRING
 
-method destroy*(self: Thing) {.gcsafe.} =
-  # Override of ed's EdRef base: a Thing must be destroyed through a concrete
-  # subtype's destroy (Bot/Build/Sign/Player), which does enu cleanup and then
-  # calls the generic EdRef teardown.
-  fail "override me"
+proc check_fields_owned[T: Thing](self: T) =
+  # Dev safety net: every direct Ed container should have been attributed to us
+  # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
+  # it'd leak silently, so surface it loudly.
+  for field in self[].fields:
+    when field is Ed:
+      # Skip unloaded placeholders: on a narrow replica the closure may not
+      # have arrived, and ownership stamps ride with it.
+      if ?field and field.loaded:
+        let fid = field.id
+        if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
+          const field_type = $typeof(field)
+          error "unowned Ed field at destroy (missing id.own:/own:?)",
+            thing = self.id, field_id = fid, field_type
 
-proc destroy_impl*(self: Bot | Build | Sign) =
+proc destroy_impl*(self: Thing) =
   if self.destroyed:
     return
 
-  # Dev safety net: every direct Ed container should have been attributed to us
-  # (via `id.own:` at construction). One that wasn't is a forgotten own-scope —
-  # it'd leak silently, so surface it loudly. Not in release.
   when not defined(release):
-    for field in self[].fields:
-      when field is Ed:
-        # Skip unloaded placeholders: on a narrow replica the closure may not
-        # have arrived, and ownership stamps ride with it.
-        if ?field and field.loaded:
-          let fid = field.id
-          if fid notin Ed.thread_ctx.owned_by.getOrDefault(self.id):
-            const field_type = $typeof(field)
-            error "unowned Ed field at destroy (missing id.own:/own:?)",
-              thing = self.id, field_id = fid, field_type
+    if self of Build: Build(self).check_fields_owned
+    elif self of Bot: Bot(self).check_fields_owned
+    elif self of Sign: Sign(self).check_fields_owned
+    else: self.check_fields_owned
 
-  if state.player.coding == self:
-    state.player.coding = nil
+  # An external client (the MCP server, a test) has no game state; it destroys
+  # its copies when the destroy arrives from Enu.
+  if not state.is_nil:
+    if state.player.coding == self:
+      state.player.coding = nil
 
-  when self is Sign:
-    if state.player.open_sign_value.valid and state.player.open_sign == self:
+    if self of Sign and state.player.open_sign_value.valid and
+        state.player.open_sign == Sign(self):
       state.player.open_sign = nil
 
-  # Unlink from the parent (syncs REMOVED). parent is a {.cursor.} — no cycle to
-  # break by nil-ing it, and ORC owns the memory now.
+  # Unlink (syncs REMOVED). The context that destroys a thing is the one that
+  # removes it; every other context tears its copy down when the destroy
+  # arrives (`on_destroy`), and a removal on its own is only a move.
   if ?self.parent:
-    self.parent.things.pause:
-      self.parent.things -= self
+    self.parent.things -= self
+  elif not state.is_nil and self in state.things:
+    state.things -= self
 
   # Everything else is ownership: the EdRef teardown finishes our lifetime
   # (callbacks) and destroys all we own — our containers, the child things (the
@@ -375,14 +380,20 @@ proc destroy_impl*(self: Bot | Build | Sign) =
   # the root, the shared voxel-edit tables (created in our `id.own:` scope).
   proc_call EdRef(self).destroy()
 
-proc clear_all*(things: EdSeq[Thing]) =
-  var roots = things.value
-  for thing in roots:
+method destroy*(self: Thing) {.gcsafe.} =
+  # Override of ed's EdRef base: enu's cleanup, then ed's teardown. Here rather
+  # than on each kind of thing so a process that doesn't link the kinds' own
+  # code (the MCP server, a test client) still tears down what it receives.
+  self.destroy_impl
+
+proc destroy_all*(things: Ed[seq[Thing]]) =
+  for thing in things.value:
+    thing.destroy
+
+proc clear_all*(things: Ed[seq[Thing]]) =
+  for thing in things.value:
     # EPHEMERAL things (the human's Player + client-owned bots like MCP)
     # survive level reloads. Their lifecycle belongs to the owning
     # remote context, not the loaded level.
-    if EPHEMERAL in thing.global_flags:
-      continue
-    thing.walk_tree proc(thing: Thing) =
-      thing.things.clear
-    things -= thing
+    if EPHEMERAL notin thing.global_flags:
+      thing.destroy
