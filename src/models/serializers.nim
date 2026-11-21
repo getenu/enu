@@ -202,6 +202,9 @@ proc load_bakes(self: Build) =
         let offset = read_i32(data, i)
         let frame = decode_frame_file(read_str(), prev)
         entry.frames[offset] = frame
+        for chunk_id, packed in frame.chunks:
+          if packed.erases:
+            entry.erasing.incl (offset, chunk_id)
         prev = some(frame)
       self.bakes.entries[key] = entry
   except ValueError, IndexDefect, JsonParsingError:

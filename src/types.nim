@@ -122,6 +122,9 @@ type
       ## The pen color the body left, if it changed it.
     drawing*: Option[bool]
       ## Likewise whether the turtle draws.
+    erasing*: HashSet[tuple[offset: int, chunk: Vector3]]
+      ## The recorded chunks that erase somewhere: a replay onto an empty chunk
+      ## can't take those as is. Worked out on record and load, not saved.
 
   BakeCapture* = object
     ## A `bake` block whose body is running: what it has drawn so far.

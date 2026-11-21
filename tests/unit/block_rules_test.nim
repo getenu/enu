@@ -55,6 +55,29 @@ suite "Computed and manual blocks":
     build.computed(ACTION_COLORS[ERASER])
     check build.voxel_info(spot) == (PERSISTED, red)
 
+  test "a bake replayed onto an empty chunk stores none of its erasing":
+    let build = Build.init(id = "build_rules_bake_erase_empty")
+    # a chunk away from the origin block, so nothing is there yet
+    let chunk_id = vec3(2, 0, 0)
+    let erased = vec3(1, 1, 1)
+    let kept = vec3(2, 2, 2)
+    var cells: array[CHUNK_VOLUME, PackedVoxel]
+    cells[linear_position(erased)] =
+      pack_voxel(pack_color_index(build.shared, ACTION_COLORS[ERASER]), TRANSIENT.ord)
+    cells[linear_position(kept)] =
+      pack_voxel(pack_color_index(build.shared, red), TRANSIENT.ord)
+    let packed = encode_chunk(cells)
+    check packed.erases
+    let fc: FrameChunk = (build.voxels.frame_id, chunk_id)
+    let origin = chunk_id * ChunkDim.float
+    check build.voxels.stamp_chunk(fc, packed, erases = true)
+    check origin + erased notin build.voxels
+    check build.voxels.voxel_info(origin + kept) == (TRANSIENT, red)
+    build.voxels.flush_dirty_chunks()
+    let stored = decode_chunk(build.voxels.chunk_bytes(fc))
+    check stored[linear_position(erased)] == EMPTY_VOXEL
+    check stored[linear_position(kept)] != EMPTY_VOXEL
+
   test "erasing a manual block leaves no hole":
     let build = Build.init(id = "build_rules_erase_manual")
     build.manual(red)
