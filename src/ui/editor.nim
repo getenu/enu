@@ -124,7 +124,6 @@ gdobj Editor of MarginContainer:
     self.mouse_filter = MOUSE_FILTER_STOP
 
   proc close_editor() =
-    self.text_edit.release_focus()
     self.rect_position = vec2(0, 0)
     if ?self.tween:
       self.tween.kill
@@ -138,9 +137,6 @@ gdobj Editor of MarginContainer:
     discard self.tween.tween_callback(
       self, "set_visible", new_array(false.to_variant)
     )
-
-  method open_done() =
-    state.pop_flag EDITOR_CLOSING
 
   proc open_editor() =
     self.opacity = 0.0
@@ -159,7 +155,6 @@ gdobj Editor of MarginContainer:
       )
       .set_trans(TRANS_EXPO)
       .set_ease(EASE_IN_OUT)
-    discard self.tween.tween_callback(self, "_open_done")
 
   proc watch_open_thing() =
     var line_zid, code_zid: EID
@@ -213,20 +208,17 @@ gdobj Editor of MarginContainer:
         self.highlight_errors()
       elif CONSOLE_VISIBLE.removed:
         self.clear_errors()
-      elif EDITOR_FOCUSED.added:
-        self.text_edit.grab_focus
+      if EDITOR_FOCUSED.added:
         self.left_panel.raisee()
       if COMMAND_MODE.added:
         if EDITOR_VISIBLE in state.local_flags:
           state.player.coding.code = Code.init(self.text_edit.text)
 
           self.ghost()
-          self.text_edit.release_focus()
           self.mouse_filter = MOUSE_FILTER_IGNORE
       elif COMMAND_MODE.removed:
         if EDITOR_VISIBLE in state.local_flags:
           self.unghost()
-          self.text_edit.grab_focus()
           self.mouse_filter = MOUSE_FILTER_STOP
 
   proc watch() =

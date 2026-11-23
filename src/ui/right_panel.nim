@@ -113,8 +113,6 @@ gdobj RightPanel of MarginContainer:
         self.raisee()
         find("Close", Control).visible = true
       elif DOCS_FOCUSED.removed:
-        self.label.release_focus
-        self.code.release_focus
         if FULL_WIDTH_PANELS in state.local_flags and
             VIEWPORT_FOCUSED notin state.local_flags:
           find("Close", Control).visible = false

@@ -469,7 +469,7 @@ gdobj PlayerNode of KinematicBody:
           self.camera.project_ray_normal(mouse_pos) * ray_length
 
       self.world_ray.cast_to =
-        if VIEWPORT_FOCUSED in state.local_flags: cast_to else: cast_from
+        if POINTER_IN_VIEWPORT in state.local_flags: cast_to else: cast_from
 
       self.world_ray.translation = cast_from
       self.aim_target.update(self.world_ray)

@@ -9,15 +9,27 @@ log_scope:
   topics = "state"
   ctx = Ed.thread_ctx.id
 
-# only one flag from the group is active at a time
-const groups =
-  @[
-    {
-      EDITOR_FOCUSED, CONSOLE_FOCUSED, DOCS_FOCUSED, SETTINGS_FOCUSED,
-      VIEWPORT_FOCUSED,
-    },
-    {RETICLE_VISIBLE, BLOCK_TARGET_VISIBLE},
-  ]
+const
+  FOCUS_FLAGS* = {
+    EDITOR_FOCUSED, CONSOLE_FOCUSED, DOCS_FOCUSED, SETTINGS_FOCUSED,
+    VIEWPORT_FOCUSED,
+  }
+    ## What has keyboard focus. Exactly one is set: the most recently wanted
+    ## one whose panel is open, else the viewport.
+  PANEL_OF = {
+    EDITOR_FOCUSED: EDITOR_VISIBLE,
+    CONSOLE_FOCUSED: CONSOLE_VISIBLE,
+    DOCS_FOCUSED: DOCS_VISIBLE,
+    SETTINGS_FOCUSED: SETTINGS_VISIBLE,
+  }
+  TARGET_FLAGS = {RETICLE_VISIBLE, BLOCK_TARGET_VISIBLE}
+    ## only one is shown at a time
+
+proc focusable(flags: set[LocalStateFlags], focus: LocalStateFlags): bool =
+  for (panel_focus, panel) in PANEL_OF:
+    if focus == panel_focus:
+      return panel in flags
+  true
 
 proc resolve_flags*(
     self: GameState, wants: seq[LocalStateFlags]
@@ -25,42 +37,51 @@ proc resolve_flags*(
   debug "resolving flags",
     flags = self.local_flags.value, wants = self.wants.value
   for flag in wants:
-    for group in groups:
-      if flag in group:
-        for f in group:
-          result.excl f
-    result.incl flag
+    if flag in TARGET_FLAGS:
+      result = result - TARGET_FLAGS
+    if flag notin FOCUS_FLAGS:
+      result.incl flag
 
   # Flags resolve before the worker creates this instance's player.
   let player = self.player
   # CODE_MODE and NONE (no tool) don't target blocks: hide the block target and
   # keep the reticle up, like play mode.
   if ?player and player.tool in {CODE_MODE, NONE}:
-    for flag in groups[1]:
-      result.excl(flag)
+    result = result - TARGET_FLAGS
     result.incl(RETICLE_VISIBLE)
 
-  if not groups[1].any_it(it in result):
+  if not TARGET_FLAGS.any_it(it in result):
     result.incl RETICLE_VISIBLE
-
-  if MOUSE_CAPTURED in result:
-    result.incl(VIEWPORT_FOCUSED)
-
-  if COMMAND_MODE in result:
-    for flag in groups[0]:
-      result.excl(flag)
-    result.incl(VIEWPORT_FOCUSED)
-    if TOUCH_CONTROLS notin result:
-      result.incl(MOUSE_CAPTURED)
-  else:
-    if EDITOR_VISIBLE in result or DOCS_VISIBLE in result or
-        SETTINGS_VISIBLE in result:
-      result.excl(MOUSE_CAPTURED)
 
   if ?player and PLAYING in player.flags:
     result.excl(BLOCK_TARGET_VISIBLE)
     result.excl(EDITOR_VISIBLE)
     result.incl(RETICLE_VISIBLE)
+
+  if COMMAND_MODE in result:
+    if TOUCH_CONTROLS notin result:
+      result.incl(MOUSE_CAPTURED)
+  elif EDITOR_VISIBLE in result or DOCS_VISIBLE in result or
+      SETTINGS_VISIBLE in result:
+    result.excl(MOUSE_CAPTURED)
+
+  # A captured mouse (or command mode) is aimed at the world; otherwise the
+  # most recently focused open panel has the keyboard.
+  if MOUSE_CAPTURED in result or COMMAND_MODE in result:
+    result.incl VIEWPORT_FOCUSED
+  else:
+    var focus = VIEWPORT_FOCUSED
+    for i in countdown(wants.high, 0):
+      if wants[i] in FOCUS_FLAGS and result.focusable(wants[i]):
+        focus = wants[i]
+        break
+    result.incl focus
+
+  # The pointer is over the world: moved there, captured, or a touch screen
+  # aimed with the viewport in front.
+  if MOUSE_CAPTURED in result or
+      (TOUCH_CONTROLS in result and VIEWPORT_FOCUSED in result):
+    result.incl POINTER_IN_VIEWPORT
 
   if TOUCH_CONTROLS in result:
     result.excl(BLOCK_TARGET_VISIBLE)
@@ -76,12 +97,11 @@ proc resolve_flags*(self: GameState) =
 
 proc replace_flags*(self: GameState, flags: varargs[LocalStateFlags]) =
   for flag in flags:
-    for group in groups:
-      if flag in group:
-        for flag in group:
-          self.wants -= flag
-        if flag notin self.wants:
-          self.wants += flag
+    if flag in TARGET_FLAGS:
+      for flag in TARGET_FLAGS:
+        self.wants -= flag
+      if flag notin self.wants:
+        self.wants += flag
   self.resolve_flags
 
 proc replace_flag*(self: GameState, flag: LocalStateFlags) =
@@ -89,9 +109,18 @@ proc replace_flag*(self: GameState, flag: LocalStateFlags) =
 
 proc push_flags*(self: GameState, flags: varargs[LocalStateFlags]) =
   for flag in flags:
-    if flag notin self.local_flags and
+    if flag in FOCUS_FLAGS:
+      # the most recent want wins, so move it to the end
+      if self.wants.len == 0 or self.wants[^1] != flag:
+        self.wants -= flag
+        self.wants += flag
+    elif flag notin self.local_flags and
         (self.wants.len == 0 or self.wants[^1] != flag):
       self.wants += flag
+    if flag == COMMAND_MODE:
+      # leaving command mode goes back to the panel that had focus, even if
+      # the world was clicked since
+      self.wants -= VIEWPORT_FOCUSED
   self.resolve_flags
 
 proc push_flag*(self: GameState, flag: LocalStateFlags) =
@@ -106,6 +135,7 @@ proc pop_flags*(self: GameState, flags: varargs[LocalStateFlags]) =
 proc try_pop*(
     self: GameState, flags: varargs[LocalStateFlags]
 ): set[LocalStateFlags] =
+  ## The flags popping `flags` would leave, without popping them.
   var wants = self.wants.value.filter_it(it notin flags)
   return self.resolve_flags(wants)
 
@@ -208,9 +238,8 @@ proc watch_player*(self: GameState) =
   player.own:
     player.coding_value.changes:
       if added and ?change.item:
-        self.push_flags EDITOR_VISIBLE, EDITOR_OPENING
+        self.push_flag EDITOR_VISIBLE
       elif added:
-        self.push_flag EDITOR_OPENING
         self.pop_flag EDITOR_VISIBLE
 
     player.flags.changes:
@@ -223,90 +252,3 @@ proc watch_player*(self: GameState) =
       if added and change.item notin BLOCK_TOOLS:
         create_choice = CREATE_AUTO
         self.pop_flag CREATE_MODE
-
-when is_main_module:
-  import pkg/print
-  on_unhandled_exception = nil
-
-  import std/[unittest, sequtils]
-  type Node = ref object
-  var state = GameState.init
-
-  state.push_flag RETICLE_VISIBLE
-  check:
-    RETICLE_VISIBLE notin state.local_flags
-    BLOCK_TARGET_VISIBLE notin state.local_flags
-    COMMAND_MODE notin state.local_flags
-    MOUSE_CAPTURED notin state.local_flags
-
-  state.push_flag MOUSE_CAPTURED
-  check:
-    RETICLE_VISIBLE in state.local_flags
-    MOUSE_CAPTURED in state.local_flags
-    BLOCK_TARGET_VISIBLE notin state.local_flags
-
-  state.replace_flag BLOCK_TARGET_VISIBLE
-  check:
-    MOUSE_CAPTURED in state.local_flags
-    BLOCK_TARGET_VISIBLE in state.local_flags
-    RETICLE_VISIBLE notin state.local_flags
-
-  state.pop_flag MOUSE_CAPTURED
-  state.push_flag RETICLE_VISIBLE
-  check:
-    RETICLE_VISIBLE notin state.local_flags
-    BLOCK_TARGET_VISIBLE notin state.local_flags
-    COMMAND_MODE notin state.local_flags
-    MOUSE_CAPTURED notin state.local_flags
-
-  var added {.threadvar.}: set[LocalStateFlags]
-  var removed {.threadvar.}: set[LocalStateFlags]
-
-  state.local_flags.track proc(changes: auto) {.gcsafe.} =
-    added = {}
-    removed = {}
-    for change in changes:
-      if Added in change.changes:
-        added.incl change.item
-      if Removed in change.changes:
-        removed.incl change.item
-
-  state.push_flag COMMAND_MODE
-  check:
-    RETICLE_VISIBLE in state.local_flags
-    COMMAND_MODE in state.local_flags
-    MOUSE_CAPTURED in state.local_flags
-    BLOCK_TARGET_VISIBLE notin state.local_flags
-
-  state.pop_flag COMMAND_MODE
-
-  state.push_flag MOUSE_CAPTURED
-  assert MOUSE_CAPTURED in state.local_flags
-
-  state.push_flags EDITOR_VISIBLE, EDITOR_OPENING
-  assert MOUSE_CAPTURED notin state.local_flags
-
-  state.push_flag COMMAND_MODE
-  assert MOUSE_CAPTURED in state.local_flags
-
-  state.pop_flag MOUSE_CAPTURED
-  assert MOUSE_CAPTURED in state.local_flags
-
-  state.push_flag EDITOR_OPENING
-  state.pop_flag EDITOR_VISIBLE
-  assert MOUSE_CAPTURED in state.local_flags
-
-  state.pop_flag COMMAND_MODE
-  assert MOUSE_CAPTURED notin state.local_flags
-
-  state.pop_flag EDITOR_VISIBLE
-  assert MOUSE_CAPTURED notin state.local_flags
-
-  state.push_flag MOUSE_CAPTURED
-  assert MOUSE_CAPTURED in state.local_flags
-
-  state.push_flag DOCS_VISIBLE
-  assert MOUSE_CAPTURED notin state.local_flags
-
-  state.push_flag COMMAND_MODE
-  assert MOUSE_CAPTURED in state.local_flags

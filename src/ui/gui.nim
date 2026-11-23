@@ -5,6 +5,7 @@ import
     input_event_action, input, button, gd_os, input_event_key,
     input_event_joypad_button, input_event_mouse_motion,
     input_event_mouse_button, input_event_pan_gesture, global_constants,
+    text_edit,
   ]
 import core, nodes/player_node, gdutils
 import std/times
@@ -49,8 +50,7 @@ gdobj GUI of Control:
     self.down = find("Down", Button)
 
     for control in [self, self.up, self.down]:
-      self.bind_signals control,
-        "mouse_entered", "mouse_exited", "focus_entered", "focus_exited"
+      self.bind_signals control, "mouse_entered", "mouse_exited"
 
     self.bind_signal(
       find("OpenSettings", Button), ("pressed", "settings_opened")
@@ -68,6 +68,8 @@ gdobj GUI of Control:
 
     state.local_flags.changes:
       update_touch_controls()
+      if change.item in FOCUS_FLAGS + {COMMAND_MODE}:
+        self.apply_focus()
     state.player.flags.changes:
       update_touch_controls()
 
@@ -87,16 +89,43 @@ gdobj GUI of Control:
     state.push_flag SETTINGS_VISIBLE
 
   method on_mouse_entered() =
-    state.push_flag VIEWPORT_FOCUSED
+    state.push_flag POINTER_IN_VIEWPORT
 
   method on_mouse_exited() =
-    state.pop_flag VIEWPORT_FOCUSED
+    state.pop_flag POINTER_IN_VIEWPORT
 
-  method on_focus_entered() =
-    state.push_flag VIEWPORT_FOCUSED
+  proc focus_target(): Control =
+    ## The control that should have Godot's keyboard focus, per the focus flag.
+    let flags = state.local_flags
+    if EDITOR_FOCUSED in flags:
+      find("Editor", Control).get_node("TextEdit") as Control
+    elif DOCS_FOCUSED in flags:
+      let panel = find("RightPanel", Control)
+      var target = find("MarkdownLabel", Control)
+      for child in panel.get_children:
+        let child = child.as_object(Node)
+        if child of TextEdit and Control(child).visible:
+          target = Control(child)
+      target
+    elif CONSOLE_FOCUSED in flags:
+      find("Console", Control)
+    elif SETTINGS_FOCUSED in flags:
+      find("Settings", Control)
+    else:
+      self
 
-  method on_focus_exited() =
-    state.pop_flag VIEWPORT_FOCUSED
+  proc apply_focus() =
+    ## Give Godot's keyboard focus to whatever the flags say has it. Inside the
+    ## focused panel, any control may hold it (a settings field, say).
+    let target = self.focus_target
+    let owner = self.get_focus_owner
+    if ?owner and (owner == target or target.is_a_parent_of(owner)):
+      return
+    if target.focus_mode == FOCUS_NONE:
+      if ?owner:
+        owner.release_focus
+    else:
+      target.grab_focus
 
   method handle_player_input*(event: InputEvent) =
     if not ?self:
@@ -240,14 +269,12 @@ gdobj GUI of Control:
       return
     if COMMAND_MODE notin state.local_flags and
         event.is_action_pressed("ui_cancel") and
-        VIEWPORT_FOCUSED in state.local_flags:
-      let flags = state.try_pop(VIEWPORT_FOCUSED)
-      if SETTINGS_FOCUSED in flags:
-        state.pop_flags SETTINGS_FOCUSED, SETTINGS_VISIBLE
-      elif EDITOR_FOCUSED in flags:
-        state.player.coding = nil
-      elif DOCS_FOCUSED in flags:
-        state.player.open_sign = nil
+        VIEWPORT_FOCUSED in state.local_flags and
+        state.try_pop(VIEWPORT_FOCUSED) * FOCUS_FLAGS != {VIEWPORT_FOCUSED}:
+      # Esc in the world goes back to the open panel it came from; the next
+      # Esc closes that panel.
+      state.pop_flag VIEWPORT_FOCUSED
+      self.get_tree().set_input_as_handled()
 
     if event of InputEventKey or event of InputEventAction:
       self.handle_player_input(event)
@@ -287,9 +314,15 @@ gdobj GUI of Control:
         return
       touch_controls
     elif event of InputEventMouseMotion or event of InputEventMouseButton:
+      if event of InputEventMouseButton and
+          InputEventMouseButton(event).pressed and
+          InputEventMouseButton(event).button_index in
+            [BUTTON_LEFT, BUTTON_RIGHT, BUTTON_MIDDLE] and
+          POINTER_IN_VIEWPORT in state.local_flags and
+          COMMAND_MODE notin state.local_flags:
+        # only the mouse takes the keyboard from a panel; a controller doesn't
+        state.push_flag VIEWPORT_FOCUSED
       self.handle_player_input(event)
-      # self.get_tree().set_input_as_handled()
-      # self.accept_event()
 
   method process(delta: float) =
     self.margin_bottom = float(get_virtual_keyboard_height() * -1)

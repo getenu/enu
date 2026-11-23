@@ -1366,7 +1366,7 @@ method main_thread_joined*(self: Build) =
         state.pop_flag BLOCK_TARGET_VISIBLE
 
   state.local_flags.watch:
-    if HOVER in self.local_flags and VIEWPORT_FOCUSED in state.local_flags:
+    if HOVER in self.local_flags and POINTER_IN_VIEWPORT in state.local_flags:
       if PRIMARY_DOWN.added:
         self.fire
       elif SECONDARY_DOWN.added:

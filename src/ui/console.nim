@@ -93,8 +93,14 @@ gdobj Console of RichTextLabel:
     state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
 
   method unhandled_input*(event: InputEvent) =
-    if CONSOLE_FOCUSED in state.local_flags and
-        event.is_action_pressed("ui_cancel"):
+    # While the mouse is captured the world has the keyboard, but Esc still
+    # closes a console that was opened to be looked at.
+    let focused =
+      CONSOLE_FOCUSED in state.local_flags or (
+        MOUSE_CAPTURED in state.local_flags and
+        CONSOLE_VISIBLE in state.local_flags and CONSOLE_FOCUSED in state.wants
+      )
+    if focused and event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
           COMMAND_MODE notin state.local_flags:
         state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
