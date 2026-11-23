@@ -2,9 +2,9 @@ import pkg/[godot]
 import
   godotapi/[
     margin_container, input_event, scene_tree, scene_tree_tween, method_tweener,
-    tween, control,
+    tween, control, text_edit,
   ]
-import ui/markdown_label
+import ui/[markdown_label, editor]
 import core, gdutils, models/[states, colors]
 
 proc set_filter(self: Control, filter: int64) =
@@ -14,15 +14,12 @@ proc set_filter(self: Control, filter: int64) =
     if child of Control:
       set_filter(Control(child), filter)
 
-proc md(self: Sign, md: string): string =
-  if self.text_only:
-    "```nim\n" & md & "\n```"
-  else:
-    md
-
 gdobj RightPanel of MarginContainer:
   var
     label: MarkdownLabel
+    code: TextEdit
+      ## A player's code fills the panel in the left editor's TextEdit, not as
+      ## a markdown code block.
     zid: EID
     margin = 3.0
     center = 1.0
@@ -34,14 +31,27 @@ gdobj RightPanel of MarginContainer:
 
   method ready*() =
     self.label = self.find_node("MarkdownLabel") as MarkdownLabel
+    self.code =
+      self.get_node("../LeftPanel").find_node("Editor").get_node(
+        "TextEdit"
+      ).duplicate as TextEdit
+    self.code.readonly = true
+    self.code.always_draw_caret = false
+    self.code.visible = false
+    self.code.configure_highlighting
+    self.add_child(self.code)
+    self.move_child(self.code, self.label.get_index + 1)
 
     state.nodes.game.bind_signal(self.label, "gui_input", self.name)
+    state.nodes.game.bind_signal(self.code, "gui_input", self.name)
     self.bind_signal(find("Close", Control), ("pressed", "close"))
 
     state.status_message_value.changes:
       if added:
         if ?change.item:
           state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
+          self.code.visible = false
+          self.label.visible = true
           self.label.markdown = change.item
           self.label.update
         else:
@@ -53,12 +63,12 @@ gdobj RightPanel of MarginContainer:
       if added and change.item != nil:
         state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
         var sign = change.item
-        self.label.markdown = md(sign, sign.more)
-        self.label.update
+        self.code.visible = sign.text_only
+        self.label.visible = not sign.text_only
+        self.show_more(sign, sign.more)
         self.zid = sign.more_value.changes:
           if added:
-            self.label.markdown = md(sign, change.item)
-            self.label.update
+            self.show_more(sign, change.item)
       if removed and change.item != nil:
         if change.item.more_value.valid:
           change.item.more_value.untrack(self.zid)
@@ -102,6 +112,7 @@ gdobj RightPanel of MarginContainer:
         find("Close", Control).visible = true
       elif DOCS_FOCUSED.removed:
         self.label.release_focus
+        self.code.release_focus
         if FULL_WIDTH_PANELS in state.local_flags and
             VIEWPORT_FOCUSED notin state.local_flags:
           find("Close", Control).visible = false
@@ -111,6 +122,13 @@ gdobj RightPanel of MarginContainer:
         self.unghost()
         find("Overlay", Control).set_mouse_filter_recursive(MOUSE_FILTER_IGNORE)
         find("Close", Control).mouse_filter = MOUSE_FILTER_STOP
+
+  proc show_more(sign: Sign, more: string) =
+    if sign.text_only:
+      self.code.text = more
+    else:
+      self.label.markdown = more
+      self.label.update
 
   method on_close() =
     state.player.open_sign = nil
