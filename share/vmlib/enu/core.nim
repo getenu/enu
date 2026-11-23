@@ -413,12 +413,11 @@ proc turn*(self: Thing, direction: Directions, degrees = 90.0, move_mode: int) =
   self.begin_turn(dir, degrees, false, move_mode)
 
 proc turn*(self: Thing, degrees: float, move_mode: int) =
-  let degrees = floor_mod(degrees, 360)
-  if degrees <= 180:
+  # not wrapped to a circle: in move mode `turn 360` spins all the way around
+  if degrees >= 0:
     self.turn Directions.right, degrees, move_mode
   else:
-    let d = 180 - (degrees - 180)
-    self.turn Directions.left, 180 - (degrees - 180), move_mode
+    self.turn Directions.left, -degrees, move_mode
 
 template turn*(self: Thing, direction: Directions, degrees = 90.0) =
   mixin wait
@@ -464,11 +463,11 @@ proc lean*(self: Thing, direction: Directions, degrees = 90.0, move_mode: int) =
   self.begin_turn(dir, degrees, true, move_mode)
 
 proc lean*(self: Thing, degrees: float, move_mode: int) =
-  let degrees = floor_mod(degrees, 360)
-  if degrees <= 180:
+  # not wrapped to a circle: in move mode `lean 360` flips all the way over
+  if degrees >= 0:
     self.lean Directions.right, degrees, move_mode
   else:
-    self.lean Directions.left, 180 - (degrees - 180), move_mode
+    self.lean Directions.left, -degrees, move_mode
 
 template lean*(self: Thing, direction: Directions, degrees = 90.0) =
   mixin wait

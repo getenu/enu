@@ -350,7 +350,6 @@ proc begin_turn(
     move_mode: int,
 ): string =
   assert not degrees.is_nan
-  var degrees = floor_mod(degrees, 360)
   let ctx = self.active_thing.script_ctx
   ctx.callback = thing.on_begin_turn(direction, degrees, lean, move_mode)
   ctx.last_ran = MonoTime.default
