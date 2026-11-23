@@ -230,8 +230,6 @@ type
     SCENE_READY
     TOUCH_CONTROLS
     FULL_WIDTH_PANELS
-    EDITOR_OPENING
-    EDITOR_CLOSING
     TEST_MODE
     CHECK_BAKES
       ## Test mode that only checks a level's saved bakes still match its
@@ -239,6 +237,10 @@ type
     CREATE_MODE
       ## The next block placed starts a new unit, whatever it's next to.
       ## Cleared once it has.
+    POINTER_IN_VIEWPORT
+      ## The mouse is over the world, or captured by it: what it points at can
+      ## be aimed at and clicked. Separate from VIEWPORT_FOCUSED, which is
+      ## where the keyboard goes.
     SPAWN_HELD
       ## LOCAL (never synced): this main thread is holding its player at the
       ## spawn — frozen (no gravity/movement/look) with the splash up — until

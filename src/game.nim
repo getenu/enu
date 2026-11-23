@@ -943,7 +943,6 @@ gdobj Game of Node:
 
     if TOUCH_CONTROLS notin state.local_flags:
       state.push_flag MOUSE_CAPTURED
-    state.push_flag VIEWPORT_FOCUSED
 
     state.queued_action_value.changes:
       if added and change.item != "":

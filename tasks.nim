@@ -182,6 +182,7 @@ task test_unit, "run unit tests":
   exec "nim c -r tests/unit/tool_availability_test"
   exec "nim c -r tests/unit/players_test"
   exec "nim c -r tests/unit/ed_flags_test"
+  exec "nim c -r tests/unit/focus_flags_test"
   exec "nim c -r tests/unit/path_safety_test"
   exec "nim c -r tests/unit/stroke_paint_test"
   exec "nim c -r tests/unit/bounds_test"

@@ -85,14 +85,22 @@ gdobj Console of RichTextLabel:
       if ?o:
         o.modulate = Color(r: 1.0, g: 1.0, b: 1.0, a: 0.0)
 
-    self.bind_signal(find("Close", Control), ("pressed", "close"))
+    let close = find("Close", Control)
+    close.focus_mode = FOCUS_NONE
+    self.bind_signal(close, ("pressed", "close"))
 
   method on_close() =
     state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED
 
   method unhandled_input*(event: InputEvent) =
-    if CONSOLE_FOCUSED in state.local_flags and
-        event.is_action_pressed("ui_cancel"):
+    # While the mouse is captured the world has the keyboard, but Esc still
+    # closes a console that was opened to be looked at.
+    let focused =
+      CONSOLE_FOCUSED in state.local_flags or (
+        MOUSE_CAPTURED in state.local_flags and
+        CONSOLE_VISIBLE in state.local_flags and CONSOLE_FOCUSED in state.wants
+      )
+    if focused and event.is_action_pressed("ui_cancel"):
       if not (event of InputEventJoypadButton) or
           COMMAND_MODE notin state.local_flags:
         state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED

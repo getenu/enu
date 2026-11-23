@@ -176,7 +176,7 @@ gdobj AimTarget of Sprite3D:
     if PRIMARY_DOWN notin state.local_flags and
         SECONDARY_DOWN notin state.local_flags:
       end_stroke()
-    elif VIEWPORT_FOCUSED notin state.local_flags:
+    elif POINTER_IN_VIEWPORT notin state.local_flags:
       discard
     elif thing of Build:
       Build(thing).stroke_frame()
