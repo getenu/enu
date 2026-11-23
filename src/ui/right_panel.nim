@@ -44,7 +44,9 @@ gdobj RightPanel of MarginContainer:
 
     state.nodes.game.bind_signal(self.label, "gui_input", self.name)
     state.nodes.game.bind_signal(self.code, "gui_input", self.name)
-    self.bind_signal(find("Close", Control), ("pressed", "close"))
+    let close = find("Close", Control)
+    close.focus_mode = FOCUS_NONE
+    self.bind_signal(close, ("pressed", "close"))
 
     state.status_message_value.changes:
       if added:

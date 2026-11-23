@@ -85,7 +85,9 @@ gdobj Console of RichTextLabel:
       if ?o:
         o.modulate = Color(r: 1.0, g: 1.0, b: 1.0, a: 0.0)
 
-    self.bind_signal(find("Close", Control), ("pressed", "close"))
+    let close = find("Close", Control)
+    close.focus_mode = FOCUS_NONE
+    self.bind_signal(close, ("pressed", "close"))
 
   method on_close() =
     state.pop_flags CONSOLE_VISIBLE, CONSOLE_FOCUSED

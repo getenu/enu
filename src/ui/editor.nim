@@ -5,7 +5,7 @@ import
   godotapi/[
     text_edit, scene_tree, node, input_event, global_constants, input_event_key,
     style_box_flat, gd_os, tween, scene_tree_tween, property_tweener,
-    method_tweener, input, input_event_screen_touch,
+    method_tweener, input, input_event_screen_touch, input_event_mouse_button,
   ]
 import core, gdutils
 import models except Color
@@ -241,8 +241,10 @@ gdobj Editor of MarginContainer:
 
     for name in ["Close", "Run"]:
       let control = find(name, Control)
+      # the keyboard stays with the code
+      control.focus_mode = FOCUS_NONE
       self.bind_signal(control, ("pressed", name.to_lower))
-      self.bind_signal(control, ("gui_input", "child_focused"))
+      self.bind_signal(control, ("gui_input", "child_clicked"))
     var stylebox = self.text_edit.get_stylebox("normal").as(StyleBoxFlat)
     self.og_bg_color = stylebox.bg_color
 
@@ -268,5 +270,6 @@ gdobj Editor of MarginContainer:
       state.player.coding.code = Code.init("")
       state.player.coding.code = Code.init(self.text_edit.text)
 
-  method on_child_focused(event: InputEvent) =
-    self.grab_focus()
+  method on_child_clicked(event: InputEvent) =
+    if event of InputEventMouseButton and InputEventMouseButton(event).pressed:
+      state.push_flag EDITOR_FOCUSED
