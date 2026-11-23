@@ -16,13 +16,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 script = ExtResource( 1 )
 
-[node name="ScrollContainer" type="ScrollContainer" parent="."]
-margin_right = 74.0
-margin_bottom = 95.0
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="TextEdit" type="TextEdit" parent="ScrollContainer"]
+[node name="TextEdit" type="TextEdit" parent="."]
 margin_right = 74.0
 margin_bottom = 95.0
 mouse_filter = 1

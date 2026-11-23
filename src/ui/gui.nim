@@ -220,6 +220,21 @@ gdobj GUI of Control:
     elif event.is_action_released("remove"):
       state.pop_flag SECONDARY_DOWN
 
+  method input*(event: InputEvent) =
+    # A captured mouse belongs to the player: its motion and clicks don't go
+    # through the GUI, where any control under the hidden cursor could take
+    # them instead. The wheel still reaches `next`/`previous` as before.
+    if TEST_MODE in state.local_flags or MOUSE_CAPTURED notin state.local_flags or
+        TOUCH_CONTROLS in state.local_flags:
+      return
+    if event of InputEventMouseMotion or (
+      event of InputEventMouseButton and
+      InputEventMouseButton(event).button_index in
+        [BUTTON_LEFT, BUTTON_RIGHT, BUTTON_MIDDLE]
+    ):
+      self.handle_player_input(event)
+      self.get_tree().set_input_as_handled()
+
   method unhandled_input*(event: InputEvent) =
     if TEST_MODE in state.local_flags:
       return
