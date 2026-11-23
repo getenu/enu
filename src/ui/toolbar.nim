@@ -34,9 +34,10 @@ gdobj Toolbar of HBoxContainer:
     self.bind_signals self, "action_changed"
     self.preview_maker = self.get_node("../PreviewMaker") as PreviewMaker
     assert not self.preview_maker.is_nil
-    self.stack = self.get_node("Button-new") as Button
-    # floats above the selected tool instead of taking a place in the row
-    self.stack.set_as_toplevel(true)
+    # A sibling drawn before the panels, so they cover it; placed above the
+    # selected tool by hand.
+    self.stack = self.get_node("../Button-new") as Button
+    self.bind_signal(self.stack, ("pressed", "stack_pressed"))
     state.local_flags.changes:
       if CREATE_MODE.added:
         self.stack.set_pressed true
@@ -176,6 +177,9 @@ gdobj Toolbar of HBoxContainer:
           self.preview_result = some (button: obj, preview: preview)
           self.waiting = false
 
+  method on_stack_pressed() =
+    state.toggle_create_mode
+
   method on_action_changed*(button_name: string) =
     state.player.tool_value.pause(self.zid):
       case button_name[7 ..^ 1]
@@ -195,5 +199,3 @@ gdobj Toolbar of HBoxContainer:
         state.select_or_modify BROWN_BLOCK
       of "bot":
         state.player.tool = PLACE_BOT
-      of "new":
-        state.toggle_create_mode

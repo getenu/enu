@@ -33,7 +33,8 @@ gdobj ActionButton of Button:
     self.update_size(state.config.toolbar_size)
 
   method on_pressed*() =
-    self.get_parent.trigger("action_changed", self.name)
+    if self.get_parent.has_signal("action_changed"):
+      self.get_parent.trigger("action_changed", self.name)
 
   method input(event: InputEvent) =
     self.ignore_touches(event)

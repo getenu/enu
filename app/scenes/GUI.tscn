@@ -113,9 +113,8 @@ margin_bottom = 50.0
 group = SubResource( 1 )
 icon = null
 
-[node name="Button-new" parent="Toolbar" instance=ExtResource( 3 )]
-margin_left = 1178.0
-margin_right = 1228.0
+[node name="Button-new" parent="." instance=ExtResource( 3 )]
+margin_right = 50.0
 margin_bottom = 50.0
 hint_tooltip = "Start a new unit with the next block"
 group = null
