@@ -8,7 +8,7 @@ import
 import godotapi/[spatial, ray_cast, voxel_terrain]
 import core, models/[states, bots, builds, bakes, things, signs, players]
 import libs/[interpreters, eval, fd_tracking]
-import ./vars
+import ./[vars, web_pages]
 
 type ScriptCycleError* = object of VMQuit
   scripts*: seq[string]
@@ -236,6 +236,7 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
   try:
     self.active_thing = thing
     thing.errors.clear
+    forget_pages(thing)
     thing.global_flags -= HIGHLIGHT_ERROR
 
     if not state.paused:

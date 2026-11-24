@@ -285,6 +285,23 @@ proc page_show*(self: Sign, key: string) =
     def_for(key).signs.add self
   self.render_kids(def_for(key).kids)
 
+proc drop_def(key: string) =
+  ## Signs still showing it keep their last picture.
+  for sign in defs[key].signs:
+    showing.del sign.id
+  defs.del key
+
+proc forget_pages*(owner: Thing) =
+  ## Before `owner`'s script runs again: pages it described that nothing shows.
+  ## The new run describes the ones it still makes, perhaps at new call sites,
+  ## which are new keys.
+  var unused: seq[string]
+  for key, def in defs:
+    if def.owner == owner and def.signs.len == 0:
+      unused.add key
+  for key in unused:
+    drop_def key
+
 proc page_key_clicks*(key: string, path: string): int =
   ## Clicks this tick on the described element at `path`, or inside it, on
   ## any sign showing the page.
@@ -390,6 +407,12 @@ proc pump_pages*() =
       ew_view_free(pages[key].view)
     ew_forget(key.cstring)
     pages.del key
+  var orphans: seq[string]
+  for key, def in defs:
+    if ?def.owner and def.owner.destroyed:
+      orphans.add key
+  for key in orphans:
+    drop_def key
 
 proc sync_sign(sign: Sign) =
   ## Builds or rebuilds a plain sign's page when its message or size changed.
