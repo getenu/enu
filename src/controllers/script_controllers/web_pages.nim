@@ -13,6 +13,10 @@ const
   MAX_PAGE_HEIGHT = 4096
     ## Pages don't scroll yet. Taller ones are cut off rather than turned
     ## into huge textures.
+  MAX_PANEL_HEIGHT = 16384
+    ## The panel scrolls, so its page can be taller.
+  PANEL_KEY* = "enu-right-panel"
+    ## The right panel's page: the open sign's `more`.
   page_park_seconds {.intdefine.} = 120
     ## A declarative page with no changes or pointer activity for this long
     ## drops its document (a few MB) and keeps only its description. Any
@@ -28,7 +32,10 @@ type
   Page = ref object
     view: ViewPtr
     sign: Sign
+    width: int
     height: int
+    scale: float32
+    panel: bool ## the right panel's page, not a sign's
     dirty: bool
     clicks: seq[int]
     clicks_since: MonoTime ## when the oldest unseen click arrived
@@ -113,7 +120,9 @@ proc create_page(self: Sign, html: string): Page =
     result = Page(
       view: ew_view_new(full.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0),
       sign: self,
+      width: PAGE_WIDTH,
       height: PAGE_WIDTH,
+      scale: 1.0,
     )
     pages[self.id] = result
   else:
@@ -261,6 +270,26 @@ proc page_stats*(): string =
   present_times.set_len(0)
   pump_times.set_len(0)
 
+proc follow_link(page: Page, node: NodeId) =
+  ## Old-style links in a sign's `more`: `nim://` runs code in the sign's
+  ## owner, `thing://` opens a thing's code.
+  var n = node
+  while n != NO_NODE:
+    let href = page.view.get_attribute(n, "href")
+    if href.starts_with("nim://"):
+      page.sign.owner.eval = href["nim://".len ..^ 1]
+      return
+    elif href.starts_with("thing://"):
+      let id = href["thing://".len ..^ 1]
+      state.things.value.walk_tree proc(thing: Thing) =
+        if thing.id == id:
+          state.player.coding = thing
+      return
+    elif href != "":
+      warn "links to pages outside Enu aren't supported yet", href
+      return
+    n = ew_parent(page.view, n)
+
 proc pump_pages*() =
   ## Before scripts run: apply pointer events from the main thread.
   var gone: seq[string]
@@ -282,13 +311,15 @@ proc pump_pages*() =
         # A sign node that needs the picture again (it was recreated).
         page.dirty = true
         continue
-      let x = events[i * 3 + 1] * PAGE_WIDTH.float32
+      let x = events[i * 3 + 1] * page.width.float32
       let y = events[i * 3 + 2] * page.height.float32
       var changed = false
       let clicked = ew_pointer(page.view, kind, x, y, changed.addr)
       if changed:
         page.dirty = true
-      if clicked != NO_NODE:
+      if clicked != NO_NODE and page.panel:
+        page.follow_link(clicked)
+      elif clicked != NO_NODE:
         if page.clicks.len == 0:
           page.clicks_since = start
         page.clicks.add int(clicked.uint64)
@@ -319,7 +350,9 @@ proc sync_sign(sign: Sign) =
     page = Page(
       view: ew_view_new(sign.message_html.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0),
       sign: sign,
+      width: PAGE_WIDTH,
       height: PAGE_WIDTH,
+      scale: 1.0,
     )
     pages[sign.id] = page
   elif page.parked:
@@ -332,6 +365,48 @@ proc sync_sign(sign: Sign) =
   page.last_active = get_mono_time()
   log_errors(sign.id)
 
+proc sync_panel() =
+  ## Keeps the right panel's page showing the open sign's `more`, at the
+  ## width and scale the panel asked for.
+  let sign = state.player.open_sign
+  var page = pages.get_or_default(PANEL_KEY)
+  if sign.is_nil or sign.more == "":
+    if not page.is_nil:
+      ew_view_free(page.view)
+      ew_drop_frame(PANEL_KEY)
+      pages.del PANEL_KEY
+    return
+  var scale: float32
+  let width = ew_requested_size(PANEL_KEY, scale.addr).int
+  if width <= 0:
+    return # the panel isn't showing yet
+  let html = panel_html(sign.more, sign.text_only)
+  let key = sign.id & "\0" & html
+  if page.is_nil:
+    page = Page(
+      view: ew_view_new(html.cstring, width.uint32, width.uint32, scale),
+      sign: sign,
+      width: width,
+      height: width,
+      scale: scale,
+      panel: true,
+      message: key,
+    )
+    pages[PANEL_KEY] = page
+    page.dirty = true
+  else:
+    page.sign = sign
+    if page.message != key:
+      ew_set_html(page.view, html.cstring)
+      page.message = key
+      page.dirty = true
+    if page.width != width or page.scale != scale:
+      ew_set_scale(page.view, scale)
+      page.width = width
+      page.scale = scale
+      page.dirty = true
+  log_errors(PANEL_KEY)
+
 proc present_pages*(things: seq[Thing]) =
   ## After scripts run: bring plain signs' pages up to date, forget clicks the
   ## script has seen, lay out and record pages that changed, and park pages
@@ -339,6 +414,7 @@ proc present_pages*(things: seq[Thing]) =
   things.walk_tree proc(thing: Thing) =
     if thing of Sign:
       sync_sign(Sign(thing))
+  sync_panel()
   let now = get_mono_time()
   for key, page in pages:
     # Clicks last until the script has looked at them (its loop may not run
@@ -351,7 +427,8 @@ proc present_pages*(things: seq[Thing]) =
       continue
     if not page.dirty:
       let idle_for =
-        if page.message != "": sign_page_seconds
+        if page.panel: -1
+        elif page.message != "": sign_page_seconds
         elif not page.imperative and not page.tree.root.is_nil: page_park_seconds
         else: -1
       if idle_for >= 0 and page.clicks.len == 0 and
@@ -360,12 +437,17 @@ proc present_pages*(things: seq[Thing]) =
       continue
     let start = get_mono_time()
     let sign = page.sign
+    if page.panel:
+      # Measure at the panel's current width.
+      ew_resize(page.view, page.width.uint32, page.height.uint32)
     let height =
-      if sign.height == 0.0:
+      if page.panel:
+        int(ew_content_height(page.view).ceil).clamp(1, MAX_PANEL_HEIGHT)
+      elif sign.height == 0.0:
         int(ew_content_height(page.view).ceil).clamp(1, MAX_PAGE_HEIGHT)
       else:
         int(PAGE_WIDTH.float * sign.height / sign.width).clamp(1, MAX_PAGE_HEIGHT)
-    ew_resize(page.view, PAGE_WIDTH, height.uint32)
+    ew_resize(page.view, page.width.uint32, height.uint32)
     page.height = height
     discard ew_present(page.view, key.cstring)
     log_errors(key)

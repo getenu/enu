@@ -29,6 +29,10 @@ struct Slot {
     frame: Option<Arc<Frame>>,
     version: u64,
     pointer: Vec<[f32; 3]>,
+    /// The width (physical px) and scale the thread showing the page wants,
+    /// for pages drawn to fit something on screen. 0: no preference.
+    width: u32,
+    scale: f32,
 }
 
 static SLOTS: LazyLock<Mutex<HashMap<String, Slot>>> = LazyLock::new(Default::default);
@@ -222,5 +226,31 @@ pub unsafe extern "C" fn ew_drop_frame(key: *const c_char) {
         if let Some(slot) = SLOTS.lock().unwrap().get_mut(key) {
             slot.frame = None;
         }
+    })
+}
+
+/// Asks for `key`'s page to be laid out `width` physical pixels wide at
+/// `scale`. For pages shown in a panel rather than on a sign.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_request_size(key: *const c_char, width: u32, scale: f32) {
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        let mut slots = SLOTS.lock().unwrap();
+        let slot = slots.entry(key.to_string()).or_default();
+        slot.width = width;
+        slot.scale = scale;
+    })
+}
+
+/// The size asked for with `ew_request_size`, if any. Returns the width (0
+/// if none) and writes the scale.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_requested_size(key: *const c_char, scale: *mut f32) -> u32 {
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        let slots = SLOTS.lock().unwrap();
+        let Some(slot) = slots.get(key) else { return 0 };
+        unsafe { *scale = slot.scale };
+        slot.width
     })
 }

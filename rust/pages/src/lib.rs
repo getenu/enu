@@ -208,6 +208,16 @@ pub unsafe extern "C" fn ew_resize(v: *mut View, width: u32, height: u32) {
     })
 }
 
+/// Changes the hidpi scale (physical pixels per CSS pixel).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_set_scale(v: *mut View, scale: f32) {
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        v.scale = scale;
+        v.doc.set_viewport(viewport(v.width, v.height, scale));
+    })
+}
+
 /// Lays out the document and draws it. Returns a pointer to `width * height`
 /// RGBA8 pixels (straight alpha), valid until the next call on this view.
 #[unsafe(no_mangle)]

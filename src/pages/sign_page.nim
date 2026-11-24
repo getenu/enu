@@ -1,7 +1,7 @@
-## How a sign's text becomes a page. Shared by the main thread (signs set by
-## `message`) and the worker (pages scripts build), so they look the same.
+## How a sign's text becomes a page: its message on the sign, its `more` in
+## the right panel.
 
-import std/[strutils, strformat]
+import std/[strutils, strformat, xmltree]
 from pkg/markdown import nil
 
 const
@@ -27,3 +27,13 @@ proc sign_html*(message: string, font_px: float): string =
     if message.strip.starts_with("<"): message
     else: markdown.markdown(message)
   &"<style>:root {{ font-size: {font_px:.1f}px; }}{SIGN_CSS}</style>{body}"
+
+proc panel_html*(more: string, code: bool): string =
+  ## A sign's `more`, for the right panel. Sized in CSS px from a 16px base;
+  ## the page's scale carries the screen scale and the font size setting.
+  ## `code` shows it as Nim code (signs made with `text_only`).
+  let body =
+    if code: "<pre><code>" & xmltree.escape(more) & "</code></pre>"
+    elif more.strip.starts_with("<"): more
+    else: markdown.markdown(more)
+  &"<style>:root {{ font-size: 16px; }}{SIGN_CSS}</style>{body}"

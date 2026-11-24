@@ -48,6 +48,7 @@ proc ew_view_new*(html: cstring, width, height: uint32, scale: float32): ViewPtr
 proc ew_view_free*(v: ViewPtr)
 proc ew_set_html*(v: ViewPtr, html: cstring)
 proc ew_resize*(v: ViewPtr, width, height: uint32)
+proc ew_set_scale*(v: ViewPtr, scale: float32)
 proc ew_render*(v: ViewPtr): ptr UncheckedArray[uint8]
 proc ew_content_height*(v: ViewPtr): float32
 proc ew_query*(v: ViewPtr, selector: cstring): NodeId
@@ -84,6 +85,8 @@ proc ew_post_pointer*(key: cstring, kind: uint32, u, v: float32): bool
 proc ew_take_pointer*(key: cstring, out_events: ptr float32, max: csize_t): csize_t
 proc ew_forget*(key: cstring)
 proc ew_drop_frame*(key: cstring)
+proc ew_request_size*(key: cstring, width: uint32, scale: float32)
+proc ew_requested_size*(key: cstring, scale: ptr float32): uint32
 
 # Every call catches its own panics (see ../src/guard.rs).
 proc ew_take_error*(): cstring
