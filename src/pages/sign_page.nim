@@ -10,11 +10,24 @@ const
   html { font-family: "Jost*", "Noto Color Emoji", sans-serif; }
   code, pre { font-family: "IBM Plex Mono", "Noto Color Emoji", monospace; }
   button, input, select, textarea { font: inherit; }
-  body { margin: 0; padding: 0.35em 0.6em; background: #000000d6; color: #fff; }
-  h1, h2, h3 { margin: 0.2em 0; }
+  body {
+    margin: 0; padding: 10px 20px; background: #14031dd6; color: #fff;
+  }
+  h1, h2, h3, h4, h5, h6 { margin: 0.2em 0; color: #96cbfe; }
   p { margin: 0.3em 0; }
-  code { background: #ffffff26; border-radius: 0.2em; padding: 0 0.2em; }
+  a { color: #c6c5fe; font-weight: bold; text-decoration: none; }
+  code { color: #ff73fd; }
+  pre {
+    background: #000000d6; color: #e0e0e0; margin: 0.4em -20px;
+    padding: 0.3em 20px; border-top: 1px solid #ff73fd;
+    border-bottom: 1px solid #ff73fd;
+  }
+  pre code { color: inherit; }
+  hr { border: none; border-top: 1px solid #ffffff40; }
 """
+    ## The look of Enu's old signs: a translucent dark purple background,
+    ## light blue headings, pink inline code, and code blocks between pink
+    ## rules.
 
 proc font_px*(size, width: float): float =
   ## `size` is text height in blocks; `width` is the sign's width in blocks.
