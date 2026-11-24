@@ -176,7 +176,7 @@ except where noted.
   pass** (`if Player.added as p:`). Results last one tick. Nested queries
   run once per combination (each player with each build); sibling queries
   are independent, since a rule can only see the results it's nested in.
-  The current code doesn't do this yet: see #152.
+  Built in #169.
 - **Clicks are a query.** `if button.clicked as click:` (built), and `on
   click(el):` as sugar for it. A click wakes the thing so it's handled in the
   same tick, even mid-command. A `->` inside one only fires if the thing is
@@ -333,9 +333,9 @@ loop:
 - The first version used callbacks (`on_click`) run from a hook in `wait`.
   That's the model Enu avoids, and it only ran handlers after a command
   finished. Replaced by the query.
-- Until #152 is fixed, a click handled in a pass during a long command can
-  be seen again on the next wake pass of that command (the stored result
-  isn't popped there). Things that are only a UI don't hit this.
+- Before #169, a click handled in a pass during a long command could be
+  seen again on the next wake pass of that command. Fixed there: results
+  last one run of the loop.
 - Measured in game (welcome level, page 1200 px wide):
   - Worker, per changed frame, style + layout + recording: 0.12–0.5 ms,
     including a 14,600 px tall page.
@@ -436,8 +436,9 @@ loop:
   the counter, a `{.piece.}`, a `pane` row, and a list of every bot with a
   "wave" button each, keyed by bot id. Worker cost per changed pass
   0.25–1 ms.
-- Inherits the query bugs in #152 (a click handled in a pass during a long
-  command can repeat on the next wake pass).
+- `on click:` is a query keyed by the element's path, using the per-run
+  query results from #169. Checked in game: two clicks in the same tick
+  run the handler twice, and the page shows both.
 
 **10. Unlit signs and parking.**
 
@@ -473,8 +474,8 @@ loop:
 - Blitz text input, focus and IME. `:hover`/`:active` and clicks work
   (prototype 7); keyboard input isn't forwarded yet.
 - Try the aim-ray click path with a real mouse, including billboard signs.
-- Query semantics (#152): results last one tick, combinations follow
-  nesting, the first transition in a tick wins.
+- After a transition, should the loop start again right away with fresh
+  results, or wait for its next natural run (what #169 does)?
 - Main-thread upload cost on Godot 3 (~6 ms per changed frame).
 - How DOM edits sync to other players (to discuss).
 - Is the Nim VM fast enough for interactive UI driven by player scripts, or
