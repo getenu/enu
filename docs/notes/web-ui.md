@@ -198,6 +198,68 @@ except where noted.
   whether `on X:` loops can run commands (proposed: no, which also makes them
   possible in native Enu, where nothing can pause mid-pass).
 
+## Pages on screen
+
+Settled in discussion (2026-11-24). Planned for 0.4; 0.3 only builds what's
+marked built, and nothing in 0.3 should get in the way of the rest.
+
+- **A page is a value, not part of a sign.** `let help = page: ...` makes a
+  page. Signs show pages (`sign.page = help`), and so do screen areas. Menus
+  and settings screens are pages with no sign at all.
+- **Pages are shared, not copied.** One page in two places (on a sign and in
+  the right panel) is one document: a click in either changes both. That's
+  how a sign and the panel stay in sync, with no syncing code.
+- **A sign's text and its page are two ways to set the same thing.** Setting
+  `message` builds a markdown page; setting `sign.page` replaces it; the
+  last one set wins (as `message` and `html=` already do).
+- **The screen has named areas, and each area is a stack of pages:**
+  `left`, `right`, `center`, and later `top`/`bottom` for toolbars.
+  ```nim
+  ui.right = help         # replaces the stack
+  ui.right = [help, more] # the whole stack at once
+  ui.right += help        # or ui.right.add help
+  ui.right += page:       # a three-argument `+=` template wraps the block
+    h1 "Help"
+  ui.right.add:           # `add` wraps its block in a page
+    h1 "Help"
+  ui.right.pop
+  ```
+  `=` is two overloads of `right=` (a page, a list of pages), not a
+  converter. Areas get the usual seq procs (`add`, `pop`, `len`, `[]`,
+  `clear`). `ui.right.push page: ...` and `[page: ..., page: ...]` don't
+  parse the way we'd want (the block goes to the outer call; `[a: b]` is a
+  table constructor), so they aren't offered.
+- **Areas are full-screen transparent layers in a fixed order** underneath:
+  the sides below the center, and the center modal (it takes input and dims
+  the world). Clicks on a layer's empty pixels go through to the world.
+  Later, raw layers (`ui.screen = page`) are the escape hatch for UI the
+  areas don't fit; Enu's own toolbar and settings may be built that way.
+- **Enu decides an area's width** (the panel width, the full-width
+  setting); pages lay themselves out to fit.
+- **Escape pops one page; the close button clears the area.** Pages may
+  override this later.
+- **`more` and status messages use the right stack.** Clicking a sign with
+  `more` replaces the stack (as it always has). A status message is added
+  on top and popped when it's cleared, so the sign under it comes back.
+  Built in 0.3, internally.
+- **UI belongs to a player.** Scripts reach it as `player.ui.right`; in a
+  click handler, the player is whoever clicked. Plain `ui` is shorthand for
+  the local player's, for scripts that run locally (below). There's no
+  global screen, since a script on the server has none.
+- **Where UI scripts run is decided later, and the API mustn't care.**
+  Pages are data (the declarative tree we already diff), and their handlers
+  run in the VM that built them. Today that's the one VM: `player.ui` is
+  player state, synced to that player's machine, which renders it; clicks
+  come back as events. Hover, press states, scrolling and typing are local
+  already; only clicks and submits make a round trip, which is fine for
+  menus and settings, not for dragging or live sliders. When things get a
+  public, RPC-backed interface (hoped for 0.4), a UI script can run in each
+  player's own VM instead: its `ui` calls become local and its world calls
+  become RPCs, with the same code.
+- **0.3 doesn't expose `player.ui`.** Per-player UI needs per-player state
+  first. 0.3 has pages on signs, `more`, and status messages on the
+  internal right stack.
+
 ## Prototypes
 
 Each one answers one question. Stop and reassess if one fails.
