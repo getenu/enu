@@ -205,7 +205,10 @@ marked built, and nothing in 0.3 should get in the way of the rest.
 
 - **A page is a value, not part of a sign.** `let help = page: ...` makes a
   page. Signs show pages (`sign.page = help`), and so do screen areas. Menus
-  and settings screens are pages with no sign at all.
+  and settings screens are pages with no sign at all. Built for signs: a
+  page is keyed by the thing that describes it and where `page:` is in its
+  script, so describing it again on the next pass updates the same page.
+  `page sign:` is `sign.page = page: ...` keyed by the sign.
 - **Pages are shared, not copied.** One page in two places (on a sign and in
   the right panel) is one document: a click in either changes both. That's
   how a sign and the panel stay in sync, with no syncing code.

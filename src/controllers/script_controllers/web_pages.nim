@@ -5,7 +5,7 @@
 ## main thread posted, and records any page that changed for the render thread
 ## (rust/pages/src/hub.rs). The main thread only uploads finished frames.
 
-import std/[tables, monotimes, times, strformat, algorithm, math, strutils]
+import std/[tables, monotimes, times, strformat, algorithm, math, strutils, sequtils]
 import core, models/[signs, things]
 import ../../pages/[renderer, sign_page, page_tree]
 
@@ -49,8 +49,18 @@ type
     parked: bool ## document dropped; `tree` holds the last description
     last_active: MonoTime
 
+  PageDef = ref object
+    ## A page made with `page:`, shown on any number of signs. Each sign has
+    ## its own document, at its own size, built from the same description.
+    kids: seq[VNode]
+    owner: Thing ## the thing whose script describes it
+    signs: seq[Sign]
+
 var
   pages {.threadvar.}: Table[string, Page]
+  defs {.threadvar.}: Table[string, PageDef]
+  showing {.threadvar.}: Table[string, string]
+    ## sign id -> the key of the page it shows
   present_times {.threadvar.}: seq[float]
   pump_times {.threadvar.}: seq[float]
 
@@ -115,6 +125,14 @@ proc changed_by_script(self: Sign): Page =
   result.imperative = true
   result.dirty = true
 
+proc unshow(self: Sign) =
+  ## The sign stops showing a `page:` page.
+  let key = showing.get_or_default(self.id)
+  if key != "":
+    showing.del self.id
+    if key in defs:
+      defs[key].signs.keep_it_if(it != self)
+
 proc create_page(self: Sign, html: string): Page =
   let full = sign_html(html, font_px(self.size, self.width))
   result = pages.get_or_default(self.id)
@@ -137,6 +155,7 @@ proc create_page(self: Sign, html: string): Page =
   result.last_active = get_mono_time()
 
 proc page_set_html*(self: Sign, html: string) =
+  self.unshow
   defer:
     check()
   self.create_page(html).imperative = true
@@ -217,11 +236,8 @@ proc page_click_count*(self: Sign, node: int): int =
         break
       n = ew_parent(page.view, n)
 
-proc page_render*(self: Sign, tree: string) =
-  ## Makes the page match a description from `page sign:`.
-  defer:
-    check()
-  let kids = parse_tree(tree)
+proc render_kids(self: Sign, kids: seq[VNode]) =
+  ## Makes the sign's page match a description.
   var page = pages.get_or_default(self.id)
   if not page.is_nil and not page.imperative and not page.tree.root.is_nil and
       same_kids(page.tree.root.kids, kids):
@@ -241,14 +257,47 @@ proc page_render*(self: Sign, tree: string) =
     if page.edit_log.len > 200:
       page.edit_log = page.edit_log[^200 .. ^1]
 
-proc page_path_clicks*(self: Sign, path: string): int =
-  ## Clicks this tick on the described element at `path`, or inside it.
+proc def_for(key: string): PageDef =
+  result = defs.get_or_default(key)
+  if result.is_nil:
+    result = PageDef()
+    defs[key] = result
+
+proc page_describe*(key: string, owner: Thing, tree: string) =
+  ## Records what the page at `key` looks like now, from `page:`, and brings
+  ## the signs showing it up to date.
   defer:
     check()
-  let page = pages.get_or_default(self.id)
-  if not page.is_nil and not page.parked:
-    page.clicks_seen = true
-    result = page.tree.clicks_at(page.view, page.clicks, path)
+  let def = def_for(key)
+  def.kids = parse_tree(tree)
+  def.owner = owner
+  def.signs.keep_it_if(not it.destroyed)
+  for sign in def.signs:
+    sign.render_kids(def.kids)
+
+proc page_show*(self: Sign, key: string) =
+  ## `sign.page = some_page`.
+  defer:
+    check()
+  if showing.get_or_default(self.id) != key:
+    self.unshow
+    showing[self.id] = key
+    def_for(key).signs.add self
+  self.render_kids(def_for(key).kids)
+
+proc page_key_clicks*(key: string, path: string): int =
+  ## Clicks this tick on the described element at `path`, or inside it, on
+  ## any sign showing the page.
+  defer:
+    check()
+  let def = defs.get_or_default(key)
+  if def.is_nil:
+    return
+  for sign in def.signs:
+    let page = pages.get_or_default(sign.id)
+    if not page.is_nil and not page.parked:
+      page.clicks_seen = true
+      result += page.tree.clicks_at(page.view, page.clicks, path)
 
 proc page_edits*(self: Sign): string =
   defer:
@@ -325,14 +374,18 @@ proc pump_pages*() =
         if page.clicks.len == 0:
           page.clicks_since = start
         page.clicks.add int(clicked.uint64)
-        # Wake the owner, like a bump does, so its loop sees the click this
-        # tick.
-        let owner = page.sign.owner
+        # Wake the thing whose script handles it, like a bump does, so its
+        # loop sees the click this tick.
+        let key = showing.get_or_default(page.sign.id)
+        let owner =
+          if key in defs and ?defs[key].owner: defs[key].owner
+          else: page.sign.owner
         if ?owner and ?owner.script_ctx:
           owner.script_ctx.timer = get_mono_time()
     log_errors(key)
     pump_times.add (get_mono_time() - start).in_microseconds.float / 1000
   for key in gone:
+    pages[key].sign.unshow
     if not pages[key].parked:
       ew_view_free(pages[key].view)
     ew_forget(key.cstring)

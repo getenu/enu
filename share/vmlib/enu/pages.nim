@@ -14,6 +14,20 @@
 ## `clicked` is a query, like `Player.hit`: inside a command loop, `as` hands
 ## out each click once and the loop runs again until they've all been
 ## handled. A click wakes the thing, so it's handled right away.
+##
+## Or describe the page, and let Enu work out what changed:
+##
+## ```nim
+## var count = 0
+## loop:
+##   let counter = page:
+##     h2 $count
+##     button "Add one":
+##       on click:
+##         inc count
+##   board.page = counter
+##   other_board.page = counter # the same page, in two places
+## ```
 
 import std/[macros, tables, strutils]
 import core, vm_bridge_utils
@@ -30,6 +44,12 @@ type
     ## A player's click on a page element.
     element*: Element
 
+  Page* = ref object
+    ## A page made with `page:`. Show it on a sign with `sign.page = it`;
+    ## one page can be on several signs at once, and a click on any of them
+    ## counts.
+    key*: string
+
 bridged_to_host:
   proc page_set_html(self: Sign, html: string)
   proc page_query(self: Sign, selector: string): int
@@ -44,8 +64,9 @@ bridged_to_host:
   proc page_parent(self: Sign, node: int): int
   proc page_rect(self: Sign, node: int): PageRect
   proc page_click_count(self: Sign, node: int): int
-  proc page_render(self: Sign, tree: string)
-  proc page_path_clicks(self: Sign, path: string): int
+  proc page_describe(key: string, owner: Thing, tree: string)
+  proc page_show(self: Sign, key: string)
+  proc page_key_clicks(key: string, path: string): int
   proc page_edits*(self: Sign): string
     ## The changes the last few page renders made, one per line. For
     ## looking at what a page sends when it changes.
@@ -192,7 +213,7 @@ proc html_tag(name: string): string =
 
 type PageBuilder* = ref object
   ## Collects a page's description while a `page` block runs.
-  sign*: Sign
+  key*: string
   tokens*: string
   counters: seq[int]
   paths: seq[string]
@@ -206,9 +227,9 @@ type PageBuilder* = ref object
 var building*: PageBuilder
   ## The page being described, while a `page` block runs.
 
-proc init*(_: type PageBuilder, sign: Sign, handling: bool): PageBuilder =
+proc init*(_: type PageBuilder, key: string, handling: bool): PageBuilder =
   PageBuilder(
-    sign: sign, counters: @[0], paths: @[""], keys: @[new_seq[string]()],
+    key: key, counters: @[0], paths: @[""], keys: @[new_seq[string]()],
     handling: handling,
   )
 
@@ -274,11 +295,11 @@ template page_on_click*(body: untyped) =
       raise ObjectConversionDefect.init(
         "`on click` only works in a page inside a command loop"
       )
-    let key = "page-click-" & building.sign.id & "-" & building.here
+    let key = "page-click-" & building.key & "-" & building.here
     if not query_run.has_query(key):
       var clicks: seq[RootRef]
-      for i in 0 ..< building.sign.page_path_clicks(building.here):
-        clicks.add Click(element: Element(sign: building.sign))
+      for i in 0 ..< page_key_clicks(building.key, building.here):
+        clicks.add Click()
       query_run.query_results(key, "", clicks)
     if not query_run.query_result(key).is_nil:
       building.handled = true
@@ -363,26 +384,51 @@ proc page_body(n: NimNode): NimNode =
   else:
     result = n
 
-macro page*(sign: Sign, body: untyped): untyped =
-  ## Describe the whole page for `sign`. See the notes above.
+proc describe_page(key: NimNode, body: NimNode): NimNode =
   let first = page_body(body)
   let again = page_body(body.copy_nim_tree)
   result = quote:
     block:
       let outer = building
       try:
-        building = PageBuilder.init(`sign`, handling = true)
+        building = PageBuilder.init(`key`, handling = true)
         block:
           `first`
         if building.handled:
           # A click changed something: describe the page again so it shows
           # the change now, not on the next pass.
-          building = PageBuilder.init(`sign`, handling = false)
+          building = PageBuilder.init(`key`, handling = false)
           block:
             `again`
-        building.sign.page_render(building.tokens)
+        page_describe(building.key, active_thing(), building.tokens)
+        Page(key: building.key)
       finally:
         building = outer
+
+proc `page=`*(self: Sign, page: Page) =
+  ## Shows `page` on the sign, instead of its message.
+  self.page_show(page.key)
+
+macro page*(args: varargs[untyped]): untyped =
+  ## `page:` makes a page, described the same way as with `page sign:`.
+  ## Inside a command loop it's described again on each pass, and it stays
+  ## the same page. `page sign:` describes the whole page for `sign`; see the
+  ## notes above.
+  if args.len == 1:
+    let site = args[0].lineinfo_obj
+    let at = ":" & site.filename & ":" & $site.line & ":" & $site.column
+    let key = quote:
+      active_thing().id & `at`
+    result = describe_page(key, args[0])
+  elif args.len == 2:
+    let sign = args[0]
+    let key = quote:
+      `sign`.id
+    let made = describe_page(key, args[1])
+    result = quote:
+      `sign`.page = `made`
+  else:
+    error("`page` takes a block, or a sign and a block", args)
 
 macro piece*(def: untyped): untyped =
   ## For a proc that describes part of a page: `proc stat(...) {.piece.} =`.
