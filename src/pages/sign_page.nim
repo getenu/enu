@@ -2,6 +2,7 @@
 ## the right panel.
 
 import std/[strutils, strformat, xmltree]
+import packages/docutils/highlite
 from pkg/markdown import nil
 
 const
@@ -23,11 +24,75 @@ const
     border-bottom: 1px solid #ff73fd;
   }
   pre code { color: inherit; }
+  .k { color: #96cbfe; } .s { color: #a8ff60; } .c { color: #7c7c7c; }
+  .n { color: #ff73fd; } .o { color: #ededed; } .p { color: #c6c5fe; }
   hr { border: none; border-top: 1px solid #ffffff40; }
 """
     ## The look of Enu's old signs: a translucent dark purple background,
     ## light blue headings, pink inline code, and code blocks between pink
-    ## rules.
+    ## rules. Code is coloured like the editor (IR_BLACK).
+
+proc highlight_nim*(code: string): string =
+  ## `code` as HTML spans for SIGN_CSS's token classes.
+  var tokens: GeneralTokenizer
+  tokens.init_general_tokenizer(code)
+  while true:
+    tokens.get_next_token(lang_nim)
+    let kind = tokens.kind
+    if kind == gt_eof:
+      break
+    let text = xmltree.escape(code[tokens.start ..< tokens.start + tokens.length])
+    let class =
+      case kind
+      of gt_keyword: "k"
+      of gt_string_lit, gt_long_string_lit, gt_char_lit, gt_escape_sequence,
+          gt_raw_data: "s"
+      of gt_comment, gt_long_comment: "c"
+      of gt_dec_number, gt_bin_number, gt_hex_number, gt_oct_number,
+          gt_float_number: "n"
+      of gt_operator: "o"
+      of gt_preprocessor: "p"
+      else: ""
+    if class == "":
+      result.add text
+    else:
+      result.add &"<span class=\"{class}\">{text}</span>"
+
+proc unescape(html: string): string =
+  ## Undoes markdown's escaping of code.
+  html.multi_replace(
+    ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"),
+    ("&amp;", "&"),
+  )
+
+proc highlight_blocks(html: string): string =
+  ## Highlights markdown's code blocks: Nim's, and unlabelled ones, which are
+  ## Nim too as far as Enu is concerned.
+  const
+    OPEN = "<pre><code"
+    CLOSE = "</code></pre>"
+  var at = 0
+  while true:
+    let start = html.find(OPEN, at)
+    if start < 0:
+      break
+    let tag_end = html.find('>', start + OPEN.len)
+    let finish = html.find(CLOSE, tag_end)
+    if tag_end < 0 or finish < 0:
+      break
+    let attrs = html[start + OPEN.len ..< tag_end]
+    result.add html[at ..< tag_end + 1]
+    let code = html[tag_end + 1 ..< finish]
+    if attrs.strip in ["", "class=\"language-nim\""]:
+      result.add highlight_nim(code.unescape)
+    else:
+      result.add code
+    result.add CLOSE
+    at = finish + CLOSE.len
+  result.add html[at .. ^1]
+
+proc markdown_html(md: string): string =
+  highlight_blocks(markdown.markdown(md))
 
 proc font_px*(size, width: float): float =
   ## `size` is text height in blocks; `width` is the sign's width in blocks.
@@ -38,7 +103,7 @@ proc sign_html*(message: string, font_px: float): string =
   ## signs have always been.
   let body =
     if message.strip.starts_with("<"): message
-    else: markdown.markdown(message)
+    else: markdown_html(message)
   &"<style>:root {{ font-size: {font_px:.1f}px; }}{SIGN_CSS}</style>{body}"
 
 proc panel_html*(more: string, code: bool): string =
@@ -46,7 +111,7 @@ proc panel_html*(more: string, code: bool): string =
   ## the page's scale carries the screen scale and the font size setting.
   ## `code` shows it as Nim code (signs made with `text_only`).
   let body =
-    if code: "<pre><code>" & xmltree.escape(more) & "</code></pre>"
+    if code: "<pre><code>" & highlight_nim(more) & "</code></pre>"
     elif more.strip.starts_with("<"): more
-    else: markdown.markdown(more)
+    else: markdown_html(more)
   &"<style>:root {{ font-size: 16px; }}{SIGN_CSS}</style>{body}"

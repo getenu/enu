@@ -245,6 +245,7 @@ task test_unit, "run unit tests":
   if pages_wanted(command_line_params()):
     exec "nim c -r tests/unit/page_tree_test"
     exec "nim c -r tests/unit/page_guard_test"
+    exec "nim c -r tests/unit/sign_page_test"
 
 task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"
