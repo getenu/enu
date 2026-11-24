@@ -8,12 +8,17 @@ import
 import core
 import nodes/sign_web
 
-const MIPMAP_SETTLE_SECONDS = 0.5
+const
+  MIPMAP_SETTLE_SECONDS = 0.5
+  GLOW = 0.08 ## light added at full glow
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
   var zid: EID
   var material: SpatialMaterial
+  var glow_pass: SpatialMaterial
+    ## Drawn over the page, adding light, while the sign glows or is
+    ## highlighted.
   var shape: CollisionShape
   var quad: QuadMesh
   var web_tex: ImageTexture
@@ -38,12 +43,18 @@ gdobj SignNode of Spatial:
       self.visible = false
 
   proc light_web() =
-    ## Brightness of an unlit page: 1 normally, more when highlighted or
-    ## glowing.
-    let k =
-      if HIGHLIGHT in self.model.local_flags: 1.3
-      else: 1.0 + self.model.glow * 0.3
-    self.material.albedo_color = init_color(k, k, k)
+    ## Pages are unlit, so they ignore emission, and brightening near-black
+    ## shows nothing. A glowing or highlighted sign gets light added on top
+    ## instead, as much as old signs' emission gave them.
+    let energy =
+      if HIGHLIGHT in self.model.local_flags: 1.0
+      else: self.model.glow
+    if energy <= 0:
+      self.material.next_pass = nil
+    else:
+      let k = GLOW * energy
+      self.glow_pass.albedo_color = init_color(k, k, k)
+      self.material.next_pass = self.glow_pass
 
   proc show_pixels(pixels: pointer, px_width, px_height: int) =
     ## Uploads a rendered page as the albedo and sizes the quad to fit it
@@ -122,6 +133,12 @@ gdobj SignNode of Spatial:
     # Unlit materials ignore emission, so glow and highlight brighten the
     # page instead.
     self.material.flags_unshaded = true
+    self.material.albedo_color = init_color(1, 1, 1)
+    self.glow_pass = gdnew[SpatialMaterial]()
+    self.glow_pass.flags_unshaded = true
+    self.glow_pass.params_blend_mode = spatial_material.BLEND_MODE_ADD
+    self.glow_pass.params_cull_mode = self.material.params_cull_mode
+    self.glow_pass.params_billboard_mode = self.material.params_billboard_mode
     self.light_web()
     # Ask for the picture again, in case this node is new and the page's
     # last frame was already taken (or dropped while the page was parked).
