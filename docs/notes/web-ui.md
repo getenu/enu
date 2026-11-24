@@ -108,8 +108,49 @@ VM ⇄ Blitz page (real DOM)  ──recording──▶ rasterize ──frame─�
 - The hand-off lives in Rust (`rust/pages/src/hub.rs`): pages are named
   by key (Enu uses the sign id). It holds the newest frame per key with a
   version, so a recreated sign node can ask again, and queues pointer events.
-- Multiplayer: a remote copy of a page would be kept in sync by replaying an
-  ordered log of DOM edits from the owner. Not designed yet.
+- Multiplayer: see Sync, below.
+
+### Sync
+
+Every page is a description (`src/pages/page_tree.nim`), whatever made it,
+and every machine shows a description the same way: compare it with the last
+one, and apply only the differences. So a change keeps whatever didn't change,
+hover and press states included.
+
+- **Plain signs** turn their message into one locally: markdown to HTML
+  (`pkg/markdown`), HTML to a description (`ew_describe_html`, the same
+  parser Blitz renders with). The message already syncs.
+- **Script pages** go on `sign.page` as a description, a synced field:
+  - `page:` already is one.
+  - `html=` and DOM calls change the document directly, so after a pass
+    that changed it, the worker describes the document (`ew_describe`) and
+    publishes that. Enu's own stylesheet (`#enu-style`) is left out; the
+    page's own stylesheets are kept.
+- Another machine's worker shows `sign.page` when it isn't empty, else the
+  message. Only the machine whose script built a page writes it.
+- **Clicks** on a page built elsewhere go back as "sign, path" through the
+  clicking player's `page_clicks` (recent clicks, one per line, with a
+  serial). Only that player writes it; the building machine reads every
+  player's and remembers the last serial it handled. The path finds the
+  element there: from the tree a `page:` rendered, or, for a page built by
+  DOM calls, from the node ids its last description recorded. Hover and press
+  stay local.
+- `md "..."` and `raw "<b>...</b>"` put markdown and HTML inside a `page:`
+  block. Both become description on the host (cached by content), so they
+  diff like everything else.
+- Sending the whole description on every change is simple and lets a late
+  joiner start from the current value. If big pages make that too costly,
+  an edit log (the tree already computes one, `take_edits`) can go on top.
+- Checked with two instances (a host, and a second Enu with `--connect`): a
+  plain sign, an `html=` page updated every pass, and a shared `page:` with
+  `md` all showed on the second machine. Remote clicks are covered by
+  `tests/unit/page_tree_test.nim` (described, rebuilt, clicked, found by
+  path), not yet with a real click from a second machine.
+- Size, `tests/bench/page_bench.nim`: 500 keyed rows of five elements (77 KB
+  described), release build. Parse 0.7 ms; unchanged compare 0.04 ms; one
+  count changed or one row moved 1.6 ms (parse, diff and apply); layout
+  1.3 ms; describing the document 1.3 ms. Not measured: the VM building
+  that description every pass, which is likely the larger cost.
 
 ### Canvas 2D and WebGPU
 
@@ -191,8 +232,8 @@ except where noted.
   describes the whole page on each pass; the host compares it with the last
   description and applies only the differences. `on click:` inside an
   element is the click query for that element. A page described inside a
-  state only exists in that state. The differences are also the edit log
-  other players would replay (syncing not designed yet).
+  state only exists in that state. Other players get the description itself
+  (see Sync).
 - **Open:** what a transition does to the rest of a tick's results (proposed:
   the first transition wins, and the remaining results are still processed);
   whether `on X:` loops can run commands (proposed: no, which also makes them
@@ -485,9 +526,8 @@ loop:
 - Host side (`src/pages/page_tree.nim`, no Enu dependencies):
   compares it with the last description and applies only the differences:
   text and attribute changes, adds, removes, moves. Each one is logged as an
-  edit (`text 2/1/0 3`, `add 4/#bot_rat li`, `move 0/#crab`), readable from a
-  script with `board.page_edits()`. That's the stream other players would
-  replay.
+  edit (`text 2/1/0 3`, `add 4/#bot_rat li`, `move 0/#crab`), which tests use
+  to check a change stays small.
 - Identity: an element's `id` is its key, and elements made in a loop over
   things (`for bot in Bot.all:`) take the thing's id automatically. Keyed
   elements are matched by key wherever they move; others by position. As in
@@ -574,6 +614,15 @@ loop:
 
   Single runs on one machine; a few fps either way is noise.
 
+  The "mipmaps once still" column didn't really have mipmaps: Godot capped a
+  texture made without them at level 0, so turning them on later generated
+  nothing. Our Godot now lifts the cap (`texture_set_flags`) and regenerates
+  them after a partial update. With working mipmaps, settled signs read
+  smoothly from a distance at no measurable cost: sign-bench ran at ~145 fps
+  right after, and ~110 later in the day both with and without the sync work.
+  The machine (a fanless MacBook Air) throttles as it warms, so compare
+  builds in alternating runs, not against an earlier number.
+
 ## Open questions
 
 - iOS (0.4): untested since signs moved to pages. `src/pages/renderer.nim`
@@ -586,10 +635,9 @@ loop:
 - Try the aim-ray click path with a real mouse, including billboard signs.
 - After a transition, should the loop start again right away with fresh
   results, or wait for its next natural run (what #169 does)?
-- How DOM edits sync to other players (to discuss).
 - Is the Nim VM fast enough for interactive UI driven by player scripts, or
   do player apps need a faster path (QuickJS, or Nim compiled to Wasm under
   an interpreter)?
 - Multiplayer for in-game apps: the owner's page is the source of truth and
-  other players replay its DOM edit log (see Threads). Not designed yet; it
-  only needs to be possible.
+  other players get its description (see Sync). Per-player pages wait for
+  `player.ui` (0.4).

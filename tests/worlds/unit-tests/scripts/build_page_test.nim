@@ -52,4 +52,26 @@ suite "Page values":
     check a["h1"].text == "Own"
     check b["h1"].text == "Count 4"
 
+  test "md and raw add to a page, and clicks still find their element":
+    var clicks = 0
+    var passes = 0
+    loop:
+      inc passes
+      a.page = page:
+        md "# Shop\nEverything is *half price*."
+        raw "<p class=note>Probably.</p>"
+        button(id = "buy", style = "width: 100%; height: 300px"):
+          text "Buy"
+          on click:
+            inc clicks
+      if passes == 2:
+        a.page_post_pointer(1, 0.5, 0.95)
+        a.page_post_pointer(2, 0.5, 0.95)
+      if clicks >= 1 or passes >= 20:
+        break
+    check a["h1"].text == "Shop"
+    check a["em"].text == "half price"
+    check a[".note"].text == "Probably."
+    check clicks == 1
+
 test_summary()

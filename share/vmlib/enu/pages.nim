@@ -28,6 +28,18 @@
 ##   board.page = counter
 ##   other_board.page = counter # the same page, in two places
 ## ```
+##
+## `md` and `raw` add markdown and HTML to a page:
+##
+## ```nim
+## board.page = page:
+##   md "# Shop\nEverything is *half price*. Probably."
+##   button "Buy":
+##     on click:
+##       inc sold
+## ```
+##
+## Every player sees the same page, and their clicks count too.
 
 import std/[macros, tables, strutils]
 import core, vm_bridge_utils
@@ -67,6 +79,7 @@ bridged_to_host:
   proc page_describe(key: string, owner: Thing, tree: string)
   proc page_show(self: Sign, key: string)
   proc page_key_clicks(key: string, path: string): int
+  proc page_html_tokens(text: string, markdown: bool): string
   proc page_stats*(): string
     ## How long pages took on the worker since you last asked.
   proc page_parked*(self: Sign): bool
@@ -271,6 +284,26 @@ proc text*(b: PageBuilder, value: string) =
   inc b.counters[^1]
   b.tokens.add "T" & FIELD_SEP & value.clean & TOKEN_SEP
 
+proc splice*(b: PageBuilder, tokens: string) =
+  ## Adds an already made description: one from HTML or markdown.
+  b.tokens.add tokens
+  var depth = 0
+  for token in tokens.split(TOKEN_SEP):
+    if token.len == 0:
+      continue
+    case token[0]
+    of 'E':
+      if depth == 0:
+        inc b.counters[^1]
+      inc depth
+    of 'T':
+      if depth == 0:
+        inc b.counters[^1]
+    of 'C':
+      dec depth
+    else:
+      discard
+
 proc close*(b: PageBuilder) =
   b.tokens.add "C" & TOKEN_SEP
   discard b.counters.pop
@@ -426,6 +459,24 @@ macro page*(args: varargs[untyped]): untyped =
       `sign`.page = `made`
   else:
     error("`page` takes a block, or a sign and a block", args)
+
+proc md*(markdown: string) =
+  ## Markdown in a page, like a sign's message:
+  ##
+  ## ```nim
+  ## page:
+  ##   md "# Shop\nEverything is *half price*."
+  ##   button "Buy"
+  ## ```
+  if building.is_nil:
+    raise ValueError.init("`md` adds to a page, so call it inside a `page` block.")
+  building.splice(page_html_tokens(markdown, true))
+
+proc raw*(html: string) =
+  ## HTML in a page, as it is.
+  if building.is_nil:
+    raise ValueError.init("`raw` adds to a page, so call it inside a `page` block.")
+  building.splice(page_html_tokens(html, false))
 
 macro piece*(def: untyped): untyped =
   ## For a proc that describes part of a page: `proc stat(...) {.piece.} =`.

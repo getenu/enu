@@ -72,6 +72,10 @@ proc ew_get_attribute*(
 ): int64
 proc ew_write_png*(v: ViewPtr, path: cstring): bool
 proc ew_get_text*(v: ViewPtr, node: NodeId): cstring
+proc ew_describe*(v: ViewPtr, node: NodeId, ids: bool): cstring
+  ## What's inside `node` (NO_NODE: the whole page) as a description, for
+  ## another copy to rebuild. With `ids`, each node is followed by its id.
+proc ew_describe_html*(html: cstring): cstring
 proc ew_rect*(v: ViewPtr, node: NodeId, out_rect: ptr array[4, float32])
 proc ew_pointer*(
   v: ViewPtr, kind: uint32, x, y: float32, changed: ptr bool

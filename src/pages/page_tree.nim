@@ -1,8 +1,7 @@
 ## Declarative pages, host side. A script describes its whole page on every
-## pass (`page board: ...`); this compares the description with the last one
-## and applies only the differences to the Blitz document. The differences
-## are also kept as a list of edits, which is what other players would replay
-## to keep a copy of the page.
+## pass (`page: ...`); this compares the description with the last one and
+## applies only the differences to the Blitz document. The differences are
+## also kept as a list of edits, so tests can check a change stays small.
 ##
 ## Elements with a key (their `id`, or one the script's loop gave them) are
 ## matched by key wherever they move. Others are matched by position. As in
@@ -39,8 +38,10 @@ type
 proc parse_tree*(s: string): seq[VNode] =
   ## Reads the tokens a script sends: `E tag` opens an element, `K key` gives
   ## it a key, `A name value` sets an attribute (`id` is also its key), `T
-  ## text` adds text, `C` closes.
+  ## text` adds text, `C` closes. `I id` after an element or text is its node
+  ## in the page it was described from.
   var stack = @[VNode()]
+  var last: VNode
   for token in s.split(TOKEN_SEP):
     if token.len == 0:
       continue
@@ -50,6 +51,7 @@ proc parse_tree*(s: string): seq[VNode] =
       let n = VNode(tag: fields[1])
       stack[^1].kids.add n
       stack.add n
+      last = n
     of "K":
       if stack[^1].key == "":
         stack[^1].key = fields[1]
@@ -58,7 +60,10 @@ proc parse_tree*(s: string): seq[VNode] =
       if fields[1] == "id":
         stack[^1].key = fields[2]
     of "T":
-      stack[^1].kids.add VNode(text: fields[1])
+      last = VNode(text: fields[1])
+      stack[^1].kids.add last
+    of "I":
+      last.node = NodeId(parse_biggest_uint(fields[1]))
     of "C":
       if stack.len > 1:
         discard stack.pop
@@ -278,3 +283,47 @@ proc clicks_at*(t: PageTree, view: ViewPtr, targets: seq[int], path: string): in
 proc take_edits*(t: var PageTree): seq[string] =
   result = t.edits
   t.edits.set_len(0)
+
+proc add_tokens(s: var string, n: VNode) =
+  template token(fields: varargs[string]) =
+    s.add fields.join($FIELD_SEP)
+    s.add TOKEN_SEP
+  if n.tag == "":
+    token "T", n.text
+  else:
+    token "E", n.tag
+    if n.key != "" and ("id", n.key) notin n.attrs:
+      token "K", n.key
+    for (k, v) in n.attrs:
+      token "A", k, v
+    for kid in n.kids:
+      s.add_tokens kid
+    token "C"
+
+proc to_tokens*(kids: seq[VNode]): string =
+  ## A description again, without node ids.
+  for kid in kids:
+    result.add_tokens kid
+
+proc adopt*(t: var PageTree, kids: seq[VNode]) =
+  ## Takes `kids`, described from a page with their node ids, as what the page
+  ## shows, so clicks on it can be matched to paths. For pages built by DOM
+  ## calls, which have no description of their own.
+  t.root = VNode(tag: "div", kids: kids)
+  t.root.assign_paths("")
+  t.paths.clear
+  for kid in kids:
+    t.index(kid)
+
+proc node_at*(t: PageTree, path: string): NodeId =
+  ## The node at `path`, or NO_NODE.
+  for node, p in t.paths:
+    if p == path:
+      return NodeId(node)
+  NO_NODE
+
+proc path_of*(t: PageTree, view: ViewPtr, node: NodeId): string =
+  ## The path of `node`, or of the nearest described element around it. ""
+  ## if it's outside the description.
+  var found = false
+  result = t.path_of(view, node, found)

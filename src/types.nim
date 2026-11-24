@@ -563,6 +563,9 @@ type
     flags*: set[PlayerFlags]
     coding*: Thing
     open_sign*: Sign
+    page_clicks*: string
+      ## This player's recent clicks on pages another machine's scripts built,
+      ## one per line: serial, sign id, path. Whoever built the page reads them.
 
   Bot* {.ed.} = ref object of Thing
     animation*: string
@@ -574,6 +577,10 @@ type
     billboard*: bool
     owner*: Thing
     text_only*: bool
+    page*: string
+      ## A page a script built for this sign, as a description (see
+      ## page_tree), so every player's copy can show it. Empty for a plain
+      ## sign, which shows its message.
 
   Build* {.ed.} = ref object of Thing
     # The synced voxel tables ride the build's closure as real Ed fields (like

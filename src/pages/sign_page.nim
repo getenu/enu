@@ -108,11 +108,11 @@ proc highlight_blocks(html: string): string =
     at = finish + CLOSE.len
   result.add html[at .. ^1]
 
-proc markdown_html(md: string): string =
+proc markdown_html*(md: string): string =
   ## Dedented first, so text indented in a script's string isn't code.
   highlight_blocks(markdown.markdown(md.dedent))
 
-proc body_html(text: string, code: bool): string =
+proc body_html*(text: string, code: bool): string =
   ## `code` shows `text` as Nim code (signs made with `text_only`). Text that
   ## starts with a tag is HTML; anything else is markdown, as signs have
   ## always been.
@@ -126,10 +126,10 @@ proc font_px*(size, width: float): float =
 
 proc sign_html*(message: string, font_px: float, code = false): string =
   let body = body_html(message, code)
-  &"<style>:root {{ font-size: {font_px:.1f}px; }}{SIGN_CSS}</style>{body}"
+  &"<style id=\"enu-style\">:root {{ font-size: {font_px:.1f}px; }}{SIGN_CSS}</style>{body}"
 
 proc panel_html*(more: string, code = false): string =
   ## For the right panel. Sized in CSS px from a 16px base; the page's scale
   ## carries the screen scale and the font size setting.
   let body = body_html(more, code)
-  &"<style>:root {{ font-size: 16px; }}{SIGN_CSS}</style>{body}"
+  &"<style id=\"enu-style\">:root {{ font-size: 16px; }}{SIGN_CSS}</style>{body}"

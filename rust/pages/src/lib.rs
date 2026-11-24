@@ -633,3 +633,116 @@ pub unsafe extern "C" fn ew_remove_attribute(v: *mut View, node: u64, name: *con
             .clear_attribute(id(node), QualName::new(None, ns!(), LocalName::from(name)));
     })
 }
+
+/// Separators of the page description format (`src/pages/page_tree.nim`).
+const TOKEN_SEP: char = '\u{1e}';
+const FIELD_SEP: char = '\u{1f}';
+
+fn token(out: &mut String, fields: &[&str]) {
+    for (i, f) in fields.iter().enumerate() {
+        if i > 0 {
+            out.push(FIELD_SEP);
+        }
+        out.extend(f.chars().filter(|&c| c != TOKEN_SEP && c != FIELD_SEP));
+    }
+    out.push(TOKEN_SEP);
+}
+
+/// Appends `node` as description tokens: `E tag`, `A name value`, `T text`,
+/// `C`. With `ids`, each element and text is followed by `I id`, its node id
+/// in this document. Comments are left out.
+fn describe_node(doc: &BaseDocument, node: NodeId, ids: bool, out: &mut String) {
+    let Some(n) = doc.get_node(node) else { return };
+    match &n.data {
+        blitz_dom::NodeData::Text(t) => {
+            token(out, &["T", &t.content]);
+            if ids {
+                token(out, &["I", &node.as_u64().to_string()]);
+            }
+        }
+        blitz_dom::NodeData::Element(el) => {
+            token(out, &["E", &el.name.local]);
+            if ids {
+                token(out, &["I", &node.as_u64().to_string()]);
+            }
+            for a in el.attrs() {
+                token(out, &["A", &a.name.local, &a.value]);
+            }
+            for &kid in &n.children {
+                describe_node(doc, kid, ids, out);
+            }
+            token(out, &["C"]);
+        }
+        _ => {}
+    }
+}
+
+/// `node`'s children as a description. Node 0 means the whole page: its own
+/// stylesheets (not Enu's, `#enu-style`) and the body's children.
+fn describe(doc: &BaseDocument, node: u64, ids: bool) -> String {
+    let mut out = String::new();
+    let kids_of = |n: NodeId| doc.get_node(n).map(|n| n.children.clone()).unwrap_or_default();
+    if node != 0 {
+        for kid in kids_of(id(node)) {
+            describe_node(doc, kid, ids, &mut out);
+        }
+        return out;
+    }
+    if let Ok(Some(head)) = doc.query_selector("head") {
+        for kid in kids_of(head) {
+            let enu = doc
+                .get_node(kid)
+                .and_then(|n| n.element_data())
+                .is_some_and(|el| el.attr(LocalName::from("id")) == Some("enu-style"));
+            if !enu {
+                describe_node(doc, kid, ids, &mut out);
+            }
+        }
+    }
+    if let Ok(Some(body)) = doc.query_selector("body") {
+        for kid in kids_of(body) {
+            describe_node(doc, kid, ids, &mut out);
+        }
+    }
+    out
+}
+
+/// Describes what's inside `node` (0: the whole page) for another copy of the
+/// page to rebuild. Valid until the next call that returns a string on this
+/// view.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_describe(v: *mut View, node: u64, ids: bool) -> *const c_char {
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        if node != 0 {
+            check_nodes(&v.doc, &[node]);
+        }
+        v.out = CString::new(describe(&v.doc, node, ids)).unwrap();
+        v.out.as_ptr()
+    })
+}
+
+thread_local! {
+    static DESCRIBED: RefCell<CString> = RefCell::new(CString::default());
+}
+
+/// `html` as a description, without making a page. Valid until the next call
+/// on this thread.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_describe_html(html: *const c_char) -> *const c_char {
+    crate::guard::guard(move || {
+        let html = unsafe { str_arg(html) };
+        // The shared fonts: a document without them scans the system's.
+        let config = DocumentConfig {
+            font_ctx: Some(fonts()),
+            base_url: Some(BASE_URL.to_string()),
+            ..Default::default()
+        };
+        let doc = HtmlDocument::from_html(html, config).into_inner();
+        let s = CString::new(describe(&doc, 0, false)).unwrap();
+        DESCRIBED.with(|d| {
+            *d.borrow_mut() = s;
+            d.borrow().as_ptr()
+        })
+    })
+}
