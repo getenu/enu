@@ -114,8 +114,10 @@ proc push_flags*(self: GameState, flags: varargs[LocalStateFlags]) =
       if self.wants.len == 0 or self.wants[^1] != flag:
         self.wants -= flag
         self.wants += flag
-    elif flag notin self.local_flags and
-        (self.wants.len == 0 or self.wants[^1] != flag):
+    elif flag notin self.wants:
+      # Checks the wants, not the resolved flags: a flag that's only on because
+      # another forces it (the pointer, while the mouse is captured) still
+      # has to be recorded, or it's gone once that other flag is.
       self.wants += flag
     if flag == COMMAND_MODE:
       # leaving command mode goes back to the panel that had focus, even if

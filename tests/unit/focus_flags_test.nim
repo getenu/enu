@@ -96,3 +96,13 @@ suite "Focus flags":
     state.replace_flag BLOCK_TARGET_VISIBLE
     check BLOCK_TARGET_VISIBLE in state.local_flags
     check RETICLE_VISIBLE notin state.local_flags
+
+  test "hovering back in while captured still counts once the mouse is freed":
+    # The hidden cursor drifts over the toolbar and back while captured; the
+    # pointer flag is forced on then, so its re-push must still be recorded.
+    state.push_flag POINTER_IN_VIEWPORT
+    state.push_flag MOUSE_CAPTURED
+    state.pop_flag POINTER_IN_VIEWPORT
+    state.push_flag POINTER_IN_VIEWPORT
+    state.pop_flag MOUSE_CAPTURED
+    check POINTER_IN_VIEWPORT in state.local_flags
