@@ -488,9 +488,12 @@ loop:
     function call per byte. Each sign now keeps its upload buffer.
   - `ImageTexture.set_data` reallocates the GL texture (`glTexImage2D`) on
     every update. Same-size updates now use
-    `VisualServer.texture_set_data_partial` (`glTexSubImage2D`). Sign
-    textures have no mipmaps, like the old viewport signs, because a partial
-    update doesn't regenerate them.
+    `VisualServer.texture_set_data_partial` (`glTexSubImage2D`). That only
+    writes the level it's given, so our Godot (`enu-partial-mipmaps` in the
+    fork) regenerates a mipmapped texture's smaller levels afterwards.
+    Regenerating them every frame is expensive (sign-bench: ~40 fps), so a
+    sign goes without mipmaps while it changes often and gets them once it
+    has been still for half a second. Old viewport signs had none.
   - Every new Blitz document scanned the system fonts. One font context is
     now shared by every page.
   - Straight alpha divided three times per translucent pixel (every pixel
@@ -499,10 +502,12 @@ loop:
 - `tests/worlds/sign-bench`: 16 marquees that change every tick and 16
   still signs. On an Apple Silicon Mac, tools build, `ENU_PERF_LOG=1`:
 
-  | | old signs (`-d:no_pages`) | pages, before | pages, now |
-  |---|---|---|---|
-  | sign-bench | ~106 fps | ~15 fps | ~104 fps |
-  | welcome level | ~93 fps | ~74 fps | ~96 fps |
+  | | old signs (`-d:no_pages`) | pages, before | pages, no mipmaps | pages, mipmaps once still |
+  |---|---|---|---|---|
+  | sign-bench | ~106 fps | ~15 fps | ~104 fps | ~94 fps |
+  | welcome level | ~93 fps | ~74 fps | ~96 fps | ~91 fps |
+
+  Single runs on one machine; a few fps either way is noise.
 
 ## Open questions
 

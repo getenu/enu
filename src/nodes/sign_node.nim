@@ -21,6 +21,7 @@ const
   # `size * viewport_x / width`. This constant is the whole bridge between the
   # block-space API and the pixel-space label.
   text_px_per_block = viewport_x.float
+  MIPMAP_SETTLE_SECONDS = 0.5
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
@@ -34,6 +35,10 @@ gdobj SignNode of Spatial:
   var expanded: bool
   var web_tex: ImageTexture
   var web_bytes: PoolByteArray
+  var web_still: float ## seconds since the picture last changed
+  var web_mipmapped: bool
+    ## Mipmaps keep distant text smooth, but regenerating them every frame is
+    ## expensive. A sign that changes often goes without until it settles.
   var page_version: uint64
     ## Version of the last frame shown from the sign's page (0: none yet).
 
@@ -88,6 +93,10 @@ gdobj SignNode of Spatial:
     ## Uploads a rendered page as the albedo and sizes the quad to fit it
     ## across the model's width.
     when defined(enu_pages):
+      if self.web_mipmapped and self.web_still < MIPMAP_SETTLE_SECONDS:
+        self.web_tex.flags = FLAG_FILTER
+        self.web_mipmapped = false
+      self.web_still = 0
       upload(
         cast[ptr UncheckedArray[uint8]](pixels),
         px_width,
@@ -274,6 +283,11 @@ gdobj SignNode of Spatial:
     when defined(enu_pages):
       if ?self.model and ?self.web_tex:
         self.show_page_frame()
+        self.web_still += delta
+        if not self.web_mipmapped and self.web_still > MIPMAP_SETTLE_SECONDS and
+            self.web_tex.get_width > 0:
+          self.web_tex.flags = FLAG_FILTER or FLAG_MIPMAPS # generates them
+          self.web_mipmapped = true
     # If we only billboard the material, the collision surface doesn't move
     # so highlighting the sign is weird from some angles. Align the mesh to the
     # camera, along with billboarding the material. The mesh doesn't line-up

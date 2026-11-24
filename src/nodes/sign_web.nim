@@ -3,7 +3,7 @@
 
 import pkg/godot
 import gdnativeapi
-import godotapi/[image, image_texture, texture, file, godottypes, visual_server]
+import godotapi/[image, image_texture, texture, file, godottypes, visual_server, gd_os]
 import pkg/chronicles
 import ../pages/[renderer, sign_page]
 
@@ -54,9 +54,13 @@ proc upload*(
   var img = gdnew[Image]()
   img.create_from_data(width, height, false, FORMAT_RGBA8, bytes)
   if tex.get_width == width and tex.get_height == height:
-    # `set_data` reallocates the GL texture every time; this writes into it.
-    texture_set_data_partial(tex.get_rid, img, 0, 0, width, height, 0, 0, 0)
+    if get_current_video_driver() == VIDEO_DRIVER_GLES3:
+      # `set_data` reallocates the GL texture every time; this writes into it.
+      # Our Godot regenerates the mipmaps after a partial update, if the
+      # texture has them.
+      texture_set_data_partial(tex.get_rid, img, 0, 0, width, height, 0, 0, 0)
+    else:
+      tex.set_data(img) # GLES2 has no partial updates
   else:
-    # No mipmaps, as with the old viewport signs: a partial update doesn't
-    # regenerate them.
+    # Mipmaps come later, once the sign stops changing (see SignNode).
     tex.create_from_image(img, FLAG_FILTER)
