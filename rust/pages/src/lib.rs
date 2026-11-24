@@ -37,9 +37,30 @@ fn viewport(width: u32, height: u32, scale: f32) -> Viewport {
     Viewport::new(width, height, scale, ColorScheme::Light)
 }
 
+thread_local! {
+    /// System fonts, found once per thread. Without this every new document
+    /// scans the system's fonts again, which costs far more than the page.
+    static FONTS: parley::FontContext = {
+        use parley::fontique::{Blob, Collection, CollectionOptions, SourceCache};
+        let mut fonts = parley::FontContext {
+            source_cache: SourceCache::new_shared(),
+            collection: Collection::new(CollectionOptions {
+                shared: true,
+                system_fonts: true,
+            }),
+        };
+        fonts.collection.register_fonts(
+            Blob::new(std::sync::Arc::new(blitz_dom::BULLET_FONT) as _),
+            None,
+        );
+        fonts
+    };
+}
+
 fn parse(html: &str, width: u32, height: u32, scale: f32) -> BaseDocument {
     let config = DocumentConfig {
         viewport: Some(viewport(width, height, scale)),
+        font_ctx: Some(FONTS.with(|fonts| fonts.clone())),
         ..Default::default()
     };
     HtmlDocument::from_html(html, config).into_inner()

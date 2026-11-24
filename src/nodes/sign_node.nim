@@ -38,8 +38,9 @@ gdobj SignNode of Spatial:
   var web: pointer # `ViewPtr` with -d:enu_pages
   var web_tex: ImageTexture
   var page_version: uint64
-  var web_idle: float ## seconds since a plain sign's page last drew
     ## Version of the last frame shown from a script's page (0: not a page).
+  var web_idle: float ## seconds since a plain sign's page last drew
+  var web_shown: string ## what a plain sign last drew: its html and height
 
   proc set_visibility() =
     if VISIBLE in self.model.global_flags:
@@ -117,6 +118,10 @@ gdobj SignNode of Spatial:
       if self.page_version > 0:
         return
       let html = sign_html(self.model.message, font_px(self.model.size, self.model.width))
+      # Scripts often set a sign's message again without changing it.
+      let shown = html & "\0" & $self.model.height
+      if shown == self.web_shown:
+        return
       if self.web.is_nil:
         self.web = ew_view_new(html.cstring, viewport_x, viewport_y, 1.0).pointer
       let web = ViewPtr(self.web)
@@ -136,6 +141,7 @@ gdobj SignNode of Spatial:
         error "sign render failed", sign = self.model.id, error
         return
       self.show_pixels(pixels, viewport_x, px_height)
+      self.web_shown = shown
 
   proc show_page_frame() =
     ## Shows the newest frame of this sign's page, if a script built one and
