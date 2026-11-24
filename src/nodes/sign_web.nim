@@ -10,16 +10,17 @@ import ../pages/[renderer, sign_page]
 export renderer, sign_page
 
 const PAGE_FONTS = [
-  "text", "text-italic", "text-bold", "text-bold-italic", "mono", "mono-italic",
-  "mono-bold", "mono-bold-italic", "icons",
+  "text.otf", "text-italic.otf", "text-bold.otf", "text-bold-italic.otf",
+  "mono.otf", "mono-italic.otf", "mono-bold.otf", "mono-bold-italic.otf",
+  "icons.otf", "emoji.ttf",
 ]
 
 proc load_page_fonts*() =
-  ## Hands Enu's fonts (Jost, IBM Plex Mono, Font Awesome) to the page
-  ## renderer. Read through Godot so they're found inside a release's pack
-  ## too. Call before any page is made.
+  ## Hands Enu's fonts (Jost, IBM Plex Mono, Font Awesome, Noto Color
+  ## Emoji) to the page renderer. Read through Godot so they're found inside
+  ## a release's pack too. Call before any page is made.
   for name in PAGE_FONTS:
-    let path = "res://themes/" & name & ".otf"
+    let path = "res://themes/" & name
     var file = gdnew[godottypes.File]()
     if file.open(path, READ) != OK:
       error "page font missing", path

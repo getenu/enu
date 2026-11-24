@@ -30,3 +30,14 @@ Icon font used for UI icons.
 
 - **Source:** https://fontawesome.com/
 - **License:** SIL Open Font License 1.1 (for fonts), CC BY 4.0 (for icons)
+
+## Noto Color Emoji
+
+**Location:** `noto/`
+
+Color emoji for signs and pages, in the COLRv1 (vector) format. The bitmap
+(CBDT) build doesn't draw in the page renderer.
+
+- **Source:** https://github.com/googlefonts/noto-emoji (`2D/fonts/Noto-COLRv1.ttf`)
+- **License:** SIL Open Font License 1.1
+- **Designer:** Google

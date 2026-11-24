@@ -569,6 +569,10 @@ proc copy_fonts() =
   with_dir "fonts/fa":
     cp_file "Font Awesome 6 Free-Solid-900.otf", "../../" & dest / "icons.otf"
 
+  # Noto Color Emoji - color emoji (COLRv1) for signs and pages (OFL licensed)
+  with_dir "fonts/noto":
+    cp_file "Noto-COLRv1.ttf", "../../" & dest / "emoji.ttf"
+
 proc mingw_path(): string =
   var pre, match: string
   let shim_help = capture("gcc --shimgen-help")
