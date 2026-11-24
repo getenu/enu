@@ -3,10 +3,34 @@
 
 import pkg/godot
 import gdnativeapi
-import godotapi/[image, image_texture, texture]
+import godotapi/[image, image_texture, texture, file, godottypes]
+import pkg/chronicles
 import ../pages/[renderer, sign_page]
 
 export renderer, sign_page
+
+const PAGE_FONTS = [
+  "text", "text-italic", "text-bold", "text-bold-italic", "mono", "mono-italic",
+  "mono-bold", "mono-bold-italic", "icons",
+]
+
+proc load_page_fonts*() =
+  ## Hands Enu's fonts (Jost, IBM Plex Mono, Font Awesome) to the page
+  ## renderer. Read through Godot so they're found inside a release's pack
+  ## too. Call before any page is made.
+  for name in PAGE_FONTS:
+    let path = "res://themes/" & name & ".otf"
+    var file = gdnew[godottypes.File]()
+    if file.open(path, READ) != OK:
+      error "page font missing", path
+      continue
+    let len = file.call("get_len").as_int
+    let bytes = file.call("get_buffer", len.to_variant).as_pool_byte_array
+    file.close
+    var data = new_seq[uint8](bytes.len)
+    for i in 0 ..< bytes.len:
+      data[i] = bytes[i]
+    ew_register_font(data[0].addr, data.len.csize_t)
 
 proc upload*(
     pixels: ptr UncheckedArray[uint8], width, height: int, tex: ImageTexture

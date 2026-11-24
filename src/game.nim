@@ -18,6 +18,8 @@ import ui/virtual_joystick
 import
   core, types, gdutils, controllers, models/[serializers, things, colors, builds]
 import libs/fd_tracking
+when defined(enu_pages):
+  import nodes/sign_web
 
 var next_perf_log {.threadvar.}: MonoTime
 var next_voxmem_log {.threadvar.}: MonoTime
@@ -402,6 +404,8 @@ gdobj Game of Node:
   proc init*() =
     info "game.init() starting"
     self.process_priority = -100
+    when defined(enu_pages):
+      load_page_fonts()
 
     let screen_scale =
       if host_os == "macos":

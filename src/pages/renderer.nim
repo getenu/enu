@@ -42,6 +42,8 @@ proc `==`*(a, b: NodeId): bool {.borrow.}
 proc is_nil*(f: FramePtr): bool = f.pointer.is_nil
 
 {.push importc, cdecl.}
+proc ew_register_font*(data: pointer, len: csize_t)
+  ## Makes a font available, by its family name, to pages created after this.
 proc ew_view_new*(html: cstring, width, height: uint32, scale: float32): ViewPtr
 proc ew_view_free*(v: ViewPtr)
 proc ew_set_html*(v: ViewPtr, html: cstring)

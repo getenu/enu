@@ -7,7 +7,9 @@ from pkg/markdown import nil
 const
   PAGE_WIDTH* = 1200 ## px across a sign, whatever its size in blocks
   SIGN_CSS* = """
-  html { font-family: sans-serif; }
+  html { font-family: "Jost*", sans-serif; }
+  code, pre { font-family: "IBM Plex Mono", monospace; }
+  button, input, select, textarea { font: inherit; }
   body { margin: 0; padding: 0.35em 0.6em; background: #000000d6; color: #fff; }
   h1, h2, h3 { margin: 0.2em 0; }
   p { margin: 0.3em 0; }

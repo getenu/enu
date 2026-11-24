@@ -37,11 +37,12 @@ fn viewport(width: u32, height: u32, scale: f32) -> Viewport {
     Viewport::new(width, height, scale, ColorScheme::Light)
 }
 
-thread_local! {
-    /// System fonts, found once per thread. Without this every new document
-    /// scans the system's fonts again, which costs far more than the page.
-    static FONTS: parley::FontContext = {
-        use parley::fontique::{Blob, Collection, CollectionOptions, SourceCache};
+/// The fonts every page can use: the system's, found once (scanning them for
+/// each new document costs far more than the page), plus Enu's own, added
+/// with `ew_register_font`. Each document gets a copy.
+static FONTS: std::sync::LazyLock<std::sync::Mutex<parley::FontContext>> =
+    std::sync::LazyLock::new(|| {
+        use parley::fontique::{Collection, CollectionOptions, SourceCache};
         let mut fonts = parley::FontContext {
             source_cache: SourceCache::new_shared(),
             collection: Collection::new(CollectionOptions {
@@ -49,18 +50,33 @@ thread_local! {
                 system_fonts: true,
             }),
         };
-        fonts.collection.register_fonts(
-            Blob::new(std::sync::Arc::new(blitz_dom::BULLET_FONT) as _),
-            None,
-        );
-        fonts
-    };
+        register(&mut fonts, blitz_dom::BULLET_FONT.to_vec());
+        std::sync::Mutex::new(fonts)
+    });
+
+fn register(fonts: &mut parley::FontContext, data: Vec<u8>) {
+    let blob = parley::fontique::Blob::new(std::sync::Arc::new(data));
+    fonts.collection.register_fonts(blob, None);
+}
+
+fn fonts() -> parley::FontContext {
+    FONTS.lock().unwrap().clone()
+}
+
+/// Makes a font (OTF/TTF bytes) available to pages created after this, by
+/// the family name inside it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_register_font(data: *const u8, len: usize) {
+    crate::guard::guard(move || {
+        let data = unsafe { std::slice::from_raw_parts(data, len) }.to_vec();
+        register(&mut FONTS.lock().unwrap(), data);
+    })
 }
 
 fn parse(html: &str, width: u32, height: u32, scale: f32) -> BaseDocument {
     let config = DocumentConfig {
         viewport: Some(viewport(width, height, scale)),
-        font_ctx: Some(FONTS.with(|fonts| fonts.clone())),
+        font_ctx: Some(fonts()),
         ..Default::default()
     };
     HtmlDocument::from_html(html, config).into_inner()
