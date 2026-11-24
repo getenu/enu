@@ -1,12 +1,12 @@
-## Pages that scripts build on signs. A page lives on
-## the worker thread next to the script, so scripts read and change the DOM
-## directly, with no frame delay. Each tick the worker feeds pages the pointer
-## events the main thread posted, and records any page that changed for the
-## render thread (rust/pages/src/hub.rs). The main thread only uploads
-## finished frames.
+## Every sign is a page, and every page lives on the worker thread. A plain
+## sign's page is built from its message; a script can instead build one
+## (`html=`, DOM calls, or `page sign:`), reading and changing the DOM directly
+## with no frame delay. Each tick the worker feeds pages the pointer events the
+## main thread posted, and records any page that changed for the render thread
+## (rust/pages/src/hub.rs). The main thread only uploads finished frames.
 
 import std/[tables, monotimes, times, strformat, algorithm, math, strutils]
-import core, models/signs
+import core, models/[signs, things]
 import ../../pages/[renderer, sign_page, page_tree]
 
 const
@@ -17,6 +17,9 @@ const
     ## A declarative page with no changes or pointer activity for this long
     ## drops its document (a few MB) and keeps only its description. Any
     ## pointer event, change, or DOM call rebuilds it.
+  sign_page_seconds {.intdefine.} = 30
+    ## The same for a plain sign's page, which is cheap to rebuild from its
+    ## message.
   PAGE_ROOT = "enu-page"
 
 type
@@ -33,6 +36,9 @@ type
     tree: PageTree ## what `page sign:` last described
     edit_log: seq[string]
     imperative: bool ## changed by DOM calls, so it can't be rebuilt
+    message: string
+      ## For a plain sign, what its page was built from: the message and the
+      ## sign's size. Empty once a script builds the page instead.
     parked: bool ## document dropped; `tree` holds the last description
     last_active: MonoTime
 
@@ -55,14 +61,26 @@ proc log_errors(key: string) =
 proc root_html(self: Sign): string =
   sign_html("<div id=" & PAGE_ROOT & "></div>", font_px(self.size, self.width))
 
+proc message_html(self: Sign): string =
+  sign_html(self.message, font_px(self.size, self.width))
+
+proc message_key(self: Sign): string =
+  ## Everything a plain sign's page depends on.
+  &"{self.message}\0{self.size}\0{self.width}\0{self.height}"
+
 proc unpark(page: Page) =
-  ## Rebuilds a parked page's document from its last description.
-  page.view = ew_view_new(page.sign.root_html.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0)
-  let root = ew_query(page.view, cstring("#" & PAGE_ROOT))
-  let kids = if page.tree.root.is_nil: @[] else: page.tree.root.kids
-  page.tree = PageTree()
-  discard page.tree.render(page.view, root, kids)
-  discard page.tree.take_edits
+  ## Rebuilds a parked page's document from its message or last description.
+  if page.message != "":
+    page.view =
+      ew_view_new(page.sign.message_html.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0)
+  else:
+    page.view =
+      ew_view_new(page.sign.root_html.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0)
+    let root = ew_query(page.view, cstring("#" & PAGE_ROOT))
+    let kids = if page.tree.root.is_nil: @[] else: page.tree.root.kids
+    page.tree = PageTree()
+    discard page.tree.render(page.view, root, kids)
+    discard page.tree.take_edits
   page.parked = false
   page.dirty = true
   page.last_active = get_mono_time()
@@ -103,6 +121,7 @@ proc create_page(self: Sign, html: string): Page =
       result.unpark
     ew_set_html(result.view, full.cstring)
   result.tree = PageTree()
+  result.message = ""
   result.dirty = true
   result.last_active = get_mono_time()
 
@@ -196,7 +215,7 @@ proc page_render*(self: Sign, tree: string) =
   if not page.is_nil and not page.imperative and not page.tree.root.is_nil and
       same_kids(page.tree.root.kids, kids):
     return # unchanged: nothing to do, and a parked page stays parked
-  if page.is_nil:
+  if page.is_nil or page.message != "":
     page = self.create_page("<div id=" & PAGE_ROOT & "></div>")
   page = self.page
   var root = ew_query(page.view, cstring("#" & PAGE_ROOT))
@@ -286,10 +305,40 @@ proc pump_pages*() =
     ew_forget(key.cstring)
     pages.del key
 
-proc present_pages*() =
-  ## After scripts run: forget clicks the script has seen, lay out and record
-  ## pages that changed, and park declarative pages that have been quiet a
-  ## while.
+proc sync_sign(sign: Sign) =
+  ## Builds or rebuilds a plain sign's page when its message or size changed.
+  if sign.text_only or sign.destroyed:
+    return
+  var page = pages.get_or_default(sign.id)
+  if not page.is_nil and page.message == "":
+    return # a script built this page
+  let key = sign.message_key
+  if not page.is_nil and page.message == key:
+    return
+  if page.is_nil:
+    page = Page(
+      view: ew_view_new(sign.message_html.cstring, PAGE_WIDTH, PAGE_WIDTH, 1.0),
+      sign: sign,
+      height: PAGE_WIDTH,
+    )
+    pages[sign.id] = page
+  elif page.parked:
+    page.message = key
+    page.unpark
+  else:
+    ew_set_html(page.view, sign.message_html.cstring)
+  page.message = key
+  page.dirty = true
+  page.last_active = get_mono_time()
+  log_errors(sign.id)
+
+proc present_pages*(things: seq[Thing]) =
+  ## After scripts run: bring plain signs' pages up to date, forget clicks the
+  ## script has seen, lay out and record pages that changed, and park pages
+  ## that have been quiet a while.
+  things.walk_tree proc(thing: Thing) =
+    if thing of Sign:
+      sync_sign(Sign(thing))
   let now = get_mono_time()
   for key, page in pages:
     # Clicks last until the script has looked at them (its loop may not run
@@ -301,9 +350,12 @@ proc present_pages*() =
     if page.sign.destroyed or page.parked:
       continue
     if not page.dirty:
-      if not page.imperative and not page.tree.root.is_nil and
-          page.clicks.len == 0 and
-          now - page.last_active > init_duration(seconds = page_park_seconds):
+      let idle_for =
+        if page.message != "": sign_page_seconds
+        elif not page.imperative and not page.tree.root.is_nil: page_park_seconds
+        else: -1
+      if idle_for >= 0 and page.clicks.len == 0 and
+          now - page.last_active > init_duration(seconds = idle_for):
         page.park(key)
       continue
     let start = get_mono_time()

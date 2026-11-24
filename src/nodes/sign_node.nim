@@ -21,9 +21,6 @@ const
   # `size * viewport_x / width`. This constant is the whole bridge between the
   # block-space API and the pixel-space label.
   text_px_per_block = viewport_x.float
-  sign_page_seconds {.intdefine.} = 30
-    ## A plain sign frees its page (a few MB) after this long without a new
-    ## message. Its picture stays; a new message builds a page again.
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
@@ -35,12 +32,10 @@ gdobj SignNode of Spatial:
   var quad: QuadMesh
   var counter: int
   var expanded: bool
-  var web: pointer # `ViewPtr` with -d:enu_pages
   var web_tex: ImageTexture
+  var web_bytes: PoolByteArray
   var page_version: uint64
-    ## Version of the last frame shown from a script's page (0: not a page).
-  var web_idle: float ## seconds since a plain sign's page last drew
-  var web_shown: string ## what a plain sign last drew: its html and height
+    ## Version of the last frame shown from the sign's page (0: none yet).
 
   proc set_visibility() =
     if VISIBLE in self.model.global_flags:
@@ -94,7 +89,11 @@ gdobj SignNode of Spatial:
     ## across the model's width.
     when defined(enu_pages):
       upload(
-        cast[ptr UncheckedArray[uint8]](pixels), px_width, px_height, self.web_tex
+        cast[ptr UncheckedArray[uint8]](pixels),
+        px_width,
+        px_height,
+        self.web_tex,
+        self.web_bytes,
       )
       let auto_height = self.model.height == 0.0
       let sign_height = self.model.width * px_height.float / px_width.float
@@ -110,42 +109,10 @@ gdobj SignNode of Spatial:
       mesh.transform = t
       self.expanded = true
 
-  proc render_web() =
-    ## Lays the message out at `viewport_x` px wide, sized to fit (or to the
-    ## model's height). Signs whose script built a page skip this; the
-    ## worker renders those.
-    when defined(enu_pages):
-      if self.page_version > 0:
-        return
-      let html = sign_html(self.model.message, font_px(self.model.size, self.model.width))
-      # Scripts often set a sign's message again without changing it.
-      let shown = html & "\0" & $self.model.height
-      if shown == self.web_shown:
-        return
-      if self.web.is_nil:
-        self.web = ew_view_new(html.cstring, viewport_x, viewport_y, 1.0).pointer
-      let web = ViewPtr(self.web)
-      self.web_idle = 0
-      ew_resize(web, viewport_x, viewport_y)
-      ew_set_html(web, html.cstring)
-
-      let px_height =
-        if self.model.height == 0.0:
-          max(1, int(ew_content_height(web) + 0.999))
-        else:
-          int(viewport_x.float * self.model.height / self.model.width)
-      ew_resize(web, viewport_x, px_height.uint32)
-      let pixels = ew_render(web)
-      let error = take_error()
-      if error != "":
-        error "sign render failed", sign = self.model.id, error
-        return
-      self.show_pixels(pixels, viewport_x, px_height)
-      self.web_shown = shown
-
   proc show_page_frame() =
-    ## Shows the newest frame of this sign's page, if a script built one and
-    ## it changed.
+    ## Shows the newest frame of this sign's page, if it changed. The worker
+    ## builds the page, from the message or a script, and the render thread
+    ## draws it.
     when defined(enu_pages):
       var version: uint64
       let frame = ew_take_frame(self.model.id.cstring, self.page_version, version.addr)
@@ -177,12 +144,6 @@ gdobj SignNode of Spatial:
       let u = local.x / self.quad.size.x + 0.5
       let v = 0.5 - local.y / self.quad.size.y
       result = ew_post_pointer(self.model.id.cstring, kind, u, v)
-
-  method exit_tree*() =
-    when defined(enu_pages):
-      if not self.web.is_nil:
-        ew_view_free(ViewPtr(self.web))
-        self.web = nil
 
   proc setup*() =
     debug "sign setup", sign = self.model.id
@@ -250,9 +211,8 @@ gdobj SignNode of Spatial:
       self.light_web()
       self.viewport.render_target_update_mode = UPDATE_DISABLED
       self.label.visible = false
-      self.render_web()
-      # If a script made this sign a page, ask its owner for the picture
-      # (this node may be new). Ignored for plain signs.
+      # Ask for the picture again, in case this node is new and the page's
+      # last frame was already taken (or dropped while the page was parked).
       when defined(enu_pages):
         discard ew_post_pointer(self.model.id.cstring, POINTER_WAKE, 0, 0)
 
@@ -265,7 +225,7 @@ gdobj SignNode of Spatial:
     self.model.message_value.watch:
       if added or touched:
         if use_web:
-          self.render_web()
+          discard # the worker rebuilds the page
         elif self.model.text_only:
           text_edit.text = change.item
           resize()
@@ -314,11 +274,6 @@ gdobj SignNode of Spatial:
     when defined(enu_pages):
       if ?self.model and ?self.web_tex:
         self.show_page_frame()
-      if not self.web.is_nil:
-        self.web_idle += delta
-        if self.web_idle > sign_page_seconds.float:
-          ew_view_free(ViewPtr(self.web))
-          self.web = nil
     # If we only billboard the material, the collision surface doesn't move
     # so highlighting the sign is weird from some angles. Align the mesh to the
     # camera, along with billboarding the material. The mesh doesn't line-up

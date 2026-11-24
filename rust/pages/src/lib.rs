@@ -116,12 +116,24 @@ fn check_nodes(doc: &BaseDocument, ids: &[u64]) {
 
 /// Blitz draws premultiplied alpha; Godot's usual blend (and PNG) want
 /// straight alpha, or translucent parts come out too dark.
+/// `255 / alpha` in 16.16 fixed point, so unpremultiplying is a multiply
+/// instead of a divide. Signs are mostly translucent, so it's every pixel.
+static RECIPROCALS: std::sync::LazyLock<[u32; 256]> = std::sync::LazyLock::new(|| {
+    let mut table = [0; 256];
+    for a in 1..256u32 {
+        table[a as usize] = ((255 << 16) + a / 2) / a;
+    }
+    table
+});
+
 pub(crate) fn unpremultiply(pixels: &mut [u8]) {
+    let table = &*RECIPROCALS;
     for px in pixels.chunks_exact_mut(4) {
-        let a = px[3] as u32;
+        let a = px[3];
         if a != 0 && a != 255 {
+            let r = table[a as usize];
             for c in &mut px[..3] {
-                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+                *c = ((*c as u32 * r + 0x8000) >> 16).min(255) as u8;
             }
         }
     }

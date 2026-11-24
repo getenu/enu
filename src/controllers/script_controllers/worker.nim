@@ -848,7 +848,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
               to_process.add(thing)
 
       when defined(enu_pages):
-        present_pages()
+        present_pages(state.things.value)
 
       # Flush pending changes for all Builds
       let asap_interval_elapsed =

@@ -473,6 +473,37 @@ loop:
   of document plus 2–3 MB of frame); not re-measured in game, where the whole
   process is around 1.2 GB.
 
+**11. One rendering path, and the frame rate.**
+
+- Plain signs rendered on the main thread (parse, layout, draw) while script
+  pages went through the worker and the render thread. Now every sign is a
+  page on the worker. A plain sign's page is built from its message, size
+  and width, and rebuilt when they change; a script that builds a page
+  takes over from it. Each tick the worker walks the things it already
+  walks. The main thread only uploads finished frames.
+- A plain sign's page parks after 30 idle seconds (`-d:sign_page_seconds`)
+  and is rebuilt from its message when needed.
+- The costs found on the way, worst first:
+  - Godot's `PoolByteArray.set_len` fills a new array a byte at a time, one
+    function call per byte. Each sign now keeps its upload buffer.
+  - `ImageTexture.set_data` reallocates the GL texture (`glTexImage2D`) on
+    every update. Same-size updates now use
+    `VisualServer.texture_set_data_partial` (`glTexSubImage2D`). Sign
+    textures have no mipmaps, like the old viewport signs, because a partial
+    update doesn't regenerate them.
+  - Every new Blitz document scanned the system fonts. One font context is
+    now shared by every page.
+  - Straight alpha divided three times per translucent pixel (every pixel
+    of a sign); now a table of reciprocals.
+  - A sign redrew whenever its message was set, changed or not.
+- `tests/worlds/sign-bench`: 16 marquees that change every tick and 16
+  still signs. On an Apple Silicon Mac, tools build, `ENU_PERF_LOG=1`:
+
+  | | old signs (`-d:no_pages`) | pages, before | pages, now |
+  |---|---|---|---|
+  | sign-bench | ~106 fps | ~15 fps | ~104 fps |
+  | welcome level | ~93 fps | ~74 fps | ~96 fps |
+
 ## Open questions
 
 - Blitz text input, focus and IME. `:hover`/`:active` and clicks work
@@ -480,7 +511,6 @@ loop:
 - Try the aim-ray click path with a real mouse, including billboard signs.
 - After a transition, should the loop start again right away with fresh
   results, or wait for its next natural run (what #169 does)?
-- Main-thread upload cost on Godot 3 (~6 ms per changed frame).
 - How DOM edits sync to other players (to discuss).
 - Is the Nim VM fast enough for interactive UI driven by player scripts, or
   do player apps need a faster path (QuickJS, or Nim compiled to Wasm under

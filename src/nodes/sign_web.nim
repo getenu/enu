@@ -3,7 +3,7 @@
 
 import pkg/godot
 import gdnativeapi
-import godotapi/[image, image_texture, texture, file, godottypes]
+import godotapi/[image, image_texture, texture, file, godottypes, visual_server]
 import pkg/chronicles
 import ../pages/[renderer, sign_page]
 
@@ -34,11 +34,18 @@ proc load_page_fonts*() =
     ew_register_font(data[0].addr, data.len.csize_t)
 
 proc upload*(
-    pixels: ptr UncheckedArray[uint8], width, height: int, tex: ImageTexture
+    pixels: ptr UncheckedArray[uint8],
+    width, height: int,
+    tex: ImageTexture,
+    bytes: var PoolByteArray,
 ) =
+  ## `bytes` is the sign's own buffer, kept between uploads: Godot fills a
+  ## resized pool array a byte at a time, which costs far more than the copy.
   let len = width * height * 4
-  var bytes = new_pool_byte_array()
-  bytes.set_len(len)
+  if bytes.is_nil:
+    bytes = new_pool_byte_array()
+  if bytes.len != len:
+    bytes.set_len(len)
   # One copy through a write lock. (`mitems` would also visit every byte.)
   let api = get_gdnative_api()
   let access = api.pool_byte_array_write(bytes.godot_pool_byte_array[])
@@ -47,9 +54,9 @@ proc upload*(
   var img = gdnew[Image]()
   img.create_from_data(width, height, false, FORMAT_RGBA8, bytes)
   if tex.get_width == width and tex.get_height == height:
-    tex.set_data(img)
+    # `set_data` reallocates the GL texture every time; this writes into it.
+    texture_set_data_partial(tex.get_rid, img, 0, 0, width, height, 0, 0, 0)
   else:
-    tex.create_from_image(img, FLAG_FILTER or FLAG_MIPMAPS)
-
-proc to_texture*(view: ViewPtr, width, height: int, tex: ImageTexture) =
-  upload(ew_render(view), width, height, tex)
+    # No mipmaps, as with the old viewport signs: a partial update doesn't
+    # regenerate them.
+    tex.create_from_image(img, FLAG_FILTER)
