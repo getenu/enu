@@ -28,6 +28,9 @@ type
   FramePtr* = distinct pointer
   NodeId* = distinct uint64
 
+proc is_nil*(v: ViewPtr): bool =
+  pointer(v).is_nil
+
 const
   NO_NODE* = NodeId(0)
   POINTER_MOVE* = 0'u32

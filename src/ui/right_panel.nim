@@ -1,3 +1,4 @@
+import std/math
 import pkg/[godot]
 import
   godotapi/[
@@ -12,7 +13,12 @@ when defined(enu_pages):
     input_event_mouse_motion, global_constants]
   import nodes/sign_web
 
-  const PANEL_KEY = "enu-right-panel" # matches web_pages
+  const
+    PANEL_KEY = "enu-right-panel" # matches web_pages
+    STATUS_KEY = "enu-status"
+    MAX_STATUS_HEIGHT = 16384
+else:
+  type ViewPtr = pointer
 
 proc set_filter(self: Control, filter: int64) =
   self.mouse_filter = filter
@@ -34,19 +40,67 @@ gdobj RightPanel of MarginContainer:
     margin = 3.0
     center = 1.0
     page_scroll: ScrollContainer
-      ## A sign's `more`, drawn as a page by the worker (-d:enu_pages).
+      ## Pages (-d:enu_pages): a status message, on top of the open sign's
+      ## `more`, which the worker draws.
     page_rect: TextureRect
     page_tex: ImageTexture
     page_bytes: PoolByteArray
     page_version: uint64
+    page_key: string
+    status: ViewPtr
+      ## Built here, not by the worker: there may be no world yet (while
+      ## connecting). It's drawn by the render thread like any other page.
+    status_html: string
+    status_width: int
+    status_scale: float32
 
-  proc show_page(show: bool) =
-    ## Pages show a sign's `more`; the label still shows status messages.
+  proc show_page() =
     when defined(enu_pages):
-      self.page_scroll.visible = show
-      self.label.visible = not show
-      if show:
+      let key =
+        if self.status_html != "": STATUS_KEY
+        elif ?state.player.open_sign: PANEL_KEY
+        else: ""
+      if key == "":
+        return # keep the last page while the panel slides away
+      self.label.visible = false
+      self.page_scroll.visible = true
+      if key != self.page_key:
+        self.page_key = key
         self.page_version = 0 # ask for the newest frame, whatever it is
+
+  proc show_status(markdown: string) =
+    when defined(enu_pages):
+      if markdown == "":
+        if not self.status.is_nil:
+          ew_view_free(self.status)
+          self.status = ViewPtr(nil)
+          ew_drop_frame(STATUS_KEY)
+        self.status_html = ""
+      else:
+        self.status_html = panel_html(markdown, false)
+        if self.status.is_nil:
+          self.status = ew_view_new(self.status_html.cstring, 1, 1, 1)
+        else:
+          ew_set_html(self.status, self.status_html.cstring)
+        self.status_width = 0 # lay it out again
+      self.show_page()
+
+  proc present_status(width: int, scale: float32) =
+    when defined(enu_pages):
+      if self.status.is_nil or
+          (width == self.status_width and scale == self.status_scale):
+        return
+      self.status_width = width
+      self.status_scale = scale
+      ew_set_scale(self.status, scale)
+      ew_resize(self.status, width.uint32, width.uint32)
+      let height =
+        int(ew_content_height(self.status).ceil).clamp(1, MAX_STATUS_HEIGHT)
+      ew_resize(self.status, width.uint32, height.uint32)
+      discard ew_present(self.status, STATUS_KEY)
+      let failure = ew_take_error()
+      if not failure.is_nil:
+        error "status page", failure = $failure
 
   proc setup_page() =
     when defined(enu_pages):
@@ -80,7 +134,7 @@ gdobj RightPanel of MarginContainer:
         if button.button_index == BUTTON_LEFT:
           kind = if button.pressed: POINTER_DOWN.int else: POINTER_UP.int
           pos = button.position
-      if kind >= 0:
+      if kind >= 0 and self.page_key == PANEL_KEY:
         discard ew_post_pointer(
           PANEL_KEY, kind.uint32, pos.x / size.x, pos.y / size.y
         )
@@ -98,8 +152,10 @@ gdobj RightPanel of MarginContainer:
       let scale =
         state.config.screen_scale * state.config.font_size.float / 16.0
       ew_request_size(PANEL_KEY, max(1, width.int).uint32, scale)
+      self.present_status(max(1, width.int), scale)
       var version: uint64
-      let frame = ew_take_frame(PANEL_KEY, self.page_version, version.addr)
+      let frame =
+        ew_take_frame(self.page_key.cstring, self.page_version, version.addr)
       if frame.is_nil:
         return
       self.page_version = version
@@ -131,29 +187,36 @@ gdobj RightPanel of MarginContainer:
       if added:
         if ?change.item:
           state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
-          self.show_page(false)
-          self.label.markdown = change.item
-          self.label.update
-        else:
+        elif not ?state.player.open_sign:
+          # Status messages sit on top of the open sign, which stays.
           state.pop_flags DOCS_FOCUSED, DOCS_VISIBLE
-          self.label.markdown = ""
+        when defined(enu_pages):
+          self.show_status(change.item)
+        else:
+          self.label.markdown = change.item
           self.label.update
 
     state.player.open_sign_value.changes:
       if added and change.item != nil:
         state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
         var sign = change.item
-        self.show_page(defined(enu_pages))
-        self.label.markdown = md(sign, sign.more)
-        self.label.update
-        self.zid = sign.more_value.changes:
-          if added:
-            self.label.markdown = md(sign, change.item)
-            self.label.update
+        when defined(enu_pages):
+          self.show_page()
+        else:
+          self.label.markdown = md(sign, sign.more)
+          self.label.update
+          self.zid = sign.more_value.changes:
+            if added:
+              self.label.markdown = md(sign, change.item)
+              self.label.update
       if removed and change.item != nil:
-        if change.item.more_value.valid:
-          change.item.more_value.untrack(self.zid)
-      if removed and not ?state.player.open_sign:
+        when defined(enu_pages):
+          self.show_page()
+        else:
+          if change.item.more_value.valid:
+            change.item.more_value.untrack(self.zid)
+      if removed and not ?state.player.open_sign and
+          not ?state.status_message:
         state.pop_flags DOCS_FOCUSED, DOCS_VISIBLE
 
     state.local_flags.changes:
