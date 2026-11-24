@@ -31,8 +31,7 @@ font_data = ExtResource( 17 )
 [sub_resource type="StyleBoxEmpty" id=15]
 
 [sub_resource type="StyleBoxFlat" id=8]
-bg_color = Color( 0.6, 0.6, 0.6, 0 )
-draw_center = false
+bg_color = Color( 0.0784314, 0.0117647, 0.113725, 0.839216 )
 border_width_left = 2
 
 [sub_resource type="DynamicFont" id=4]

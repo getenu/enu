@@ -132,4 +132,6 @@ proc panel_html*(more: string, code = false): string =
   ## For the right panel. Sized in CSS px from a 16px base; the page's scale
   ## carries the screen scale and the font size setting.
   let body = body_html(more, code)
-  &"<style id=\"enu-style\">:root {{ font-size: 16px; }}{SIGN_CSS}</style>{body}"
+  # The panel draws the background, all the way down.
+  &"<style id=\"enu-style\">:root {{ font-size: 16px; }}{SIGN_CSS}" &
+    &"body {{ background: none; }}</style>{body}"
