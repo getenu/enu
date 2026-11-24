@@ -759,6 +759,8 @@ type
       ## The `bake` blocks in this script, as last compiled.
     bakes_known*: bool
       ## `bake_sites` is filled: the script has compiled at least once.
+    compiled_now*: bool
+      ## The current run got past compiling.
     source_keys*: Table[string, string]
       ## Hashes of the script files keyless bakes depend on, by path, since
       ## the last compile.
@@ -771,6 +773,7 @@ type
   QuitKind* = enum
     UNKNOWN
     TIMEOUT
+    LIBRARY ## in Enu's own script library, not the script
 
   VMQuit* = object of VMError
     info*: TLineInfo
@@ -790,6 +793,9 @@ type
     # join is deferred until their core containers fill. Drained per loop tick.
     pending_things*: seq[Thing]
     retry_failures*: bool
+    library_error*: tuple[msg, location: string]
+      ## The first error in Enu's own script library. Every script that fails
+      ## afterwards shows it, since the library can't recover until restart.
     interpreter*: Interpreter
     # Use `active_thing`/`active_thing=` (scripting.nim): setting it also
     # tells the VM, which reads it from a global instead of asking the host.

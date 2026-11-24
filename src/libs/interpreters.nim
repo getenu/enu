@@ -257,6 +257,7 @@ proc run*(self: ScriptCtx, me: int): bool =
   ## Load the script's module, then run its body. `me` is the bridge handle of
   ## the thing the script drives. True while the script is parked.
   self.exit_code = none(int)
+  self.compiled_now = false
 
   var raw_dependencies = newSeq[string]()
   var bake_sites = newSeq[BakeSite]()
@@ -318,6 +319,7 @@ proc run*(self: ScriptCtx, me: int): bool =
           self.bake_sites = bake_sites
           self.source_keys.clear
           self.bakes_known = true
+          self.compiled_now = true
           record_dependencies()
           if not self.compiled.is_nil:
             self.compiled(),

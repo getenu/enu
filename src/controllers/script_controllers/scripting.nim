@@ -1,4 +1,4 @@
-import std/[os, re, posix, sets, options]
+import std/[os, re, posix, sets, options, sequtils]
 
 import pkg/godot except print
 import pkg/compiler/ast except new_node
@@ -47,6 +47,16 @@ proc script_error*(self: Worker, thing: Thing, e: ref VMQuit) =
     var error = error
     error.log = true
     thing.errors[i] = error
+
+  if self.library_error.msg != "" and
+      thing.errors.value.all_it(it.location != self.library_error.location):
+    thing.errors.add (
+      "Enu's script library has an error, so scripts can't load: " &
+        self.library_error.msg,
+      TLineInfo(),
+      self.library_error.location,
+      true,
+    )
 
   thing.global_flags += HIGHLIGHT_ERROR
   thing.global_flags -= SCRIPT_INITIALIZING
@@ -143,6 +153,14 @@ proc init_interpreter*[T](self: Worker, _: T) {.gcsafe.} =
       if msg.starts_with("interpretation requires too many iterations"):
         kind = TIMEOUT
         msg = \"Timeout. Script {ctx.script} ran too long without yielding"
+      elif not ctx.compiled_now and
+          file_name.is_relative_to(state.config.lib_dir / "vmlib"):
+        # Retrying won't help, and the retry would only see what's missing
+        # downstream (say, `undeclared identifier: 'say'`).
+        kind = LIBRARY
+        if controller.library_error.msg == "":
+          controller.library_error = (msg, loc)
+          error "script library error", msg, location = loc
       errors.add (msg, info, loc, false)
       ctx.exit_code = error_code
       raise (ref VMQuit)(info: info, kind: kind, msg: msg, location: loc)
@@ -319,7 +337,7 @@ proc load_script*(self: Worker, thing: Thing, fuel = script_fuel) =
     ctx.running = false
     self.interpreter.reset_module(thing.script_ctx.module_name)
     self.module_names.excl thing.script_ctx.module_name
-    if self.retry_failures and e.kind != TIMEOUT:
+    if self.retry_failures and e.kind notin {TIMEOUT, LIBRARY}:
       # One calm line per transient failure; the detail is DEBUG. If the
       # retries exhaust, script_error reports it loudly.
       info "script failed, will retry",
