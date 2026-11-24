@@ -1,5 +1,4 @@
-## Signs rendered by the Blitz HTML renderer (rust/pages) instead of the
-## Godot viewport + MarkdownLabel. Left out by `-d:no_pages`.
+## Showing pages drawn by the Blitz HTML renderer (rust/pages) in Godot.
 
 import pkg/godot
 import gdnativeapi

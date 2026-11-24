@@ -23,4 +23,19 @@ block inline_code:
 block panel_code:
   doAssert "<span class=\"k\">proc</span>" in panel_html("proc a = discard", true)
 
+block indented_messages:
+  # Indented in a script's string, not code.
+  let html = sign_html("    # Hi\n    some text", 20)
+  doAssert "<h1>Hi</h1>" in html
+  doAssert "<pre>" notin html
+
+block text_only:
+  let html = sign_html("echo 1", 20, code = true)
+  doAssert "<pre><code><span class=\"ln\">1</span>echo <span class=\"n\">1</span></code></pre>" in html
+
+block line_numbers:
+  let html = sign_html("```\na\nb\n```", 20)
+  doAssert "<span class=\"ln\">2</span>b" in html
+  doAssert "<span class=\"ln\">3</span>" notin html
+
 echo "sign_page_test passed"

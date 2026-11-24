@@ -5,7 +5,8 @@ import std/os
 const
   ew_triple =
     (if defined(arm64): "aarch64" else: "x86_64") & (
-      if defined(macosx): "-apple-darwin"
+      if defined(ios): "-apple-ios"
+      elif defined(macosx): "-apple-darwin"
       elif defined(windows): "-pc-windows-gnu"
       else: "-unknown-linux-gnu"
     )

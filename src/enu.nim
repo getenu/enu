@@ -4,7 +4,7 @@ import core, game
 
 import
   ui/[
-    editor, console, toolbar, action_button, preview_maker, markdown_label,
+    editor, console, toolbar, action_button, preview_maker,
     right_panel, settings, virtual_joystick, gui, floating_button,
   ]
 import

@@ -153,15 +153,12 @@ proc rust_triple(cpu = cpu): string =
     of "windows": "-pc-windows-gnu" # Enu builds with MinGW, not MSVC
     else: "-unknown-linux-gnu"
 
-proc pages_wanted(params: openArray[string]): bool =
-  "-d:no_pages" notin params and get_env("TARGET") != "ios"
-
 proc build_pages(triple = rust_triple()) =
   ## Builds the web page renderer (Blitz, in Rust) for `triple`, and saves
   ## the system libraries it links against for src/pages/renderer.nim to pass on.
   if find_exe("cargo") == "":
     quit "Enu's signs and pages need Rust. Install it from https://rustup.rs " &
-      "and run this again, or build with -d:no_pages to leave them out."
+      "and run this again."
   if find_exe("rustup") != "":
     exec &"rustup target add {triple}"
   let
@@ -242,10 +239,9 @@ task test_unit, "run unit tests":
   exec "nim c -r tests/unit/block_rules_test"
   exec "nim c -r tests/unit/join_target_test"
   exec "nim c -r tests/unit/vmlib_globals_test"
-  if pages_wanted(command_line_params()):
-    exec "nim c -r tests/unit/page_tree_test"
-    exec "nim c -r tests/unit/page_guard_test"
-    exec "nim c -r tests/unit/sign_page_test"
+  exec "nim c -r tests/unit/page_tree_test"
+  exec "nim c -r tests/unit/page_guard_test"
+  exec "nim c -r tests/unit/sign_page_test"
 
 task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"
@@ -649,7 +645,10 @@ task prereqs,
   build_godot(force = "--force" in command_line_params())
   copy_fonts()
   gen_binding_and_copy_stdlib()
-  if pages_wanted(command_line_params()):
+  if get_env("TARGET") == "ios":
+    # Untested: iOS is out of 0.3, and nothing builds it yet.
+    echo "Build the page renderer with `nim build_pages aarch64-apple-ios`."
+  else:
     build_pages()
 
 task import_assets,

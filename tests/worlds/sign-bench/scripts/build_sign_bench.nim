@@ -1,5 +1,5 @@
-## Worst-case signs, for comparing sign renderers (`nim build` against
-## `nim build -d:no_pages`). Sixteen marquees change every tick, next to
+## Worst-case signs, for measuring sign rendering (Godot's own signs, before
+## pages, managed ~106 fps here). Sixteen marquees change every tick, next to
 ## sixteen signs that never change. Run with ENU_PERF_LOG=1 and compare the
 ## PERF lines' fps.
 

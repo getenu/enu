@@ -1,8 +1,8 @@
 # Web UI
 
 Status: prototypes 1–10 done as a spike (see Results). Signs and script
-pages now render through Blitz by default (`-d:no_pages` leaves
-them out). The renderer is `rust/pages/` (Rust, built by `nim prereqs` or `nim build_pages`); the Nim
+pages always render through Blitz; Godot's own sign rendering
+(MarkdownLabel) is gone. The renderer is `rust/pages/` (Rust, built by `nim prereqs` or `nim build_pages`); the Nim
 side is `src/pages/`. The spike-only experiments (the JS backend, blocks,
 measurement harnesses) were removed; they're in git history before the
 move.
@@ -564,7 +564,7 @@ loop:
 - `tests/worlds/sign-bench`: 16 marquees that change every tick and 16
   still signs. On an Apple Silicon Mac, tools build, `ENU_PERF_LOG=1`:
 
-  | | old signs (`-d:no_pages`) | pages, before | pages, no mipmaps | pages, mipmaps once still |
+  | | old signs (since removed) | pages, before | pages, no mipmaps | pages, mipmaps once still |
   |---|---|---|---|---|
   | sign-bench | ~106 fps | ~15 fps | ~104 fps | ~94 fps |
   | welcome level | ~93 fps | ~74 fps | ~96 fps | ~91 fps |
@@ -572,6 +572,11 @@ loop:
   Single runs on one machine; a few fps either way is noise.
 
 ## Open questions
+
+- iOS (0.4): untested since signs moved to pages. `src/pages/renderer.nim`
+  expects the renderer built for `aarch64-apple-ios` (`nim build_pages
+  aarch64-apple-ios`); `nim prereqs` with `TARGET=ios` says so instead of
+  building it.
 
 - Blitz text input, focus and IME. `:hover`/`:active` and clicks work
   (prototype 7); keyboard input isn't forwarded yet.

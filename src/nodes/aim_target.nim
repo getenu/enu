@@ -3,9 +3,8 @@ import pkg/[godot]
 import godotapi/[sprite_3d, ray_cast, spatial, input, global_constants]
 import gdutils, core, nodes/helpers, models
 
-when defined(enu_pages):
-  import godotapi/static_body
-  import nodes/[sign_node, sign_web]
+import godotapi/static_body
+import nodes/[sign_node, sign_web]
 
 type JoinKey = tuple[
   model: Model,
@@ -21,33 +20,32 @@ gdobj AimTarget of Sprite3D:
     target_model: Model
     glowing: Build
     join_key: JoinKey
-    page_sign_id: string # the sign page under the pointer (-d:enu_pages)
+    page_sign_id: string # the sign page under the pointer
     page_down: bool
 
   proc forward_pointer(collider: Spatial, ray: RayCast) =
     ## Signs that are pages get the pointer: moves for `:hover`, and the
     ## primary button for clicks.
-    when defined(enu_pages):
-      let sign_node =
-        if collider != nil and collider of StaticBody and
-            collider.name == "SignBody":
-          SignNode(collider.get_parent.get_parent)
-        else:
-          nil
-      let point = ray.get_collision_point()
-      let on_page =
-        sign_node != nil and sign_node.page_pointer(POINTER_MOVE, point)
-      let id = if on_page: sign_node.model.id else: ""
-      if id != self.page_sign_id:
-        if self.page_sign_id != "":
-          discard ew_post_pointer(self.page_sign_id.cstring, POINTER_LEAVE, 0, 0)
-        self.page_sign_id = id
-        self.page_down = false
-      if on_page:
-        let down = PRIMARY_DOWN in state.local_flags
-        if down != self.page_down:
-          discard sign_node.page_pointer(if down: POINTER_DOWN else: POINTER_UP, point)
-          self.page_down = down
+    let sign_node =
+      if collider != nil and collider of StaticBody and
+          collider.name == "SignBody":
+        SignNode(collider.get_parent.get_parent)
+      else:
+        nil
+    let point = ray.get_collision_point()
+    let on_page =
+      sign_node != nil and sign_node.page_pointer(POINTER_MOVE, point)
+    let id = if on_page: sign_node.model.id else: ""
+    if id != self.page_sign_id:
+      if self.page_sign_id != "":
+        discard ew_post_pointer(self.page_sign_id.cstring, POINTER_LEAVE, 0, 0)
+      self.page_sign_id = id
+      self.page_down = false
+    if on_page:
+      let down = PRIMARY_DOWN in state.local_flags
+      if down != self.page_down:
+        discard sign_node.page_pointer(if down: POINTER_DOWN else: POINTER_UP, point)
+        self.page_down = down
 
   proc glow(target: Build) =
     if target != self.glowing:
@@ -115,8 +113,7 @@ gdobj AimTarget of Sprite3D:
 
     let thing = ?.collider.model
 
-    when defined(enu_pages):
-      self.forward_pointer(collider, ray)
+    self.forward_pointer(collider, ray)
 
     # Invisible walls collide (so they block the ray) but must not show the aim
     # target. Sample the voxel just inside the hit face; if it's INVISIBLE, treat

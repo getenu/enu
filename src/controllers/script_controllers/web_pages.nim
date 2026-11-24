@@ -69,11 +69,13 @@ proc root_html(self: Sign): string =
   sign_html("<div id=" & PAGE_ROOT & "></div>", font_px(self.size, self.width))
 
 proc message_html(self: Sign): string =
-  sign_html(self.message, font_px(self.size, self.width))
+  # Code views have always used a fixed size, whatever the sign's `size`.
+  let px = if self.text_only: CODE_FONT_PX else: font_px(self.size, self.width)
+  sign_html(self.message, px, self.text_only)
 
 proc message_key(self: Sign): string =
   ## Everything a plain sign's page depends on.
-  &"{self.message}\0{self.size}\0{self.width}\0{self.height}"
+  &"{self.message}\0{self.size}\0{self.width}\0{self.height}\0{self.text_only}"
 
 proc unpark(page: Page) =
   ## Rebuilds a parked page's document from its message or last description.
@@ -338,7 +340,7 @@ proc pump_pages*() =
 
 proc sync_sign(sign: Sign) =
   ## Builds or rebuilds a plain sign's page when its message or size changed.
-  if sign.text_only or sign.destroyed:
+  if sign.destroyed:
     return
   var page = pages.get_or_default(sign.id)
   if not page.is_nil and page.message == "":
