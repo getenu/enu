@@ -15,7 +15,7 @@
 ## Changes are applied as differences, so a page that changes keeps whatever
 ## didn't, hover and press states included.
 
-import std/[tables, monotimes, times, strformat, algorithm, math, strutils, sequtils]
+import std/[tables, monotimes, times, strformat, algorithm, math, strutils, sequtils, uri]
 import core, models/[signs, things]
 import ../../pages/[renderer, sign_page, page_tree]
 
@@ -391,25 +391,29 @@ proc page_stats*(): string =
   pump_times.set_len(0)
   describe_times.set_len(0)
 
-proc follow_link(page: Page, node: NodeId) =
-  ## Old-style links in a sign's `more`: `nim://` runs code in the sign's
-  ## owner, `thing://` opens a thing's code.
+proc link_at(page: Page, node: NodeId): string =
+  ## The link clicked, if any, as written: markdown escapes link targets, and
+  ## ours are code (`nim://player.tools = {...}`).
   var n = node
   while n != NO_NODE:
     let href = page.view.get_attribute(n, "href")
-    if href.starts_with("nim://"):
-      page.sign.owner.eval = href["nim://".len ..^ 1]
-      return
-    elif href.starts_with("thing://"):
-      let id = href["thing://".len ..^ 1]
-      state.things.value.walk_tree proc(thing: Thing) =
-        if thing.id == id:
-          state.player.coding = thing
-      return
-    elif href != "":
-      warn "links to pages outside Enu aren't supported yet", href
-      return
+    if href != "":
+      return href.decode_url(decode_plus = false)
     n = ew_parent(page.view, n)
+
+proc follow_link(owner: Thing, href: string) =
+  ## Old-style links in a sign's `more`: `nim://` runs code in the sign's
+  ## owner, `thing://` opens a thing's code. Run after the pages are pumped:
+  ## the code can do anything, like reloading the level.
+  if href.starts_with("nim://"):
+    owner.eval = href["nim://".len ..^ 1]
+  elif href.starts_with("thing://"):
+    let id = href["thing://".len ..^ 1]
+    state.things.value.walk_tree proc(thing: Thing) =
+      if thing.id == id:
+        state.player.coding = thing
+  else:
+    warn "links to pages outside Enu aren't supported yet", href
 
 proc add_click(page: Page, node: NodeId, now: MonoTime) =
   if page.clicks.len == 0:
@@ -469,6 +473,7 @@ proc pump_pages*() =
     if thing of Player and thing != state.player:
       Player(thing).read_clicks(now)
   var gone: seq[string]
+  var links: seq[(Thing, string)]
   for key, page in pages:
     if page.sign.destroyed:
       gone.add key
@@ -496,7 +501,9 @@ proc pump_pages*() =
       if clicked == NO_NODE:
         continue
       if page.panel:
-        page.follow_link(clicked)
+        let href = page.link_at(clicked)
+        if href != "":
+          links.add (page.sign.owner, href)
       elif page.source == REMOTE:
         page.send_click(clicked)
       else:
@@ -515,6 +522,8 @@ proc pump_pages*() =
       orphans.add key
   for key in orphans:
     drop_def key
+  for (owner, href) in links:
+    owner.follow_link(href)
 
 proc sync_sign(sign: Sign) =
   ## Keeps a sign's page showing its message, or a page built on another
