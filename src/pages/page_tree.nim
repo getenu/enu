@@ -14,7 +14,7 @@
 ## The script computes the same paths while it describes the page, so a click
 ## is matched to the element the player actually clicked.
 
-import std/[tables, strutils]
+import std/[tables, strutils, sequtils]
 import renderer
 
 const
@@ -233,10 +233,17 @@ proc index(t: var PageTree, n: VNode) =
   for kid in n.kids:
     t.index(kid)
 
+proc copy(n: VNode): VNode =
+  result = VNode(tag: n.tag, text: n.text, key: n.key, attrs: n.attrs)
+  for kid in n.kids:
+    result.kids.add kid.copy
+
 proc render*(t: var PageTree, view: ViewPtr, container: NodeId, kids: seq[VNode]): bool =
   ## Makes `container`'s children match `kids`. True if anything changed.
+  ## The tree keeps its own copy of `kids`, so one description can be shown
+  ## in several documents.
   let before = t.edits.len
-  let new_root = VNode(tag: "div", node: container, kids: kids)
+  let new_root = VNode(tag: "div", node: container, kids: kids.map_it(it.copy))
   new_root.assign_paths("")
   let old_root =
     if t.root.is_nil or t.root.node != container:
