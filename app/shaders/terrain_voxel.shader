@@ -17,6 +17,9 @@ uniform vec4 emission : hint_color;
 uniform float emission_energy;
 uniform bool tint_emission = true;
   // false: glow in `emission` as given (the error flash), not the voxel's color
+uniform vec4 glow_tint : hint_color = vec4(0.0, 0.404, 1.0, 1.0);
+uniform float glow_tint_amount = 0.0;
+  // how far the voxel-colored glow leans toward `glow_tint` (selected units)
 uniform sampler2D texture_normal : hint_normal;
 uniform float normal_scale : hint_range(-16,16);
 varying vec3 uv1_triplanar_pos;
@@ -75,7 +78,8 @@ void fragment() {
   SPECULAR = specular;
   NORMALMAP = triplanar_texture(texture_normal,uv1_power_normal,uv1_triplanar_pos).rgb;
   NORMALMAP_DEPTH = normal_scale;
-  EMISSION = (tint_emission ? emission.rgb * glow_color(color) : emission.rgb) * emission_energy;
+  vec3 glow = glow_color(mix(color, glow_tint.rgb, glow_tint_amount));
+  EMISSION = (tint_emission ? emission.rgb * glow : emission.rgb) * emission_energy;
   {
     float view_distance = distance(VERTEX, CAMERA_MATRIX[2].xyz);
     if (view_distance > draw_distance) {

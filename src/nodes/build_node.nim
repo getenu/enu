@@ -14,10 +14,13 @@ const
   default_glow = 0.0
   error_flash_time = 0.5.seconds
   PULSE_LOW = 0.1
-  PULSE_HIGH = 0.5
+  PULSE_HIGH = 1.5
   PULSE_PERIOD = 2.0
     ## Seconds per cycle of the glow on a unit that's selected (code mode)
     ## or will take the next block.
+  SELECTION_TINT = 0.6
+    ## How far a selected unit's glow leans toward blue.
+  WHITE_EMISSION = init_color(1.0, 1.0, 1.0, 1.0)
 
 proc pulse_glow(): float =
   ## The selection glow right now, shared by every unit so they pulse together.
@@ -157,10 +160,6 @@ gdobj BuildNode of VoxelTerrain:
         else:
           let m = m.duplicate.as(ShaderMaterial)
           m.set_shader_param("emission_energy", default_glow.to_variant)
-          self.model.shared.emission_colors.add(
-            m.get_shader_param("emission").as_color
-          )
-
           self.model.shared.materials.add(m)
 
     for i, material in self.model.shared.materials:
@@ -215,12 +214,11 @@ gdobj BuildNode of VoxelTerrain:
       m.set_shader_param(
         "tint_emission", (not self.error_highlight_on).to_variant
       )
-      if self.error_highlight_on:
-        m.set_shader_param("emission", ACTION_COLORS[RED].to_variant)
-      elif i < self.model.shared.emission_colors.len:
-        m.set_shader_param(
-          "emission", self.model.shared.emission_colors[i].to_variant
-        )
+      # the error flash glows red; otherwise the glow is the voxel's color
+      m.set_shader_param(
+        "emission",
+        (if self.error_highlight_on: ACTION_COLORS[RED] else: WHITE_EMISSION).to_variant,
+      )
 
       if HIGHLIGHT_ERROR in self.model.global_flags and self.error_highlight_on:
         m.set_shader_param("emission_energy", highlight_glow.to_variant)
@@ -230,6 +228,10 @@ gdobj BuildNode of VoxelTerrain:
         )
       else:
         m.set_shader_param("emission_energy", self.model.glow.to_variant)
+      m.set_shader_param(
+        "glow_tint_amount",
+        (if self.selected: SELECTION_TINT else: 0.0).to_variant,
+      )
 
   proc set_visibility() =
     if VISIBLE in self.model.global_flags:

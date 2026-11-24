@@ -389,7 +389,6 @@ type
     materials* {.ignore.}: seq[ShaderMaterial]
       ## Node-side Godot refs, shared across the unit tree's nodes. Godot refs
       ## can't sync.
-    emission_colors* {.ignore.}: seq[godot.Color]
     edit_snapshots*: Table[EditKey, SnapshotData]
     edit_deltas*: Table[EditKey, Ed[seq[DeltaUpdate]]]
     palette*: seq[Color]
