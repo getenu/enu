@@ -1,13 +1,13 @@
-## Spike (`-d:enu_web`): pages that scripts build on signs. A page lives on
+## Pages that scripts build on signs. A page lives on
 ## the worker thread next to the script, so scripts read and change the DOM
 ## directly, with no frame delay. Each tick the worker feeds pages the pointer
 ## events the main thread posted, and records any page that changed for the
-## render thread (tools/web_spike/src/hub.rs). The main thread only uploads
+## render thread (rust/pages/src/hub.rs). The main thread only uploads
 ## finished frames.
 
 import std/[tables, monotimes, times, strformat, algorithm, math, strutils]
 import core, models/signs
-import ../../../tools/web_spike/nim/[enu_web, sign_page, page_tree]
+import ../../pages/[renderer, sign_page, page_tree]
 
 const
   MAX_PAGE_HEIGHT = 4096

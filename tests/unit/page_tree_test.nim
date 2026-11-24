@@ -3,7 +3,7 @@
 ## rebuilt, and clicks are matched by path.
 
 import std/strutils
-import enu_web, page_tree
+import ../../src/pages/[renderer, page_tree]
 
 proc e(tag: string): string = "E" & FIELD_SEP & tag & TOKEN_SEP
 proc k(key: string): string = "K" & FIELD_SEP & key & TOKEN_SEP

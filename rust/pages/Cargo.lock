@@ -488,7 +488,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "enu_web"
+name = "enu_pages"
 version = "0.1.0"
 dependencies = [
  "anyrender",

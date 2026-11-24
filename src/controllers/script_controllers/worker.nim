@@ -835,7 +835,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
         last_asap_flush = frame_start
       was_in_asap = any_asap
 
-      when defined(enu_web):
+      when defined(enu_pages):
         pump_pages()
 
       while Ed.thread_ctx.pressure < 0.9 and to_process.len > 0 and
@@ -847,7 +847,7 @@ proc worker_thread(params: (EdContext, GameState)) {.gcsafe.} =
             if worker.advance_thing(thing, timeout):
               to_process.add(thing)
 
-      when defined(enu_web):
+      when defined(enu_pages):
         present_pages()
 
       # Flush pending changes for all Builds

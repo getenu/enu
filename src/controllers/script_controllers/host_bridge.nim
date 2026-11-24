@@ -17,7 +17,7 @@ import enu/shared/errors
 import ./[vars, scripting, path_safety]
 include ./host_bridge_utils
 
-when defined(enu_web):
+when defined(enu_pages):
   import ./web_pages
   export web_pages.pump_pages, web_pages.present_pages
 
@@ -1826,7 +1826,7 @@ proc bridge_to_vm*(worker: Worker) =
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,
     size, `size=`, open, `open=`, billboard, `billboard=`
 
-  when defined(enu_web):
+  when defined(enu_pages):
     result.bridged_from_vm "pages",
       page_set_html, page_query, page_create, page_append, page_remove,
       page_text, page_set_text, page_attr, page_set_attr, page_set_inner_html,

@@ -1,7 +1,11 @@
 # Web UI
 
-Status: prototypes 1–10 done as a spike (see Results). Nothing ships yet;
-web signs and script pages are behind `-d:enu_web`.
+Status: prototypes 1–10 done as a spike (see Results). Signs and script
+pages now render through Blitz by default (`-d:no_pages` leaves
+them out). The renderer is `rust/pages/` (Rust, built by `nim prereqs` or `nim build_pages`); the Nim
+side is `src/pages/`. The spike-only experiments (the JS backend, blocks,
+measurement harnesses) were removed; they're in git history before the
+move.
 
 ## Goal
 
@@ -101,7 +105,7 @@ VM ⇄ Blitz page (real DOM)  ──recording──▶ rasterize ──frame─�
   tests, updates `:hover`/`:active`, and queues clicks for the script.
 - The main thread only uploads finished frames and forwards the aim ray.
 - Enu's own UI keeps its pages on the main thread.
-- The hand-off lives in Rust (`tools/web_spike/src/hub.rs`): pages are named
+- The hand-off lives in Rust (`rust/pages/src/hub.rs`): pages are named
   by key (Enu uses the sign id). It holds the newest frame per key with a
   version, so a recreated sign node can ask again, and queues pointer events.
 - Multiplayer: a remote copy of a page would be kept in sync by replaying an
@@ -226,9 +230,9 @@ iOS build.
 
 ## Results (spike, 2026-11-16)
 
-Code: `tools/web_spike/` (Rust C interface, Nim bindings, `web_ui` module),
-`tools/blocks_spike/` (blocks), `src/nodes/sign_web.nim` (signs, behind
-`-d:enu_web`). Blitz 0.3.0-beta.4, CPU drawing with `vello_cpu`. Measured on
+Code at the time: `tools/web_spike/` (Rust C interface, Nim bindings, `web_ui`
+module), `tools/blocks_spike/` (blocks), `src/nodes/sign_web.nim` (signs,
+behind `-d:enu_web`). Now `rust/pages/` and `src/pages/`. Blitz 0.3.0-beta.4, CPU drawing with `vello_cpu`. Measured on
 an Apple Silicon Mac.
 
 **1. Offscreen rendering works and is fast.**
@@ -362,7 +366,7 @@ loop:
 - Pages are capped at 4096 px tall until they scroll.
 
 **8. Panics stop at the C interface.** Every exported function runs inside
-`guard` (`tools/web_spike/src/guard.rs`), which catches panics and stores the
+`guard` (`rust/pages/src/guard.rs`), which catches panics and stores the
 message for `ew_take_error`.
 
 - In a script call, the error becomes a script error ("The page had a
@@ -413,7 +417,7 @@ loop:
   what it is; if it's just for layout, use a `pane`".
 - `{.piece.}` on a proc lets it describe part of a page, for reuse. It has to
   be called inside a `page` block.
-- Host side (`tools/web_spike/nim/page_tree.nim`, no Enu dependencies):
+- Host side (`src/pages/page_tree.nim`, no Enu dependencies):
   compares it with the last description and applies only the differences:
   text and attribute changes, adds, removes, moves. Each one is logged as an
   edit (`text 2/1/0 3`, `add 4/#bot_rat li`, `move 0/#crab`), readable from a
@@ -481,8 +485,6 @@ loop:
 - Is the Nim VM fast enough for interactive UI driven by player scripts, or
   do player apps need a faster path (QuickJS, or Nim compiled to Wasm under
   an interpreter)?
-- The cargo build is a separate `nim build_web` task. Before anything ships
-  it belongs in `nim prereqs` and `nim dist`.
 - Multiplayer for in-game apps: the owner's page is the source of truth and
   other players replay its DOM edit log (see Threads). Not designed yet; it
   only needs to be possible.

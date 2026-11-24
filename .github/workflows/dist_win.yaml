@@ -59,6 +59,15 @@ jobs:
           cd ..
           rm mesa -Recurse
         if: steps.prereq-cache.outputs.cache-hit != 'true'
+      - name: page renderer cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/pages/target
+          key: ${{ runner.os }}-pages-v1-${{ hashFiles('rust/pages/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-pages-v1-
       - name: Setup package paths
         run: atlas rep
       - name: Dist

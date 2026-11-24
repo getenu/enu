@@ -1,12 +1,12 @@
-## Spike: signs rendered by the Blitz HTML renderer (tools/web_spike) instead
-## of the Godot viewport + MarkdownLabel. Only built with `-d:enu_web`.
+## Signs rendered by the Blitz HTML renderer (rust/pages) instead of the
+## Godot viewport + MarkdownLabel. Left out by `-d:no_pages`.
 
 import pkg/godot
 import gdnativeapi
 import godotapi/[image, image_texture, texture]
-import ../../tools/web_spike/nim/[enu_web, sign_page]
+import ../pages/[renderer, sign_page]
 
-export enu_web, sign_page
+export renderer, sign_page
 
 proc upload*(
     pixels: ptr UncheckedArray[uint8], width, height: int, tex: ImageTexture

@@ -355,7 +355,7 @@ pub unsafe extern "C" fn ew_get_attribute(
     })
 }
 
-/// Writes the last rendered frame to a PNG. For tests and the spike harness.
+/// Writes the last rendered frame to a PNG. For tests.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ew_write_png(v: *mut View, path: *const c_char) -> bool {
     crate::guard::guard(move || {

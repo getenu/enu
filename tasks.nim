@@ -141,6 +141,52 @@ task ios, "Build ios":
   exec &"{gen()} write_export_presets --enu_version {git_version}"
   exec &"{godot_bin()} --path app --export-pack \"ios\" " & "ios"
 
+const pages_dir = "rust/pages"
+
+proc rust_triple(cpu = cpu): string =
+  ## The Rust target for an Enu build. Must match `ew_triple` in
+  ## src/pages/renderer.nim.
+  result = if cpu == "arm64": "aarch64" else: "x86_64"
+  result.add:
+    case host_os
+    of "macosx": "-apple-darwin"
+    of "windows": "-pc-windows-gnu" # Enu builds with MinGW, not MSVC
+    else: "-unknown-linux-gnu"
+
+proc pages_wanted(params: openArray[string]): bool =
+  "-d:no_pages" notin params and get_env("TARGET") != "ios"
+
+proc build_pages(triple = rust_triple()) =
+  ## Builds the web page renderer (Blitz, in Rust) for `triple`, and saves
+  ## the system libraries it links against for src/pages/renderer.nim to pass on.
+  if find_exe("cargo") == "":
+    quit "Enu's signs and pages need Rust. Install it from https://rustup.rs " &
+      "and run this again, or build with -d:no_pages to leave them out."
+  if find_exe("rustup") != "":
+    exec &"rustup target add {triple}"
+  let
+    manifest = &"--manifest-path {pages_dir}/Cargo.toml"
+    libs_file = &"{pages_dir}/target/{triple}/release/native_libs.txt"
+  when host_os == "macosx":
+    put_env "MACOSX_DEPLOYMENT_TARGET", "11.0"
+  if cross_compile:
+    put_env "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER", "x86_64-linux-gnu-gcc"
+  p &"Building the web page renderer for {triple}..."
+  let (output, exit_code) = capture(
+    &"cargo rustc {manifest} --release --lib --target {triple} -- " &
+      "--print native-static-libs"
+  )
+  echo output
+  if exit_code != 0:
+    quit "Building the web page renderer failed."
+  const marker = "native-static-libs: "
+  for line in output.split_lines:
+    let i = line.find(marker)
+    if i >= 0:
+      write_file libs_file, line[i + marker.len .. ^1].strip
+  if not file_exists(libs_file):
+    quit "cargo didn't report the libraries the web page renderer needs."
+
 const arch_args = ["amd64", "x86_64", "x64", "64", "arm64", "aarch64"]
 
 task build, "Build enu":
@@ -166,9 +212,13 @@ task build, "Build enu":
   # The MCP server (`bin/enu`) builds separately — `nim build_mcp`. dist_package
   # bundles it per-platform; the MCP tests compile it themselves (`nim r`).
 
-task build_web,
-  "Spike: build the Blitz HTML renderer (tools/web_spike). Then `nim build -d:enu_web`":
-  exec "cargo build --release --manifest-path tools/web_spike/Cargo.toml"
+task build_pages,
+  "Build the web page renderer (rust/pages), for a Rust target triple if given. `nim prereqs` does this too":
+  let triples = command_line_params()[1 ..^ 1].filter_it(not it.starts_with("-"))
+  if triples.len == 0:
+    build_pages()
+  for triple in triples:
+    build_pages(triple)
 
 task build_godot, "Build godot. Use --force to re-init submodules":
   build_godot(force = "--force" in command_line_params())
@@ -192,6 +242,9 @@ task test_unit, "run unit tests":
   exec "nim c -r tests/unit/block_rules_test"
   exec "nim c -r tests/unit/join_target_test"
   exec "nim c -r tests/unit/vmlib_globals_test"
+  if pages_wanted(command_line_params()):
+    exec "nim c -r tests/unit/page_tree_test"
+    exec "nim c -r tests/unit/page_guard_test"
 
 task test_vm, "run VM script tests":
   exec "nim c -r tests/vm/runner"
@@ -591,6 +644,8 @@ task prereqs,
   build_godot(force = "--force" in command_line_params())
   copy_fonts()
   gen_binding_and_copy_stdlib()
+  if pages_wanted(command_line_params()):
+    build_pages()
 
 task import_assets,
   "Import Godot assets. Only required if you're not using the Godot editor":
@@ -677,6 +732,7 @@ task dist_package, "Build distribution binaries":
   when host_os == "windows":
     extract_dlls_task()
     gen_binding_and_copy_stdlib()
+    build_pages()
     let release_bin = &"vendor/godot/bin/godot.{target}.opt.{cpu}{exe_ext}"
     let root = &"dist/enu-{git_version}"
     mk_dir root
@@ -709,6 +765,8 @@ task dist_package, "Build distribution binaries":
         &"-o:dist/Enu.app/Contents/Frameworks/enu.dylib.{target} src/enu.nim"
       exec cmd
 
+    build_pages("x86_64-apple-darwin")
+    build_pages("aarch64-apple-darwin")
     exec "cp -r installer/Enu.app dist/Enu.app"
     exec "mkdir -p dist/Enu.app/Contents/MacOS"
     exec "mkdir -p dist/Enu.app/Contents/Frameworks"
@@ -780,6 +838,7 @@ task dist_package, "Build distribution binaries":
         exec &"xcrun altool --notarize-app --primary-bundle-id 'com.getenu.enu'  --username '{username}' --password '{password}' --file dist/{package_name}"
   elif host_os == "linux":
     gen_binding_and_copy_stdlib("server")
+    build_pages()
     let release_bin = &"vendor/godot/bin/godot.{target}.opt.{cpu}{exe_ext}"
     let root = &"dist/enu-{git_version}"
     mk_dir root & "/bin"

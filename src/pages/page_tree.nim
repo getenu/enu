@@ -15,7 +15,7 @@
 ## is matched to the element the player actually clicked.
 
 import std/[tables, strutils]
-import enu_web
+import renderer
 
 const
   TOKEN_SEP* = '\x1e'

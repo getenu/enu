@@ -1,17 +1,27 @@
-## Nim bindings for the enu_web C interface (see ../src/lib.rs).
+## Nim bindings for the page renderer's C interface (rust/pages/src/lib.rs).
 
 import std/os
 
-const ew_profile {.strdefine.} = "release"
-const lib_dir = current_source_path.parent_dir / ".." / "target" / ew_profile
+const
+  ew_triple =
+    (if defined(arm64): "aarch64" else: "x86_64") & (
+      if defined(macosx): "-apple-darwin"
+      elif defined(windows): "-pc-windows-gnu"
+      else: "-unknown-linux-gnu"
+    )
+    ## Must match `rust_triple` in tasks.nim.
+  lib_dir =
+    current_source_path.parent_dir / ".." / ".." / "rust" / "pages" / "target" /
+    ew_triple / "release"
+  native_libs = lib_dir / "native_libs.txt"
+    ## The system libraries the Rust library needs, as cargo reported them.
 
-{.passl: lib_dir / "libenu_web.a".}
-when defined(macosx):
-  {.
-    passl:
-      "-framework CoreFoundation -framework CoreText -framework CoreGraphics " &
-      "-framework Foundation -framework AppKit -framework Security"
-  .}
+when not file_exists(native_libs):
+  {.error: "The web page renderer isn't built for " & ew_triple &
+    ". Run `nim prereqs`, or `nim build_pages` to build just the renderer.".}
+
+{.passl: lib_dir / "libenu_pages.a".}
+{.passl: static_read(native_libs).}
 
 type
   ViewPtr* = distinct pointer

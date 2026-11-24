@@ -13,8 +13,7 @@
 ##
 ## `clicked` is a query, like `Player.hit`: inside a command loop, `as` hands
 ## out each click once and the loop runs again until they've all been
-## handled. A click wakes the thing, so it's handled right away. (Spike:
-## needs Enu built with `-d:enu_web`.)
+## handled. A click wakes the thing, so it's handled right away.
 
 import std/[macros, tables, strutils]
 import core, vm_bridge_utils

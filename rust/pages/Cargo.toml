@@ -1,5 +1,5 @@
 [package]
-name = "enu_web"
+name = "enu_pages"
 version = "0.1.0"
 edition = "2024"
 
@@ -17,7 +17,7 @@ peniko = "0.6"
 png = "0.18"
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["staticlib"]
 
 [profile.release]
 opt-level = 3

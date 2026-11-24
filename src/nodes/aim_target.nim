@@ -3,7 +3,7 @@ import pkg/[godot]
 import godotapi/[sprite_3d, ray_cast, spatial, input, global_constants]
 import gdutils, core, nodes/helpers, models
 
-when defined(enu_web):
+when defined(enu_pages):
   import godotapi/static_body
   import nodes/[sign_node, sign_web]
 
@@ -21,13 +21,13 @@ gdobj AimTarget of Sprite3D:
     target_model: Model
     glowing: Build
     join_key: JoinKey
-    page_sign_id: string # the sign page under the pointer (-d:enu_web)
+    page_sign_id: string # the sign page under the pointer (-d:enu_pages)
     page_down: bool
 
   proc forward_pointer(collider: Spatial, ray: RayCast) =
     ## Signs that are pages get the pointer: moves for `:hover`, and the
     ## primary button for clicks.
-    when defined(enu_web):
+    when defined(enu_pages):
       let sign_node =
         if collider != nil and collider of StaticBody and
             collider.name == "SignBody":
@@ -115,7 +115,7 @@ gdobj AimTarget of Sprite3D:
 
     let thing = ?.collider.model
 
-    when defined(enu_web):
+    when defined(enu_pages):
       self.forward_pointer(collider, ray)
 
     # Invisible walls collide (so they block the ray) but must not show the aim

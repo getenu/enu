@@ -1,7 +1,7 @@
 ## Panics in the renderer become errors, and a broken page recovers when its
 ## HTML is set again.
 import std/strutils
-import enu_web
+import ../../src/pages/renderer
 
 let v = ew_view_new("<p id=a>hi</p><canvas id=c></canvas>", 400, 300, 1.0)
 doAssert take_error() == ""

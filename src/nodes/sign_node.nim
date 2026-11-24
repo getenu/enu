@@ -8,7 +8,7 @@ import ui/[markdown_label, editor]
 import core
 import godotapi/image_texture
 
-when defined(enu_web):
+when defined(enu_pages):
   import std/[monotimes, times]
   import nodes/sign_web
 
@@ -35,7 +35,7 @@ gdobj SignNode of Spatial:
   var quad: QuadMesh
   var counter: int
   var expanded: bool
-  var web: pointer # `ViewPtr` with -d:enu_web
+  var web: pointer # `ViewPtr` with -d:enu_pages
   var web_tex: ImageTexture
   var page_version: uint64
   var web_idle: float ## seconds since a plain sign's page last drew
@@ -91,7 +91,7 @@ gdobj SignNode of Spatial:
   proc show_pixels(pixels: pointer, px_width, px_height: int) =
     ## Uploads a rendered page as the albedo and sizes the quad to fit it
     ## across the model's width.
-    when defined(enu_web):
+    when defined(enu_pages):
       upload(
         cast[ptr UncheckedArray[uint8]](pixels), px_width, px_height, self.web_tex
       )
@@ -113,7 +113,7 @@ gdobj SignNode of Spatial:
     ## Lays the message out at `viewport_x` px wide, sized to fit (or to the
     ## model's height). Signs whose script built a page skip this; the
     ## worker renders those.
-    when defined(enu_web):
+    when defined(enu_pages):
       if self.page_version > 0:
         return
       let html = sign_html(self.model.message, font_px(self.model.size, self.model.width))
@@ -140,7 +140,7 @@ gdobj SignNode of Spatial:
   proc show_page_frame() =
     ## Shows the newest frame of this sign's page, if a script built one and
     ## it changed.
-    when defined(enu_web):
+    when defined(enu_pages):
       var version: uint64
       let frame = ew_take_frame(self.model.id.cstring, self.page_version, version.addr)
       if frame.is_nil:
@@ -163,7 +163,7 @@ gdobj SignNode of Spatial:
   proc page_pointer*(kind: uint32, global_point: Vector3): bool =
     ## Passes a pointer event at `global_point` to this sign's page, if it's
     ## a page. True if it was.
-    when defined(enu_web):
+    when defined(enu_pages):
       if self.page_version == 0:
         return false
       let mesh = self.get_node("MeshInstance") as MeshInstance
@@ -173,7 +173,7 @@ gdobj SignNode of Spatial:
       result = ew_post_pointer(self.model.id.cstring, kind, u, v)
 
   method exit_tree*() =
-    when defined(enu_web):
+    when defined(enu_pages):
       if not self.web.is_nil:
         ew_view_free(ViewPtr(self.web))
         self.web = nil
@@ -233,7 +233,7 @@ gdobj SignNode of Spatial:
     self.material.params_billboard_mode =
       if self.model.billboard: BILLBOARD_ENABLED else: BILLBOARD_DISABLED
 
-    let use_web = defined(enu_web) and not self.model.text_only
+    let use_web = defined(enu_pages) and not self.model.text_only
     if use_web:
       self.web_tex = gdnew[ImageTexture]()
       self.material.albedo_texture = self.web_tex
@@ -247,7 +247,7 @@ gdobj SignNode of Spatial:
       self.render_web()
       # If a script made this sign a page, ask its owner for the picture
       # (this node may be new). Ignored for plain signs.
-      when defined(enu_web):
+      when defined(enu_pages):
         discard ew_post_pointer(self.model.id.cstring, POINTER_WAKE, 0, 0)
 
     if self.model.text_only:
@@ -305,7 +305,7 @@ gdobj SignNode of Spatial:
       self.expanded = true
 
   method process*(delta: float) =
-    when defined(enu_web):
+    when defined(enu_pages):
       if ?self.model and ?self.web_tex:
         self.show_page_frame()
       if not self.web.is_nil:
