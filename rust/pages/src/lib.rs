@@ -73,10 +73,15 @@ pub unsafe extern "C" fn ew_register_font(data: *const u8, len: usize) {
     })
 }
 
+/// What relative links and image paths resolve against. Without one, Blitz
+/// panics on the first relative URL. Nothing is fetched: there's no network.
+const BASE_URL: &str = "enu://page/";
+
 fn parse(html: &str, width: u32, height: u32, scale: f32) -> BaseDocument {
     let config = DocumentConfig {
         viewport: Some(viewport(width, height, scale)),
         font_ctx: Some(fonts()),
+        base_url: Some(BASE_URL.to_string()),
         ..Default::default()
     };
     HtmlDocument::from_html(html, config).into_inner()
