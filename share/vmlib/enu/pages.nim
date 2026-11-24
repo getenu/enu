@@ -67,9 +67,6 @@ bridged_to_host:
   proc page_describe(key: string, owner: Thing, tree: string)
   proc page_show(self: Sign, key: string)
   proc page_key_clicks(key: string, path: string): int
-  proc page_edits*(self: Sign): string
-    ## The changes the last few page renders made, one per line. For
-    ## looking at what a page sends when it changes.
   proc page_stats*(): string
     ## How long pages took on the worker since you last asked.
   proc page_parked*(self: Sign): bool

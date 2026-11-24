@@ -41,7 +41,6 @@ type
     clicks_since: MonoTime ## when the oldest unseen click arrived
     clicks_seen: bool ## the script asked about clicks since they arrived
     tree: PageTree ## what `page sign:` last described
-    edit_log: seq[string]
     imperative: bool ## changed by DOM calls, so it can't be rebuilt
     message: string
       ## For a plain sign, what its page was built from: the message and the
@@ -253,9 +252,7 @@ proc render_kids(self: Sign, kids: seq[VNode]) =
   if page.tree.render(page.view, root, kids):
     page.dirty = true
     page.last_active = get_mono_time()
-    page.edit_log.add page.tree.take_edits
-    if page.edit_log.len > 200:
-      page.edit_log = page.edit_log[^200 .. ^1]
+    discard page.tree.take_edits
 
 proc def_for(key: string): PageDef =
   result = defs.get_or_default(key)
@@ -315,13 +312,6 @@ proc page_key_clicks*(key: string, path: string): int =
     if not page.is_nil and not page.parked:
       page.clicks_seen = true
       result += page.tree.clicks_at(page.view, page.clicks, path)
-
-proc page_edits*(self: Sign): string =
-  defer:
-    check()
-  let page = self.page
-  result = page.edit_log.join("\n")
-  page.edit_log.set_len(0)
 
 proc summary(times: seq[float]): string =
   if times.len == 0:

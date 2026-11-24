@@ -19,11 +19,9 @@ suite "Page values":
   test "describing a page again changes every sign showing it":
     a.page = board(1)
     b.page = board(1)
-    discard a.page_edits
-    discard b.page_edits
     discard board(2)
-    check "Count 2" in a.page_edits
-    check "Count 2" in b.page_edits
+    check a["h1"].text == "Count 2"
+    check b["h1"].text == "Count 2"
 
   test "a click on either sign counts":
     var clicks = 0
@@ -47,13 +45,11 @@ suite "Page values":
     check clicks == 2
 
   test "html= stops showing the page":
-    let p = page:
-      h1 "Before"
-    a.page = p
+    a.page = board(3)
+    b.page = board(3)
     a.html = "<h1>Own</h1>"
-    discard page:
-      h1 "After"
-    discard a.page_edits
+    discard board(4)
     check a["h1"].text == "Own"
+    check b["h1"].text == "Count 4"
 
 test_summary()
