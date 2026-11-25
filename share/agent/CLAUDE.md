@@ -135,10 +135,11 @@ of distinctly-colored bots.
     scripts/<id>.nim    — the unit's script
 ```
 
-Build ids start with `build_`, bot ids with `bot_`. A script declaring
-`name FlyerShip` gets the id `build_flyer_ship` (`build_` + snake_case
-of the name) and Enu renames its files to match — name the files that
-way from the start so `wait_for_script` ids line up.
+Build ids start with `build_`, bot ids with `bot_`. A build's script
+declaring `name FlyerShip` gets the id `build_flyer_ship` (`build_` +
+snake_case of the name), a bot's `name Walker` gets `bot_walker`, and
+Enu renames the files to match — name the files that way from the start
+so `wait_for_script` ids line up.
 
 **`data/<id>/<id>.json`:**
 

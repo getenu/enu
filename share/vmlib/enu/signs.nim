@@ -56,7 +56,7 @@ proc say*(
     billboard = none(bool),
 ): Sign {.discardable.} =
   ## Show a message on a sign above the thing: `say "Hello!"`. Call it
-  ## again to change the message, or `say ""` to put the sign away.
+  ## again to change the message, or `say()` to put the sign away.
   ## Markdown works, `more` adds extra text for when the sign is
   ## opened, and `width`/`height`/`size` control the shape if you're
   ## picky. `width`, `height` and `size` are all in blocks.
@@ -74,10 +74,7 @@ proc say*(
     size = if size == float.high: defaults.size else: size
     billboard = billboard.get(defaults.billboard)
 
-  if message == "":
-    if ?self.sign:
-      self.sign.show = false
-  elif self of Bot and ?self.sign:
+  if self of Bot and ?self.sign:
     result = self.sign
     result.update_markdown_sign(message, more, width, height, size, billboard)
     result.show = true
@@ -92,6 +89,15 @@ proc say*(
       result.position = result.position + (UP * (height - 1.0))
     elif self of Bot:
       result.position = result.position + (UP * 2) + (LEFT * 1)
+
+proc say*(self: Thing) =
+  ## Put the thing's sign away, if it has one.
+  if ?self.sign:
+    self.sign.show = false
+
+template say*() =
+  ## Put the sign away: say nothing.
+  active_thing().say()
 
 template say*(
     message: string,

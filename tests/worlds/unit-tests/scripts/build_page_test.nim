@@ -74,4 +74,13 @@ suite "Page values":
     check a[".note"].text == "Probably."
     check clicks == 1
 
+suite "Saying nothing":
+  test "say \"\" makes an empty sign, and say() puts it away":
+    let empty = say("", width = 2.0)
+    check ?empty
+    check empty.message == ""
+    check empty.show
+    say()
+    check not empty.show
+
 test_summary()
