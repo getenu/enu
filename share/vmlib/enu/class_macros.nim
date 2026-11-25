@@ -433,16 +433,6 @@ proc start_here(n: NimNode): NimNode =
     for child in n:
       result.add start_here(child)
 
-proc right_away(n: NimNode): NimNode =
-  ## Inside `on` and `off`, a switch happens now: `->` becomes `==>`.
-  if n.kind == nnkInfix and n[0].eq_ident("->"):
-    result = n.copy_nim_tree
-    result[0] = ident"==>"
-  else:
-    result = n.copy_nim_node
-    for child in n:
-      result.add right_away(child)
-
 proc is_page_block(n: NimNode): bool =
   ## `page:`, `page sign:` or `sign.page:`, whose `on click` is the page's.
   if n.kind notin {nnkCall, nnkCommand} or n.len == 0:
@@ -451,10 +441,24 @@ proc is_page_block(n: NimNode): bool =
   callee.eq_ident("page") or
     (callee.kind == nnkDotExpr and callee[1].eq_ident("page"))
 
+proc has_query(n: NimNode): bool =
+  if n.kind == nnkInfix and n[0].eq_ident("as"):
+    return true
+  for child in n:
+    if child.has_query:
+      return true
+
+proc edge_check(n: NimNode): NimNode =
+  ## `enu_edge("where", cond)` for an `on` or `off` at `n`.
+  let cond = n[1]
+  if cond.has_query:
+    error("`on` and `off` can't use `as` yet. Use `if ... as` instead.", cond)
+  new_call(ident"enu_edge", new_lit(n.line_info), cond)
+
 proc transform_events(stmts: NimNode): NimNode =
-  ## `on cond:` runs its block while `cond` is true, switching states right
-  ## away. `off cond:` is the same for while it's false, and a bare `off:`
-  ## after an `on` is its `else`.
+  ## `on cond:` runs its block once, the pass `cond` becomes true, and
+  ## `off cond:` the pass it becomes false. A bare `off:` after an `on` is
+  ## the `off` for the same condition.
   if stmts.is_page_block:
     return stmts
   if stmts.kind != nnkStmtList:
@@ -467,15 +471,17 @@ proc transform_events(stmts: NimNode): NimNode =
   while i < stmts.len:
     let n = stmts[i]
     if n.is_word_block("on") or n.is_word_block("off"):
-      var cond = n[1]
-      if n[0].eq_ident("off"):
-        cond = new_call(ident"not", cond)
-      var branch = nnkIfStmt.new_tree(
-        nnkElifBranch.new_tree(cond, right_away(transform_events(n[2])))
-      )
+      let edge = gen_sym(nskLet, "edge")
+      result.add new_let_stmt(edge, edge_check(n))
+      let fired = if n[0].eq_ident("on"): 1 else: -1
+      var branch = nnkIfStmt.new_tree(nnkElifBranch.new_tree(
+        infix(edge, "==", new_lit(fired)), transform_events(n[2])
+      ))
       if n[0].eq_ident("on") and i + 1 < stmts.len and stmts[i + 1].is_bare_off:
         inc i
-        branch.add nnkElse.new_tree(right_away(transform_events(stmts[i][1])))
+        branch.add nnkElifBranch.new_tree(
+          infix(edge, "==", new_lit(-1)), transform_events(stmts[i][1])
+        )
       result.add branch
     else:
       result.add transform_events(n)

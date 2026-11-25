@@ -4,32 +4,89 @@ An exploration of how a thing's ongoing behavior should be written, prompted
 by `loop` not saying what it does, and by pages not fitting it well.
 Prototyped on the `actions-exploration` branch.
 
-## Recommendation
+## Settled (built)
 
-Keep Enu's model, states plus rules that are re-checked all the time. Change
-its syntax:
+Enu keeps its model, states plus rules that are re-checked all the time, with
+new syntax:
 
-1. **`run` instead of `loop:`.** A bare `run` line, after which everything is
-   the thing's rules, re-checked over and over. Setup goes above it, behavior
-   below, and nothing is indented.
-2. **`on` and `off` instead of `==>`.** `on cond:` holds the rules that should
-   interrupt whatever the thing is doing. Rules outside an `on` wait for the
-   current action to finish, as `->` does today. One arrow, and the timing
-   comes from where it's written. `off cond:` is `on` for a condition that's
-   false, and a bare `off:` after an `on` is its `else`.
-3. **`move` and `build` without `me`.** Plain templates, so no parentheses or
-   shift key. Existing `move me` and `build me` lines are rewritten to them,
-   so old scripts keep working.
+- **`run`.** A bare `run` line replaces `loop:`. Everything after it is the
+  thing's rules, re-checked over and over. Setup goes above, behavior below,
+  and nothing is indented.
+- **`-> x` starts in `x`** (today's `nil -> x`). **`-> done` leaves** the
+  machine (today's `-> nil`).
+- **`a -> b` waits** for `a` to finish what it's doing. **`a -> b now`**
+  switches right away (today's `==>`). A block after the switch, `a -> b:`,
+  runs once as it happens.
+- **`if cond:` applies while `cond` is true**, checked every pass.
+  **`on cond:` runs once, the moment `cond` becomes true**, and **`off
+  cond:` the moment it becomes false**. A bare `off:` after an `on` is the
+  `off` for the same condition. A machine's first pass counts as a change,
+  so a script that starts with the condition already true still reacts.
+- **The first switch in a pass wins, and the pass finishes.** Later switches
+  that pass are ignored, so order is priority, but the rest of the rules
+  still run. The switch takes effect at the end of the pass.
+- **A state whose block has rules is a machine of its own** (in place of
+  `loop name:`). It runs while its state is current, and the outer rules can
+  interrupt it.
+- **`move` and `build` without `me`.** `move me` and `build me` are rewritten
+  to them, so old scripts keep working.
+- **The old `run` and `walk` commands are gone.** Setting `speed` does the
+  same.
 
-All three are built on the branch, by rewriting scripts into what `loop`
-already does. Inky and the button page below ran in Enu in this form.
+`==>`, `nil` and `do:` still work, so existing scripts run unchanged. All
+existing tests pass. New ones (`tests/worlds/unit-tests/scripts/
+build_rules_test.nim`) cover:
+- the first switch winning while the pass finishes;
+- `on`/`off` firing once each, with the first pass counting;
+- `now` interrupting, and a plain switch waiting;
+- `-> done` leaving a machine.
 
-Built since: states whose bodies have rules are machines of their own (in
-place of `loop name:`), and a bare `-> x` is where a machine starts. Things
-I'd also consider, not built yet:
+Inky, in this form (ran in tutorial-3: explore, attack, charge, hunt, and a
+catch ending the game):
+
+```nim
+run
+
+-> sleep
+if not ?player:
+  any -> sleep now
+  continue # the rules below need a player
+
+if not maze.building:
+  sleep -> explore
+
+if charge_player:
+  charge_player = false
+  (explore, hunt, attack) -> charge now
+charge -> hunt
+
+on player.hit:
+  if over player:
+    others -> win_game now
+  else:
+    (others, -win_game) -> lose_game now
+(win_game, lose_game) -> reset
+reset -> explore
+
+if sees(player, 150):
+  (hunt, explore) -> attack now
+else:
+  attack -> charge
+
+if player.far(60):
+  hunt -> explore
+```
+
+`continue` is still useful when the rest of the rules can't run. Here they
+need a player, and without the `continue` `player.far(60)` fails when there
+isn't one.
+
+Not built yet:
 
 - **State names as yes/no questions** (`if not win_game:`), in place of
   exclusion lists like `(others, -win_game)`.
+- **Switching the shipped scripts, docs and skills** to the new syntax, and
+  `do:` to the colon form.
 
 What I'd avoid:
 
@@ -38,6 +95,8 @@ What I'd avoid:
 - **A plain `forever` with a mode variable for anything that has to react
   mid-action.** It's fine for things that only need to be in the right place
   (doors, buttons), and for those it may be the simplest option.
+
+The rest of this note is how we got here.
 
 ## What there is now
 
@@ -180,7 +239,10 @@ Scratch answers these with concurrent scripts and "stop other scripts", which
 is its own set of concepts. It also brings back the mode variable. I don't
 think it's simpler than rules.
 
-### `run` with `on` and `off` (built)
+### `run` with `on` and `off` (first draft)
+
+This first draft had `on` switch right away; the settled design above uses
+`now` for that, and `on` means "once".
 
 ```nim
 run
@@ -502,5 +564,5 @@ don't run commands. Not built; it means deferring the switch in
 
 ## Open questions
 
-- **A word for "the moment it becomes true"**, if counters need one.
-- **First switch wins, pass finishes:** worth building?
+- **`on Player.hit as p:`**, once per player as each one starts touching,
+  isn't built. `on` with `as` is an error for now; `if ... as` still works.

@@ -103,6 +103,11 @@ type
   Frame* = ref object
     manager*: proc(active: bool): bool
     action*: proc()
+    switched*: bool
+      ## A switch happened this pass. Later ones are ignored, and it takes
+      ## effect when the pass ends.
+    edges*: Table[string, bool]
+      ## What each `on`/`off` condition was last pass.
 
   Halt* = object of CatchableError
 

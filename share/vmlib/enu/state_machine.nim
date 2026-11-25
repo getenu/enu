@@ -43,7 +43,7 @@ template loop_body(body: untyped) =
   var
     main_loop = false
     current_state {.inject, used.} = "nil"
-    done {.inject.} = true
+    action_done {.inject.} = true
     first_iteration {.inject.} = true
     frame {.inject.} = Frame()
 
@@ -66,16 +66,25 @@ template loop_body(body: untyped) =
     defer:
       query_run = outer_run
     var body_running = false
+    template finish_pass() =
+      # The first switch this pass takes effect now that it's over.
+      if frame.switched:
+        frame.switched = false
+        queries.clear()
+        raise (ref Halt)()
+
     while true:
       if body_running:
         # Should only be true on `continue`, which ends this pass early.
         body_running = false
+        finish_pass()
         if not queries.next_combination():
           queries.clear()
           sleep()
       body_running = true
       body
       body_running = false
+      finish_pass()
       if queries.next_combination():
         continue
       queries.clear()
@@ -99,7 +108,7 @@ template loop_body(body: untyped) =
       loop_finished()
   else:
     while looping:
-      done = false
+      action_done = false
       try:
         let previous_state = current_state
         var frames = frame_count()
@@ -120,7 +129,7 @@ template loop_body(body: untyped) =
           else:
             # bubble the halt
             raise (ref Halt)()
-      done = true
+      action_done = true
       looping = ctx.advance(frame)
 
 proc is_transition(n: NimNode): bool =
@@ -219,7 +228,15 @@ macro smart_call*(call: untyped) =
   result = quote:
     when compiles(`call`): `call` else: `call_without_ctx`
 
-proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
+proc is_word(n: NimNode, word: string): bool =
+  ## `word` as written, even if a template already bound it to a symbol of
+  ## the same name (scripts have a `now()`).
+  if n.kind in {nnkOpenSymChoice, nnkClosedSymChoice}:
+    n.len > 0 and n[0].eq_ident(word)
+  else:
+    n.kind in {nnkIdent, nnkSym} and n.eq_ident(word)
+
+proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
   var
     to_state_name: string
     to_state = to_state
@@ -231,6 +248,17 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
     result = node.str_val
     current_loop().from_states.add (result, node.copy_nim_node)
 
+  var immediate = immediate_arg
+  # `a -> b now`: right away, without waiting for `a` to finish.
+  if to_state.kind == nnkCommand and to_state.len in 2 .. 3 and
+      to_state[1].is_word("now"):
+    immediate = ident"true"
+    if to_state.len == 3:
+      body = to_state[2]
+    to_state = to_state[0]
+  # `-> done` leaves the machine.
+  if to_state.is_word("done"):
+    to_state = new_nil_lit()
   if body.kind == nnkNilLit:
     body = new_stmt_list()
   if from_state.kind == nnkTupleConstr:
@@ -297,7 +325,7 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
   result = quote:
     when not declared(current_state) or not declared(ctx):
       {.error: "`->` or `==>` must be inside a `loop` ".}
-    if `immediate` or (active and done):
+    if not frame.switched and (`immediate` or (active and action_done)):
       let
         from_includes: seq[string] = `includes_str`.split(",")
         from_excludes: seq[string] = `excludes_str`.split(",")
@@ -321,10 +349,27 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
           frame.action = action
         else:
           frame.action = nil
-        # The first transition wins: the rest of this run's query results
-        # are dropped, and the loop's next run starts fresh.
-        query_run.clear()
-        raise (ref Halt)()
+        # The first switch wins: later ones this pass are ignored, the rest
+        # of the pass still runs, and the switch takes effect at its end
+        # (along with dropping the run's query results).
+        frame.switched = true
+
+proc edge*(frame: Frame, key: string, value: bool): int =
+  ## For `on` and `off`: 1 the pass `value` becomes true, -1 the pass it
+  ## becomes false, else 0. A machine's first pass counts as a change.
+  if key notin frame.edges:
+    frame.edges[key] = value
+    return if value: 1 else: -1
+  let was = frame.edges[key]
+  frame.edges[key] = value
+  if value and not was: 1
+  elif was and not value: -1
+  else: 0
+
+template enu_edge*(key: string, value: bool): int =
+  when not declared(frame):
+    {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
+  frame.edge(key, value)
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   ## Like `->`, but impatient: switches states right away instead of
@@ -332,11 +377,14 @@ macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   result = transition(from_state, to_state, body, ident"true")
 
 macro `->`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
-  ## A state change rule for `loop`. `wander -> hide` means "if we're
-  ## wandering, start hiding". `nil` is the state you begin in, `any`
-  ## matches every state, `others` matches every state except the one
-  ## you're switching to, and `(a, b) -> c` matches either. Add a
-  ## `do:` block to run something once at the moment of the switch.
+  ## A state change rule. `wander -> hide` means "if we're wandering,
+  ## start hiding once this bit of wandering is done"; `wander -> hide now`
+  ## switches right away. `-> wander` is where the rules start, and
+  ## `-> done` leaves them. `any` matches every state, `others` matches
+  ## every state except the one you're switching to, and `(a, b) -> c`
+  ## matches either. A block after the switch (`a -> b:`) runs once, at
+  ## the moment it happens. The first switch in a pass wins; the rest of
+  ## the pass still runs.
   result = transition(from_state, to_state, body, ident"false")
 
 when is_main_module:
@@ -435,7 +483,7 @@ when is_main_module:
     nil ==> loop_a as initial_loop do:
       echo "initial loop "
     inc counter
-    if done:
+    if action_done:
       initial_loop ==> action_a(name) do:
         counter = 0
     if counter == 3:
