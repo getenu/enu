@@ -128,6 +128,8 @@ gdobj Game of Node:
     stats: Label
     last_tool = BLUE_BLOCK
     saved_mouse_position: Vector2
+    minimized: bool
+      ## Launched out of the way (--minimized), so it leaves the mouse alone.
     rescale_at = get_mono_time()
     update_metrics_at = get_mono_time()
     force_quit_at = MonoTime.high
@@ -500,6 +502,7 @@ gdobj Game of Node:
       let i = args.find("--minimized")
       if i > -1:
         minimized = true
+        self.minimized = true
         args.delete(i)
     # --world is a path (the world is the thing with a path); --level is a plain
     # name for a level inside it. A bare --world name is normalized to a work-dir
@@ -943,7 +946,7 @@ gdobj Game of Node:
       elif RETICLE_VISIBLE.removed:
         self.reticle.visible = false
 
-    if TOUCH_CONTROLS notin state.local_flags:
+    if TOUCH_CONTROLS notin state.local_flags and not self.minimized:
       state.push_flag MOUSE_CAPTURED
     state.push_flag VIEWPORT_FOCUSED
 
