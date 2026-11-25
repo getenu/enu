@@ -452,8 +452,34 @@ proc edge_check(n: NimNode): NimNode =
   ## `enu_edge("where", cond)` for an `on` or `off` at `n`.
   let cond = n[1]
   if cond.has_query:
-    error("`on` and `off` can't use `as` yet. Use `if ... as` instead.", cond)
+    error("`as` goes at the end: `on Player.hit as p:`", cond)
   new_call(ident"enu_edge", new_lit(n.line_info), cond)
+
+proc is_as(n: NimNode): bool =
+  n.kind == nnkInfix and n[0].eq_ident("as")
+
+proc crowd_events(n: NimNode, off_body: NimNode): NimNode =
+  ## `on Player.hit as p:` runs its block once for each player who starts
+  ## touching, with `p` as that player. `off ... as p:` (or a bare `off:`
+  ## after the `on`) runs once for each one who stops.
+  let query = n[1][1]
+  let name = n[1][2]
+  if query.has_query:
+    error("Only one `as` in an `on`.", query)
+  let changes = gen_sym(nskLet, "changes")
+  result = new_stmt_list()
+  result.add new_let_stmt(
+    changes, new_call(ident"enu_changes", new_lit(n.line_info), query)
+  )
+  if n[0].eq_ident("on"):
+    result.add nnkForStmt.new_tree(
+      name, new_dot_expr(changes, ident"arrived"), transform_events(n[2])
+    )
+  let left_body = if n[0].eq_ident("off"): n[2] else: off_body
+  if not left_body.is_nil:
+    result.add nnkForStmt.new_tree(
+      name, new_dot_expr(changes, ident"left"), transform_events(left_body)
+    )
 
 proc transform_events(stmts: NimNode): NimNode =
   ## `on cond:` runs its block once, the pass `cond` becomes true, and
@@ -470,7 +496,13 @@ proc transform_events(stmts: NimNode): NimNode =
   var i = 0
   while i < stmts.len:
     let n = stmts[i]
-    if n.is_word_block("on") or n.is_word_block("off"):
+    if (n.is_word_block("on") or n.is_word_block("off")) and n[1].is_as:
+      var off_body: NimNode
+      if n[0].eq_ident("on") and i + 1 < stmts.len and stmts[i + 1].is_bare_off:
+        inc i
+        off_body = stmts[i][1]
+      result.add crowd_events(n, off_body)
+    elif n.is_word_block("on") or n.is_word_block("off"):
       let edge = gen_sym(nskLet, "edge")
       result.add new_let_stmt(edge, edge_check(n))
       let fired = if n[0].eq_ident("on"): 1 else: -1

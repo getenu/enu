@@ -25,6 +25,13 @@ new syntax:
 - **The first switch in a pass wins, and the pass finishes.** Later switches
   that pass are ignored, so order is priority, but the rest of the rules
   still run. The switch takes effect at the end of the pass.
+- **`on Player.hit as p:` runs once for each one that arrives,** with `p` as
+  that player, and a bare `off:` after it runs once for each one that leaves.
+  Today's `if Player.hit as p:` still runs every pass, for everyone touching.
+- **A blink isn't a change.** Something has to be gone for a tenth of a
+  second before `off` fires or it can arrive again. Touching blinks off for a
+  frame or two when a player lands on something, which would otherwise count
+  one landing as two arrivals. `off` fires that tenth of a second late.
 - **A state whose block has rules is a machine of its own** (in place of
   `loop name:`). It runs while its state is current, and the outer rules can
   interrupt it.
@@ -39,7 +46,9 @@ build_rules_test.nim`) cover:
 - the first switch winning while the pass finishes;
 - `on`/`off` firing once each, with the first pass counting;
 - `now` interrupting, and a plain switch waiting;
-- `-> done` leaving a machine.
+- `-> done` leaving a machine;
+- `on ... as` arrivals and departures;
+- a blink not counting as a departure.
 
 Inky, in this form (ran in tutorial-3: explore, attack, charge, hunt, and a
 catch ending the game):
@@ -564,5 +573,8 @@ don't run commands. Not built; it means deferring the switch in
 
 ## Open questions
 
-- **`on Player.hit as p:`**, once per player as each one starts touching,
-  isn't built. `on` with `as` is an error for now; `if ... as` still works.
+- **A nil `position` error from Inky, seen once** in tutorial-3, around when
+  the start pad set the player during testing. I couldn't reproduce it.
+- **Checking `on Player.hit as p:` with real players:** done with tutorial-3's
+  start pad. Stepping on counted once, a landing bounce didn't count again,
+  and stepping off and back counted again.

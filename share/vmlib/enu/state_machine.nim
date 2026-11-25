@@ -354,17 +354,65 @@ proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
         # (along with dropping the run's query results).
         frame.switched = true
 
+const BLINK = 0.1
+  ## Seconds something has to be gone before it counts as gone. Touching
+  ## blinks off for a frame or two when a player lands or bounces, which
+  ## would otherwise fire `off` and `on` again.
+
 proc edge*(frame: Frame, key: string, value: bool): int =
   ## For `on` and `off`: 1 the pass `value` becomes true, -1 the pass it
-  ## becomes false, else 0. A machine's first pass counts as a change.
+  ## becomes false (and has stayed false for a moment), else 0. A machine's
+  ## first pass counts as a change.
   if key notin frame.edges:
     frame.edges[key] = value
     return if value: 1 else: -1
   let was = frame.edges[key]
-  frame.edges[key] = value
-  if value and not was: 1
-  elif was and not value: -1
-  else: 0
+  if value:
+    frame.false_since.del key
+    frame.edges[key] = true
+    return if was: 0 else: 1
+  if not was:
+    return 0
+  let now = now_seconds()
+  let since = frame.false_since.get_or_default(key, now)
+  frame.false_since[key] = since
+  if now - since >= BLINK:
+    frame.false_since.del key
+    frame.edges[key] = false
+    return -1
+
+proc changes*[T: Thing](
+    frame: Frame, key: string, found: seq[T]
+): tuple[arrived, left: seq[T]] =
+  ## For `on ... as`: who's in `found` now but wasn't, and who was but has
+  ## been gone for a moment. On a machine's first pass, everyone found has
+  ## arrived.
+  let now = now_seconds()
+  let found = found.map_it(Thing(it))
+  var members = frame.crowds.get_or_default(key)
+  var missing = frame.missing.get_or_default(key)
+  for item in found:
+    if item notin members:
+      members.add item
+      result.arrived.add T(item)
+  missing.keep_it_if(it[0] notin found)
+  for item in members:
+    if item notin found and missing.all_it(it[0] != item):
+      missing.add (item, now)
+  var still: seq[(Thing, float)]
+  for (item, since) in missing:
+    if now - since >= BLINK:
+      members.keep_it_if(it != item)
+      result.left.add T(item)
+    else:
+      still.add (item, since)
+  frame.crowds[key] = members
+  frame.missing[key] = still
+
+template enu_changes*[T](key: string, query: Query[seq[T]]): untyped =
+  when not declared(frame):
+    {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
+  frame.changes(key, query.result)
 
 template enu_edge*(key: string, value: bool): int =
   when not declared(frame):

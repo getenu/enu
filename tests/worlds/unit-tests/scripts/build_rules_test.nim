@@ -28,6 +28,7 @@ var offs = 0
 
 -tick:
   inc steps
+  sleep 0.2 # longer than a blink, so a change counts
 
 - edges:
   -> tick
@@ -74,6 +75,32 @@ var fasts = 0
   inner -> two
   two -> done
 
+var crowd: seq[Sign]
+var arrivals: seq[string]
+var departures: seq[string]
+var turn = 0
+let sign_a = say("a")
+let sign_b = say("b")
+
+-step:
+  inc turn
+  case turn
+  of 1: crowd = @[sign_a]
+  of 2: crowd = @[sign_a, sign_b]
+  of 3: crowd = @[sign_b]
+  of 4: crowd = @[]
+  else: discard
+  sleep 0.2 # longer than a blink, so a departure counts
+
+- watching:
+  -> step
+  on Query.init(crowd) as s:
+    arrivals.add s.message
+  off:
+    departures.add s.message
+  if turn == 5:
+    step -> done
+
 suite "Rules":
   test "the first switch wins, and the pass finishes":
     visits = @[]
@@ -99,5 +126,31 @@ suite "Rules":
     visits = @[]
     outer()
     check visits == @["one", "two"]
+
+  test "on ... as runs once for each arrival, and off for each departure":
+    watching()
+    check arrivals == @["a", "b"]
+    check departures == @["a", "b"]
+
+  test "a blink isn't a departure":
+    var blinker: seq[Sign] = @[sign_a]
+    var blink_arrivals = 0
+    var blink_departures = 0
+    var blink_turn = 0
+    -blink_step:
+      inc blink_turn
+      blinker = if blink_turn == 2: @[] else: @[sign_a]
+      sleep 0.03
+    - blinking:
+      -> blink_step
+      on Query.init(blinker) as s:
+        inc blink_arrivals
+      off:
+        inc blink_departures
+      if blink_turn == 6:
+        blink_step -> done
+    blinking()
+    check blink_arrivals == 1
+    check blink_departures == 0
 
 test_summary()

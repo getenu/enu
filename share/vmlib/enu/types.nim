@@ -108,6 +108,13 @@ type
       ## effect when the pass ends.
     edges*: Table[string, bool]
       ## What each `on`/`off` condition was last pass.
+    crowds*: Table[string, seq[Thing]]
+      ## Who each `on ... as` query has, counting anyone gone for less
+      ## than a moment.
+    missing*: Table[string, seq[(Thing, float)]]
+      ## For each `on ... as`, who's gone from it and since when.
+    false_since*: Table[string, float]
+      ## For each `on`/`off` that's true, when it last looked false.
 
   Halt* = object of CatchableError
 
