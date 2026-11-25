@@ -70,8 +70,8 @@ but not a `Vector3`, so don't pass it to `me.go()`). Use `h`, `w`,
 Prototype names use `CamelCase` — `name Tower(...)`, `name Door(...)`.
 The name becomes a type, so it reads as one.
 
-The unit's id is `build_` + snake_case of the name: `name FlyerShip`
-makes the unit `build_flyer_ship`, and Enu renames the script and data
+The unit's id is `build_` + snake_case of the name (`bot_` for a bot):
+`name FlyerShip` makes the unit `build_flyer_ship`, and Enu renames the script and data
 files to match. Name the files that way from the start
 (`scripts/build_flyer_ship.nim`) so the id you pass to
 `wait_for_script` is the one the unit actually has.

@@ -17,6 +17,9 @@ import enu/shared/errors
 import ./[vars, scripting, path_safety]
 include ./host_bridge_utils
 
+import ./web_pages
+export web_pages.pump_pages, web_pages.present_pages
+
 # Program start time for now_seconds() function
 let program_start_time = get_mono_time()
 
@@ -146,11 +149,13 @@ proc exit(self: Worker, ctx: ScriptCtx, exit_code: int) =
   self.pause_script()
   ctx.running = false
 
-proc to_thing_id*(requested_name: string): string =
+proc to_thing_id*(requested_name: string, prefix = "build_"): string =
   ## Convert a user-facing prototype name (CamelCase or any-case) into
-  ## the on-disk thing id `build_<snake_case>`. `Tree` -> `build_tree`,
-  ## `DiningChair` -> `build_dining_chair`, `bed_queen` ->
-  ## `build_bed_queen`. Already-prefixed names are kept as-is.
+  ## the on-disk thing id `<prefix><snake_case>`: a build's `Tree` ->
+  ## `build_tree`, `DiningChair` -> `build_dining_chair`, `bed_queen` ->
+  ## `build_bed_queen`; a bot's `Walker` -> `bot_walker`. The prefix is the
+  ## thing's kind, which loading reads back from it. Already-prefixed names
+  ## are kept as-is.
   if requested_name == "":
     return ""
   var snake = ""
@@ -164,7 +169,7 @@ proc to_thing_id*(requested_name: string): string =
   if snake.starts_with("build_") or snake.starts_with("bot_"):
     snake
   else:
-    "build_" & snake
+    prefix & snake
 
 proc claim_name(self: Worker, requested: string) =
   ## Called from the `name` macro at the top of a prototype script.
@@ -182,7 +187,8 @@ proc claim_name(self: Worker, requested: string) =
   # claim_name in the macro-generated code).
   if not state.show_prototypes:
     thing.global_flags -= VISIBLE
-  let target_id = to_thing_id(requested)
+  let target_id =
+    to_thing_id(requested, if thing of Bot: "bot_" else: "build_")
   if target_id == "" or thing.id == target_id:
     return
 
@@ -1821,6 +1827,13 @@ proc bridge_to_vm*(worker: Worker) =
   result.bridged_from_vm "signs",
     message, `message=`, more, `more=`, height, `height=`, width, `width=`,
     size, `size=`, open, `open=`, billboard, `billboard=`
+
+  result.bridged_from_vm "pages",
+    page_set_html, page_query, page_create, page_append, page_remove,
+    page_text, page_set_text, page_attr, page_set_attr, page_set_inner_html,
+    page_parent, page_rect, page_click_count, page_stats, page_post_pointer,
+    page_describe, page_show, page_key_clicks, page_parked,
+    page_html_tokens
 
   result.bridged_from_vm "players",
     playing, `playing=`, god, `god=`, flying, `flying=`, can_fly,

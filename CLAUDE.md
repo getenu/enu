@@ -49,7 +49,7 @@ task over working around it.
 
 ### Setup
 - `atlas install && atlas rep` - Install dependencies (first-time setup)
-- `nim prereqs` - Build Godot, download fonts, generate API bindings and stdlib
+- `nim prereqs` - Build Godot, download fonts, generate API bindings and stdlib, and build the page renderer (needs Rust)
 
 ### Dependency Management (Atlas)
 

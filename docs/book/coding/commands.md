@@ -77,7 +77,7 @@ lean right, 45   # tip right, 45 degrees
 ## `say`
 
 Show a message on a sign above a thing. Call it again to change the message, or
-`say ""` to put the sign away. The text is markdown, so `**bold**` and lists
+`say()` to put the sign away. The text is markdown, so `**bold**` and lists
 work.
 
 ```nim

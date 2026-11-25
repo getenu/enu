@@ -210,6 +210,19 @@ proc info*(self: GameState, args: varargs[string, `$`]) =
 proc err*(self: GameState, args: varargs[string, `$`]) =
   logger("err", \"[color=#FF0000]{args.join}[/color]")
 
+proc strip_colors(s: string): string =
+  ## Without the terminal's color codes, which the console shows as junk.
+  var i = 0
+  while i < s.len:
+    if s[i] == '\e' and i + 1 < s.len and s[i + 1] == '[':
+      i += 2
+      while i < s.len and s[i] notin {'A' .. 'Z', 'a' .. 'z'}:
+        inc i
+      inc i
+    else:
+      result.add s[i]
+      inc i
+
 when not defined(no_godot):
   import pkg/godot
 
@@ -221,7 +234,7 @@ when not defined(no_godot):
         # when defined(release):
         godot.print msg
         if log_level >= ERROR and not state.logger.is_nil:
-          state.err(msg)
+          state.err(msg.strip_colors)
         # else:
         #   if log_level >= INFO:
         #     echo msg

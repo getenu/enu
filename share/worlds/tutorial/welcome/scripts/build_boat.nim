@@ -71,7 +71,7 @@ proc sail() =
 
 forever:
   if player_aboard():
-    say ""
+    say()
     sleep 1.5
     if at_dock:
       sail()

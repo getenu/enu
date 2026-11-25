@@ -1,0 +1,15 @@
+{
+  "id": "bot_misnamed",
+  "start_transform": {
+    "basis": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ],
+    "origin": [22.0, 0.0, 0.0]
+  },
+  "start_color": "BLACK",
+  "edits": {
+    
+  }
+}

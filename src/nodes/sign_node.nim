@@ -1,32 +1,34 @@
+import std/[monotimes, times]
 import pkg/[godot]
 import
   godotapi/[
     spatial, resource_loader, packed_scene, collision_shape, mesh_instance,
-    quad_mesh, spatial_material, viewport, style_box_flat, text_edit
+    quad_mesh, spatial_material, image_texture, viewport, camera,
   ]
-import ui/[markdown_label, editor]
 import core
+import nodes/sign_web
 
 const
-  viewport_x = 1200
-  viewport_y = 1200
-  # The sign renders its markdown into a fixed `viewport_x`-wide texture mapped
-  # across `width` blocks, so a block spans `viewport_x / width` px. `size` (the
-  # model field) is the text height in blocks, so its font size in texture px is
-  # `size * viewport_x / width`. This constant is the whole bridge between the
-  # block-space API and the pixel-space label.
-  text_px_per_block = viewport_x.float
+  MIPMAP_SETTLE_SECONDS = 0.5
+  GLOW = 0.08 ## light added at full glow
 
 gdobj SignNode of Spatial:
   var model* {.cursor.}: Sign
   var zid: EID
   var material: SpatialMaterial
-  var viewport: Viewport
-  var label: MarkdownLabel
+  var glow_pass: SpatialMaterial
+    ## Drawn over the page, adding light, while the sign glows or is
+    ## highlighted.
   var shape: CollisionShape
   var quad: QuadMesh
-  var counter: int
-  var expanded: bool
+  var web_tex: ImageTexture
+  var web_bytes: PoolByteArray
+  var web_still: float ## seconds since the picture last changed
+  var web_mipmapped: bool
+    ## Mipmaps keep distant text smooth, but regenerating them every frame is
+    ## expensive. A sign that changes often goes without until it settles.
+  var page_version: uint64
+    ## Version of the last frame shown from the sign's page (0: none yet).
 
   proc set_visibility() =
     if VISIBLE in self.model.global_flags:
@@ -40,106 +42,111 @@ gdobj SignNode of Spatial:
     else:
       self.visible = false
 
-  proc expand() =
-    self.label.rect_min_size = vec2(1200, 0)
-    self.label.rect_size = vec2(1200, 0)
+  proc light_web() =
+    ## Pages are unlit, so they ignore emission, and brightening near-black
+    ## shows nothing. A glowing or highlighted sign gets light added on top
+    ## instead, as much as old signs' emission gave them.
+    let energy =
+      if HIGHLIGHT in self.model.local_flags: 1.0
+      else: self.model.glow
+    if energy <= 0:
+      self.material.next_pass = nil
+    else:
+      let k = GLOW * energy
+      self.glow_pass.albedo_color = init_color(k, k, k)
+      self.material.next_pass = self.glow_pass
 
-    # The markdown label has extra padding at the bottom. There's probably a
-    # good reason for this and a way to remove it properly, but this gets
-    # the job done for now. (`size` is blocks; scale to texture px like the
-    # font does, so the trim tracks the text size.)
-    let padding =
-      self.model.size * text_px_per_block / (0.9 * self.model.width)
-    let rect = vec2(self.label.rect_size.x, self.label.rect_size.y - padding)
-
-    let ratio = rect.y / rect.x
-    let sign_height = self.model.width * ratio
-    self.viewport.size = rect
+  proc show_pixels(pixels: pointer, px_width, px_height: int) =
+    ## Uploads a rendered page as the albedo and sizes the quad to fit it
+    ## across the model's width.
+    if self.web_mipmapped and self.web_still < MIPMAP_SETTLE_SECONDS:
+      self.web_tex.flags = FLAG_FILTER
+      self.web_mipmapped = false
+    self.web_still = 0
+    upload(
+      cast[ptr UncheckedArray[uint8]](pixels),
+      px_width,
+      px_height,
+      self.web_tex,
+      self.web_bytes,
+    )
+    let auto_height = self.model.height == 0.0
+    let sign_height = self.model.width * px_height.float / px_width.float
     self.quad.size = vec2(self.model.width, sign_height)
     self.shape.scale = vec3(self.model.width, sign_height, 1)
-
-    # Auto-sized signs (bots, mainly) anchor their bottom edge and grow upward,
-    # so a long message climbs into the air instead of clipping down through the
-    # speaker's head. The quad is centred on the mesh origin, so lifting the mesh
-    # by half its height pins the bottom edge at the sign's origin.
     let mesh = self.get_node("MeshInstance") as MeshInstance
     var t = mesh.transform
-    t.origin.y = sign_height / 2
+    if auto_height:
+      t.origin.y = sign_height / 2
+    else:
+      t.origin.x = self.model.width / -2 + 0.5
+      t.origin.y = self.model.height / -2 + 0.5
     mesh.transform = t
+
+  proc show_page_frame() =
+    ## Shows the newest frame of this sign's page, if it changed. The worker
+    ## builds the page, from the message or a script, and the render thread
+    ## draws it.
+    var version: uint64
+    let frame = ew_take_frame(self.model.id.cstring, self.page_version, version.addr)
+    if frame.is_nil:
+      return
+    self.page_version = version
+    let start = get_mono_time()
+    self.show_pixels(
+      ew_frame_pixels(frame),
+      ew_frame_width(frame).int,
+      ew_frame_height(frame).int,
+    )
+    debug "page frame",
+      sign = self.model.id,
+      width = ew_frame_width(frame),
+      height = ew_frame_height(frame),
+      render_ms = ew_frame_render_ms(frame),
+      upload_ms = (get_mono_time() - start).in_microseconds.float / 1000
+    ew_frame_free(frame)
+
+  proc page_pointer*(kind: uint32, global_point: Vector3): bool =
+    ## Passes a pointer event at `global_point` to this sign's page, if it's
+    ## a page. True if it was.
+    if self.page_version == 0:
+      return false
+    let mesh = self.get_node("MeshInstance") as MeshInstance
+    let local = mesh.to_local(global_point)
+    let u = local.x / self.quad.size.x + 0.5
+    let v = 0.5 - local.y / self.quad.size.y
+    result = ew_post_pointer(self.model.id.cstring, kind, u, v)
 
   proc setup*() =
     debug "sign setup", sign = self.model.id
 
     var mesh = self.get_node("MeshInstance") as MeshInstance
-    self.viewport = self.get_node("Viewport") as Viewport
-    self.label = self.viewport.get_node("MarkdownLabel") as MarkdownLabel
     self.shape = mesh.get_node("SignBody/CollisionShape") as CollisionShape
     self.quad = mesh.mesh as QuadMesh
-
-    var text_edit = self.viewport.get_node("TextEdit") as TextEdit
-
     self.material = mesh.get_active_material(0) as SpatialMaterial
-    text_edit.configure_highlighting
-
-    for child in text_edit.get_children:
-      let child = child.as_object(Node)
-      if child of ScrollBar or child of HScrollBar:
-        # hide scrollbars
-        ScrollBar(child).rect_scale = vec2()
-
-    proc resize() =
-      debug "sign resize", sign = self.model.id
-
-      var
-        ratio = self.model.width / self.model.height
-        size = vec2(viewport_x, viewport_y / ratio)
-
-      self.expanded = false
-
-      if self.model.height == 0.0:
-        self.quad.size = vec2(self.model.width, self.quad.size.y)
-        self.shape.scale = vec3(self.model.width, self.quad.size.y, 1)
-      else:
-        self.quad.size = vec2(self.model.width, self.model.height)
-        self.shape.scale = vec3(self.model.width, self.model.height, 1)
-        self.label.rect_size = size
-
-        var t = mesh.transform
-        t.origin.x = self.model.width / -2 + 0.5
-        t.origin.y = self.model.height / -2 + 0.5
-        mesh.transform = t
-        self.viewport.size = size
-
-      var stylebox = self.label.og_label.get_stylebox("normal") as StyleBoxFlat
-
-      stylebox.content_margin_left = 80 / self.model.width
-      self.label.size = int(self.model.size * text_px_per_block / self.model.width)
-
-      text_edit.visible = self.model.text_only
-      self.label.visible = not self.model.text_only
-
-    resize()
     self.material.params_billboard_mode =
       if self.model.billboard: BILLBOARD_ENABLED else: BILLBOARD_DISABLED
 
-    if self.model.text_only:
-      text_edit.text = self.model.message
-    else:
-      self.label.markdown = self.model.message
-      self.label.update
-
-    self.model.message_value.watch:
-      if added or touched:
-        if self.model.text_only:
-          text_edit.text = change.item
-        else:
-          self.label.markdown = change.item
-        resize()
-        self.label.update
+    self.web_tex = gdnew[ImageTexture]()
+    self.material.albedo_texture = self.web_tex
+    # Pages show their own colors, like a screen, whatever the lighting.
+    # Unlit materials ignore emission, so glow and highlight brighten the
+    # page instead.
+    self.material.flags_unshaded = true
+    self.material.albedo_color = init_color(1, 1, 1)
+    self.glow_pass = gdnew[SpatialMaterial]()
+    self.glow_pass.flags_unshaded = true
+    self.glow_pass.params_blend_mode = spatial_material.BLEND_MODE_ADD
+    self.glow_pass.params_cull_mode = self.material.params_cull_mode
+    self.glow_pass.params_billboard_mode = self.material.params_billboard_mode
+    self.light_web()
+    # Ask for the picture again, in case this node is new and the page's
+    # last frame was already taken (or dropped while the page was parked).
+    discard ew_post_pointer(self.model.id.cstring, POINTER_WAKE, 0, 0)
 
     self.model.glow_value.watch:
       if added:
-        self.material.emission_energy = change.item
+        self.light_web()
 
     self.transform = self.model.transform
     self.model.transform_value.watch:
@@ -158,17 +165,17 @@ gdobj SignNode of Spatial:
         self.set_visibility
 
     self.model.local_flags.watch:
-      if HIGHLIGHT.added:
-        self.material.emission_energy = 1.0
-      elif HIGHLIGHT.removed:
-        self.material.emission_energy = self.model.glow
-
-  method physics_process*(delta: float) =
-    if ?self.model and self.model.height == 0.0 and not self.expanded:
-      self.expand()
-      self.expanded = true
+      if HIGHLIGHT.added or HIGHLIGHT.removed:
+        self.light_web()
 
   method process*(delta: float) =
+    if ?self.model:
+      self.show_page_frame()
+      self.web_still += delta
+      if not self.web_mipmapped and self.web_still > MIPMAP_SETTLE_SECONDS and
+          self.web_tex.get_width > 0:
+        self.web_tex.flags = FLAG_FILTER or FLAG_MIPMAPS # generates them
+        self.web_mipmapped = true
     # If we only billboard the material, the collision surface doesn't move
     # so highlighting the sign is weird from some angles. Align the mesh to the
     # camera, along with billboarding the material. The mesh doesn't line-up

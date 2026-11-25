@@ -127,6 +127,12 @@ proc init*(
 
 method clone*(self: Bot, clone_to: Thing, id: string): Thing =
   var transform = clone_to.transform
+  if clone_to of Build:
+    # Where the build's turtle is, as for a build's copies. Bots are placed
+    # in the world, so turn the turtle's spot into a world position.
+    let turtle = Build(clone_to).draw_transform
+    transform.basis = transform.basis * turtle.basis
+    transform.origin = turtle.origin.global_from(clone_to)
   result = Bot.init(
     id = id,
     transform = transform,

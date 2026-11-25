@@ -84,7 +84,7 @@ proc params_to_accessors(type_name: NimNode, nodes: seq[NimNode]): NimNode =
             self.wake
 
 proc build_ctors(
-    name_str: string, type_name: NimNode, params: seq[NimNode]
+    name_str: string, type_name, base_type: NimNode, params: seq[NimNode]
 ): NimNode =
   var ctor_body = quote:
     assert not instance.is_nil
@@ -115,10 +115,14 @@ proc build_ctors(
 
   var speed = "speed".ident
   if "speed" notin var_names:
-    # Instances default to ASAP: a spawned copy appears at once (you already
-    # watched the prototype draw itself). Prototypes and standalone script
-    # builds keep the `auto` ramp from their base default.
-    params &= new_ident_defs(speed, new_empty_node(), ident"ASAP")
+    # Built instances default to ASAP: a spawned copy appears at once (you
+    # already watched the prototype draw itself). Prototypes and standalone
+    # script builds keep the `auto` ramp from their base default. Bots walk
+    # at their usual speed; at ASAP they'd never take a step.
+    let default_speed =
+      if base_type.eq_ident("Bot"): new_float_lit_node(1.0)
+      else: ident"ASAP"
+    params &= new_ident_defs(speed, new_empty_node(), default_speed)
   ctor_body.add quote do:
     result.speed = `speed`
 
@@ -200,7 +204,7 @@ proc build_class(name_node: NimNode, base_type: NimNode): NimNode =
       name_node_actual
     )
     var_name = name.ident.with_line_info(name_node_actual)
-    ctors = build_ctors(name, type_name, params)
+    ctors = build_ctors(name, type_name, base_type, params)
 
   result = new_stmt_list()
 

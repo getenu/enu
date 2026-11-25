@@ -16,4 +16,16 @@ suite "Scripts finishing":
     sleep 0.5
     check not box.asap_mode
 
+  test "a bot instance walks at the usual speed":
+    let walker = quick_walker.new(position = vec3(64, 0, -60))
+    check walker.speed == 1.0
+
+  test "a bot instance starts at the turtle":
+    drawing = false
+    forward 3
+    right 2
+    let turtle = me.draw_position
+    let walker = quick_walker.new
+    check walker.position.distance_to(turtle) < 0.01
+
 test_summary()

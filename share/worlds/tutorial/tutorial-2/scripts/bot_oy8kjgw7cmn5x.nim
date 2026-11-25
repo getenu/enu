@@ -25,7 +25,7 @@ let goodbyes = [
   forward 5
 
 -caught:
-  say ""
+  say()
   sleep 2
   say random(goodbyes)
   sleep 2

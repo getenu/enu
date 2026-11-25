@@ -562,6 +562,9 @@ type
     flags*: set[PlayerFlags]
     coding*: Thing
     open_sign*: Sign
+    page_clicks*: string
+      ## This player's recent clicks on pages another machine's scripts built,
+      ## one per line: serial, sign id, path. Whoever built the page reads them.
 
   Bot* {.ed.} = ref object of Thing
     animation*: string
@@ -573,6 +576,10 @@ type
     billboard*: bool
     owner*: Thing
     text_only*: bool
+    page*: string
+      ## A page a script built for this sign, as a description (see
+      ## page_tree), so every player's copy can show it. Empty for a plain
+      ## sign, which shows its message.
 
   Build* {.ed.} = ref object of Thing
     # The synced voxel tables ride the build's closure as real Ed fields (like
@@ -758,6 +765,8 @@ type
       ## The `bake` blocks in this script, as last compiled.
     bakes_known*: bool
       ## `bake_sites` is filled: the script has compiled at least once.
+    compiled_now*: bool
+      ## The current run got past compiling.
     source_keys*: Table[string, string]
       ## Hashes of the script files keyless bakes depend on, by path, since
       ## the last compile.
@@ -770,6 +779,7 @@ type
   QuitKind* = enum
     UNKNOWN
     TIMEOUT
+    LIBRARY ## in Enu's own script library, not the script
 
   VMQuit* = object of VMError
     info*: TLineInfo
@@ -789,6 +799,9 @@ type
     # join is deferred until their core containers fill. Drained per loop tick.
     pending_things*: seq[Thing]
     retry_failures*: bool
+    library_error*: tuple[msg, location: string]
+      ## The first error in Enu's own script library. Every script that fails
+      ## afterwards shows it, since the library can't recover until restart.
     interpreter*: Interpreter
     # Use `active_thing`/`active_thing=` (scripting.nim): setting it also
     # tells the VM, which reads it from a global instead of asking the host.

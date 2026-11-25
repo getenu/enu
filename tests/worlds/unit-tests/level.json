@@ -5,6 +5,7 @@
     "bot_alias_test",
     "build_alias_class",
     "build_misnamed",
+    "bot_misnamed",
     "build_rename_check",
     "bot_test_runner",
     "build_block_tests",
@@ -15,6 +16,7 @@
     "build_quit_at_load",
     "build_quick_box",
     "build_draws_only",
+    "bot_quick_walker",
     "build_asap_check"
   ],
   "show_prototypes": true

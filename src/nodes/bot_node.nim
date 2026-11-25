@@ -8,7 +8,7 @@ import
     text_edit, camera, viewport, texture, image, visual_server, voxel_viewer,
     area, ray_cast,
   ]
-import gdutils, core, models/[colors, things, builds], ui/markdown_label
+import gdutils, core, models/[colors, things, builds]
 import ./queries
 
 const CLIMB_SPEED = 10.0
