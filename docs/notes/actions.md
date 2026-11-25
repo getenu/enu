@@ -24,12 +24,12 @@ its syntax:
 All three are built on the branch, by rewriting scripts into what `loop`
 already does. Inky and the button page below ran in Enu in this form.
 
-Things I'd also consider, not built yet:
+Built since: states whose bodies have rules are machines of their own (in
+place of `loop name:`), and a bare `-> x` is where a machine starts. Things
+I'd also consider, not built yet:
 
-- **A bare `-> x`** for "from any other state" (today `others -> x`).
 - **State names as yes/no questions** (`if not win_game:`), in place of
   exclusion lists like `(others, -win_game)`.
-- **No `nil -> first_state` line.** A thing would start in its first state.
 
 What I'd avoid:
 
@@ -230,14 +230,16 @@ if player.far(60):
   loses sight, where the old `attack -> charge` waited for the current attack
   pass. An attack pass is a 2-block lunge, so it hardly matters.
 
-With the extra simplifications above:
+With a bare `-> x` for the start, state names as questions, and the first
+switch winning while the pass finishes (so no `continue`, and
+`charge_player = false` can go anywhere):
 
 ```nim
 run
 
+-> sleep
 off ?player:
-  -> sleep
-  continue
+  any -> sleep
 off maze.building:
   sleep -> explore
 
@@ -248,9 +250,9 @@ charge -> hunt
 
 on player.hit:
   if over player:
-    -> win_game
+    others -> win_game
   elif not win_game:
-    -> lose_game
+    others -> lose_game
 (win_game, lose_game) -> reset
 reset -> explore
 
@@ -393,15 +395,112 @@ each" without a `for` loop. With `on`, the natural form is
 to several things at once (players, bots), and use plain values like
 `player.hit` everywhere else.
 
+## States that are machines (built)
+
+A `-name:` block whose body has rules (arrows, `on`, `off`) is a machine of
+its own: it runs while the state it's in is current, and the outer rules keep
+being checked, so they can interrupt it. A block without rules stays an
+action. Nothing new to learn: if it switches states, it's a machine.
+
+```nim
+-wait:
+  sleep 0.2
+
+-hunt:
+  forward 2
+  turn -90 .. 90
+
+-dig:
+  inc digs
+  sleep 0.3
+
+- explore:
+  -> hunt
+  on near_treasure:
+    hunt -> dig
+  dig -> hunt
+
+run
+
+-> wait
+on started:
+  wait -> explore
+```
+
+A bare `-> x` is where a machine starts (today's `nil -> x`). Tested with a
+bot: it waited, started exploring when `started` turned on, dug repeatedly
+(with a step of hunting between digs) while `near_treasure` was on, and went
+back to hunting when it turned off.
+
+The old `run` and `walk` commands are gone. Setting `speed` does the same,
+and picks the walk or run animation.
+
+## `on`: while true, or the moment it becomes true?
+
+Built as "while true". Cases it handles that "the moment it becomes true"
+doesn't:
+
+1. **The condition turns true in the wrong state.** `on sees(player, 150):
+   (hunt, explore) -> attack`. If Inky is mid-`charge` when the player comes
+   into view, the rule doesn't apply yet. While true, it applies the moment
+   the charge ends; on change, the moment has passed, and Inky hunts a player
+   it can see. Any rule with a list of states it applies from has this
+   problem.
+2. **It was already true.** The level loads, or a script reloads (which Enu
+   does all the time while you edit), with the player already on the button,
+   already near the guard, or the door's `open` already set. On change,
+   nothing happens until it goes false and true again.
+3. **Coming back after an interruption.** A guard chases while the player is
+   near, gets knocked into `flinch` by a hit, and goes `flinch -> idle`. While
+   true, it chases again straight away; on change, it idles beside a player
+   who never left.
+4. **Keep doing it while it lasts.** The digger digs while it's near the
+   treasure, as many times as it takes.
+
+Where "the moment it becomes true" is needed: counting and one-off effects
+without a change of state. `on player.hit: score += 1` adds a point every
+pass while touching, and `say "Ouch!"` repeats. Most of these become fine
+when the effect sits behind a switch, in the state it switches to or a `do:`
+block, because the switch only happens once (the coin vanishes, the bot goes
+to `flinch`). A counter that keeps counting while you stand on it does need
+an edge, so I'd add a second, explicit form later if scripts need one, and
+keep `on` as "while true". Every rule in the shipped scripts is guarded by
+the state it switches from, and works the same either way.
+
+## Should a switch end the pass?
+
+For ending it:
+
+- **Order is priority.** Rules are read top to bottom and the first switch
+  wins. In Inky the hit rules come before the sight rules, so a catch beats
+  an attack. If the pass carried on, a later `any`/`others` rule could switch
+  again in the same pass, the last switch would win, and the priority you see
+  on the page would be backwards.
+- **One `do:` per pass.** Two switches in a pass would run two `do:` blocks:
+  a door's open and close in the same instant, or a bot saying two things at
+  once.
+- **Queries.** A switch clears the run's query results (`as`), so the next
+  pass starts fresh, not halfway through a list of players.
+
+Against:
+
+- **Code after a switch silently doesn't run.** Inky's
+  `charge_player = false` sits after its switch and only works because the
+  next pass skips the rule. The button's `glow = cycle(...)` at the end of its
+  rules skips a beat whenever it switches. A page described below a switch
+  updates one pass late.
+- **Order of bookkeeping matters.** `on coin.hit: -> celebrate` followed by
+  `score += 1` loses the point.
+
+A middle way keeps the good part: **the first switch wins, but the pass
+finishes.** Later switches in the same pass are ignored, so order is still
+priority and there's still one `do:`, and everything else still runs. Inky's
+`continue` after `any -> sleep` becomes unnecessary too. The switch takes
+effect at the end of the pass, which is immediate in practice, since rules
+don't run commands. Not built; it means deferring the switch in
+`state_machine.nim` instead of raising `Halt`.
+
 ## Open questions
 
-- **`on` reacts while true, not when it changes.** It's re-checked every pass
-  while its condition holds, which is what `if` does today and what Inky
-  needs. A "fires once" form would be a separate word.
-- **`run` collides with the bot command** that sets running speed. It's only
-  used inside scripts' own states, not as a bare line, but `sprint` or
-  `speed = 5` would avoid the clash.
-- **Named loops (`loop wander:`) are sub-machines.** They'd need a form under
-  `run` too, perhaps `-wander:` containing its own `run` section.
-- **A transition still ends the pass.** Rules after it don't run until next
-  time. That might be fine to keep, if the docs say so plainly.
+- **A word for "the moment it becomes true"**, if counters need one.
+- **First switch wins, pass finishes:** worth building?

@@ -362,6 +362,10 @@ proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
     pragmas = new_nim_node(nnkPragma).add(ident"discardable"),
   ).fix_line_info(sig)
 
+proc has_rules(body: NimNode): bool
+proc transform_events(stmts: NimNode): NimNode
+proc start_here(n: NimNode): NimNode
+
 proc transform_commands*(parent: NimNode): NimNode =
   for i, node in parent:
     # `move me` and `build me` from before `move` and `build` took no thing.
@@ -374,7 +378,12 @@ proc transform_commands*(parent: NimNode): NimNode =
     # tells them apart from a negation like `if a: -b else: c`.
     if parent.kind == nnkStmtList and node.kind == nnkPrefix and
         node[0] == ident"-" and node.len == 3 and node[2].kind == nnkStmtList:
-      if node[1].kind in [nnkIdent, nnkCall]:
+      if node[1].kind in [nnkIdent, nnkCall] and node[2].has_rules:
+        # A state that's rules, not actions: a machine of its own, running
+        # while the state it's in is current (`loop name:`).
+        let body = transform_events(transform_commands node[2]).start_here
+        parent[i] = nnkCommand.new_tree(ident"loop", node[1], body)
+      elif node[1].kind in [nnkIdent, nnkCall]:
         let new_proc = build_proc(node[1], transform_commands node[2])
         parent[i] = new_proc
       elif node[1].kind == nnkCommand:
@@ -397,6 +406,32 @@ proc is_bare_off(n: NimNode): bool =
   ## `off:` on its own: the opposite of the `on` before it.
   n.kind == nnkCall and n.len == 2 and n[0].eq_ident("off") and
     n[1].kind == nnkStmtList
+
+proc is_rule(n: NimNode): bool =
+  ## A state switch, or an `on`/`off` block of them.
+  (n.kind == nnkInfix and (n[0].eq_ident("->") or n[0].eq_ident("==>"))) or
+    (n.kind == nnkPrefix and n[0].eq_ident("->")) or
+    n.is_word_block("on") or n.is_word_block("off") or n.is_bare_off
+
+proc has_rules(body: NimNode): bool =
+  ## Whether a block is rules (it switches states) rather than an action.
+  for n in body:
+    if n.is_rule:
+      return true
+    if n.kind in {nnkIfStmt, nnkWhenStmt, nnkCaseStmt}:
+      for branch in n:
+        if branch.len > 0 and branch[^1].kind == nnkStmtList and
+            branch[^1].has_rules:
+          return true
+
+proc start_here(n: NimNode): NimNode =
+  ## A bare `-> x` starts in `x`: `nil -> x`.
+  if n.kind == nnkPrefix and n[0].eq_ident("->"):
+    result = infix(new_nil_lit(), "->", n[1])
+  else:
+    result = n.copy_nim_node
+    for child in n:
+      result.add start_here(child)
 
 proc right_away(n: NimNode): NimNode =
   ## Inside `on` and `off`, a switch happens now: `->` becomes `==>`.
@@ -457,7 +492,7 @@ proc transform_run(ast: NimNode): NimNode =
         body.add rest
       while ast.len > i:
         ast.del(ast.len - 1)
-      ast.add new_call(ident"loop", transform_events(body))
+      ast.add new_call(ident"loop", transform_events(body).start_here)
       break
 
 macro load_enu_script*(
