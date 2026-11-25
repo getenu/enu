@@ -1,6 +1,6 @@
 #? stdtmpl
 #proc bot_code_template(file_name, imports: string): string =
-import system except echo, quit
+import system except echo, quit, move
 import std / [strutils]
 import core, dice, class_macros, worlds, players, state_machine, bots,
   builds, signs, bots_private

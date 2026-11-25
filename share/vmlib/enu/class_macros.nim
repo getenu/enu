@@ -364,6 +364,12 @@ proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
 
 proc transform_commands*(parent: NimNode): NimNode =
   for i, node in parent:
+    # `move me` and `build me` from before `move` and `build` took no thing.
+    if node.kind == nnkCommand and node.len == 2 and
+        (node[0].eq_ident("move") or node[0].eq_ident("build")) and
+        node[1].eq_ident("me"):
+      parent[i] = node[0]
+      continue
     # `- name:` statements define commands. They always have a body, which
     # tells them apart from a negation like `if a: -b else: c`.
     if parent.kind == nnkStmtList and node.kind == nnkPrefix and
@@ -382,6 +388,78 @@ proc transform_commands*(parent: NimNode): NimNode =
       parent[i] = transform_commands(node)
   parent
 
+proc is_word_block(n: NimNode, word: string): bool =
+  ## `word cond:` (a command with a condition and a block).
+  n.kind == nnkCommand and n.len == 3 and n[0].eq_ident(word) and
+    n[2].kind == nnkStmtList
+
+proc is_bare_off(n: NimNode): bool =
+  ## `off:` on its own: the opposite of the `on` before it.
+  n.kind == nnkCall and n.len == 2 and n[0].eq_ident("off") and
+    n[1].kind == nnkStmtList
+
+proc right_away(n: NimNode): NimNode =
+  ## Inside `on` and `off`, a switch happens now: `->` becomes `==>`.
+  if n.kind == nnkInfix and n[0].eq_ident("->"):
+    result = n.copy_nim_tree
+    result[0] = ident"==>"
+  else:
+    result = n.copy_nim_node
+    for child in n:
+      result.add right_away(child)
+
+proc is_page_block(n: NimNode): bool =
+  ## `page:`, `page sign:` or `sign.page:`, whose `on click` is the page's.
+  if n.kind notin {nnkCall, nnkCommand} or n.len == 0:
+    return false
+  let callee = n[0]
+  callee.eq_ident("page") or
+    (callee.kind == nnkDotExpr and callee[1].eq_ident("page"))
+
+proc transform_events(stmts: NimNode): NimNode =
+  ## `on cond:` runs its block while `cond` is true, switching states right
+  ## away. `off cond:` is the same for while it's false, and a bare `off:`
+  ## after an `on` is its `else`.
+  if stmts.is_page_block:
+    return stmts
+  if stmts.kind != nnkStmtList:
+    result = stmts.copy_nim_node
+    for child in stmts:
+      result.add transform_events(child)
+    return
+  result = new_stmt_list()
+  var i = 0
+  while i < stmts.len:
+    let n = stmts[i]
+    if n.is_word_block("on") or n.is_word_block("off"):
+      var cond = n[1]
+      if n[0].eq_ident("off"):
+        cond = new_call(ident"not", cond)
+      var branch = nnkIfStmt.new_tree(
+        nnkElifBranch.new_tree(cond, right_away(transform_events(n[2])))
+      )
+      if n[0].eq_ident("on") and i + 1 < stmts.len and stmts[i + 1].is_bare_off:
+        inc i
+        branch.add nnkElse.new_tree(right_away(transform_events(stmts[i][1])))
+      result.add branch
+    else:
+      result.add transform_events(n)
+    inc i
+
+proc transform_run(ast: NimNode): NimNode =
+  ## A bare `run` line: everything after it is the thing's action loop,
+  ## checked over and over, without `loop:` and its indentation.
+  result = ast
+  for i, n in ast:
+    if n.kind == nnkIdent and n.eq_ident("run"):
+      var body = new_stmt_list()
+      for rest in ast[i + 1 ..^ 1]:
+        body.add rest
+      while ast.len > i:
+        ast.del(ast.len - 1)
+      ast.add new_call(ident"loop", transform_events(body))
+      break
+
 macro load_enu_script*(
     file_name: string,
     base_type: untyped,
@@ -397,7 +475,7 @@ macro load_enu_script*(
 
   let code = read_enu_script(resolved_file_name)
   when compiles(parse_stmt(code, resolved_file_name)):
-    var ast = parse_stmt(code, resolved_file_name).transform_commands
+    var ast = parse_stmt(code, resolved_file_name).transform_commands.transform_run
   else:
     # Just for tests running in Nim <= 1.6. Enu VM and Nim 2.0 can take both
     # Nim code and a file name.
