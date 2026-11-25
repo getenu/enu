@@ -188,11 +188,18 @@ forever:
 
 ## Sign Properties
 
+`say` returns the sign it shows. Keep it to change it later:
+
 ```nim
-sign.show = true/false       # show or hide the sign
-sign.open = true/false       # open or close the expanded panel
-sign.more = "new content"    # update the detailed panel text
+let board = say("Hi", "More")
+board.show = true/false       # show or hide the sign
+board.open = true/false       # open or close the expanded panel
+board.more = "new content"    # update the detailed panel text
+say()                         # put away the sign `say` last showed
 ```
+
+From another script, `thing.signs` lists the signs on a thing (maybe none,
+maybe several).
 
 ## Embedded Links Reference
 

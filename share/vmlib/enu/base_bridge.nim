@@ -140,6 +140,8 @@ bridged_to_host:
   proc all_signs*(): seq[Sign]
     ## Every sign in the world.
 
+  proc signs_on*(self: Thing): seq[Sign]
+
   proc all_players*(): seq[Player]
     ## Everyone playing right now.
 

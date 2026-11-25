@@ -191,7 +191,7 @@ var activated* = false
       color = green
       say "- Checkpoint!", "# Checkpoint Reached!\n\nProgress saved."
       sleep 3
-      sign.show = false
+      say()
 
 loop:
   nil -> waiting

@@ -15,7 +15,7 @@ proc fix_line_info(node, source: NimNode): NimNode =
 const private_props = ["lock"]
 const public_props = [
   "position", "start_position", "speed", "scale", "glow", "global", "seed",
-  "color", "height", "show", "sign",
+  "color", "height", "show",
 ]
 
 proc params_to_assignments(nodes: seq[NimNode]): NimNode =

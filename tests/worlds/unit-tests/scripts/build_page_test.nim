@@ -83,4 +83,10 @@ suite "Saying nothing":
     say()
     check not empty.show
 
+  test "signs lists the signs on a thing":
+    let before = me.signs.len
+    let another = say("another")
+    check me.signs.len == before + 1
+    check me.signs[^1] == another
+
 test_summary()

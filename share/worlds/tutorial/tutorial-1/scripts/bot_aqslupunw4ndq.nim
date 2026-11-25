@@ -5,6 +5,7 @@ var test_mode = false
 
 var bot_id = ""
 var maze: MazeType
+var bubble: Sign # the speech bubble over the bot; `say` reuses it
 
 proc get_bot(): Bot =
   # each time the code for the bot is reloaded we need to
@@ -32,8 +33,8 @@ proc get_bot(): Bot =
 
   say "- Welcome to **Enu**!", width = 2.1
   sleep 1.5
-  say "- Click this text for a short tutorial.", "# Welcome to Enu!"
-  while not sign.open:
+  bubble = say("- Click this text for a short tutorial.", "# Welcome to Enu!")
+  while not bubble.open:
     turn(player)
 
 -movement_info:
@@ -90,7 +91,7 @@ proc get_bot(): Bot =
 
   speed = 1
   turn player
-  sign.open = true
+  bubble.open = true
   while not player.flying:
     sleep()
 
@@ -100,7 +101,7 @@ proc get_bot(): Bot =
     sleep()
 
 -good_job:
-  sign.open = false
+  bubble.open = false
   say "- Good Job!", "# Good Job!"
   sleep 2
 
@@ -125,7 +126,7 @@ proc get_bot(): Bot =
     """,
     width = 2.5
 
-  sign.open = true
+  bubble.open = true
   while player.tool != PlaceBot:
     sleep()
   sleep 0.5
@@ -144,7 +145,7 @@ proc get_bot(): Bot =
     """,
     width = 2.0
 
-  sign.open = true
+  bubble.open = true
   var last_bot_frame = frame_count()
   var og_bot_count = Bot.all.len
 
@@ -168,7 +169,7 @@ proc get_bot(): Bot =
   sleep 1
 
 -code_info:
-  say "- Coding", """
+  bubble = say("- Coding", """
     # Coding Enu
 
     We control Enu using [Nim](https://nim-lang.org), a powerful programming
@@ -177,15 +178,15 @@ proc get_bot(): Bot =
     of the course.
 
     Switch to the `Code` tool to continue the tutorial.
-    """
+    """)
 
-  sign.open = true
+  bubble.open = true
   while player.tool != CodeMode:
     turn player
   sleep 0.5
 
 -open_code:
-  sign.more = """
+  bubble.more = """
     # Coding Enu
 
     With the `Code` tool selected, you can code anything you've created by
@@ -194,7 +195,7 @@ proc get_bot(): Bot =
     Open the code for your `Bot` to continue the tutorial.
     """
 
-  sign.open = true
+  bubble.open = true
   var bot = get_bot()
 
   while player.coding != bot:
@@ -202,7 +203,7 @@ proc get_bot(): Bot =
   sleep 0.5
 
 -bot_navigation:
-  sign.more = """
+  bubble.more = """
     # Coding Bots
 
     We control the bot with simple commands like `forward` and `turn`. Here's
@@ -238,7 +239,7 @@ proc get_bot(): Bot =
     `FINISH HERE!` sign at the end of the course.
     """
 
-  sign.open = true
+  bubble.open = true
   var bot = get_bot()
   while maze.position.x - bot.position.x < 5:
     bot = get_bot()
@@ -264,7 +265,7 @@ proc get_bot(): Bot =
     game written in Enu that's loosley inspired by **Alien: Isolation**, but
     features Inky, the blue ghost from Pac-Man. If you're curious how this
     tutorial was written, click
-    [HERE](<nim://player.god = true;sign.open = false>)
+    [HERE](<nim://player.god = true;bubble.open = false>)
     to turn on `God Mode`, which will let you see and modify its code. It's a
     bit of a mess, but some folks might find it interesting.
 
@@ -272,7 +273,7 @@ proc get_bot(): Bot =
     suggestions. Thanks for trying Enu!
     """
 
-  sign.open = true
+  bubble.open = true
 
 setup()
 if not test_mode:

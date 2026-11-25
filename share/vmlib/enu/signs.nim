@@ -2,7 +2,10 @@
 
 import system except echo
 import std/[strutils, math, wrapnils, options]
+import std/importutils
 import core, vm_bridge_utils, base_bridge_private, pages
+
+private_access Thing
 
 export pages
 
@@ -42,6 +45,11 @@ bridged_to_host:
 
   proc `billboard=`*(self: Sign, value: bool)
 
+proc signs*(self: Thing): seq[Sign] =
+  ## The signs on the thing, from `say`: maybe none, maybe several, oldest
+  ## first.
+  self.signs_on
+
 const DEFAULT_TEXT_SIZE = 250 / 1200
   ## Default text height in blocks (≈0.208). The odd literal reproduces the
   ## pre-blocks default (font px == 250 / sign width) exactly.
@@ -61,8 +69,8 @@ proc say*(
   ## opened, and `width`/`height`/`size` control the shape if you're
   ## picky. `width`, `height` and `size` are all in blocks.
   let defaults: tuple[width: float, height: float, size: float, billboard: bool] =
-    if ?self.sign:
-      (self.sign.width, self.sign.height, self.sign.size, self.sign.billboard)
+    if ?self.speech:
+      (self.speech.width, self.speech.height, self.speech.size, self.speech.billboard)
     elif self of Bot:
       (2.0, 0.0, DEFAULT_TEXT_SIZE, true)
     else:
@@ -74,8 +82,8 @@ proc say*(
     size = if size == float.high: defaults.size else: size
     billboard = billboard.get(defaults.billboard)
 
-  if self of Bot and ?self.sign:
-    result = self.sign
+  if self of Bot and ?self.speech:
+    result = self.speech
     result.update_markdown_sign(message, more, width, height, size, billboard)
     result.show = true
   else:
@@ -83,7 +91,7 @@ proc say*(
       message, more, width, height, size, billboard
     )
 
-    self.sign = result
+    self.speech = result
 
     if self of Build and height > 1.0:
       result.position = result.position + (UP * (height - 1.0))
@@ -92,8 +100,8 @@ proc say*(
 
 proc say*(self: Thing) =
   ## Put the thing's sign away, if it has one.
-  if ?self.sign:
-    self.sign.show = false
+  if ?self.speech:
+    self.speech.show = false
 
 template say*() =
   ## Put the sign away: say nothing.

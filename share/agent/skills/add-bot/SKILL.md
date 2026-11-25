@@ -236,12 +236,13 @@ drawing = false
 # Short text (always visible bubble)
 say "Hello!"
 
-# Short + detailed (click for more)
-say "- Click me", "# Details\n\nFull markdown content here."
+# Short + detailed (click for more). `say` returns the sign; a bot has one
+# speech bubble, which every `say` reuses.
+let bubble = say("- Click me", "# Details\n\nFull markdown content here.")
 
 # Update sign content dynamically
-sign.more = "# Updated\n\nNew content"
+bubble.more = "# Updated\n\nNew content"
 
-# Hide/show sign
-sign.show = false
+# Put the bubble away
+say()
 ```

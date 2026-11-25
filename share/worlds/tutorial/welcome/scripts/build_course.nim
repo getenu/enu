@@ -173,8 +173,8 @@ proc apply_stage(s: int) =
 
 # ----- live progress on the standalone progress sign -----
 # The tall progress board sits off to the player's right. We keep its in-world
-# message in sync with world state, reading its say-sign straight off the build
-# (`board.sign`) so it survives the board being moved or hot-reloaded. (The
+# message in sync with world state, reading its sign straight off the build
+# (`board.signs`) so it survives the board being moved or hot-reloaded. (The
 # welcome sign owns its own page now — we don't touch it.)
 
 proc mark(done: bool): string =
@@ -292,10 +292,11 @@ forever:
     apply_stage(3)
 
   let board = find_by_id("build_progress_sign")
-  if ?board and ?board.sign:
+  if ?board and board.signs.len > 0:
+    let sign = board.signs[0]
     let page = checklist()
-    if board.sign.message != page:
-      board.sign.message = page
+    if sign.message != page:
+      sign.message = page
     let more = detail()
-    if board.sign.more != more:
-      board.sign.more = more
+    if sign.more != more:
+      sign.more = more

@@ -423,6 +423,11 @@ proc all_builds(worker: Worker): seq[Build] =
 proc all_signs(worker: Worker): seq[Sign] =
   worker.find_all(Sign)
 
+proc signs_on(self: Thing): seq[Sign] =
+  for thing in self.things:
+    if thing of Sign and not thing.destroyed:
+      result.add Sign(thing)
+
 proc all_things(worker: Worker): seq[Thing] =
   worker.find_all(Thing)
 
@@ -1801,7 +1806,7 @@ proc bridge_to_vm*(worker: Worker) =
     `lock=`, reset, press_action, release_action, load_level, level_name,
     world_name,
     reset_level, current_colliders, added_things, all_players, all_builds,
-    all_bots, all_signs, all_things, report_test_results, now_seconds,
+    all_bots, all_signs, signs_on, all_things, report_test_results, now_seconds,
     dump_stats, find_voxel_overlaps, things_in_box, floor_at, has_blocks_in, bounds,
     overlaps, things_overlapping, box_is_free, bounds_at, adopt, release
 
