@@ -16,6 +16,7 @@
     "build_quit_at_load",
     "build_quick_box",
     "build_draws_only",
+    "bot_quick_walker",
     "build_asap_check"
   ],
   "show_prototypes": true

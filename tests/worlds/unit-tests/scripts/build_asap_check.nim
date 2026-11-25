@@ -16,4 +16,8 @@ suite "Scripts finishing":
     sleep 0.5
     check not box.asap_mode
 
+  test "a bot instance walks at the usual speed":
+    let walker = quick_walker.new(position = vec3(64, 0, -60))
+    check walker.speed == 1.0
+
 test_summary()
