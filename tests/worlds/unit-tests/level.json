@@ -5,6 +5,7 @@
     "bot_alias_test",
     "build_alias_class",
     "build_misnamed",
+    "bot_misnamed",
     "build_rename_check",
     "bot_test_runner",
     "build_block_tests",
