@@ -240,6 +240,10 @@ gdobj Game of Node:
         vertex_mem_kb = (get_monitor(RENDER_VERTEX_MEM_USED) / 1024.0).int,
         objects = get_monitor(RENDER_OBJECTS_IN_FRAME).int,
         draw_calls = get_monitor(RENDER_DRAW_CALLS_IN_FRAME).int,
+        # 2D (GUI) cost; canvas batching shows up as draw_calls_2d well below
+        # items_2d.
+        items_2d = get_monitor(RENDER_2D_ITEMS_IN_FRAME).int,
+        draw_calls_2d = get_monitor(RENDER_2D_DRAW_CALLS_IN_FRAME).int,
         video_mem_mb = (get_monitor(RENDER_VIDEO_MEM_USED) / 1048576.0).int,
         # VoxelServer in-flight task gauges (live counts, not cumulative —
         # for totals, sum the per-terrain TERRAIN `meshed` counter instead).
