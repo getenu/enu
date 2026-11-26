@@ -88,7 +88,6 @@ bridged_to_host:
     ## The thing's color. For a Build this is the drawing color, blocks
     ## you draw after changing it use the new color.
 
-  proc `color=`*(self: Thing, color: Color)
   proc show*(self: Thing): bool
     ## Whether the thing is visible. `show = false` makes it vanish.
     ## It's still there. It's just being sneaky.

@@ -88,6 +88,9 @@ gdobj BuildNode of VoxelTerrain:
     pending_transform: Option[Transform]
     positioned: bool # initial placement applied? (see the transform watch)
     default_view_distance: int
+    own_materials: bool
+      ## Using copies of the shared materials, so a color override on this
+      ## build doesn't recolor the others in its tree.
     toggle_error_highlight_at = MonoTime.high
     error_highlight_on: bool
     next_stats_log: MonoTime
@@ -150,6 +153,19 @@ gdobj BuildNode of VoxelTerrain:
       "frame_mesh_baked", "mesh_block_created"
     self.default_view_distance = self.max_view_distance.int
 
+  proc set_color_override(color: Color) =
+    let on = color.a > 0
+    if on and not self.own_materials:
+      self.each_material(i, m):
+        self.set_material(i, m.duplicate.as(ShaderMaterial))
+      self.own_materials = true
+    self.each_material(i, m):
+      if on:
+        m.set_shader_param("color_override", color.to_variant)
+      m.set_shader_param(
+        "color_override_amount", (if on: 1.0 else: 0.0).to_variant
+      )
+
   proc prepare_materials() =
     let start = get_mono_time()
     if self.model.shared.materials.len == 0:
@@ -164,6 +180,8 @@ gdobj BuildNode of VoxelTerrain:
 
     for i, material in self.model.shared.materials:
       self.set_material(i, material)
+    self.own_materials = false
+    self.set_color_override(self.model.color_override)
     let took = (get_mono_time() - start).in_milliseconds
     if took > 5:
       warn "prepare_materials slow", ms = took, unit = self.model.id
@@ -666,6 +684,10 @@ gdobj BuildNode of VoxelTerrain:
     self.model.glow_value.watch:
       if added:
         self.set_glow(change.item)
+
+    self.model.color_override_value.watch:
+      if added:
+        self.set_color_override(change.item)
 
     self.set_terrain_bounds(self.model.bounds)
     self.model.bounds_value.watch:

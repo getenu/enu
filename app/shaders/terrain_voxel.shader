@@ -20,6 +20,9 @@ uniform bool tint_emission = true;
 uniform vec4 glow_tint : hint_color = vec4(0.0, 0.404, 1.0, 1.0);
 uniform float glow_tint_amount = 0.0;
   // how far the voxel-colored glow leans toward `glow_tint` (selected units)
+uniform vec4 color_override : hint_color = vec4(1.0);
+uniform float color_override_amount = 0.0;
+  // 1.0 shows every voxel in `color_override` (`color =` in move mode)
 uniform sampler2D texture_normal : hint_normal;
 uniform float normal_scale : hint_range(-16,16);
 varying vec3 uv1_triplanar_pos;
@@ -72,6 +75,7 @@ vec3 glow_color(vec3 color) {
 void fragment() {
   vec4 albedo_tex = triplanar_texture(texture_albedo,uv1_power_normal,uv1_triplanar_pos);
   vec3 color = srgb_to_linear(clamp(COLOR.rgb, 0.0, 1.0));
+  color = mix(color, color_override.rgb, color_override_amount);
   ALBEDO = color * albedo.rgb * albedo_tex.rgb;
   METALLIC = metallic;
   ROUGHNESS = roughness;
