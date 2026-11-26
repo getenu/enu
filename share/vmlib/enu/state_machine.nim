@@ -76,12 +76,14 @@ template loop_body(body: untyped) =
 
     while true:
       if body_running:
-        # Should only be true on `continue`, which ends this pass early.
+        # Only true after a `continue`, which skips the rest of the rules for
+        # this combination. If it was the last, the pass is over, and the
+        # current state carries on as usual.
         body_running = false
         if not queries.next_combination():
           finish_pass()
           queries.clear()
-          sleep()
+          return true
       body_running = true
       body
       body_running = false

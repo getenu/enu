@@ -41,6 +41,9 @@ new syntax:
   try again. `x` hasn't run yet, so `x -> y` still waits for it.
 - **A script's rules wait one tick before their first pass,** so every
   script in the level has run its setup first.
+- **`continue` skips the rest of the rules for that pass,** and the current
+  state carries on. It used to go straight back to the rules without letting
+  the state's action run, freezing the action until the condition changed.
 - **A blink isn't a change.** Something has to be gone for a tenth of a
   second before `off` fires or it can arrive again. Touching blinks off for a
   frame or two when a player lands on something, which would otherwise count

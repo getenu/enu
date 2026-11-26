@@ -130,8 +130,6 @@ var seen: seq[string]
   -> tick2
   if turn2 == 5:
     tick2 -> done
-  # `continue` re-checks the rules without the state running, so the hold
-  # has to end here.
   inc held
   if held < 4:
     continue
@@ -197,6 +195,22 @@ suite "Rules":
     greeting()
     check greeted == @["a", "b"]
     check waves == 1
+
+  test "continue skips the rest of the rules, and the state carries on":
+    var cont_ticks = 0
+    var cont_rules = 0
+    -cont_tick:
+      inc cont_ticks
+      sleep 0.05
+    - continuing:
+      -> cont_tick
+      if cont_ticks >= 3:
+        cont_tick -> done
+      continue
+      inc cont_rules # never reached
+    continuing()
+    check cont_ticks >= 3
+    check cont_rules == 0
 
   test "an arrival a pass doesn't reach gets its turn later":
     pair = @[sign_a, sign_b]
