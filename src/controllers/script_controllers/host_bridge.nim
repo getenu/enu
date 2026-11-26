@@ -637,8 +637,11 @@ proc scale(self: Thing): float =
 proc color(self: Thing): Color =
   self.color_value.value
 
-proc `color=`(self: Thing, color: Color) =
+proc color_set(self: Thing, color: Color) =
   types.`color=`(self, color)
+
+proc color_override_set(self: Build, color: Color) =
+  self.color_override = color
 
 proc show(self: Thing): bool =
   VISIBLE in self.global_flags
@@ -1790,7 +1793,7 @@ proc bridge_to_vm*(worker: Worker) =
     exec_instance, capture_start_transform, hit, exit, global, `global=`,
     position, local_position,
     rotation, `rotation=`, id, glow, `glow=`, speed, `speed=`, scale, `scale=`,
-    velocity, `velocity=`, active_thing, color, `color=`, sees, start_position,
+    velocity, `velocity=`, active_thing, color, sees, start_position,
     wake, frame_count, write_stack_trace, show, `show=`, frame_created, lock,
     `lock=`, reset, press_action, release_action, load_level, level_name,
     world_name,
@@ -1801,7 +1804,8 @@ proc bridge_to_vm*(worker: Worker) =
 
   result.bridged_from_vm "base_bridge_private",
     action_running, `action_running=`, yield_script, begin_turn, begin_move,
-    sleep_impl, position_set, start_position_set, reset_anchor, delete,
+    sleep_impl, position_set, start_position_set, color_set,
+    color_override_set, reset_anchor, delete,
     keep_alive, new_markdown_sign, update_markdown_sign, claim_name
 
   result.bridged_from_vm "bots", play

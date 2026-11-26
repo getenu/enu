@@ -16,6 +16,10 @@ bridged_to_host:
   proc sleep_impl*(seconds = 1.0)
   proc position_set*(self: Thing, position: Vector3)
   proc start_position_set*(self: Thing, position: Vector3)
+  proc color_set*(self: Thing, color: Color)
+  proc color_override_set*(self: Build, color: Color)
+    ## Show every block of the build in `color`, without changing them. A
+    ## transparent color turns it off.
   proc reset_anchor*(self: Thing)
   proc delete*(self: Thing)
   proc keep_alive*()

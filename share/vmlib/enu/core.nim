@@ -80,6 +80,21 @@ proc quit*(code = 0, msg = "") =
   ## Stop the script.
   exit(code, msg)
 
+template `color=`*(self: Thing, value: Color) =
+  ## Set the thing's color. For a Build this is the drawing color: blocks
+  ## you draw after changing it use the new color. In move mode
+  ## (`move me`), a Build also turns that color all over, without changing
+  ## its blocks. `color = nil` brings back the real colors.
+  when declared(move_mode):
+    if move_mode == 2 and self of Build and value.a == 1.0:
+      Build(self).color_override_set(value)
+  self.color_set(value)
+
+template `color=`*(self: Thing, value: typeof(nil)) =
+  ## Turn off a move-mode color, so a Build shows its real colors again.
+  if self of Build:
+    Build(self).color_override_set(eraser)
+
 proc `position=`*(self: Thing, position: Vector3) =
   ## Teleport the thing. No walking, no animation, it's just there now.
   ## You can also assign another thing to teleport to wherever it is:

@@ -1040,6 +1040,7 @@ method reset*(self: Build) =
   debug "resetting build", id = self.id
   self.transform = self.start_transform
   self.color = self.start_color
+  self.color_override = default(Color)
   self.draw_state.drawing = true
   self.speed = AUTO # ramp up then finish ASAP, unless the script sets a speed
   self.draw_state.ramp.active = false

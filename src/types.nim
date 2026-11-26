@@ -592,6 +592,10 @@ type
     draw_state* {.ignore.}: DrawState
     bounds*: AABB
     bot_collisions*: bool
+    color_override*: Color
+      ## Set by `color =` in move mode: the build shows every block in this
+      ## color, leaving the blocks themselves alone. Transparent when off.
+      ## Not saved; the script sets it again when it runs.
     frame_order*: FrameOrder = FrameOrder(ids: @[0], next_id: 1)
       ## The frames, in order, by id. Every voxel row is keyed by frame id, so
       ## inserting, deleting or moving a frame only rewrites this list.
