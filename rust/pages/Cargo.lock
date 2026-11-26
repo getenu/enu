@@ -498,6 +498,7 @@ dependencies = [
  "blitz-paint",
  "blitz-traits",
  "bytemuck",
+ "cursor-icon",
  "kurbo",
  "parley",
  "peniko",

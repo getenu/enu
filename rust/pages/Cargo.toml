@@ -11,6 +11,7 @@ blitz-html = "0.3.0-beta.4"
 blitz-paint = { version = "0.3.0-beta.4", features = ["custom-widget"] }
 blitz-traits = "0.3.0-beta.4"
 bytemuck = "1.25.2"
+cursor-icon = "1.2.0"
 kurbo = "0.13"
 parley = "0.12"
 peniko = "0.6"

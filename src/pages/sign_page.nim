@@ -17,7 +17,7 @@ const
   }
   h1, h2, h3, h4, h5, h6 { margin: 0.2em 0; color: #96cbfe; }
   p { margin: 0.3em 0; }
-  a { color: #c6c5fe; font-weight: bold; text-decoration: none; }
+  a { color: #c6c5fe; font-weight: bold; text-decoration: underline; }
   code { color: #ff73fd; }
   pre {
     background: #000000d6; color: #e0e0e0; margin: 0.4em -20px;

@@ -33,6 +33,8 @@ struct Slot {
     /// for pages drawn to fit something on screen. 0: no preference.
     width: u32,
     scale: f32,
+    /// The pointer is over something to click (a link, or `cursor: pointer`).
+    pointing: bool,
 }
 
 static SLOTS: LazyLock<Mutex<HashMap<String, Slot>>> = LazyLock::new(Default::default);
@@ -239,6 +241,24 @@ pub unsafe extern "C" fn ew_request_size(key: *const c_char, width: u32, scale: 
         let slot = slots.entry(key.to_string()).or_default();
         slot.width = width;
         slot.scale = scale;
+    })
+}
+
+/// Whether the pointer is over something to click on `key`'s page, for the
+/// thread showing it to set its cursor.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_set_pointing(key: *const c_char, pointing: bool) {
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        SLOTS.lock().unwrap().entry(key.to_string()).or_default().pointing = pointing;
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_pointing(key: *const c_char) -> bool {
+    crate::guard::guard(move || {
+        let key = unsafe { str_arg(key) };
+        SLOTS.lock().unwrap().get(key).is_some_and(|slot| slot.pointing)
     })
 }
 

@@ -746,3 +746,13 @@ pub unsafe extern "C" fn ew_describe_html(html: *const c_char) -> *const c_char 
         })
     })
 }
+
+/// Whether the pointer is over something to click: a link, or anything
+/// styled `cursor: pointer`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ew_view_pointing(v: *mut View) -> bool {
+    crate::guard::guard(move || {
+        let v = unsafe { view(v) };
+        matches!(v.doc.get_cursor(), Some(cursor_icon::CursorIcon::Pointer))
+    })
+}

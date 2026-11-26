@@ -60,6 +60,7 @@ gdobj RightPanel of MarginContainer:
       self.status_html = ""
     else:
       self.status_html = panel_html(markdown, false)
+      self.page_scroll.scroll_vertical = 0
       if self.status.is_nil:
         self.status = ew_view_new(self.status_html.cstring, 1, 1, 1)
       else:
@@ -105,6 +106,9 @@ gdobj RightPanel of MarginContainer:
   method process*(delta: float) =
     if not self.visible or self.page_key == "":
       return
+    self.page_rect.mouse_default_cursor_shape =
+      if self.page_key == PANEL_KEY and ew_pointing(PANEL_KEY): CURSOR_POINTING_HAND
+      else: CURSOR_ARROW
     # Drawn 1:1: the panel's width in physical px, with the screen scale
     # and font size setting as the page's scale (its CSS is 16px based).
     var width = self.page_scroll.rect_size.x
@@ -161,6 +165,7 @@ gdobj RightPanel of MarginContainer:
     state.player.open_sign_value.changes:
       if added and change.item != nil:
         state.push_flags DOCS_VISIBLE, DOCS_FOCUSED
+        self.page_scroll.scroll_vertical = 0 # a sign opens at the top
         self.show_page()
       if removed and change.item != nil:
         self.show_page()

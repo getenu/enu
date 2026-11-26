@@ -95,6 +95,11 @@ proc ew_forget*(key: cstring)
 proc ew_drop_frame*(key: cstring)
 proc ew_request_size*(key: cstring, width: uint32, scale: float32)
 proc ew_requested_size*(key: cstring, scale: ptr float32): uint32
+proc ew_view_pointing*(v: ViewPtr): bool
+  ## The pointer is over a link, or something styled `cursor: pointer`.
+proc ew_set_pointing*(key: cstring, pointing: bool)
+proc ew_pointing*(key: cstring): bool
+  ## What the thread with `key`'s page last said about `ew_view_pointing`.
 
 # Every call catches its own panics (see ../src/guard.rs).
 proc ew_take_error*(): cstring

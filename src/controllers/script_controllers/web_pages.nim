@@ -508,6 +508,9 @@ proc pump_pages*() =
         page.send_click(clicked)
       else:
         page.add_click(clicked, start)
+    if page.panel:
+      # For the panel's cursor: a hand over links.
+      ew_set_pointing(key.cstring, ew_view_pointing(page.view))
     log_errors(key)
     pump_times.add (get_mono_time() - start).in_microseconds.float / 1000
   for key in gone:

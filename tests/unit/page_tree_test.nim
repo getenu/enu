@@ -148,6 +148,25 @@ discard ew_content_height(images)
 doAssert take_error() == ""
 ew_view_free(images)
 
+# The hand cursor: over links (and anything styled `cursor: pointer`), not
+# over buttons or text, as in a browser.
+let cursors = ew_view_new(
+  "<p><a id=go href=x>go</a> plain text</p><button id=b>B</button>" &
+    "<div id=c style='cursor: pointer'>C</div>",
+  600, 400, 1.0,
+)
+proc hover(v: ViewPtr, selector: string): bool =
+  var r: array[4, float32]
+  ew_rect(v, ew_query(v, selector.cstring), r.addr)
+  var changed = false
+  discard ew_pointer(v, POINTER_MOVE, r[0] + r[2] / 2, r[1] + r[3] / 2, changed.addr)
+  ew_view_pointing(v)
+doAssert cursors.hover("#go"), "a link"
+doAssert not cursors.hover("#b"), "a button"
+doAssert cursors.hover("#c"), "cursor: pointer"
+doAssert not cursors.hover("p"), "text"
+ew_view_free(cursors)
+
 # HTML and markdown turn into descriptions without a page.
 let md = parse_tree($ew_describe_html("<h1>Hi</h1><p>there <em>you</em></p>"))
 doAssert md.len == 2 and md[0].tag == "h1" and md[1].kids[1].tag == "em"
