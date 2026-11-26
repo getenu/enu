@@ -52,7 +52,14 @@ new syntax:
   `loop name:`). It runs while its state is current, and the outer rules can
   interrupt it.
 - **`move` and `build` without `me`.** `move me` and `build me` are rewritten
-  to them, so old scripts keep working.
+  to them, so old scripts keep working. **`move:` and `build:` blocks** run
+  their block in that mode and put the mode back afterwards, even when a
+  switch interrupts them. Without a block, the mode stays until changed, and
+  it belongs to the script, not the state: a state that switches modes and
+  is interrupted leaves the next state in that mode.
+- **`run` doesn't imply `move`.** A build is in build mode until it says
+  `move`, so rules can draw. Inky says `move`, then `run`. A build drawing
+  while it moves draws in its own space, so the blocks travel with it.
 - **The old `run` and `walk` commands are gone.** Setting `speed` does the
   same.
 

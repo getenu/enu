@@ -374,6 +374,16 @@ proc transform_commands*(parent: NimNode): NimNode =
         node[1].eq_ident("me"):
       parent[i] = node[0]
       continue
+    # `move:` and `build:` blocks. A different name, so a bare `move` or
+    # `build` stays unambiguous.
+    if node.kind == nnkCall and node.len == 2 and
+        (node[0].eq_ident("move") or node[0].eq_ident("build")) and
+        node[1].kind == nnkStmtList:
+      let mode = if node[0].eq_ident("move"): 2 else: 1
+      parent[i] = new_call(
+        ident"in_mode", new_lit(mode), transform_commands(node[1])
+      )
+      continue
     # `- name:` statements define commands. They always have a body, which
     # tells them apart from a negation like `if a: -b else: c`.
     if parent.kind == nnkStmtList and node.kind == nnkPrefix and

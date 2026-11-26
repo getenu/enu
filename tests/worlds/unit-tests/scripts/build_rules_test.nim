@@ -136,6 +136,23 @@ var seen: seq[string]
   on Query.init(pair) as s:
     seen.add s.message
 
+var block_passes = 0
+var mode_after = 0
+
+-moving_block:
+  move:
+    sleep 0.5
+
+-after_block:
+  mode_after = move_mode
+
+- interrupted_block:
+  -> moving_block
+  inc block_passes
+  if block_passes > 3:
+    moving_block -> after_block now
+  after_block -> done
+
 suite "Rules":
   test "the first switch wins, and the pass finishes":
     visits = @[]
@@ -216,5 +233,19 @@ suite "Rules":
     pair = @[sign_a, sign_b]
     skipping()
     check seen == @["a", "b"]
+
+  test "move: and build: blocks put the mode back":
+    build
+    move:
+      check move_mode == 2
+      build:
+        check move_mode == 1
+      check move_mode == 2
+    check move_mode == 1
+
+  test "even when a switch interrupts the block":
+    build
+    interrupted_block()
+    check mode_after == 1
 
 test_summary()

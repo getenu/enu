@@ -509,6 +509,17 @@ template build*() {.dirty.} =
   enu_target = me
   move_mode = 1
 
+template in_mode*(mode: int, body: untyped) {.dirty.} =
+  ## `move:` and `build:` blocks: the block runs in that mode, and the
+  ## mode before it comes back afterwards, even if a switch interrupts it.
+  block:
+    let enu_mode_before = move_mode
+    if mode == 2: move else: build
+    try:
+      body
+    finally:
+      if enu_mode_before == 2: move else: build
+
 template anchor*(body: untyped) =
   ## Declare the thing's pivot. Inside the block, turtle commands
   ## (`forward`, `right`, `up`, `turn`, `lean`, …) accumulate into the
