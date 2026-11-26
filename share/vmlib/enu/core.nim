@@ -667,15 +667,6 @@ proc rand*[T: int | float](range: Slice[T]): T =
 converter int_to_float*(i: int): float =
   result = i.float
 
-converter int_slice_to_float*(range: Slice[int]): float =
-  rand(range).float
-
-converter int_slice_to_fint*(range: Slice[int]): int =
-  rand(range)
-
-converter float_slice_to_float*(range: Slice[float]): float =
-  rand(range)
-
 proc fuzzed*(self, range: float): float =
   ## A copy of a number or position, nudged by a random amount up to
   ## `range`. `position.fuzzed(0.5)` is great for jitters, shivers and
@@ -743,13 +734,6 @@ proc random*[T](args: varargs[T]): T =
   ## `color = random(red, green, blue)`.
   let i = rnd.rand(rng(), 0 .. (args.len - 1))
   args[i]
-
-proc contains*(max, chance: int): bool =
-  ## Roll the dice: `1 in 10` is true 1 time out of 10. Use it for
-  ## things that should only happen sometimes:
-  ## `if 1 in 100: echo "jackpot!"`.
-  var r = rnd.rand(rng(), 1 .. max)
-  result = r <= chance
 
 template forever*(body) =
   ## Do something forever. The same as `while true`, but friendlier.

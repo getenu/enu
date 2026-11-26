@@ -2,6 +2,7 @@
 ## or playing, and what they have open.
 
 import core, vm_bridge_utils, builds_private
+import dice # for the player's own code: `forward 2 .. 10`, `1 in 10`
 
 bridged_to_host:
   proc tool*(self: Player): Tools
