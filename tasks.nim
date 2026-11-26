@@ -109,10 +109,45 @@ proc p(msg: varargs[string, `$`]) =
     echo underline & "\e[00m"
   echo ""
 
-proc build_godot(target = target, cpu = cpu, opts = godot_opts, force = false) =
+var
+  submodules_synced = false
+  stale_submodules: seq[string]
+
+proc sync_submodules() =
+  ## Check out each submodule at the commit this repo pins, unless it has
+  ## uncommitted changes (untracked files don't count: builds leave them).
+  ## Those, and any that fail to update, are left for
+  ## `warn_stale_submodules` to list.
+  if submodules_synced:
+    return
+  submodules_synced = true
+  for line in capture("git submodule status").output.split_lines:
+    if line.len == 0 or line[0] notin {'-', '+'}:
+      continue
+    let path = line[1 ..^ 1].split_whitespace[1]
+    if line[0] == '+' and capture(
+      &"git -C {path} status --porcelain --untracked-files=no"
+    ).output.strip != "":
+      stale_submodules.add &"{path} (uncommitted changes)"
+    else:
+      p &"Updating {path}..."
+      let update = capture(&"git submodule update --init {path}")
+      echo update.output
+      if update.exit_code != 0:
+        stale_submodules.add &"{path} (update failed, see above)"
+
+proc warn_stale_submodules() =
+  if stale_submodules.len > 0:
+    p "WARNING: submodules not updated"
+    echo "These aren't at the commit this branch pins:"
+    for path in stale_submodules:
+      echo "  " & path
+    echo "\nSort them out and run this again, or check out the pinned " &
+      "commit yourself.\n"
+
+proc build_godot(target = target, cpu = cpu, opts = godot_opts) =
   p "Building Godot..."
-  if force or not file_exists("vendor/godot/.git"):
-    exec "git submodule update --init"
+  sync_submodules()
   let
     scons = find_exe "scons"
     cores = gorge(gen() & " core_count")
@@ -131,11 +166,13 @@ task build_mcp, "Build the MCP/CLI server (bin/enu)":
   build_mcp()
 
 task ios_prereqs, "Build godot for ios":
+  sync_submodules()
   with_dir "vendor/pcre":
     exec "./configure  --host=arm-apple-darwin10 --target=arm-apple-darwin10"
     exec "make"
 
   build_godot(target = "iphone", cpu = "arm64")
+  warn_stale_submodules()
 
 task ios, "Build ios":
   exec &"{gen()} write_export_presets --enu_version {git_version}"
@@ -166,8 +203,9 @@ task build, "Build enu":
   # The MCP server (`bin/enu`) builds separately — `nim build_mcp`. dist_package
   # bundles it per-platform; the MCP tests compile it themselves (`nim r`).
 
-task build_godot, "Build godot. Use --force to re-init submodules":
-  build_godot(force = "--force" in command_line_params())
+task build_godot, "Build godot":
+  build_godot()
+  warn_stale_submodules()
 
 task build_headless, "build headless godot":
   build_godot(target = "server use_static_cpp=no")
@@ -573,7 +611,7 @@ task setup_checksums, "setup checksum module in nim dependency":
     exec koch_cmd & " checksums"
 
 task prereqs,
-  "Build godot, verify fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target. Use --force to re-init submodules":
+  "Build godot, verify fonts, generate binding and stdlib. Use 'amd64' or 'arm64' to set target":
   # Persist arch if specified
   when host_os == "linux":
     if parse_arch_arg() != "":
@@ -584,9 +622,10 @@ task prereqs,
   setup_checksums_task()
   when host_os == "windows":
     extract_dlls_task()
-  build_godot(force = "--force" in command_line_params())
+  build_godot()
   copy_fonts()
   gen_binding_and_copy_stdlib()
+  warn_stale_submodules()
 
 task import_assets,
   "Import Godot assets. Only required if you're not using the Godot editor":
@@ -653,6 +692,7 @@ task dist_prereqs, "Build godot debug and release versions, and verify fonts":
   build_godot(cpu = "64", opts = release_opts)
   when host_os == "macosx":
     build_godot(cpu = "arm64", opts = release_opts)
+  warn_stale_submodules()
 
 proc copy_share(src, dest: string) =
   cp_dir src, dest
