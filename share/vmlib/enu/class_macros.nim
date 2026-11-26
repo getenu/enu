@@ -458,28 +458,43 @@ proc edge_check(n: NimNode): NimNode =
 proc is_as(n: NimNode): bool =
   n.kind == nnkInfix and n[0].eq_ident("as")
 
-proc crowd_events(n: NimNode, off_body: NimNode): NimNode =
-  ## `on Player.hit as p:` runs its block once for each player who starts
-  ## touching, with `p` as that player. `off ... as p:` (or a bare `off:`
-  ## after the `on`) runs once for each one who stops.
+proc crowd_events(n: NimNode, off_node: NimNode): NimNode =
+  ## `on Player.hit as p:` is `if ... as p:` over the players who've arrived
+  ## and haven't had their turn, so it uses the loop's usual query
+  ## machinery: one turn each, and anyone a pass doesn't reach gets theirs
+  ## next pass. `off ... as p:` (or a bare `off:` after the `on`) is the
+  ## same for those who've left.
   let query = n[1][1]
   let name = n[1][2]
   if query.has_query:
     error("Only one `as` in an `on`.", query)
-  let changes = gen_sym(nskLet, "changes")
+  let key = new_lit(n.line_info)
   result = new_stmt_list()
-  result.add new_let_stmt(
-    changes, new_call(ident"enu_changes", new_lit(n.line_info), query)
-  )
   if n[0].eq_ident("on"):
-    result.add nnkForStmt.new_tree(
-      name, new_dot_expr(changes, ident"arrived"), transform_events(n[2])
+    var cond = infix(
+      new_call(ident"enu_arrivals", key, query, new_lit(not off_node.is_nil)),
+      "as",
+      name,
     )
-  let left_body = if n[0].eq_ident("off"): n[2] else: off_body
-  if not left_body.is_nil:
-    result.add nnkForStmt.new_tree(
-      name, new_dot_expr(changes, ident"left"), transform_events(left_body)
+    cond.copy_line_info(n)
+    let body = new_stmt_list(
+      new_call(ident"enu_arrived", key, name), transform_events(n[2])
     )
+    result.add nnkIfStmt.new_tree(nnkElifBranch.new_tree(cond, body))
+  let off_node = if n[0].eq_ident("off"): n else: off_node
+  if not off_node.is_nil:
+    let off_body = if off_node.is_bare_off: off_node[1] else: off_node[2]
+    var cond = infix(
+      new_call(ident"enu_departures", key, query.copy_nim_tree),
+      "as",
+      name.copy_nim_tree,
+    )
+    cond.copy_line_info(off_node)
+    let body = new_stmt_list(
+      new_call(ident"enu_departed", key, name.copy_nim_tree),
+      transform_events(off_body),
+    )
+    result.add nnkIfStmt.new_tree(nnkElifBranch.new_tree(cond, body))
 
 proc transform_events(stmts: NimNode): NimNode =
   ## `on cond:` runs its block once, the pass `cond` becomes true, and
@@ -497,11 +512,11 @@ proc transform_events(stmts: NimNode): NimNode =
   while i < stmts.len:
     let n = stmts[i]
     if (n.is_word_block("on") or n.is_word_block("off")) and n[1].is_as:
-      var off_body: NimNode
+      var off_node: NimNode
       if n[0].eq_ident("on") and i + 1 < stmts.len and stmts[i + 1].is_bare_off:
         inc i
-        off_body = stmts[i][1]
-      result.add crowd_events(n, off_body)
+        off_node = stmts[i]
+      result.add crowd_events(n, off_node)
     elif n.is_word_block("on") or n.is_word_block("off"):
       let edge = gen_sym(nskLet, "edge")
       result.add new_let_stmt(edge, edge_check(n))

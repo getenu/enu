@@ -27,7 +27,20 @@ new syntax:
   still run. The switch takes effect at the end of the pass.
 - **`on Player.hit as p:` runs once for each one that arrives,** with `p` as
   that player, and a bare `off:` after it runs once for each one that leaves.
-  Today's `if Player.hit as p:` still runs every pass, for everyone touching.
+  It's `if ... as` over the arrivals that haven't had their turn, so it uses
+  the usual query machinery, and an arrival only counts as handled when its
+  turn runs. Anyone a pass doesn't reach (a `continue`, an untaken branch)
+  gets their turn later. Today's `if Player.hit as p:` still runs every pass,
+  for everyone touching.
+- **A pass runs every combination of query results** before its first switch
+  takes effect, so a switch no longer drops the rest. That also fixes a
+  lost click: two clicks in one tick where the first switched states.
+- **Starting a machine (`-> x`) isn't a competing switch.** The rules below
+  it can act on the new state the same pass. Otherwise anything arriving on a
+  machine's first pass would have its switch ignored, and `on` would never
+  try again. `x` hasn't run yet, so `x -> y` still waits for it.
+- **A script's rules wait one tick before their first pass,** so every
+  script in the level has run its setup first.
 - **A blink isn't a change.** Something has to be gone for a tenth of a
   second before `off` fires or it can arrive again. Touching blinks off for a
   frame or two when a player lands on something, which would otherwise count
@@ -573,8 +586,13 @@ don't run commands. Not built; it means deferring the switch in
 
 ## Open questions
 
-- **A nil `position` error from Inky, seen once** in tutorial-3, around when
-  the start pad set the player during testing. I couldn't reproduce it.
+- **Mid-pass pauses can see the world change.** `sees` pauses the rules for
+  a tick while the main thread checks. Another script can change things
+  meanwhile, so a guard at the top of the pass (`if not ?player:`) doesn't
+  cover the rest of it. This was the nil `position` error in Inky: the start
+  pad sets `player = nil` when it loads, which happened in the middle of
+  Inky's first pass. Waiting a tick before the first pass fixes that case,
+  but the general race remains.
 - **Checking `on Player.hit as p:` with real players:** done with tutorial-3's
   start pad. Stepping on counted once, a landing bounce didn't count again,
   and stepping off and back counted again.

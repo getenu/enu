@@ -67,7 +67,8 @@ template loop_body(body: untyped) =
       query_run = outer_run
     var body_running = false
     template finish_pass() =
-      # The first switch this pass takes effect now that it's over.
+      # Every combination of query results has had its turn, so the first
+      # switch this pass takes effect.
       if frame.switched:
         frame.switched = false
         queries.clear()
@@ -77,16 +78,16 @@ template loop_body(body: untyped) =
       if body_running:
         # Should only be true on `continue`, which ends this pass early.
         body_running = false
-        finish_pass()
         if not queries.next_combination():
+          finish_pass()
           queries.clear()
           sleep()
       body_running = true
       body
       body_running = false
-      finish_pass()
       if queries.next_combination():
         continue
+      finish_pass()
       queries.clear()
       return true
 
@@ -94,6 +95,12 @@ template loop_body(body: untyped) =
   frame.manager = manager
   ctx.stack.add frame
 
+  if main_loop:
+    # Let every script in the level run its setup before the rules' first
+    # pass: a pass can pause partway (`sees` waits a tick), and a script
+    # that loads meanwhile could change what the rules already checked.
+    # (Before `loop_started`, so the nap doesn't run the rules itself.)
+    sleep 0.0
   when declared(loop_started):
     loop_started(ctx, main_loop)
 
@@ -229,12 +236,17 @@ macro smart_call*(call: untyped) =
     when compiles(`call`): `call` else: `call_without_ctx`
 
 proc is_word(n: NimNode, word: string): bool =
-  ## `word` as written, even if a template already bound it to a symbol of
-  ## the same name (scripts have a `now()`).
-  if n.kind in {nnkOpenSymChoice, nnkClosedSymChoice}:
+  ## `word` as written, even if it was already resolved to something of the
+  ## same name (scripts have a `now()`), or to a call of it.
+  case n.kind
+  of nnkOpenSymChoice, nnkClosedSymChoice:
     n.len > 0 and n[0].eq_ident(word)
+  of nnkIdent, nnkSym:
+    n.eq_ident(word)
+  of nnkCall:
+    n.len == 1 and n[0].is_word(word)
   else:
-    n.kind in {nnkIdent, nnkSym} and n.eq_ident(word)
+    false
 
 proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
   var
@@ -250,7 +262,8 @@ proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
 
   var immediate = immediate_arg
   # `a -> b now`: right away, without waiting for `a` to finish.
-  if to_state.kind == nnkCommand and to_state.len in 2 .. 3 and
+  # (Not `len in 2 .. 3`: in scripts, `..` picks a random number.)
+  if to_state.kind == nnkCommand and to_state.len >= 2 and to_state.len <= 3 and
       to_state[1].is_word("now"):
     immediate = ident"true"
     if to_state.len == 3:
@@ -321,6 +334,10 @@ proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
   let
     includes_str = includes.join(",")
     excludes_str = excludes.join(",")
+    # `-> x` (from nil) starts the machine. It isn't a switch that competes
+    # with the rest of the pass: the rules below can act on the new state
+    # right away, and `x` hasn't run yet, so `x -> y` still waits for it.
+    starting = new_lit(includes == @["nil"] and excludes.len == 0)
 
   result = quote:
     when not declared(current_state) or not declared(ctx):
@@ -350,9 +367,12 @@ proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
         else:
           frame.action = nil
         # The first switch wins: later ones this pass are ignored, the rest
-        # of the pass still runs, and the switch takes effect at its end
-        # (along with dropping the run's query results).
-        frame.switched = true
+        # of the pass (every combination of query results) still runs, and
+        # the switch takes effect at its end.
+        if `starting`:
+          action_done = false
+        else:
+          frame.switched = true
 
 const BLINK = 0.1
   ## Seconds something has to be gone before it counts as gone. Touching
@@ -381,20 +401,13 @@ proc edge*(frame: Frame, key: string, value: bool): int =
     frame.edges[key] = false
     return -1
 
-proc changes*[T: Thing](
-    frame: Frame, key: string, found: seq[T]
-): tuple[arrived, left: seq[T]] =
-  ## For `on ... as`: who's in `found` now but wasn't, and who was but has
-  ## been gone for a moment. On a machine's first pass, everyone found has
-  ## arrived.
+proc update_crowd[T: Thing](frame: Frame, key: string, found: seq[T], tracks_left: bool) =
+  ## Who's still with an `on ... as` query. Someone gone for a moment has
+  ## left: they're dropped, and kept for `off` if there is one.
   let now = now_seconds()
   let found = found.map_it(Thing(it))
   var members = frame.crowds.get_or_default(key)
   var missing = frame.missing.get_or_default(key)
-  for item in found:
-    if item notin members:
-      members.add item
-      result.arrived.add T(item)
   missing.keep_it_if(it[0] notin found)
   for item in members:
     if item notin found and missing.all_it(it[0] != item):
@@ -403,16 +416,56 @@ proc changes*[T: Thing](
   for (item, since) in missing:
     if now - since >= BLINK:
       members.keep_it_if(it != item)
-      result.left.add T(item)
+      if tracks_left:
+        frame.left.mget_or_put(key, @[]).add item
     else:
       still.add (item, since)
   frame.crowds[key] = members
   frame.missing[key] = still
 
-template enu_changes*[T](key: string, query: Query[seq[T]]): untyped =
+proc arrivals*[T: Thing](
+    frame: Frame, key: string, found: seq[T], tracks_left: bool
+): seq[T] =
+  ## For `on ... as`: who's here but hasn't had their turn yet.
+  frame.update_crowd(key, found, tracks_left)
+  let members = frame.crowds.get_or_default(key)
+  for item in found:
+    if Thing(item) notin members:
+      result.add item
+
+proc arrived*(frame: Frame, key: string, item: Thing) =
+  ## `item`'s `on ... as` block ran.
+  if item notin frame.crowds.mget_or_put(key, @[]):
+    frame.crowds[key].add item
+
+proc departures*[T: Thing](
+    frame: Frame, key: string, found: seq[T]
+): seq[T] =
+  ## For `off ... as`: who's left but hasn't had their turn yet.
+  frame.update_crowd(key, found, true)
+  for item in frame.left.get_or_default(key):
+    result.add T(item)
+
+proc departed*(frame: Frame, key: string, item: Thing) =
+  ## `item`'s `off ... as` block ran.
+  if key in frame.left:
+    frame.left[key].keep_it_if(it != item)
+
+template enu_arrivals*[T](key: string, query: Query[seq[T]], tracks_left: bool): untyped =
   when not declared(frame):
     {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
-  frame.changes(key, query.result)
+  Query.init(frame.arrivals(key, query.result, tracks_left))
+
+template enu_departures*[T](key: string, query: Query[seq[T]]): untyped =
+  when not declared(frame):
+    {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
+  Query.init(frame.departures(key, query.result))
+
+template enu_arrived*(key: string, item: Thing) =
+  frame.arrived(key, item)
+
+template enu_departed*(key: string, item: Thing) =
+  frame.departed(key, item)
 
 template enu_edge*(key: string, value: bool): int =
   when not declared(frame):

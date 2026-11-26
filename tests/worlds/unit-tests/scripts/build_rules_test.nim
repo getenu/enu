@@ -101,11 +101,50 @@ let sign_b = say("b")
   if turn == 5:
     step -> done
 
+var pair: seq[Sign]
+var greeted: seq[string]
+var waves = 0
+
+-idle_g:
+  sleep 0.05
+
+-wave_g:
+  inc waves
+
+- greeting:
+  -> idle_g
+  on Query.init(pair) as s:
+    greeted.add s.message
+    idle_g -> wave_g now
+  wave_g -> done
+
+var held = 0
+var turn2 = 0
+var seen: seq[string]
+
+-tick2:
+  inc turn2
+  sleep 0.05
+
+- skipping:
+  -> tick2
+  if turn2 == 5:
+    tick2 -> done
+  # `continue` re-checks the rules without the state running, so the hold
+  # has to end here.
+  inc held
+  if held < 4:
+    continue
+  on Query.init(pair) as s:
+    seen.add s.message
+
 suite "Rules":
   test "the first switch wins, and the pass finishes":
     visits = @[]
     first_wins()
-    check visits == @["one", "two"]
+    # `-> one` starts there, and `one -> two now` acts on it the same pass,
+    # so `one` never runs; `one -> three now` is ignored.
+    check visits == @["two"]
     check after_switch >= 2
 
   test "on and off fire once each, and the first pass counts":
@@ -152,5 +191,16 @@ suite "Rules":
     blinking()
     check blink_arrivals == 1
     check blink_departures == 0
+
+  test "everyone arriving together gets a turn, and the first switch wins":
+    pair = @[sign_a, sign_b]
+    greeting()
+    check greeted == @["a", "b"]
+    check waves == 1
+
+  test "an arrival a pass doesn't reach gets its turn later":
+    pair = @[sign_a, sign_b]
+    skipping()
+    check seen == @["a", "b"]
 
 test_summary()
