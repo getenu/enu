@@ -455,12 +455,12 @@ proc departed*(frame: Frame, key: string, item: Thing) =
 
 template enu_arrivals*[T](key: string, query: Query[seq[T]], tracks_left: bool): untyped =
   when not declared(frame):
-    {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
+    {.error: "`on` and `off` only work under `rules`, or in a state that switches states".}
   Query.init(frame.arrivals(key, query.result, tracks_left))
 
 template enu_departures*[T](key: string, query: Query[seq[T]]): untyped =
   when not declared(frame):
-    {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
+    {.error: "`on` and `off` only work under `rules`, or in a state that switches states".}
   Query.init(frame.departures(key, query.result))
 
 template enu_arrived*(key: string, item: Thing) =
@@ -471,7 +471,7 @@ template enu_departed*(key: string, item: Thing) =
 
 template enu_edge*(key: string, value: bool): int =
   when not declared(frame):
-    {.error: "`on` and `off` only work under `run`, or in a state that switches states".}
+    {.error: "`on` and `off` only work under `rules`, or in a state that switches states".}
   frame.edge(key, value)
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =

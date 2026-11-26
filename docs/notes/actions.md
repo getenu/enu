@@ -9,7 +9,7 @@ Prototyped on the `actions-exploration` branch.
 Enu keeps its model, states plus rules that are re-checked all the time, with
 new syntax:
 
-- **`run`.** A bare `run` line replaces `loop:`. Everything after it is the
+- **`rules`.** A bare `rules` line replaces `loop:`. Everything after it is the
   thing's rules, re-checked over and over. Setup goes above, behavior below,
   and nothing is indented.
 - **`-> x` starts in `x`** (today's `nil -> x`). **`-> done` leaves** the
@@ -57,11 +57,19 @@ new syntax:
   switch interrupts them. Without a block, the mode stays until changed, and
   it belongs to the script, not the state: a state that switches modes and
   is interrupted leaves the next state in that mode.
-- **`run` doesn't imply `move`.** A build is in build mode until it says
-  `move`, so rules can draw. Inky says `move`, then `run`. A build drawing
+- **`rules` doesn't imply `move`.** A build is in build mode until it says
+  `move`, so rules can draw. Inky says `move`, then `rules`. A build drawing
   while it moves draws in its own space, so the blocks travel with it.
 - **The old `run` and `walk` commands are gone.** Setting `speed` does the
   same.
+
+The line was `run` while we explored. `rules` says what the section is
+rather than what it does: kids know game rules as things that always apply
+and get checked whenever something happens, and the docs already call these
+rules. (`run` also read as the bot running, next to `speed` and `forward`.)
+The weak fit is a script that only describes a page, which isn't much of a
+rule, but it still reads better than the alternatives (`always` reads
+`-> sleep` as "always sleep", and is too close to `forever`).
 
 `==>`, `nil` and `do:` still work, so existing scripts run unchanged. All
 existing tests pass. New ones (`tests/worlds/unit-tests/scripts/
@@ -77,7 +85,7 @@ Inky, in this form (ran in tutorial-3: explore, attack, charge, hunt, and a
 catch ending the game):
 
 ```nim
-run
+rules
 
 -> sleep
 if not ?player:
@@ -271,13 +279,13 @@ Scratch answers these with concurrent scripts and "stop other scripts", which
 is its own set of concepts. It also brings back the mode variable. I don't
 think it's simpler than rules.
 
-### `run` with `on` and `off` (first draft)
+### `rules` with `on` and `off` (first draft, when the line was `run`)
 
 This first draft had `on` switch right away; the settled design above uses
 `now` for that, and `on` means "once".
 
 ```nim
-run
+rules
 
 off ?player:
   any -> sleep
@@ -329,7 +337,7 @@ switch winning while the pass finishes (so no `continue`, and
 `charge_player = false` can go anywhere):
 
 ```nim
-run
+rules
 
 -> sleep
 off ?player:
@@ -388,13 +396,13 @@ Moving to `home + width` is a move to a spot, so repeating it once the door
 is there does nothing. For things like this, a plain loop is simpler than
 states, and we should teach it.
 
-**The button (tutorial-3), with `run`** (a sketch, not run):
+**The button (tutorial-3), with `rules`** (a sketch, not run):
 
 ```nim
 name Button(door = Door, pause = 11.0, ghost = inky)
 move
 
-run
+rules
 nil -> up(home + 0.2)
 on ?player and player.hit:
   up -> down(home + 0.2) do:
@@ -412,7 +420,7 @@ case of why interrupting matters: it switches to `chase` the moment the
 player is close, in the middle of wandering.
 
 ```nim
-run
+rules
 nil -> wander
 (go_home, wander_home) -> wander
 caught -> go_home
@@ -433,7 +441,7 @@ if player.near(3):
 
 ## Pages
 
-The button page fits `run` without any special handling. The page is just
+The button page fits `rules` without any special handling. The page is just
 something described on every pass. The version I clicked through in Enu also
 had a stylesheet, `pane`s and a bot counter; this one is trimmed:
 
@@ -441,7 +449,7 @@ had a stylesheet, `pane`s and a bot counter; this one is trimmed:
 var count = 0
 var show_maker = false
 
-run
+rules
 
 board.page:
   h2 "Count: " & $count
@@ -475,8 +483,8 @@ controlling another thing that is also running its own script never had good
 answers; telling the other thing what to do (`enemy.open = true`, like the
 button and door) is clearer.
 
-`run` and the modes are separate questions. `move` or `build` sets what
-`forward` does; `run` starts the rules. Inky does `move`, then `run`. Nothing
+`rules` and the modes are separate questions. `move` or `build` sets what
+`forward` does; `rules` starts the rules. Inky does `move`, then `rules`. Nothing
 stops a script from building inside a state, and `build` and `move` can
 change modes in the middle.
 
@@ -514,7 +522,7 @@ action. Nothing new to learn: if it switches states, it's a machine.
     hunt -> dig
   dig -> hunt
 
-run
+rules
 
 -> wait
 on started:

@@ -544,12 +544,12 @@ proc transform_events(stmts: NimNode): NimNode =
       result.add transform_events(n)
     inc i
 
-proc transform_run(ast: NimNode): NimNode =
-  ## A bare `run` line: everything after it is the thing's action loop,
+proc transform_rules(ast: NimNode): NimNode =
+  ## A bare `rules` line: everything after it is the thing's rules,
   ## checked over and over, without `loop:` and its indentation.
   result = ast
   for i, n in ast:
-    if n.kind == nnkIdent and n.eq_ident("run"):
+    if n.kind == nnkIdent and n.eq_ident("rules"):
       var body = new_stmt_list()
       for rest in ast[i + 1 ..^ 1]:
         body.add rest
@@ -573,7 +573,7 @@ macro load_enu_script*(
 
   let code = read_enu_script(resolved_file_name)
   when compiles(parse_stmt(code, resolved_file_name)):
-    var ast = parse_stmt(code, resolved_file_name).transform_commands.transform_run
+    var ast = parse_stmt(code, resolved_file_name).transform_commands.transform_rules
   else:
     # Just for tests running in Nim <= 1.6. Enu VM and Nim 2.0 can take both
     # Nim code and a file name.
