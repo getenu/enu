@@ -76,7 +76,7 @@ task over working around it.
 
 ### Testing and Documentation
 - `nim test` - Run the fast default tests (unit + VM) — use while iterating
-- `nim test_all` - Run the full suite (unit + VM + world + MCP) — before opening a PR
+- `nim test_all` - Run the full suite (unit + VM + world + MCP)
 - `nim test_unit` - Run unit tests
 - `nim test_vm` - Run VM script tests
 - `nim test_world` - Run in-world tests (boots Godot)
@@ -84,7 +84,9 @@ task over working around it.
 - `nim docs` - Build documentation using nimibook
 - `nim clean` - Remove build artifacts
 
-Relevant tests must pass before calling a feature done.
+Relevant tests must pass before calling a feature done. Before opening a PR, run
+the suites the change touches; for a small blast radius that's enough (CI runs
+everything). When in doubt, run `nim test_all`.
 
 ### Platform-Specific
 - `nim ios` - Build iOS package
