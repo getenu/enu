@@ -12,6 +12,11 @@ import models except Color
 
 const clear = init_color(0.0, 0.0, 0.0, 0.0)
 
+type EditorPosition = object
+  line, column, scroll_x: int
+  scroll_y: float
+
+
 proc configure_highlighting*(self: TextEdit) =
   # strings
   self.add_color_region("\"", "\"", IR_BLACK[TEXT], false)
@@ -29,6 +34,9 @@ gdobj Editor of MarginContainer:
     scroll_bar: VScrollBar
     text_edit: TextEdit
     left_panel: Container
+    positions: Table[string, EditorPosition]
+      ## Where the cursor and scroll were in each thing's code when it was last
+      ## closed. This player's only, and only until the level is reloaded.
 
   proc indent_new_line() =
     let editor = self.text_edit
@@ -161,9 +169,26 @@ gdobj Editor of MarginContainer:
       .set_ease(EASE_IN_OUT)
     discard self.tween.tween_callback(self, "_open_done")
 
+  proc save_position(thing: Thing) =
+    self.positions[thing.id] = EditorPosition(
+      line: int self.text_edit.cursor_get_line,
+      column: int self.text_edit.cursor_get_column,
+      scroll_x: int self.text_edit.scroll_horizontal,
+      scroll_y: self.text_edit.scroll_vertical,
+    )
+
+  proc restore_position(thing: Thing) =
+    let pos = self.positions.get_or_default(thing.id)
+    self.text_edit.cursor_set_line(pos.line, adjust_viewport = false)
+    self.text_edit.cursor_set_column(pos.column, adjust_viewport = false)
+    self.text_edit.scroll_vertical = pos.scroll_y
+    self.text_edit.scroll_horizontal = pos.scroll_x
+
   proc watch_open_thing() =
     var line_zid, code_zid: EID
     state.player.coding_value.changes:
+      if removed and ?change.item:
+        self.save_position(change.item)
       if removed:
         let thing = state.player.coding
         if thing.is_nil:
@@ -190,6 +215,7 @@ gdobj Editor of MarginContainer:
 
           self.text_edit.text = state.player.coding.code.nim
           state.player.open_code = self.text_edit.text
+          self.restore_position(thing)
 
           if COMMAND_MODE in state.local_flags:
             self.ghost()
@@ -232,6 +258,9 @@ gdobj Editor of MarginContainer:
   proc watch() =
     self.watch_open_thing()
     self.watch_local_flags()
+    state.global_flags.changes:
+      if LOADING_LEVEL.added:
+        self.positions.clear
 
   method ready*() =
     self.text_edit = find("TextEdit", TextEdit)
