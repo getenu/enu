@@ -6,13 +6,6 @@ bridged_to_host:
     ## Play an animation by name, like `play "wave"`. Play `""` to
     ## stop.
 
-proc walk*(self: Bot) =
-  ## Walking speed. The same as `speed = 1`.
-  self.speed = 1.0
-
-proc run*(self: Bot) =
-  ## Running speed. The same as `speed = 5`.
-  self.speed = 5.0
 
 proc go_home*(self: Bot) =
   ## Head back to the start position by turning around and walking

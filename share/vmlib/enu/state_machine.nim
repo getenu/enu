@@ -8,7 +8,33 @@ proc current_loop(value: Loop = nil): Loop =
   var loop {.global.}: Loop
   if not value.is_nil:
     loop = value
+  if loop.is_nil:
+    # A switch outside any rules, before the script has any: it only fails
+    # if it's reached, so give it somewhere harmless to note its states.
+    loop = Loop()
   result = loop
+
+proc outside_rules*(what: string) =
+  raise ValueError.init(
+    what & " only works under `rules`, or in a state that has rules of its own."
+  )
+
+proc outside_rules_int(what: string): int =
+  outside_rules(what)
+
+proc outside_rules_query[T](what: string, _: typedesc[T]): Query[seq[T]] =
+  outside_rules(what)
+
+template on*(cond: untyped, body: untyped) =
+  ## Only here to explain itself: under `rules`, `on` is rewritten before
+  ## it gets this far.
+  outside_rules("`on`")
+
+template off*(cond: untyped, body: untyped) =
+  outside_rules("`off`")
+
+template off*(body: untyped) =
+  outside_rules("`off`")
 
 proc advance*(ctx: Context, frame: Frame = nil): bool =
   ## advance state machine. Returns true if statemachine is still running.
@@ -43,7 +69,7 @@ template loop_body(body: untyped) =
   var
     main_loop = false
     current_state {.inject, used.} = "nil"
-    done {.inject.} = true
+    action_done {.inject.} = true
     first_iteration {.inject.} = true
     frame {.inject.} = Frame()
 
@@ -66,18 +92,30 @@ template loop_body(body: untyped) =
     defer:
       query_run = outer_run
     var body_running = false
+    template finish_pass() =
+      # Every combination of query results has had its turn, so the first
+      # switch this pass takes effect.
+      if frame.switched:
+        frame.switched = false
+        queries.clear()
+        raise (ref Halt)()
+
     while true:
       if body_running:
-        # Should only be true on `continue`, which ends this pass early.
+        # Only true after a `continue`, which skips the rest of the rules for
+        # this combination. If it was the last, the pass is over, and the
+        # current state carries on as usual.
         body_running = false
         if not queries.next_combination():
+          finish_pass()
           queries.clear()
-          sleep()
+          return true
       body_running = true
       body
       body_running = false
       if queries.next_combination():
         continue
+      finish_pass()
       queries.clear()
       return true
 
@@ -85,6 +123,12 @@ template loop_body(body: untyped) =
   frame.manager = manager
   ctx.stack.add frame
 
+  if main_loop:
+    # Let every script in the level run its setup before the rules' first
+    # pass: a pass can pause partway (`sees` waits a tick), and a script
+    # that loads meanwhile could change what the rules already checked.
+    # (Before `loop_started`, so the nap doesn't run the rules itself.)
+    sleep 0.0
   when declared(loop_started):
     loop_started(ctx, main_loop)
 
@@ -99,7 +143,7 @@ template loop_body(body: untyped) =
       loop_finished()
   else:
     while looping:
-      done = false
+      action_done = false
       try:
         let previous_state = current_state
         var frames = frame_count()
@@ -120,7 +164,7 @@ template loop_body(body: untyped) =
           else:
             # bubble the halt
             raise (ref Halt)()
-      done = true
+      action_done = true
       looping = ctx.advance(frame)
 
 proc is_transition(n: NimNode): bool =
@@ -219,7 +263,20 @@ macro smart_call*(call: untyped) =
   result = quote:
     when compiles(`call`): `call` else: `call_without_ctx`
 
-proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
+proc is_word(n: NimNode, word: string): bool =
+  ## `word` as written, even if it was already resolved to something of the
+  ## same name (scripts have a `now()`), or to a call of it.
+  case n.kind
+  of nnkOpenSymChoice, nnkClosedSymChoice:
+    n.len > 0 and n[0].eq_ident(word)
+  of nnkIdent, nnkSym:
+    n.eq_ident(word)
+  of nnkCall:
+    n.len == 1 and n[0].is_word(word)
+  else:
+    false
+
+proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
   var
     to_state_name: string
     to_state = to_state
@@ -231,6 +288,18 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
     result = node.str_val
     current_loop().from_states.add (result, node.copy_nim_node)
 
+  var immediate = immediate_arg
+  # `a -> b now`: right away, without waiting for `a` to finish.
+  # (Not `len in 2 .. 3`: in scripts, `..` picks a random number.)
+  if to_state.kind == nnkCommand and to_state.len >= 2 and to_state.len <= 3 and
+      to_state[1].is_word("now"):
+    immediate = ident"true"
+    if to_state.len == 3:
+      body = to_state[2]
+    to_state = to_state[0]
+  # `-> done` leaves the machine.
+  if to_state.is_word("done"):
+    to_state = new_nil_lit()
   if body.kind == nnkNilLit:
     body = new_stmt_list()
   if from_state.kind == nnkTupleConstr:
@@ -293,38 +362,147 @@ proc transition(from_state, to_state, body, immediate: NimNode): NimNode =
   let
     includes_str = includes.join(",")
     excludes_str = excludes.join(",")
+    # `-> x` (from nil) starts the machine. It isn't a switch that competes
+    # with the rest of the pass: the rules below can act on the new state
+    # right away, and `x` hasn't run yet, so `x -> y` still waits for it.
+    starting = new_lit(includes == @["nil"] and excludes.len == 0)
 
   result = quote:
     when not declared(current_state) or not declared(ctx):
-      {.error: "`->` or `==>` must be inside a `loop` ".}
-    if `immediate` or (active and done):
-      let
-        from_includes: seq[string] = `includes_str`.split(",")
-        from_excludes: seq[string] = `excludes_str`.split(",")
-      if (
-        current_state in from_includes or (
-          current_state != "nil" and (
-            ("others" in from_includes and `to_state_name` != current_state) or
-            "any" in from_includes
+      outside_rules("Switching states (`a -> b`)")
+    else:
+      if not frame.switched and (`immediate` or (active and action_done)):
+        let
+          from_includes: seq[string] = `includes_str`.split(",")
+          from_excludes: seq[string] = `excludes_str`.split(",")
+        if (
+          current_state in from_includes or (
+            current_state != "nil" and (
+              ("others" in from_includes and `to_state_name` != current_state) or
+              "any" in from_includes
+            )
           )
-        )
-      ) and current_state notin from_excludes:
-        current_state = `to_state_name`
-        first_iteration = true
-        proc action() =
-          if first_iteration:
-            `body`
-          smart_call(`to_state`)
-          first_iteration = false
+        ) and current_state notin from_excludes:
+          current_state = `to_state_name`
+          first_iteration = true
+          proc action() =
+            if first_iteration:
+              `body`
+            smart_call(`to_state`)
+            first_iteration = false
 
-        if `to_state_name` != "nil":
-          frame.action = action
-        else:
-          frame.action = nil
-        # The first transition wins: the rest of this run's query results
-        # are dropped, and the loop's next run starts fresh.
-        query_run.clear()
-        raise (ref Halt)()
+          if `to_state_name` != "nil":
+            frame.action = action
+          else:
+            frame.action = nil
+          # The first switch wins: later ones this pass are ignored, the rest
+          # of the pass (every combination of query results) still runs, and
+          # the switch takes effect at its end.
+          if `starting`:
+            action_done = false
+          else:
+            frame.switched = true
+
+const BLINK = 0.1
+  ## Seconds something has to be gone before it counts as gone. Touching
+  ## blinks off for a frame or two when a player lands or bounces, which
+  ## would otherwise fire `off` and `on` again.
+
+proc edge*(frame: Frame, key: string, value: bool): int =
+  ## For `on` and `off`: 1 the pass `value` becomes true, -1 the pass it
+  ## becomes false (and has stayed false for a moment), else 0. A machine's
+  ## first pass counts as a change.
+  if key notin frame.edges:
+    frame.edges[key] = value
+    return if value: 1 else: -1
+  let was = frame.edges[key]
+  if value:
+    frame.false_since.del key
+    frame.edges[key] = true
+    return if was: 0 else: 1
+  if not was:
+    return 0
+  let now = now_seconds()
+  let since = frame.false_since.get_or_default(key, now)
+  frame.false_since[key] = since
+  if now - since >= BLINK:
+    frame.false_since.del key
+    frame.edges[key] = false
+    return -1
+
+proc update_crowd[T: Thing](frame: Frame, key: string, found: seq[T], tracks_left: bool) =
+  ## Who's still with an `on ... as` query. Someone gone for a moment has
+  ## left: they're dropped, and kept for `off` if there is one.
+  let now = now_seconds()
+  let found = found.map_it(Thing(it))
+  var members = frame.crowds.get_or_default(key)
+  var missing = frame.missing.get_or_default(key)
+  missing.keep_it_if(it[0] notin found)
+  for item in members:
+    if item notin found and missing.all_it(it[0] != item):
+      missing.add (item, now)
+  var still: seq[(Thing, float)]
+  for (item, since) in missing:
+    if now - since >= BLINK:
+      members.keep_it_if(it != item)
+      if tracks_left:
+        frame.left.mget_or_put(key, @[]).add item
+    else:
+      still.add (item, since)
+  frame.crowds[key] = members
+  frame.missing[key] = still
+
+proc arrivals*[T: Thing](
+    frame: Frame, key: string, found: seq[T], tracks_left: bool
+): seq[T] =
+  ## For `on ... as`: who's here but hasn't had their turn yet.
+  frame.update_crowd(key, found, tracks_left)
+  let members = frame.crowds.get_or_default(key)
+  for item in found:
+    if Thing(item) notin members:
+      result.add item
+
+proc arrived*(frame: Frame, key: string, item: Thing) =
+  ## `item`'s `on ... as` block ran.
+  if item notin frame.crowds.mget_or_put(key, @[]):
+    frame.crowds[key].add item
+
+proc departures*[T: Thing](
+    frame: Frame, key: string, found: seq[T]
+): seq[T] =
+  ## For `off ... as`: who's left but hasn't had their turn yet.
+  frame.update_crowd(key, found, true)
+  for item in frame.left.get_or_default(key):
+    result.add T(item)
+
+proc departed*(frame: Frame, key: string, item: Thing) =
+  ## `item`'s `off ... as` block ran.
+  if key in frame.left:
+    frame.left[key].keep_it_if(it != item)
+
+template enu_arrivals*[T](key: string, query: Query[seq[T]], tracks_left: bool): untyped =
+  when not declared(frame):
+    outside_rules_query("`on`", T)
+  else:
+    Query.init(frame.arrivals(key, query.result, tracks_left))
+
+template enu_departures*[T](key: string, query: Query[seq[T]]): untyped =
+  when not declared(frame):
+    outside_rules_query("`off`", T)
+  else:
+    Query.init(frame.departures(key, query.result))
+
+template enu_arrived*(key: string, item: Thing) =
+  frame.arrived(key, item)
+
+template enu_departed*(key: string, item: Thing) =
+  frame.departed(key, item)
+
+template enu_edge*(key: string, value: bool): int =
+  when not declared(frame):
+    outside_rules_int("`on` and `off`")
+  else:
+    frame.edge(key, value)
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   ## Like `->`, but impatient: switches states right away instead of
@@ -332,11 +510,14 @@ macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   result = transition(from_state, to_state, body, ident"true")
 
 macro `->`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
-  ## A state change rule for `loop`. `wander -> hide` means "if we're
-  ## wandering, start hiding". `nil` is the state you begin in, `any`
-  ## matches every state, `others` matches every state except the one
-  ## you're switching to, and `(a, b) -> c` matches either. Add a
-  ## `do:` block to run something once at the moment of the switch.
+  ## A state change rule. `wander -> hide` means "if we're wandering,
+  ## start hiding once this bit of wandering is done"; `wander -> hide now`
+  ## switches right away. `-> wander` is where the rules start, and
+  ## `-> done` leaves them. `any` matches every state, `others` matches
+  ## every state except the one you're switching to, and `(a, b) -> c`
+  ## matches either. A block after the switch (`a -> b:`) runs once, at
+  ## the moment it happens. The first switch in a pass wins; the rest of
+  ## the pass still runs.
   result = transition(from_state, to_state, body, ident"false")
 
 when is_main_module:
@@ -435,7 +616,7 @@ when is_main_module:
     nil ==> loop_a as initial_loop do:
       echo "initial loop "
     inc counter
-    if done:
+    if action_done:
       initial_loop ==> action_a(name) do:
         counter = 0
     if counter == 3:

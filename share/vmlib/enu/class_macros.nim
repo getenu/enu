@@ -362,13 +362,38 @@ proc build_proc(sig, body: NimNode, return_type = new_empty_node()): NimNode =
     pragmas = new_nim_node(nnkPragma).add(ident"discardable"),
   ).fix_line_info(sig)
 
+proc has_rules(body: NimNode): bool
+proc transform_events(stmts: NimNode): NimNode
+proc start_here(n: NimNode): NimNode
+
 proc transform_commands*(parent: NimNode): NimNode =
   for i, node in parent:
+    # `move me` and `build me` from before `move` and `build` took no thing.
+    if node.kind == nnkCommand and node.len == 2 and
+        (node[0].eq_ident("move") or node[0].eq_ident("build")) and
+        node[1].eq_ident("me"):
+      parent[i] = node[0]
+      continue
+    # `move:` and `build:` blocks. A different name, so a bare `move` or
+    # `build` stays unambiguous.
+    if node.kind == nnkCall and node.len == 2 and
+        (node[0].eq_ident("move") or node[0].eq_ident("build")) and
+        node[1].kind == nnkStmtList:
+      let mode = if node[0].eq_ident("move"): 2 else: 1
+      parent[i] = new_call(
+        ident"in_mode", new_lit(mode), transform_commands(node[1])
+      )
+      continue
     # `- name:` statements define commands. They always have a body, which
     # tells them apart from a negation like `if a: -b else: c`.
     if parent.kind == nnkStmtList and node.kind == nnkPrefix and
         node[0] == ident"-" and node.len == 3 and node[2].kind == nnkStmtList:
-      if node[1].kind in [nnkIdent, nnkCall]:
+      if node[1].kind in [nnkIdent, nnkCall] and node[2].has_rules:
+        # A state that's rules, not actions: a machine of its own, running
+        # while the state it's in is current (`loop name:`).
+        let body = transform_events(transform_commands node[2]).start_here
+        parent[i] = nnkCommand.new_tree(ident"loop", node[1], body)
+      elif node[1].kind in [nnkIdent, nnkCall]:
         let new_proc = build_proc(node[1], transform_commands node[2])
         parent[i] = new_proc
       elif node[1].kind == nnkCommand:
@@ -381,6 +406,157 @@ proc transform_commands*(parent: NimNode): NimNode =
     else:
       parent[i] = transform_commands(node)
   parent
+
+proc is_word_block(n: NimNode, word: string): bool =
+  ## `word cond:` (a command with a condition and a block).
+  n.kind == nnkCommand and n.len == 3 and n[0].eq_ident(word) and
+    n[2].kind == nnkStmtList
+
+proc is_bare_off(n: NimNode): bool =
+  ## `off:` on its own: the opposite of the `on` before it.
+  n.kind == nnkCall and n.len == 2 and n[0].eq_ident("off") and
+    n[1].kind == nnkStmtList
+
+proc is_rule(n: NimNode): bool =
+  ## A state switch, or an `on`/`off` block of them.
+  (n.kind == nnkInfix and (n[0].eq_ident("->") or n[0].eq_ident("==>"))) or
+    (n.kind == nnkPrefix and n[0].eq_ident("->")) or
+    n.is_word_block("on") or n.is_word_block("off") or n.is_bare_off
+
+proc has_rules(body: NimNode): bool =
+  ## Whether a block is rules (it switches states) rather than an action.
+  for n in body:
+    if n.is_rule:
+      return true
+    if n.kind in {nnkIfStmt, nnkWhenStmt, nnkCaseStmt}:
+      for branch in n:
+        if branch.len > 0 and branch[^1].kind == nnkStmtList and
+            branch[^1].has_rules:
+          return true
+
+proc start_here(n: NimNode): NimNode =
+  ## A bare `-> x` starts in `x`: `nil -> x`.
+  if n.kind == nnkPrefix and n[0].eq_ident("->"):
+    result = infix(new_nil_lit(), "->", n[1])
+  else:
+    result = n.copy_nim_node
+    for child in n:
+      result.add start_here(child)
+
+proc is_page_block(n: NimNode): bool =
+  ## `page:`, `page sign:` or `sign.page:`, whose `on click` is the page's.
+  if n.kind notin {nnkCall, nnkCommand} or n.len == 0:
+    return false
+  let callee = n[0]
+  callee.eq_ident("page") or
+    (callee.kind == nnkDotExpr and callee[1].eq_ident("page"))
+
+proc has_query(n: NimNode): bool =
+  if n.kind == nnkInfix and n[0].eq_ident("as"):
+    return true
+  for child in n:
+    if child.has_query:
+      return true
+
+proc edge_check(n: NimNode): NimNode =
+  ## `enu_edge("where", cond)` for an `on` or `off` at `n`.
+  let cond = n[1]
+  if cond.has_query:
+    error("`as` goes at the end: `on Player.hit as p:`", cond)
+  new_call(ident"enu_edge", new_lit(n.line_info), cond)
+
+proc is_as(n: NimNode): bool =
+  n.kind == nnkInfix and n[0].eq_ident("as")
+
+proc crowd_events(n: NimNode, off_node: NimNode): NimNode =
+  ## `on Player.hit as p:` is `if ... as p:` over the players who've arrived
+  ## and haven't had their turn, so it uses the loop's usual query
+  ## machinery: one turn each, and anyone a pass doesn't reach gets theirs
+  ## next pass. `off ... as p:` (or a bare `off:` after the `on`) is the
+  ## same for those who've left.
+  let query = n[1][1]
+  let name = n[1][2]
+  if query.has_query:
+    error("Only one `as` in an `on`.", query)
+  let key = new_lit(n.line_info)
+  result = new_stmt_list()
+  if n[0].eq_ident("on"):
+    var cond = infix(
+      new_call(ident"enu_arrivals", key, query, new_lit(not off_node.is_nil)),
+      "as",
+      name,
+    )
+    cond.copy_line_info(n)
+    let body = new_stmt_list(
+      new_call(ident"enu_arrived", key, name), transform_events(n[2])
+    )
+    result.add nnkIfStmt.new_tree(nnkElifBranch.new_tree(cond, body))
+  let off_node = if n[0].eq_ident("off"): n else: off_node
+  if not off_node.is_nil:
+    let off_body = if off_node.is_bare_off: off_node[1] else: off_node[2]
+    var cond = infix(
+      new_call(ident"enu_departures", key, query.copy_nim_tree),
+      "as",
+      name.copy_nim_tree,
+    )
+    cond.copy_line_info(off_node)
+    let body = new_stmt_list(
+      new_call(ident"enu_departed", key, name.copy_nim_tree),
+      transform_events(off_body),
+    )
+    result.add nnkIfStmt.new_tree(nnkElifBranch.new_tree(cond, body))
+
+proc transform_events(stmts: NimNode): NimNode =
+  ## `on cond:` runs its block once, the pass `cond` becomes true, and
+  ## `off cond:` the pass it becomes false. A bare `off:` after an `on` is
+  ## the `off` for the same condition.
+  if stmts.is_page_block:
+    return stmts
+  if stmts.kind != nnkStmtList:
+    result = stmts.copy_nim_node
+    for child in stmts:
+      result.add transform_events(child)
+    return
+  result = new_stmt_list()
+  var i = 0
+  while i < stmts.len:
+    let n = stmts[i]
+    if (n.is_word_block("on") or n.is_word_block("off")) and n[1].is_as:
+      var off_node: NimNode
+      if n[0].eq_ident("on") and i + 1 < stmts.len and stmts[i + 1].is_bare_off:
+        inc i
+        off_node = stmts[i]
+      result.add crowd_events(n, off_node)
+    elif n.is_word_block("on") or n.is_word_block("off"):
+      let edge = gen_sym(nskLet, "edge")
+      result.add new_let_stmt(edge, edge_check(n))
+      let fired = if n[0].eq_ident("on"): 1 else: -1
+      var branch = nnkIfStmt.new_tree(nnkElifBranch.new_tree(
+        infix(edge, "==", new_lit(fired)), transform_events(n[2])
+      ))
+      if n[0].eq_ident("on") and i + 1 < stmts.len and stmts[i + 1].is_bare_off:
+        inc i
+        branch.add nnkElifBranch.new_tree(
+          infix(edge, "==", new_lit(-1)), transform_events(stmts[i][1])
+        )
+      result.add branch
+    else:
+      result.add transform_events(n)
+    inc i
+
+proc transform_rules(ast: NimNode): NimNode =
+  ## A bare `rules` line: everything after it is the thing's rules,
+  ## checked over and over, without `loop:` and its indentation.
+  result = ast
+  for i, n in ast:
+    if n.kind == nnkIdent and n.eq_ident("rules"):
+      var body = new_stmt_list()
+      for rest in ast[i + 1 ..^ 1]:
+        body.add rest
+      while ast.len > i:
+        ast.del(ast.len - 1)
+      ast.add new_call(ident"loop", transform_events(body).start_here)
+      break
 
 macro load_enu_script*(
     file_name: string,
@@ -397,7 +573,7 @@ macro load_enu_script*(
 
   let code = read_enu_script(resolved_file_name)
   when compiles(parse_stmt(code, resolved_file_name)):
-    var ast = parse_stmt(code, resolved_file_name).transform_commands
+    var ast = parse_stmt(code, resolved_file_name).transform_commands.transform_rules
   else:
     # Just for tests running in Nim <= 1.6. Enu VM and Nim 2.0 can take both
     # Nim code and a file name.

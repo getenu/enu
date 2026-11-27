@@ -17,6 +17,7 @@
     "build_quick_box",
     "build_draws_only",
     "bot_quick_walker",
+    "build_rules_test",
     "build_asap_check"
   ],
   "show_prototypes": true

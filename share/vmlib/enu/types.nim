@@ -103,6 +103,20 @@ type
   Frame* = ref object
     manager*: proc(active: bool): bool
     action*: proc()
+    switched*: bool
+      ## A switch happened this pass. Later ones are ignored, and it takes
+      ## effect when the pass ends.
+    edges*: Table[string, bool]
+      ## What each `on`/`off` condition was last pass.
+    crowds*: Table[string, seq[Thing]]
+      ## Who has had their turn in each `on ... as`, counting anyone gone
+      ## for less than a moment.
+    missing*: Table[string, seq[(Thing, float)]]
+      ## For each `on ... as`, who's gone from it and since when.
+    left*: Table[string, seq[Thing]]
+      ## For each `off ... as`, who's left and hasn't had their turn yet.
+    false_since*: Table[string, float]
+      ## For each `on`/`off` that's true, when it last looked false.
 
   Halt* = object of CatchableError
 

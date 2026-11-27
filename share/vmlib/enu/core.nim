@@ -489,27 +489,36 @@ template lean*(self: Thing, degrees: float) =
   mixin wait
   wait self.lean(degrees, move_mode)
 
-template move*[T: Thing](new_enu_target: T) =
+template move*() {.dirty.} =
   ## Switch to move mode: commands like `forward` and `turn` now move
-  ## the thing around instead of drawing blocks. `move me` moves this
-  ## thing; `move enemy` steers a different one. (If the speed was 0,
+  ## the thing around instead of drawing blocks. (If the speed was 0,
   ## it's bumped to 1 so you can actually see something happen.)
   when enu_target is Build:
     enu_target.end_asap()
-  enu_target = new_enu_target
+  enu_target = me
   move_mode = 2
   if enu_target.speed == 0 or enu_target.speed == auto:
     enu_target.speed = 1
 
-template build*(new_enu_target: Thing) =
+template build*() {.dirty.} =
   ## Switch to build mode: commands like `forward` and `turn` steer
   ## the drawing turtle, leaving a trail of blocks. This is the normal
-  ## mode for a Build, so you mostly need it to switch back after
-  ## `move`, or to aim commands at a different thing: `build enemy`.
+  ## mode for a Build, so you mostly need it to switch back after `move`.
   when enu_target is Build:
     enu_target.end_asap()
-  enu_target = new_enu_target
+  enu_target = me
   move_mode = 1
+
+template in_mode*(mode: int, body: untyped) {.dirty.} =
+  ## `move:` and `build:` blocks: the block runs in that mode, and the
+  ## mode before it comes back afterwards, even if a switch interrupts it.
+  block:
+    let enu_mode_before = move_mode
+    if mode == 2: move else: build
+    try:
+      body
+    finally:
+      if enu_mode_before == 2: move else: build
 
 template anchor*(body: untyped) =
   ## Declare the thing's pivot. Inside the block, turtle commands

@@ -12,7 +12,7 @@ proc follow_nearest_player*(thing: Build) =
       closest_player = p
 
   if closest_player != nil:
-    move thing
+    move
     thing.turn(closest_player)
 
 proc show_exercise*(exercise_id: string) =
