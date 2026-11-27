@@ -153,6 +153,16 @@ var mode_after = 0
     moving_block -> after_block now
   after_block -> done
 
+proc never_called() =
+  one -> three # fine, as long as it never runs
+
+proc stray_switch() =
+  one -> two
+
+proc stray_on() =
+  on touching:
+    inc ons
+
 suite "Rules":
   test "the first switch wins, and the pass finishes":
     visits = @[]
@@ -247,5 +257,21 @@ suite "Rules":
     build
     interrupted_block()
     check mode_after == 1
+
+  test "a switch outside rules fails when it's reached, and says why":
+    var message = ""
+    try:
+      stray_switch()
+    except ValueError as e:
+      message = e.msg
+    check "only works under `rules`" in message
+
+  test "so does on outside rules":
+    var message = ""
+    try:
+      stray_on()
+    except ValueError as e:
+      message = e.msg
+    check "`on` only works under `rules`" in message
 
 test_summary()

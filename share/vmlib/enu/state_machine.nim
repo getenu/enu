@@ -8,7 +8,33 @@ proc current_loop(value: Loop = nil): Loop =
   var loop {.global.}: Loop
   if not value.is_nil:
     loop = value
+  if loop.is_nil:
+    # A switch outside any rules, before the script has any: it only fails
+    # if it's reached, so give it somewhere harmless to note its states.
+    loop = Loop()
   result = loop
+
+proc outside_rules*(what: string) =
+  raise ValueError.init(
+    what & " only works under `rules`, or in a state that has rules of its own."
+  )
+
+proc outside_rules_int(what: string): int =
+  outside_rules(what)
+
+proc outside_rules_query[T](what: string, _: typedesc[T]): Query[seq[T]] =
+  outside_rules(what)
+
+template on*(cond: untyped, body: untyped) =
+  ## Only here to explain itself: under `rules`, `on` is rewritten before
+  ## it gets this far.
+  outside_rules("`on`")
+
+template off*(cond: untyped, body: untyped) =
+  outside_rules("`off`")
+
+template off*(body: untyped) =
+  outside_rules("`off`")
 
 proc advance*(ctx: Context, frame: Frame = nil): bool =
   ## advance state machine. Returns true if statemachine is still running.
@@ -343,38 +369,39 @@ proc transition(from_state, to_state, body, immediate_arg: NimNode): NimNode =
 
   result = quote:
     when not declared(current_state) or not declared(ctx):
-      {.error: "`->` or `==>` must be inside a `loop` ".}
-    if not frame.switched and (`immediate` or (active and action_done)):
-      let
-        from_includes: seq[string] = `includes_str`.split(",")
-        from_excludes: seq[string] = `excludes_str`.split(",")
-      if (
-        current_state in from_includes or (
-          current_state != "nil" and (
-            ("others" in from_includes and `to_state_name` != current_state) or
-            "any" in from_includes
+      outside_rules("Switching states (`a -> b`)")
+    else:
+      if not frame.switched and (`immediate` or (active and action_done)):
+        let
+          from_includes: seq[string] = `includes_str`.split(",")
+          from_excludes: seq[string] = `excludes_str`.split(",")
+        if (
+          current_state in from_includes or (
+            current_state != "nil" and (
+              ("others" in from_includes and `to_state_name` != current_state) or
+              "any" in from_includes
+            )
           )
-        )
-      ) and current_state notin from_excludes:
-        current_state = `to_state_name`
-        first_iteration = true
-        proc action() =
-          if first_iteration:
-            `body`
-          smart_call(`to_state`)
-          first_iteration = false
+        ) and current_state notin from_excludes:
+          current_state = `to_state_name`
+          first_iteration = true
+          proc action() =
+            if first_iteration:
+              `body`
+            smart_call(`to_state`)
+            first_iteration = false
 
-        if `to_state_name` != "nil":
-          frame.action = action
-        else:
-          frame.action = nil
-        # The first switch wins: later ones this pass are ignored, the rest
-        # of the pass (every combination of query results) still runs, and
-        # the switch takes effect at its end.
-        if `starting`:
-          action_done = false
-        else:
-          frame.switched = true
+          if `to_state_name` != "nil":
+            frame.action = action
+          else:
+            frame.action = nil
+          # The first switch wins: later ones this pass are ignored, the rest
+          # of the pass (every combination of query results) still runs, and
+          # the switch takes effect at its end.
+          if `starting`:
+            action_done = false
+          else:
+            frame.switched = true
 
 const BLINK = 0.1
   ## Seconds something has to be gone before it counts as gone. Touching
@@ -455,13 +482,15 @@ proc departed*(frame: Frame, key: string, item: Thing) =
 
 template enu_arrivals*[T](key: string, query: Query[seq[T]], tracks_left: bool): untyped =
   when not declared(frame):
-    {.error: "`on` and `off` only work under `rules`, or in a state that switches states".}
-  Query.init(frame.arrivals(key, query.result, tracks_left))
+    outside_rules_query("`on`", T)
+  else:
+    Query.init(frame.arrivals(key, query.result, tracks_left))
 
 template enu_departures*[T](key: string, query: Query[seq[T]]): untyped =
   when not declared(frame):
-    {.error: "`on` and `off` only work under `rules`, or in a state that switches states".}
-  Query.init(frame.departures(key, query.result))
+    outside_rules_query("`off`", T)
+  else:
+    Query.init(frame.departures(key, query.result))
 
 template enu_arrived*(key: string, item: Thing) =
   frame.arrived(key, item)
@@ -471,8 +500,9 @@ template enu_departed*(key: string, item: Thing) =
 
 template enu_edge*(key: string, value: bool): int =
   when not declared(frame):
-    {.error: "`on` and `off` only work under `rules`, or in a state that switches states".}
-  frame.edge(key, value)
+    outside_rules_int("`on` and `off`")
+  else:
+    frame.edge(key, value)
 
 macro `==>`*(from_state: untyped, to_state: untyped, body: untyped = nil) =
   ## Like `->`, but impatient: switches states right away instead of
